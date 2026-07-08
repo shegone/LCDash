@@ -1,21 +1,31 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+
 from app.config.settings import settings
 from app.auth.oauth import get_access_token, CentralSquareAuthError
-from app.services.centralsquare import CentralSquareClient, CentralSquareAPIError
+from app.services.cad_service import get_active_calls
+from app.services.centralsquare import (
+    CentralSquareClient,
+    CentralSquareAPIError,
+)
 
 app = FastAPI(
     title="LCDash",
     description="Logan County 911 Operations Dashboard",
-    version="0.2.0"
+    version="0.3.0",
 )
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
 
 
 @app.get("/")
 def home():
     return {
         "application": "LCDash",
-        "version": "0.2.0",
-        "status": "Running"
+        "version": "0.3.0",
+        "status": "Running",
     }
 
 
@@ -28,7 +38,7 @@ def config_test():
         "username_loaded": bool(settings.username),
         "password_loaded": bool(settings.password),
         "from_header": settings.from_header,
-        "debug": settings.debug
+        "debug": settings.debug,
     }
 
 
@@ -38,13 +48,13 @@ def auth_test():
         token = get_access_token()
         return {
             "authenticated": True,
-            "token_received": bool(token),
-            "token_preview": token[:12] + "..."
+            "token_received": True,
+            "token_preview": token[:12] + "...",
         }
     except CentralSquareAuthError as exc:
         return {
             "authenticated": False,
-            "error": str(exc)
+            "error": str(exc),
         }
 
 
@@ -59,11 +69,54 @@ def system_test():
             "connected": True,
             "configuration": "CADUnitStatus",
             "records_returned": len(statuses),
-            "sample": statuses[:3]
+            "sample": statuses[:3],
         }
 
     except CentralSquareAPIError as exc:
         return {
             "connected": False,
-            "error": str(exc)
+            "error": str(exc),
         }
+
+
+@app.get("/active-calls-test")
+def active_calls_test():
+    try:
+        calls = get_active_calls()
+
+        return {
+            "connected": True,
+            "active_calls": len(calls),
+            "sample": calls[:3],
+        }
+
+    except CentralSquareAPIError as exc:
+        return {
+            "connected": False,
+            "error": str(exc),
+        }
+
+
+@app.get("/dashboard")
+def dashboard(request: Request):
+    try:
+        calls = get_active_calls()
+        cad_status = "Connected"
+        system_status = "Connected"
+    except CentralSquareAPIError:
+        calls = []
+        cad_status = "Disconnected"
+        system_status = "Unknown"
+
+    return templates.TemplateResponse(
+        request=request,
+        name="dashboard.html",
+        context={
+            "system_status": system_status,
+            "cad_status": cad_status,
+            "active_calls": len(calls),
+            "units": 0,
+            "version": "0.3.0",
+            "calls": calls,
+        },
+    )

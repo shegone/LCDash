@@ -1,0 +1,70 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}LCDash Dashboard{% endblock %}
+
+{% block content %}
+
+<div class="row g-4 mb-4">
+
+    <div class="col-md-3">
+        <div class="glass p-4">
+            <div class="text-info">ACTIVE CALLS</div>
+            <h1>{{ active_calls }}</h1>
+            <div class="text-secondary">Live CAD incidents</div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="glass p-4">
+            <div class="text-info">UNITS</div>
+            <h1>{{ units }}</h1>
+            <div class="text-secondary">Tracked resources</div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="glass p-4">
+            <div class="text-info">CENTRALSQUARE</div>
+            <h1 class="text-success">ONLINE</h1>
+            <div class="text-secondary">{{ system_status }}</div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="glass p-4">
+            <div class="text-info">CAD API</div>
+            <h1 class="text-success">LIVE</h1>
+            <div class="text-secondary">{{ cad_status }}</div>
+        </div>
+    </div>
+
+</div>
+
+<div class="glass p-4">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="text-warning mb-0">ACTIVE INCIDENT FEED</h4>
+            <div class="text-secondary">Live Calls for Service from CentralSquare</div>
+        </div>
+
+        <span class="badge text-bg-success p-2">LIVE CAD DATA</span>
+    </div>
+
+    {% if calls %}
+        <div class="row g-4">
+            {% for call in calls %}
+                <div class="col-xl-4 col-lg-6">
+                    {% include "components/incident_card.html" %}
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="text-center text-secondary py-5">
+            No active calls returned from CAD.
+        </div>
+    {% endif %}
+
+</div>
+
+{% endblock %}

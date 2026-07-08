@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}LCDash{% endblock %}</title>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+
+    <style>
+        body {
+            margin: 0;
+            background: #07111f;
+            color: white;
+            overflow: hidden;
+            font-family: "Segoe UI", Arial, sans-serif;
+        }
+
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 270px;
+            height: 100vh;
+            background: #091729;
+            border-right: 1px solid #19304d;
+            overflow: auto;
+        }
+
+        .logo {
+            width: 150px;
+            display: block;
+            margin: 20px auto 15px auto;
+            filter: drop-shadow(0 0 18px rgba(0, 195, 255, 0.25));
+        }
+
+        .sidebar h4 {
+            text-align: center;
+            font-weight: 700;
+            margin-bottom: 30px;
+            color: #4cc9ff;
+        }
+
+        .nav-link {
+            color: #c7d7e7;
+            padding: 14px 24px;
+            border-radius: 10px;
+            margin: 6px 10px;
+        }
+
+        .nav-link:hover {
+            background: #16395e;
+            color: white;
+        }
+
+        .main {
+            margin-left: 270px;
+            padding: 25px;
+            height: 100vh;
+            overflow: auto;
+        }
+
+        .topbar {
+            min-height: 75px;
+            margin-bottom: 25px;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .glass {
+            background: rgba(18, 33, 56, .85);
+            border: 1px solid #23466f;
+            border-radius: 20px;
+            box-shadow: 0 0 25px rgba(0, 140, 255, .10);
+        }
+
+        .clock {
+            color: #67d7ff;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        .incident-card {
+            height: 100%;
+            padding: 22px;
+            border-radius: 22px;
+            background:
+                linear-gradient(180deg, rgba(19, 38, 64, 0.96), rgba(8, 18, 33, 0.96));
+            border: 1px solid rgba(95, 178, 255, 0.35);
+            box-shadow:
+                0 0 22px rgba(0, 148, 255, 0.12),
+                inset 0 0 18px rgba(255, 255, 255, 0.025);
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .incident-card:hover {
+            transform: translateY(-3px);
+            box-shadow:
+                0 0 32px rgba(0, 180, 255, 0.28),
+                inset 0 0 18px rgba(255, 255, 255, 0.04);
+        }
+
+        .incident-code {
+            color: #ffd66b;
+            font-size: 0.95rem;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+        }
+
+        .incident-title {
+            font-size: 1.25rem;
+            font-weight: 800;
+            color: #ffffff;
+            margin-top: 3px;
+        }
+
+        .priority-badge {
+            padding: 8px 12px;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            font-weight: 800;
+            color: #03101e;
+            background: #ffd66b;
+            white-space: nowrap;
+        }
+
+        .incident-location,
+        .incident-units {
+            color: #dbeeff;
+            font-size: 0.95rem;
+        }
+
+        .incident-location i,
+        .incident-units i {
+            color: #4cc9ff;
+            margin-right: 6px;
+        }
+
+        .label {
+            color: #82a9ca;
+            font-size: 0.72rem;
+            letter-spacing: 1.2px;
+            font-weight: 700;
+        }
+
+        .value {
+            color: #ffffff;
+            font-weight: 700;
+        }
+
+        .status-text {
+            color: #69ffb9;
+        }
+
+        .incident-footer {
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            padding-top: 12px;
+            color: #8fb7d9;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .priority-5,
+        .priority-10 {
+            border-color: rgba(255, 76, 76, 0.65);
+            box-shadow: 0 0 26px rgba(255, 76, 76, 0.18);
+        }
+
+        .priority-15 {
+            border-color: rgba(255, 214, 107, 0.65);
+            box-shadow: 0 0 26px rgba(255, 214, 107, 0.14);
+        }
+
+        .priority-20 {
+            border-color: rgba(76, 201, 255, 0.65);
+        }
+
+        .priority-30 {
+            border-color: rgba(105, 255, 185, 0.4);
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="sidebar">
+    <img src="/static/img/logan911-logo.png" class="logo">
+    <h4>LCDash</h4>
+
+    <div class="nav flex-column">
+        <a class="nav-link" href="/dashboard"><i class="bi bi-speedometer2"></i> Dashboard</a>
+        <a class="nav-link" href="#"><i class="bi bi-telephone-fill"></i> Active Calls</a>
+        <a class="nav-link" href="#"><i class="bi bi-broadcast-pin"></i> 911 Queue</a>
+        <a class="nav-link" href="#"><i class="bi bi-truck"></i> Units</a>
+        <a class="nav-link" href="#"><i class="bi bi-map"></i> GIS Map</a>
+        <a class="nav-link" href="#"><i class="bi bi-broadcast"></i> Mindshare Radio</a>
+        <a class="nav-link" href="#"><i class="bi bi-graph-up-arrow"></i> Analytics</a>
+        <a class="nav-link" href="#"><i class="bi bi-robot"></i> AI Assistant</a>
+        <a class="nav-link" href="#"><i class="bi bi-gear-fill"></i> Settings</a>
+    </div>
+</div>
+
+<div class="main">
+
+    <div class="topbar glass">
+        <div>
+            <h3>Logan County 911</h3>
+            <div style="color:#7ea8d3;">WV's First NG911 Center</div>
+        </div>
+
+        <div class="clock" id="clock"></div>
+    </div>
+
+    {% block content %}
+    {% endblock %}
+
+</div>
+
+<script>
+    function updateClock() {
+        const d = new Date();
+        document.getElementById("clock").innerHTML = d.toLocaleString();
+    }
+
+    setInterval(updateClock, 1000);
+    updateClock();
+</script>
+
+</body>
+</html>

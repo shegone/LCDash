@@ -1,4 +1,5 @@
 import httpx
+
 from app.auth.oauth import get_access_token
 from app.config.settings import settings
 
@@ -20,11 +21,18 @@ class CentralSquareClient:
 
     def get_system_config(self, configuration: str) -> dict:
         url = f"{settings.system_base_url}/configurations"
+        params = {"configuration": configuration}
+        return self.get(url, params=params)
 
-        params = {
-            "configuration": configuration
-        }
+    def search_cfs_core(self, search_body: dict) -> dict:
+        url = f"{settings.cad_base_url}/cfs_core/search"
+        return self.post(url, json=search_body)
 
+    def get_cfs_core(self, cfs_number: str) -> dict:
+        url = f"{settings.cad_base_url}/cfs_core/{cfs_number}"
+        return self.get(url)
+
+    def get(self, url: str, params: dict | None = None) -> dict:
         try:
             response = httpx.get(
                 url,
@@ -37,5 +45,21 @@ class CentralSquareClient:
 
         except httpx.HTTPError as exc:
             raise CentralSquareAPIError(
-                f"System configuration request failed: {exc}"
+                f"GET request failed: {exc}"
+            ) from exc
+
+    def post(self, url: str, json: dict | None = None) -> dict:
+        try:
+            response = httpx.post(
+                url,
+                headers=self.headers(),
+                json=json or {},
+                timeout=30,
+            )
+            response.raise_for_status()
+            return response.json()
+
+        except httpx.HTTPError as exc:
+            raise CentralSquareAPIError(
+                f"POST request failed: {exc}"
             ) from exc
