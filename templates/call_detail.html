@@ -137,6 +137,21 @@
         letter-spacing: .5px;
     }
 
+    .unit-status-timer-box {
+        margin-top: 16px;
+        padding: 12px;
+        border-radius: 14px;
+        background: rgba(255, 214, 107, .08);
+        border: 1px solid rgba(255, 214, 107, .22);
+    }
+
+    .unit-status-timer {
+        color: #ffd66b;
+        font-size: 1.35rem;
+        font-weight: 950;
+        letter-spacing: 1px;
+    }
+
     .unit-meta {
         color: #8fb7d9;
         font-size: .9rem;
@@ -175,6 +190,10 @@
     .timeline-text {
         color: white;
         font-size: 1rem;
+    }
+
+    .cad-time {
+        white-space: nowrap;
     }
 
     .raw-json {
@@ -270,7 +289,7 @@
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <div>
                     <h4 class="text-warning mb-0">Assigned Units</h4>
-                    <div class="text-secondary">Responding resources from CAD</div>
+                    <div class="text-secondary">Responding resources from CAD with live unit status timers</div>
                 </div>
 
                 <span class="badge text-bg-info p-2">
@@ -304,6 +323,29 @@
                                     </div>
                                 </div>
 
+                                <div class="unit-status-timer-box">
+                                    <div class="label">TIME IN STATUS</div>
+                                    <div
+                                        class="unit-status-timer"
+                                        data-status-start="{{ unit.status_timer_start }}"
+                                    >
+                                        --:--:--
+                                    </div>
+
+                                    {% if unit.status_timer_start %}
+                                        <div class="unit-meta mt-1">
+                                            Since
+                                            <span class="cad-time" data-cad-time="{{ unit.status_timer_start }}">
+                                                {{ unit.status_timer_start }}
+                                            </span>
+                                        </div>
+                                    {% else %}
+                                        <div class="unit-meta mt-1">
+                                            Status timestamp not returned
+                                        </div>
+                                    {% endif %}
+                                </div>
+
                                 {% if unit.responder %}
                                     <div class="mt-3">
                                         <div class="label">RESPONDER</div>
@@ -314,24 +356,76 @@
                                 <div class="row mt-3 small">
                                     <div class="col-6">
                                         <div class="label">DISPATCH</div>
-                                        <div class="value">{{ unit.dispatch_time or "-" }}</div>
+                                        <div class="value">
+                                            {% if unit.dispatch_time %}
+                                                <span class="cad-time" data-cad-time="{{ unit.dispatch_time }}">
+                                                    {{ unit.dispatch_time }}
+                                                </span>
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </div>
                                     </div>
 
                                     <div class="col-6 text-end">
                                         <div class="label">ENROUTE</div>
-                                        <div class="value">{{ unit.enroute_time or "-" }}</div>
+                                        <div class="value">
+                                            {% if unit.enroute_time %}
+                                                <span class="cad-time" data-cad-time="{{ unit.enroute_time }}">
+                                                    {{ unit.enroute_time }}
+                                                </span>
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </div>
                                     </div>
                                 </div>
 
                                 <div class="row mt-2 small">
                                     <div class="col-6">
                                         <div class="label">ARRIVAL</div>
-                                        <div class="value">{{ unit.arrival_time or "-" }}</div>
+                                        <div class="value">
+                                            {% if unit.arrival_time %}
+                                                <span class="cad-time" data-cad-time="{{ unit.arrival_time }}">
+                                                    {{ unit.arrival_time }}
+                                                </span>
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </div>
                                     </div>
 
                                     <div class="col-6 text-end">
+                                        <div class="label">TRANSPORT</div>
+                                        <div class="value">
+                                            {% if unit.transport_time %}
+                                                <span class="cad-time" data-cad-time="{{ unit.transport_time }}">
+                                                    {{ unit.transport_time }}
+                                                </span>
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row mt-2 small">
+                                    <div class="col-6">
                                         <div class="label">CLEAR</div>
-                                        <div class="value">{{ unit.clear_time or "-" }}</div>
+                                        <div class="value">
+                                            {% if unit.clear_time %}
+                                                <span class="cad-time" data-cad-time="{{ unit.clear_time }}">
+                                                    {{ unit.clear_time }}
+                                                </span>
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </div>
+                                    </div>
+
+                                    <div class="col-6 text-end">
+                                        <div class="label">CURRENT</div>
+                                        <div class="value text-success">{{ unit.status }}</div>
                                     </div>
                                 </div>
 
@@ -362,7 +456,11 @@
                 <div class="timeline mt-3">
                     {% for log in logs %}
                         <div class="timeline-item">
-                            <div class="timeline-time">{{ log.timestamp }}</div>
+                            <div class="timeline-time">
+                                <span class="cad-time" data-cad-time="{{ log.timestamp }}">
+                                    {{ log.timestamp }}
+                                </span>
+                            </div>
 
                             <div class="timeline-text">
                                 {% if log.unit_number %}
@@ -421,7 +519,11 @@
 
             <div class="detail-row">
                 <span>Received</span>
-                <strong>{{ call.call_datetime }}</strong>
+                <strong>
+                    <span class="cad-time" data-cad-time="{{ call.call_datetime }}">
+                        {{ call.call_datetime }}
+                    </span>
+                </strong>
             </div>
 
             <div class="detail-row">
@@ -505,29 +607,30 @@
 {% endif %}
 
 <script>
-    function updateIncidentElapsed() {
-        const elapsedElement = document.getElementById("incident-elapsed");
-
-        if (!elapsedElement) {
-            return;
+    function parseCadDateTime(value) {
+        if (!value) {
+            return null;
         }
 
-        const callTimeValue = elapsedElement.dataset.callTime;
+        let cleanedValue = value;
 
-        if (!callTimeValue) {
-            elapsedElement.textContent = "--:--:--";
-            return;
+        if (cleanedValue.includes(".") && cleanedValue.endsWith("Z")) {
+            cleanedValue = cleanedValue.replace(/\.(\d{3})\d*Z$/, ".$1Z");
         }
 
-        const callStart = new Date(callTimeValue);
+        const parsedDate = new Date(cleanedValue);
+
+        if (isNaN(parsedDate.getTime())) {
+            return null;
+        }
+
+        return parsedDate;
+    }
+
+    function formatElapsedTime(startDate) {
         const now = new Date();
 
-        if (isNaN(callStart.getTime())) {
-            elapsedElement.textContent = "--:--:--";
-            return;
-        }
-
-        let totalSeconds = Math.floor((now - callStart) / 1000);
+        let totalSeconds = Math.floor((now - startDate) / 1000);
 
         if (totalSeconds < 0) {
             totalSeconds = 0;
@@ -537,14 +640,91 @@
         const minutes = Math.floor((totalSeconds % 3600) / 60);
         const seconds = totalSeconds % 60;
 
-        elapsedElement.textContent =
+        return (
             String(hours).padStart(2, "0") + ":" +
             String(minutes).padStart(2, "0") + ":" +
-            String(seconds).padStart(2, "0");
+            String(seconds).padStart(2, "0")
+        );
     }
 
-    setInterval(updateIncidentElapsed, 1000);
-    updateIncidentElapsed();
+    function formatCadDisplayTime(value) {
+        const date = parseCadDateTime(value);
+
+        if (!date) {
+            return value || "-";
+        }
+
+        const datePart = date.toLocaleDateString([], {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit"
+        });
+
+        const timePart = date.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false
+        });
+
+        return datePart + " " + timePart;
+    }
+
+    function updateCadDisplayTimes() {
+        const timeElements = document.querySelectorAll(".cad-time");
+
+        timeElements.forEach(function (element) {
+            const rawValue = element.dataset.cadTime;
+
+            if (!rawValue) {
+                element.textContent = "-";
+                return;
+            }
+
+            element.textContent = formatCadDisplayTime(rawValue);
+        });
+    }
+
+    function updateIncidentElapsed() {
+        const elapsedElement = document.getElementById("incident-elapsed");
+
+        if (!elapsedElement) {
+            return;
+        }
+
+        const callStart = parseCadDateTime(elapsedElement.dataset.callTime);
+
+        if (!callStart) {
+            elapsedElement.textContent = "--:--:--";
+            return;
+        }
+
+        elapsedElement.textContent = formatElapsedTime(callStart);
+    }
+
+    function updateUnitStatusTimers() {
+        const unitTimerElements = document.querySelectorAll(".unit-status-timer");
+
+        unitTimerElements.forEach(function (element) {
+            const statusStart = parseCadDateTime(element.dataset.statusStart);
+
+            if (!statusStart) {
+                element.textContent = "No Time";
+                return;
+            }
+
+            element.textContent = formatElapsedTime(statusStart);
+        });
+    }
+
+    function updateTimers() {
+        updateIncidentElapsed();
+        updateUnitStatusTimers();
+        updateCadDisplayTimes();
+    }
+
+    setInterval(updateTimers, 1000);
+    updateTimers();
 </script>
 
 {% endif %}
