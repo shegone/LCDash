@@ -1,6 +1,12 @@
 {% extends "layouts/base.html" %}
 
-{% block title %}Incident {{ call.cfs_number }}{% endblock %}
+{% block title %}
+    {% if call %}
+        Incident {{ call.cfs_number }}
+    {% else %}
+        Incident Detail
+    {% endif %}
+{% endblock %}
 
 {% block content %}
 
@@ -27,6 +33,38 @@
         text-align: right;
     }
 
+    .unit-card {
+        padding: 18px;
+        border-radius: 18px;
+        background: linear-gradient(180deg, rgba(19, 38, 64, 0.96), rgba(8, 18, 33, 0.96));
+        border: 1px solid rgba(95, 178, 255, 0.35);
+        box-shadow: 0 0 18px rgba(0, 148, 255, 0.10);
+        height: 100%;
+    }
+
+    .unit-number {
+        font-size: 1.6rem;
+        font-weight: 900;
+        color: #ffffff;
+        letter-spacing: 1px;
+    }
+
+    .unit-status {
+        display: inline-block;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(105, 255, 185, 0.16);
+        color: #69ffb9;
+        font-size: 0.8rem;
+        font-weight: 800;
+        letter-spacing: .5px;
+    }
+
+    .unit-meta {
+        color: #8fb7d9;
+        font-size: .9rem;
+    }
+
     .timeline {
         border-left: 2px solid rgba(76, 201, 255, .45);
         margin-left: 12px;
@@ -36,6 +74,7 @@
     .timeline-item {
         margin-bottom: 18px;
         position: relative;
+        padding-bottom: 8px;
     }
 
     .timeline-item::before {
@@ -80,6 +119,15 @@
     }
 </style>
 
+{% if not connected or not call %}
+
+<div class="glass p-4">
+    <h2 class="text-danger">Incident could not be loaded</h2>
+    <p class="text-secondary mb-0">{{ error }}</p>
+</div>
+
+{% else %}
+
 <div class="glass p-4 mb-4">
 
     <div class="d-flex justify-content-between align-items-start">
@@ -119,30 +167,74 @@
         </div>
 
         <div class="glass p-4 mb-4">
-            <h4 class="text-warning">Assigned Units</h4>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h4 class="text-warning mb-0">Assigned Units</h4>
+                    <div class="text-secondary">Responding resources from CAD</div>
+                </div>
 
-            {% set units = call.raw.Unit or [] %}
+                <span class="badge text-bg-info p-2">
+                    {{ call.assigned_units|length }} UNIT{% if call.assigned_units|length != 1 %}S{% endif %}
+                </span>
+            </div>
+
+            {% set units = call.assigned_units or [] %}
 
             {% if units %}
                 <div class="row g-3">
                     {% for unit in units %}
                         <div class="col-md-6">
-                            <div class="incident-card">
-                                <h4>{{ unit.UnitNumber }}</h4>
+                            <div class="unit-card">
 
-                                <div class="text-info">
-                                    {{ unit.UnitType.Description if unit.UnitType else "" }}
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div>
+                                        <div class="unit-number">{{ unit.unit_number }}</div>
+
+                                        {% if unit.unit_type %}
+                                            <div class="unit-meta">{{ unit.unit_type }}</div>
+                                        {% endif %}
+
+                                        {% if unit.agency %}
+                                            <div class="unit-meta">{{ unit.agency }}</div>
+                                        {% endif %}
+                                    </div>
+
+                                    <div class="unit-status">
+                                        {{ unit.status }}
+                                    </div>
                                 </div>
 
-                                <div class="text-secondary">
-                                    {{ unit.Agency.Name if unit.Agency else "" }}
-                                </div>
-
-                                {% if unit.Responder %}
-                                    <div class="mt-2">
-                                        {{ unit.Responder.FullDescription }}
+                                {% if unit.responder %}
+                                    <div class="mt-3">
+                                        <div class="label">RESPONDER</div>
+                                        <div class="value">{{ unit.responder }}</div>
                                     </div>
                                 {% endif %}
+
+                                <div class="row mt-3 small">
+                                    <div class="col-6">
+                                        <div class="label">DISPATCH</div>
+                                        <div class="value">{{ unit.dispatch_time or "-" }}</div>
+                                    </div>
+
+                                    <div class="col-6 text-end">
+                                        <div class="label">ENROUTE</div>
+                                        <div class="value">{{ unit.enroute_time or "-" }}</div>
+                                    </div>
+                                </div>
+
+                                <div class="row mt-2 small">
+                                    <div class="col-6">
+                                        <div class="label">ARRIVAL</div>
+                                        <div class="value">{{ unit.arrival_time or "-" }}</div>
+                                    </div>
+
+                                    <div class="col-6 text-end">
+                                        <div class="label">CLEAR</div>
+                                        <div class="value">{{ unit.clear_time or "-" }}</div>
+                                    </div>
+                                </div>
+
                             </div>
                         </div>
                     {% endfor %}
@@ -153,32 +245,48 @@
         </div>
 
         <div class="glass p-4">
-            <h4 class="text-warning">Command Log Timeline</h4>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h4 class="text-warning mb-0">Command Log Timeline</h4>
+                    <div class="text-secondary">CAD activity and status history</div>
+                </div>
 
-            {% set logs = call.raw.CommandLog or [] %}
+                <span class="badge text-bg-secondary p-2">
+                    {{ call.command_logs|length }} LOG{% if call.command_logs|length != 1 %}S{% endif %}
+                </span>
+            </div>
+
+            {% set logs = call.command_logs or [] %}
 
             {% if logs %}
                 <div class="timeline mt-3">
                     {% for log in logs %}
                         <div class="timeline-item">
-                            <div class="timeline-time">{{ log.Timestamp }}</div>
+                            <div class="timeline-time">{{ log.timestamp }}</div>
 
                             <div class="timeline-text">
-                                {% if log.UnitNumber %}
-                                    <strong>{{ log.UnitNumber }}</strong>
+                                {% if log.unit_number %}
+                                    <strong>{{ log.unit_number }}</strong>
                                 {% endif %}
-                                {{ log.Text }}
+
+                                {% if log.text %}
+                                    {{ log.text }}
+                                {% elif log.status %}
+                                    Status changed to {{ log.status }}
+                                {% else %}
+                                    CAD log entry
+                                {% endif %}
                             </div>
 
-                            {% if log.Status %}
+                            {% if log.status %}
                                 <div class="text-success small">
-                                    Status: {{ log.Status.Description }}
+                                    Status: {{ log.status }}
                                 </div>
                             {% endif %}
 
-                            {% if log.Creator %}
+                            {% if log.creator %}
                                 <div class="text-secondary small">
-                                    {{ log.Creator.FullDescription }}
+                                    {{ log.creator }}
                                 </div>
                             {% endif %}
                         </div>
@@ -225,27 +333,23 @@
         <div class="glass p-4 mb-4">
             <h4 class="text-warning">Reporter</h4>
 
-            {% set reporter = call.raw.Reporter %}
+            {% set reporter = call.reporter or {} %}
 
-            {% if reporter %}
+            {% if reporter.name or reporter.phone or reporter.how_reported %}
                 <div class="detail-row">
                     <span>Name</span>
-                    <strong>
-                        {{ reporter.First or "" }} {{ reporter.Last or "" }}
-                    </strong>
+                    <strong>{{ reporter.name or "-" }}</strong>
                 </div>
 
                 <div class="detail-row">
                     <span>Phone</span>
-                    <strong>{{ reporter.ContactPhoneNumber or reporter.FromPhoneNumber or "" }}</strong>
+                    <strong>{{ reporter.phone or "-" }}</strong>
                 </div>
 
-                {% if reporter.HowReported %}
-                    <div class="detail-row">
-                        <span>How Reported</span>
-                        <strong>{{ reporter.HowReported.Description }}</strong>
-                    </div>
-                {% endif %}
+                <div class="detail-row">
+                    <span>How Reported</span>
+                    <strong>{{ reporter.how_reported or "-" }}</strong>
+                </div>
             {% else %}
                 <div class="text-secondary">No reporter information returned.</div>
             {% endif %}
@@ -298,6 +402,8 @@
         `)
         .openPopup();
 </script>
+{% endif %}
+
 {% endif %}
 
 {% endblock %}
