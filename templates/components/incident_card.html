@@ -30,8 +30,25 @@
             </div>
 
             <div class="col-6 text-end">
+                <div class="label">ELAPSED</div>
+                <div
+                    class="value text-warning call-elapsed"
+                    data-call-time="{{ call.call_datetime }}"
+                >
+                    --:--:--
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-3 small">
+            <div class="col-6">
                 <div class="label">CALL TAKER</div>
                 <div class="value">{{ call.call_taker }}</div>
+            </div>
+
+            <div class="col-6 text-end">
+                <div class="label">AGENCY</div>
+                <div class="value">{{ call.agency }}</div>
             </div>
         </div>
 

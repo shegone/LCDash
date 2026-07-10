@@ -85,6 +85,62 @@
 </div>
 
 <script>
+    function parseCadDateTime(value) {
+        if (!value) {
+            return null;
+        }
+
+        let cleanedValue = value;
+
+        if (cleanedValue.includes(".") && cleanedValue.endsWith("Z")) {
+            cleanedValue = cleanedValue.replace(/\.(\d{3})\d*Z$/, ".$1Z");
+        }
+
+        const parsedDate = new Date(cleanedValue);
+
+        if (isNaN(parsedDate.getTime())) {
+            return null;
+        }
+
+        return parsedDate;
+    }
+
+    function formatElapsedTime(startDate) {
+        const now = new Date();
+
+        let totalSeconds = Math.floor((now - startDate) / 1000);
+
+        if (totalSeconds < 0) {
+            totalSeconds = 0;
+        }
+
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+
+        return (
+            String(hours).padStart(2, "0") + ":" +
+            String(minutes).padStart(2, "0") + ":" +
+            String(seconds).padStart(2, "0")
+        );
+    }
+
+    function updateCallElapsedTimers() {
+        const elapsedElements = document.querySelectorAll(".call-elapsed");
+
+        elapsedElements.forEach(function (element) {
+            const callTimeValue = element.dataset.callTime;
+            const callStart = parseCadDateTime(callTimeValue);
+
+            if (!callStart) {
+                element.textContent = "--:--:--";
+                return;
+            }
+
+            element.textContent = formatElapsedTime(callStart);
+        });
+    }
+
     function updateLastUpdatedDisplay() {
         const lastUpdatedElement = document.getElementById("last-updated");
 
@@ -93,16 +149,10 @@
         }
 
         const rawValue = lastUpdatedElement.dataset.lastUpdated;
+        const date = parseCadDateTime(rawValue);
 
-        if (!rawValue) {
+        if (!date) {
             lastUpdatedElement.textContent = "Unknown";
-            return;
-        }
-
-        const date = new Date(rawValue);
-
-        if (isNaN(date.getTime())) {
-            lastUpdatedElement.textContent = rawValue;
             return;
         }
 
@@ -127,8 +177,11 @@
     }
 
     updateLastUpdatedDisplay();
+    updateCallElapsedTimers();
 
+    setInterval(updateCallElapsedTimers, 1000);
     setInterval(updateRefreshCountdown, 1000);
+
     updateRefreshCountdown();
 </script>
 
