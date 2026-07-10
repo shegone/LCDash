@@ -42,13 +42,22 @@
 
 <div class="glass p-4">
 
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
         <div>
             <h4 class="text-warning mb-0">ACTIVE INCIDENT FEED</h4>
             <div class="text-secondary">Live Calls for Service from CentralSquare</div>
         </div>
 
-        <span class="badge text-bg-success p-2">LIVE CAD DATA</span>
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            <div class="text-end">
+                <div class="text-info fw-bold">AUTO REFRESH</div>
+                <div class="text-secondary small">
+                    Refreshing in <span id="refresh-countdown">30</span> seconds
+                </div>
+            </div>
+
+            <span class="badge text-bg-success p-2">LIVE CAD DATA</span>
+        </div>
     </div>
 
     {% if calls %}
@@ -66,5 +75,27 @@
     {% endif %}
 
 </div>
+
+<script>
+    let refreshSeconds = 30;
+    const countdownElement = document.getElementById("refresh-countdown");
+
+    function updateRefreshCountdown() {
+        if (!countdownElement) {
+            return;
+        }
+
+        countdownElement.textContent = refreshSeconds;
+
+        refreshSeconds = refreshSeconds - 1;
+
+        if (refreshSeconds < 0) {
+            window.location.reload();
+        }
+    }
+
+    setInterval(updateRefreshCountdown, 1000);
+    updateRefreshCountdown();
+</script>
 
 {% endblock %}
