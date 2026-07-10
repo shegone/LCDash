@@ -16,6 +16,83 @@
 />
 
 <style>
+    .command-hero {
+        position: relative;
+        overflow: hidden;
+        border-left: 8px solid #4cc9ff;
+    }
+
+    .command-hero::after {
+        content: "";
+        position: absolute;
+        top: -80px;
+        right: -80px;
+        width: 240px;
+        height: 240px;
+        background: radial-gradient(circle, rgba(76, 201, 255, .22), transparent 70%);
+        pointer-events: none;
+    }
+
+    .command-hero.priority-5,
+    .command-hero.priority-10 {
+        border-left-color: #ff4c4c;
+        box-shadow: 0 0 34px rgba(255, 76, 76, .18);
+    }
+
+    .command-hero.priority-15 {
+        border-left-color: #ffd66b;
+        box-shadow: 0 0 34px rgba(255, 214, 107, .14);
+    }
+
+    .command-hero.priority-20 {
+        border-left-color: #4cc9ff;
+    }
+
+    .command-hero.priority-30 {
+        border-left-color: #69ffb9;
+    }
+
+    .incident-kpi {
+        min-width: 150px;
+        padding: 16px;
+        border-radius: 18px;
+        background: rgba(0, 0, 0, .22);
+        border: 1px solid rgba(255, 255, 255, .08);
+        text-align: center;
+    }
+
+    .incident-kpi-label {
+        color: #8fb7d9;
+        font-size: .72rem;
+        font-weight: 800;
+        letter-spacing: 1.4px;
+    }
+
+    .incident-kpi-value {
+        color: #ffffff;
+        font-size: 1.4rem;
+        font-weight: 900;
+        margin-top: 4px;
+    }
+
+    .elapsed-timer {
+        color: #ffd66b;
+        font-size: 1.7rem;
+        font-weight: 900;
+        letter-spacing: 1px;
+    }
+
+    .status-pill-large {
+        display: inline-block;
+        padding: 10px 15px;
+        border-radius: 999px;
+        background: rgba(105, 255, 185, 0.16);
+        color: #69ffb9;
+        font-size: .95rem;
+        font-weight: 900;
+        letter-spacing: .8px;
+    }
+
     .detail-row {
         display: flex;
         justify-content: space-between;
@@ -128,18 +205,41 @@
 
 {% else %}
 
-<div class="glass p-4 mb-4">
+<div class="glass p-4 mb-4 command-hero priority-{{ call.priority|default('30') }}">
 
-    <div class="d-flex justify-content-between align-items-start">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-4">
         <div>
-            <div class="text-info">INCIDENT COMMAND VIEW</div>
+            <div class="text-info fw-bold">INCIDENT COMMAND VIEW</div>
             <h1 class="mb-1">{{ call.incident_description }}</h1>
             <h4 class="text-secondary">{{ call.cfs_number }}</h4>
+            <div class="mt-3">
+                <span class="status-pill-large">{{ call.status }}</span>
+            </div>
         </div>
 
-        <div class="text-end">
-            <div class="priority-badge mb-2">PRI {{ call.priority }}</div>
-            <h4 class="text-success">{{ call.status }}</h4>
+        <div class="d-flex gap-3 flex-wrap justify-content-end">
+
+            <div class="incident-kpi">
+                <div class="incident-kpi-label">PRIORITY</div>
+                <div class="incident-kpi-value">PRI {{ call.priority }}</div>
+            </div>
+
+            <div class="incident-kpi">
+                <div class="incident-kpi-label">ELAPSED</div>
+                <div
+                    class="elapsed-timer"
+                    id="incident-elapsed"
+                    data-call-time="{{ call.call_datetime }}"
+                >
+                    --:--:--
+                </div>
+            </div>
+
+            <div class="incident-kpi">
+                <div class="incident-kpi-label">UNITS</div>
+                <div class="incident-kpi-value">{{ call.assigned_units|length }}</div>
+            </div>
+
         </div>
     </div>
 
@@ -403,6 +503,49 @@
         .openPopup();
 </script>
 {% endif %}
+
+<script>
+    function updateIncidentElapsed() {
+        const elapsedElement = document.getElementById("incident-elapsed");
+
+        if (!elapsedElement) {
+            return;
+        }
+
+        const callTimeValue = elapsedElement.dataset.callTime;
+
+        if (!callTimeValue) {
+            elapsedElement.textContent = "--:--:--";
+            return;
+        }
+
+        const callStart = new Date(callTimeValue);
+        const now = new Date();
+
+        if (isNaN(callStart.getTime())) {
+            elapsedElement.textContent = "--:--:--";
+            return;
+        }
+
+        let totalSeconds = Math.floor((now - callStart) / 1000);
+
+        if (totalSeconds < 0) {
+            totalSeconds = 0;
+        }
+
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+
+        elapsedElement.textContent =
+            String(hours).padStart(2, "0") + ":" +
+            String(minutes).padStart(2, "0") + ":" +
+            String(seconds).padStart(2, "0");
+    }
+
+    setInterval(updateIncidentElapsed, 1000);
+    updateIncidentElapsed();
+</script>
 
 {% endif %}
 
