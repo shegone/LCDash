@@ -1,40 +1,44 @@
-<div class="incident-card priority-{{ call.priority|default('30') }}">
+<a href="/calls/{{ call.cfs_number }}" target="_blank" class="incident-card-link">
 
-    <div class="d-flex justify-content-between align-items-start mb-2">
-        <div>
-            <div class="incident-code">{{ call.incident_code }}</div>
-            <div class="incident-title">{{ call.incident_description }}</div>
+    <div class="incident-card priority-{{ call.priority|default('30') }}">
+
+        <div class="d-flex justify-content-between align-items-start mb-2">
+            <div>
+                <div class="incident-code">{{ call.incident_code }}</div>
+                <div class="incident-title">{{ call.incident_description }}</div>
+            </div>
+
+            <div class="priority-badge">
+                PRI {{ call.priority }}
+            </div>
         </div>
 
-        <div class="priority-badge">
-            PRI {{ call.priority }}
-        </div>
-    </div>
-
-    <div class="incident-location mt-3">
-        <i class="bi bi-geo-alt-fill"></i>
-        {{ call.location }}
-    </div>
-
-    <div class="incident-units mt-3">
-        <i class="bi bi-truck-front-fill"></i>
-        {{ call.units }}
-    </div>
-
-    <div class="row mt-3 small">
-        <div class="col-6">
-            <div class="label">STATUS</div>
-            <div class="value status-text">{{ call.status }}</div>
+        <div class="incident-location mt-3">
+            <i class="bi bi-geo-alt-fill"></i>
+            {{ call.location }}
         </div>
 
-        <div class="col-6 text-end">
-            <div class="label">CALL TAKER</div>
-            <div class="value">{{ call.call_taker }}</div>
+        <div class="incident-units mt-3">
+            <i class="bi bi-truck-front-fill"></i>
+            {{ call.units }}
         </div>
+
+        <div class="row mt-3 small">
+            <div class="col-6">
+                <div class="label">STATUS</div>
+                <div class="value status-text">{{ call.status }}</div>
+            </div>
+
+            <div class="col-6 text-end">
+                <div class="label">CALL TAKER</div>
+                <div class="value">{{ call.call_taker }}</div>
+            </div>
+        </div>
+
+        <div class="incident-footer mt-3">
+            {{ call.cfs_number }}
+        </div>
+
     </div>
 
-    <div class="incident-footer mt-3">
-        {{ call.cfs_number }}
-    </div>
-
-</div>
+</a>

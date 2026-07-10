@@ -1,0 +1,303 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Incident {{ call.cfs_number }}{% endblock %}
+
+{% block content %}
+
+<link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+/>
+
+<style>
+    .detail-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        border-bottom: 1px solid rgba(255,255,255,.08);
+        padding: 10px 0;
+    }
+
+    .detail-row span {
+        color: #8fb7d9;
+    }
+
+    .detail-row strong {
+        color: #ffffff;
+        text-align: right;
+    }
+
+    .timeline {
+        border-left: 2px solid rgba(76, 201, 255, .45);
+        margin-left: 12px;
+        padding-left: 20px;
+    }
+
+    .timeline-item {
+        margin-bottom: 18px;
+        position: relative;
+    }
+
+    .timeline-item::before {
+        content: "";
+        position: absolute;
+        left: -28px;
+        top: 4px;
+        width: 12px;
+        height: 12px;
+        background: #4cc9ff;
+        border-radius: 50%;
+        box-shadow: 0 0 14px #4cc9ff;
+    }
+
+    .timeline-time {
+        color: #ffd66b;
+        font-size: .85rem;
+        font-weight: 700;
+    }
+
+    .timeline-text {
+        color: white;
+        font-size: 1rem;
+    }
+
+    .raw-json {
+        max-height: 280px;
+        overflow: auto;
+        background: rgba(0,0,0,.35);
+        color: #d7ecff;
+        padding: 14px;
+        border-radius: 12px;
+        font-size: .85rem;
+    }
+
+    #incident-map {
+        height: 420px;
+        border-radius: 18px;
+        overflow: hidden;
+        border: 1px solid rgba(76, 201, 255, .35);
+        box-shadow: 0 0 25px rgba(0, 140, 255, .15);
+    }
+</style>
+
+<div class="glass p-4 mb-4">
+
+    <div class="d-flex justify-content-between align-items-start">
+        <div>
+            <div class="text-info">INCIDENT COMMAND VIEW</div>
+            <h1 class="mb-1">{{ call.incident_description }}</h1>
+            <h4 class="text-secondary">{{ call.cfs_number }}</h4>
+        </div>
+
+        <div class="text-end">
+            <div class="priority-badge mb-2">PRI {{ call.priority }}</div>
+            <h4 class="text-success">{{ call.status }}</h4>
+        </div>
+    </div>
+
+</div>
+
+<div class="row g-4">
+
+    <div class="col-lg-8">
+
+        <div class="glass p-4 mb-4">
+            <h4 class="text-warning">Location</h4>
+            <h3>{{ call.location }}</h3>
+
+            {% if call.latitude and call.longitude %}
+                <div class="text-info mt-2">
+                    Coordinates: {{ call.latitude }}, {{ call.longitude }}
+                </div>
+
+                <div id="incident-map" class="mt-4"></div>
+            {% else %}
+                <div class="text-secondary mt-2">
+                    No verified GIS coordinates returned for this call.
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="glass p-4 mb-4">
+            <h4 class="text-warning">Assigned Units</h4>
+
+            {% set units = call.raw.Unit or [] %}
+
+            {% if units %}
+                <div class="row g-3">
+                    {% for unit in units %}
+                        <div class="col-md-6">
+                            <div class="incident-card">
+                                <h4>{{ unit.UnitNumber }}</h4>
+
+                                <div class="text-info">
+                                    {{ unit.UnitType.Description if unit.UnitType else "" }}
+                                </div>
+
+                                <div class="text-secondary">
+                                    {{ unit.Agency.Name if unit.Agency else "" }}
+                                </div>
+
+                                {% if unit.Responder %}
+                                    <div class="mt-2">
+                                        {{ unit.Responder.FullDescription }}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-secondary">No units assigned.</div>
+            {% endif %}
+        </div>
+
+        <div class="glass p-4">
+            <h4 class="text-warning">Command Log Timeline</h4>
+
+            {% set logs = call.raw.CommandLog or [] %}
+
+            {% if logs %}
+                <div class="timeline mt-3">
+                    {% for log in logs %}
+                        <div class="timeline-item">
+                            <div class="timeline-time">{{ log.Timestamp }}</div>
+
+                            <div class="timeline-text">
+                                {% if log.UnitNumber %}
+                                    <strong>{{ log.UnitNumber }}</strong>
+                                {% endif %}
+                                {{ log.Text }}
+                            </div>
+
+                            {% if log.Status %}
+                                <div class="text-success small">
+                                    Status: {{ log.Status.Description }}
+                                </div>
+                            {% endif %}
+
+                            {% if log.Creator %}
+                                <div class="text-secondary small">
+                                    {{ log.Creator.FullDescription }}
+                                </div>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-secondary">No command log entries returned.</div>
+            {% endif %}
+        </div>
+
+    </div>
+
+    <div class="col-lg-4">
+
+        <div class="glass p-4 mb-4">
+            <h4 class="text-warning">Incident Details</h4>
+
+            <div class="detail-row">
+                <span>Incident Code</span>
+                <strong>{{ call.incident_code }}</strong>
+            </div>
+
+            <div class="detail-row">
+                <span>Agency</span>
+                <strong>{{ call.agency }}</strong>
+            </div>
+
+            <div class="detail-row">
+                <span>Call Taker</span>
+                <strong>{{ call.call_taker }}</strong>
+            </div>
+
+            <div class="detail-row">
+                <span>Received</span>
+                <strong>{{ call.call_datetime }}</strong>
+            </div>
+
+            <div class="detail-row">
+                <span>Status</span>
+                <strong class="text-success">{{ call.status }}</strong>
+            </div>
+        </div>
+
+        <div class="glass p-4 mb-4">
+            <h4 class="text-warning">Reporter</h4>
+
+            {% set reporter = call.raw.Reporter %}
+
+            {% if reporter %}
+                <div class="detail-row">
+                    <span>Name</span>
+                    <strong>
+                        {{ reporter.First or "" }} {{ reporter.Last or "" }}
+                    </strong>
+                </div>
+
+                <div class="detail-row">
+                    <span>Phone</span>
+                    <strong>{{ reporter.ContactPhoneNumber or reporter.FromPhoneNumber or "" }}</strong>
+                </div>
+
+                {% if reporter.HowReported %}
+                    <div class="detail-row">
+                        <span>How Reported</span>
+                        <strong>{{ reporter.HowReported.Description }}</strong>
+                    </div>
+                {% endif %}
+            {% else %}
+                <div class="text-secondary">No reporter information returned.</div>
+            {% endif %}
+        </div>
+
+        <div class="glass p-4 mb-4">
+            <h4 class="text-warning">RapidSOS</h4>
+
+            {% if call.raw.RapidSOS %}
+                <pre class="raw-json">{{ call.raw.RapidSOS }}</pre>
+            {% else %}
+                <div class="text-secondary">No RapidSOS data returned.</div>
+            {% endif %}
+        </div>
+
+        <div class="glass p-4">
+            <h4 class="text-warning">ProQA</h4>
+
+            {% if call.raw.ProQA %}
+                <pre class="raw-json">{{ call.raw.ProQA }}</pre>
+            {% else %}
+                <div class="text-secondary">No ProQA data returned.</div>
+            {% endif %}
+        </div>
+
+    </div>
+
+</div>
+
+{% if call.latitude and call.longitude %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+    const incidentLat = {{ call.latitude }};
+    const incidentLng = {{ call.longitude }};
+
+    const map = L.map("incident-map").setView([incidentLat, incidentLng], 16);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap contributors"
+    }).addTo(map);
+
+    L.marker([incidentLat, incidentLng])
+        .addTo(map)
+        .bindPopup(`
+            <strong>{{ call.incident_description }}</strong><br>
+            {{ call.location }}<br>
+            {{ call.cfs_number }}
+        `)
+        .openPopup();
+</script>
+{% endif %}
+
+{% endblock %}

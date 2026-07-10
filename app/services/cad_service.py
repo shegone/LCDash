@@ -8,7 +8,7 @@ def _primary_incident(call: dict) -> dict:
 
     primary = next(
         (item for item in incident_codes if item.get("IsPrimary")),
-        incident_codes[0]
+        incident_codes[0],
     )
 
     incident = primary.get("IncidentCode") or {}
@@ -53,6 +53,7 @@ def simplify_call(call: dict) -> dict:
     priority = call.get("Priority") or {}
     agency = call.get("PrimaryResponseAgency") or {}
     call_taker = call.get("CallTaker") or {}
+    address = call.get("Address") or {}
 
     return {
         "cfs_number": call.get("CFSNumber", ""),
@@ -65,6 +66,9 @@ def simplify_call(call: dict) -> dict:
         "status": _latest_status(call),
         "call_taker": call_taker.get("CallSign") or call_taker.get("Username", ""),
         "call_datetime": call.get("CallDateTime", ""),
+        "latitude": address.get("Latitude"),
+        "longitude": address.get("Longitude"),
+        "raw": call,
     }
 
 
@@ -82,3 +86,9 @@ def get_active_calls() -> list:
     raw_calls = result.get("cfs_cores", [])
 
     return [simplify_call(call) for call in raw_calls]
+
+
+def get_call_detail(cfs_number: str) -> dict:
+    client = CentralSquareClient()
+    raw_call = client.get_cfs_core(cfs_number)
+    return simplify_call(raw_call)

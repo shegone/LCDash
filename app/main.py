@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config.settings import settings
 from app.auth.oauth import get_access_token, CentralSquareAuthError
-from app.services.cad_service import get_active_calls
+from app.services.cad_service import get_active_calls, get_call_detail
 from app.services.centralsquare import (
     CentralSquareClient,
     CentralSquareAPIError,
@@ -118,5 +118,28 @@ def dashboard(request: Request):
             "units": 0,
             "version": "0.3.0",
             "calls": calls,
+        },
+    )
+
+
+@app.get("/calls/{cfs_number}")
+def call_detail(request: Request, cfs_number: str):
+    try:
+        call = get_call_detail(cfs_number)
+        connected = True
+        error = None
+    except CentralSquareAPIError as exc:
+        call = None
+        connected = False
+        error = str(exc)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="call_detail.html",
+        context={
+            "call": call,
+            "connected": connected,
+            "error": error,
+            "version": "0.3.0",
         },
     )
