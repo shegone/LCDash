@@ -22,6 +22,49 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 
+def _safe_priority_level(call: dict) -> int:
+    try:
+        return int(call.get("priority") or 999)
+    except (TypeError, ValueError):
+        return 999
+
+
+def _build_dashboard_stats(calls: list) -> dict:
+    unique_units = set()
+    agency_counts = {}
+    high_priority_calls = 0
+
+    for call in calls:
+        priority = _safe_priority_level(call)
+
+        if priority <= 15:
+            high_priority_calls += 1
+
+        agency = call.get("agency") or "Unknown"
+        agency_counts[agency] = agency_counts.get(agency, 0) + 1
+
+        for unit in call.get("assigned_units") or []:
+            unit_number = unit.get("unit_number")
+            if unit_number:
+                unique_units.add(unit_number)
+
+    agency_summary = [
+        {"agency": agency, "count": count}
+        for agency, count in sorted(
+            agency_counts.items(),
+            key=lambda item: item[1],
+            reverse=True,
+        )
+    ]
+
+    return {
+        "active_calls": len(calls),
+        "assigned_units": len(unique_units),
+        "high_priority_calls": high_priority_calls,
+        "agency_summary": agency_summary,
+    }
+
+
 @app.get("/")
 def home():
     return {
@@ -85,11 +128,13 @@ def system_test():
 def active_calls_test():
     try:
         calls = get_active_calls()
+        stats = _build_dashboard_stats(calls)
 
         return {
             "connected": True,
             "active_calls": len(calls),
             "last_updated": datetime.now(timezone.utc).isoformat(),
+            "stats": stats,
             "sample": calls[:3],
         }
 
@@ -106,10 +151,12 @@ def dashboard(request: Request):
 
     try:
         calls = get_active_calls()
+        stats = _build_dashboard_stats(calls)
         cad_status = "Connected"
         system_status = "Connected"
     except CentralSquareAPIError:
         calls = []
+        stats = _build_dashboard_stats(calls)
         cad_status = "Disconnected"
         system_status = "Unknown"
 
@@ -119,8 +166,10 @@ def dashboard(request: Request):
         context={
             "system_status": system_status,
             "cad_status": cad_status,
-            "active_calls": len(calls),
-            "units": 0,
+            "active_calls": stats["active_calls"],
+            "assigned_units": stats["assigned_units"],
+            "high_priority_calls": stats["high_priority_calls"],
+            "agency_summary": stats["agency_summary"],
             "version": "0.3.0",
             "calls": calls,
             "last_updated": last_updated,

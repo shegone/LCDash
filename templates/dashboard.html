@@ -4,37 +4,122 @@
 
 {% block content %}
 
+<style>
+    .dashboard-kpi {
+        min-height: 150px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .dashboard-kpi::after {
+        content: "";
+        position: absolute;
+        top: -50px;
+        right: -50px;
+        width: 150px;
+        height: 150px;
+        background: radial-gradient(circle, rgba(76, 201, 255, .18), transparent 70%);
+        pointer-events: none;
+    }
+
+    .kpi-label {
+        color: #4cc9ff;
+        font-weight: 800;
+        letter-spacing: 1px;
+        font-size: .82rem;
+    }
+
+    .kpi-number {
+        color: #ffffff;
+        font-size: 2.5rem;
+        font-weight: 900;
+        line-height: 1;
+        margin-top: 10px;
+    }
+
+    .kpi-subtitle {
+        color: #8fb7d9;
+        margin-top: 8px;
+    }
+
+    .agency-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(76, 201, 255, .12);
+        border: 1px solid rgba(76, 201, 255, .22);
+        color: #dbeeff;
+        font-weight: 700;
+        margin: 4px;
+    }
+
+    .agency-chip-count {
+        color: #ffd66b;
+        font-weight: 900;
+    }
+</style>
+
 <div class="row g-4 mb-4">
 
     <div class="col-md-3">
-        <div class="glass p-4">
-            <div class="text-info">ACTIVE CALLS</div>
-            <h1>{{ active_calls }}</h1>
-            <div class="text-secondary">Live CAD incidents</div>
+        <div class="glass p-4 dashboard-kpi">
+            <div class="kpi-label">ACTIVE CALLS</div>
+            <div class="kpi-number">{{ active_calls }}</div>
+            <div class="kpi-subtitle">Live CAD incidents</div>
         </div>
     </div>
 
     <div class="col-md-3">
-        <div class="glass p-4">
-            <div class="text-info">UNITS</div>
-            <h1>{{ units }}</h1>
-            <div class="text-secondary">Tracked resources</div>
+        <div class="glass p-4 dashboard-kpi">
+            <div class="kpi-label">ASSIGNED UNITS</div>
+            <div class="kpi-number">{{ assigned_units }}</div>
+            <div class="kpi-subtitle">Unique units on active calls</div>
         </div>
     </div>
 
     <div class="col-md-3">
-        <div class="glass p-4">
-            <div class="text-info">CENTRALSQUARE</div>
-            <h1 class="text-success">ONLINE</h1>
-            <div class="text-secondary">{{ system_status }}</div>
+        <div class="glass p-4 dashboard-kpi">
+            <div class="kpi-label">HIGH PRIORITY</div>
+            <div class="kpi-number text-warning">{{ high_priority_calls }}</div>
+            <div class="kpi-subtitle">Priority 15 or higher urgency</div>
         </div>
     </div>
 
     <div class="col-md-3">
-        <div class="glass p-4">
-            <div class="text-info">CAD API</div>
-            <h1 class="text-success">LIVE</h1>
-            <div class="text-secondary">{{ cad_status }}</div>
+        <div class="glass p-4 dashboard-kpi">
+            <div class="kpi-label">CAD API</div>
+            {% if cad_status == "Connected" %}
+                <div class="kpi-number text-success">LIVE</div>
+            {% else %}
+                <div class="kpi-number text-danger">OFF</div>
+            {% endif %}
+            <div class="kpi-subtitle">{{ cad_status }} / {{ system_status }}</div>
+        </div>
+    </div>
+
+</div>
+
+<div class="glass p-4 mb-4">
+
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <h4 class="text-warning mb-0">AGENCY SUMMARY</h4>
+            <div class="text-secondary">Active calls grouped by CAD primary response agency</div>
+        </div>
+
+        <div>
+            {% if agency_summary %}
+                {% for item in agency_summary %}
+                    <span class="agency-chip">
+                        {{ item.agency }}
+                        <span class="agency-chip-count">{{ item.count }}</span>
+                    </span>
+                {% endfor %}
+            {% else %}
+                <span class="text-secondary">No agency data returned.</span>
+            {% endif %}
         </div>
     </div>
 
