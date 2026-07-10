@@ -1,10 +1,19 @@
+{% set priority_value = call.priority|int if call.priority else 999 %}
+
 <a href="/calls/{{ call.cfs_number }}" target="_blank" class="incident-card-link">
 
     <div class="incident-card priority-{{ call.priority|default('30') }}">
 
         <div class="d-flex justify-content-between align-items-start mb-2">
             <div>
-                <div class="incident-code">{{ call.incident_code }}</div>
+                <div class="incident-code">
+                    {{ call.incident_code }}
+
+                    {% if priority_value <= 15 %}
+                        <span class="badge text-bg-danger ms-2">HIGH PRIORITY</span>
+                    {% endif %}
+                </div>
+
                 <div class="incident-title">{{ call.incident_description }}</div>
             </div>
 
@@ -52,8 +61,12 @@
             </div>
         </div>
 
-        <div class="incident-footer mt-3">
-            {{ call.cfs_number }}
+        <div class="incident-footer mt-3 d-flex justify-content-between align-items-center">
+            <span>{{ call.cfs_number }}</span>
+            <span class="text-info">
+                Open Command View
+                <i class="bi bi-box-arrow-up-right"></i>
+            </span>
         </div>
 
     </div>

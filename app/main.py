@@ -29,6 +29,32 @@ def _safe_priority_level(call: dict) -> int:
         return 999
 
 
+def _parse_call_datetime(value: str) -> datetime:
+    if not value:
+        return datetime.max.replace(tzinfo=timezone.utc)
+
+    try:
+        cleaned_value = str(value)
+
+        if cleaned_value.endswith("Z"):
+            cleaned_value = cleaned_value.replace("Z", "+00:00")
+
+        return datetime.fromisoformat(cleaned_value)
+
+    except (TypeError, ValueError):
+        return datetime.max.replace(tzinfo=timezone.utc)
+
+
+def _sort_dashboard_calls(calls: list) -> list:
+    return sorted(
+        calls,
+        key=lambda call: (
+            _safe_priority_level(call),
+            _parse_call_datetime(call.get("call_datetime")),
+        ),
+    )
+
+
 def _build_dashboard_stats(calls: list) -> dict:
     unique_units = set()
     agency_counts = {}
@@ -127,7 +153,7 @@ def system_test():
 @app.get("/active-calls-test")
 def active_calls_test():
     try:
-        calls = get_active_calls()
+        calls = _sort_dashboard_calls(get_active_calls())
         stats = _build_dashboard_stats(calls)
 
         return {
@@ -150,7 +176,7 @@ def dashboard(request: Request):
     last_updated = datetime.now(timezone.utc).isoformat()
 
     try:
-        calls = get_active_calls()
+        calls = _sort_dashboard_calls(get_active_calls())
         stats = _build_dashboard_stats(calls)
         cad_status = "Connected"
         system_status = "Connected"
