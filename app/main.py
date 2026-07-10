@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -87,6 +89,7 @@ def active_calls_test():
         return {
             "connected": True,
             "active_calls": len(calls),
+            "last_updated": datetime.now(timezone.utc).isoformat(),
             "sample": calls[:3],
         }
 
@@ -99,6 +102,8 @@ def active_calls_test():
 
 @app.get("/dashboard")
 def dashboard(request: Request):
+    last_updated = datetime.now(timezone.utc).isoformat()
+
     try:
         calls = get_active_calls()
         cad_status = "Connected"
@@ -118,6 +123,7 @@ def dashboard(request: Request):
             "units": 0,
             "version": "0.3.0",
             "calls": calls,
+            "last_updated": last_updated,
         },
     )
 
