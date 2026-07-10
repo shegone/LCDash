@@ -5,6 +5,49 @@
 {% block content %}
 
 <style>
+    .ops-status-bar {
+        padding: 18px 22px;
+        border-radius: 20px;
+        background:
+            linear-gradient(90deg, rgba(8, 24, 43, 0.95), rgba(17, 43, 70, 0.95));
+        border: 1px solid rgba(76, 201, 255, .30);
+        box-shadow: 0 0 28px rgba(0, 148, 255, .12);
+    }
+
+    .ops-status-item {
+        padding: 10px 14px;
+        border-radius: 16px;
+        background: rgba(0, 0, 0, .18);
+        border: 1px solid rgba(255, 255, 255, .07);
+        min-width: 145px;
+    }
+
+    .ops-label {
+        color: #8fb7d9;
+        font-size: .72rem;
+        font-weight: 900;
+        letter-spacing: 1.3px;
+    }
+
+    .ops-value {
+        color: #ffffff;
+        font-size: 1rem;
+        font-weight: 900;
+        margin-top: 3px;
+    }
+
+    .ops-good {
+        color: #69ffb9;
+    }
+
+    .ops-warning {
+        color: #ffd66b;
+    }
+
+    .ops-danger {
+        color: #ff6b6b;
+    }
+
     .dashboard-kpi {
         min-height: 150px;
         position: relative;
@@ -60,6 +103,71 @@
         font-weight: 900;
     }
 </style>
+
+<div class="ops-status-bar mb-4">
+
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+
+        <div>
+            <div class="text-info fw-bold">LOGAN COUNTY 911 OPERATIONS</div>
+
+            {% if cad_status == "Connected" and high_priority_calls == 0 %}
+                <h3 class="mb-0 ops-good">Operations Normal</h3>
+            {% elif cad_status == "Connected" and high_priority_calls > 0 %}
+                <h3 class="mb-0 ops-warning">Attention Required</h3>
+            {% else %}
+                <h3 class="mb-0 ops-danger">CAD Connection Issue</h3>
+            {% endif %}
+        </div>
+
+        <div class="d-flex align-items-center gap-3 flex-wrap justify-content-end">
+
+            <div class="ops-status-item">
+                <div class="ops-label">CAD STATUS</div>
+                {% if cad_status == "Connected" %}
+                    <div class="ops-value ops-good">CONNECTED</div>
+                {% else %}
+                    <div class="ops-value ops-danger">DISCONNECTED</div>
+                {% endif %}
+            </div>
+
+            <div class="ops-status-item">
+                <div class="ops-label">HIGH PRIORITY</div>
+                {% if high_priority_calls > 0 %}
+                    <div class="ops-value ops-warning">{{ high_priority_calls }} ACTIVE</div>
+                {% else %}
+                    <div class="ops-value ops-good">NONE</div>
+                {% endif %}
+            </div>
+
+            <div class="ops-status-item">
+                <div class="ops-label">LAST UPDATED</div>
+                <div
+                    class="ops-value"
+                    id="last-updated"
+                    data-last-updated="{{ last_updated }}"
+                >
+                    Loading...
+                </div>
+            </div>
+
+            <div class="ops-status-item">
+                <div class="ops-label">AUTO REFRESH</div>
+                <div class="ops-value">
+                    <span id="refresh-countdown">30</span>s
+                </div>
+            </div>
+
+            <div class="ops-status-item">
+                <div class="ops-label">LOCAL TIME</div>
+                <div class="ops-value" id="dashboard-local-time">--:--:--</div>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
 
 <div class="row g-4 mb-4">
 
@@ -133,24 +241,7 @@
             <div class="text-secondary">Live Calls for Service from CentralSquare</div>
         </div>
 
-        <div class="d-flex align-items-center gap-4 flex-wrap">
-
-            <div class="text-end">
-                <div class="text-info fw-bold">LAST UPDATED</div>
-                <div class="text-secondary small" id="last-updated" data-last-updated="{{ last_updated }}">
-                    Loading...
-                </div>
-            </div>
-
-            <div class="text-end">
-                <div class="text-info fw-bold">AUTO REFRESH</div>
-                <div class="text-secondary small">
-                    Refreshing in <span id="refresh-countdown">30</span> seconds
-                </div>
-            </div>
-
-            <span class="badge text-bg-success p-2">LIVE CAD DATA</span>
-        </div>
+        <span class="badge text-bg-success p-2">LIVE CAD DATA</span>
     </div>
 
     {% if calls %}
@@ -241,7 +332,17 @@
             return;
         }
 
-        lastUpdatedElement.textContent = date.toLocaleString();
+        lastUpdatedElement.textContent = date.toLocaleTimeString();
+    }
+
+    function updateDashboardLocalTime() {
+        const localTimeElement = document.getElementById("dashboard-local-time");
+
+        if (!localTimeElement) {
+            return;
+        }
+
+        localTimeElement.textContent = new Date().toLocaleTimeString();
     }
 
     let refreshSeconds = 30;
@@ -263,8 +364,10 @@
 
     updateLastUpdatedDisplay();
     updateCallElapsedTimers();
+    updateDashboardLocalTime();
 
     setInterval(updateCallElapsedTimers, 1000);
+    setInterval(updateDashboardLocalTime, 1000);
     setInterval(updateRefreshCountdown, 1000);
 
     updateRefreshCountdown();
