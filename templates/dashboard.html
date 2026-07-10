@@ -5,6 +5,23 @@
 {% block content %}
 
 <style>
+    .wallboard-title-row {
+        margin-bottom: 20px;
+    }
+
+    .wallboard-title {
+        font-size: 2rem;
+        font-weight: 900;
+        letter-spacing: 1px;
+        color: #ffffff;
+        margin-bottom: 4px;
+    }
+
+    .wallboard-subtitle {
+        color: #8fb7d9;
+        font-size: 1rem;
+    }
+
     .ops-status-bar {
         padding: 18px 22px;
         border-radius: 20px;
@@ -49,7 +66,7 @@
     }
 
     .dashboard-kpi {
-        min-height: 150px;
+        min-height: 165px;
         position: relative;
         overflow: hidden;
     }
@@ -65,44 +82,86 @@
         pointer-events: none;
     }
 
+    .dashboard-kpi.alert-kpi {
+        border-color: rgba(255, 214, 107, .55);
+        box-shadow: 0 0 30px rgba(255, 214, 107, .14);
+    }
+
+    .dashboard-kpi.danger-kpi {
+        border-color: rgba(255, 76, 76, .65);
+        box-shadow: 0 0 34px rgba(255, 76, 76, .18);
+    }
+
     .kpi-label {
         color: #4cc9ff;
-        font-weight: 800;
-        letter-spacing: 1px;
-        font-size: .82rem;
+        font-weight: 900;
+        letter-spacing: 1.2px;
+        font-size: .86rem;
     }
 
     .kpi-number {
         color: #ffffff;
-        font-size: 2.5rem;
-        font-weight: 900;
+        font-size: 3rem;
+        font-weight: 950;
         line-height: 1;
-        margin-top: 10px;
+        margin-top: 12px;
     }
 
     .kpi-subtitle {
         color: #8fb7d9;
-        margin-top: 8px;
+        margin-top: 10px;
+        font-size: .95rem;
     }
 
     .agency-chip {
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        padding: 8px 12px;
+        padding: 9px 13px;
         border-radius: 999px;
         background: rgba(76, 201, 255, .12);
         border: 1px solid rgba(76, 201, 255, .22);
         color: #dbeeff;
-        font-weight: 700;
+        font-weight: 800;
         margin: 4px;
     }
 
     .agency-chip-count {
         color: #ffd66b;
+        font-weight: 950;
+    }
+
+    .feed-header {
+        border-bottom: 1px solid rgba(255,255,255,.08);
+        padding-bottom: 18px;
+        margin-bottom: 24px;
+    }
+
+    .wallboard-badge {
+        font-size: .9rem;
+        letter-spacing: .6px;
         font-weight: 900;
+        padding: 10px 14px;
+    }
+
+    .incident-feed-wrap {
+        min-height: 300px;
     }
 </style>
+
+<div class="wallboard-title-row d-flex justify-content-between align-items-start flex-wrap gap-3">
+    <div>
+        <div class="wallboard-title">LCDash Operations Dashboard</div>
+        <div class="wallboard-subtitle">
+            Logan County 911 live operational picture from CentralSquare CAD
+        </div>
+    </div>
+
+    <div class="text-end">
+        <div class="text-info fw-bold">DISPLAY MODE</div>
+        <div class="text-secondary">Supervisor / Wallboard View</div>
+    </div>
+</div>
 
 <div class="ops-status-bar mb-4">
 
@@ -188,7 +247,7 @@
     </div>
 
     <div class="col-md-3">
-        <div class="glass p-4 dashboard-kpi">
+        <div class="glass p-4 dashboard-kpi {% if high_priority_calls > 0 %}danger-kpi{% endif %}">
             <div class="kpi-label">HIGH PRIORITY</div>
             <div class="kpi-number text-warning">{{ high_priority_calls }}</div>
             <div class="kpi-subtitle">Priority 15 or higher urgency</div>
@@ -196,7 +255,7 @@
     </div>
 
     <div class="col-md-3">
-        <div class="glass p-4 dashboard-kpi">
+        <div class="glass p-4 dashboard-kpi {% if cad_status != 'Connected' %}danger-kpi{% endif %}">
             <div class="kpi-label">CAD API</div>
             {% if cad_status == "Connected" %}
                 <div class="kpi-number text-success">LIVE</div>
@@ -233,15 +292,18 @@
 
 </div>
 
-<div class="glass p-4">
+<div class="glass p-4 incident-feed-wrap">
 
-    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+    <div class="feed-header d-flex justify-content-between align-items-center flex-wrap gap-3">
         <div>
             <h4 class="text-warning mb-0">ACTIVE INCIDENT FEED</h4>
-            <div class="text-secondary">Live Calls for Service from CentralSquare</div>
+            <div class="text-secondary">Sorted by CAD priority and call age</div>
         </div>
 
-        <span class="badge text-bg-success p-2">LIVE CAD DATA</span>
+        <div class="d-flex gap-2 flex-wrap">
+            <span class="badge text-bg-success wallboard-badge">LIVE CAD DATA</span>
+            <span class="badge text-bg-secondary wallboard-badge">{{ active_calls }} ACTIVE</span>
+        </div>
     </div>
 
     {% if calls %}
