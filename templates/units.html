@@ -1,0 +1,565 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}LCDash Units{% endblock %}
+
+{% block content %}
+
+<style>
+    .unit-board-title {
+        font-size: 2rem;
+        font-weight: 950;
+        letter-spacing: 1px;
+        color: #ffffff;
+        margin-bottom: 4px;
+    }
+
+    .unit-board-subtitle {
+        color: #8fb7d9;
+        font-size: 1rem;
+    }
+
+    .unit-kpi {
+        min-height: 145px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .unit-kpi::after {
+        content: "";
+        position: absolute;
+        top: -55px;
+        right: -55px;
+        width: 155px;
+        height: 155px;
+        background: radial-gradient(circle, rgba(76, 201, 255, .18), transparent 70%);
+        pointer-events: none;
+    }
+
+    .unit-kpi-label {
+        color: #4cc9ff;
+        font-weight: 900;
+        letter-spacing: 1.2px;
+        font-size: .82rem;
+    }
+
+    .unit-kpi-number {
+        color: #ffffff;
+        font-size: 2.8rem;
+        font-weight: 950;
+        line-height: 1;
+        margin-top: 10px;
+    }
+
+    .unit-kpi-subtitle {
+        color: #8fb7d9;
+        margin-top: 8px;
+    }
+
+    .unit-board-status-bar {
+        padding: 18px 22px;
+        border-radius: 20px;
+        background:
+            linear-gradient(90deg, rgba(8, 24, 43, 0.95), rgba(17, 43, 70, 0.95));
+        border: 1px solid rgba(76, 201, 255, .30);
+        box-shadow: 0 0 28px rgba(0, 148, 255, .12);
+    }
+
+    .status-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 13px;
+        border-radius: 999px;
+        background: rgba(76, 201, 255, .12);
+        border: 1px solid rgba(76, 201, 255, .22);
+        color: #dbeeff;
+        font-weight: 800;
+        margin: 4px;
+    }
+
+    .status-chip-count {
+        color: #ffd66b;
+        font-weight: 950;
+    }
+
+    .unit-card-link {
+        display: block;
+        height: 100%;
+        color: inherit;
+        text-decoration: none;
+    }
+
+    .unit-card-link:hover {
+        color: inherit;
+        text-decoration: none;
+    }
+
+    .unit-board-card {
+        height: 100%;
+        padding: 20px;
+        border-radius: 22px;
+        background:
+            linear-gradient(180deg, rgba(19, 38, 64, 0.96), rgba(8, 18, 33, 0.96));
+        border: 1px solid rgba(95, 178, 255, 0.35);
+        box-shadow: 0 0 22px rgba(0, 148, 255, 0.12);
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .unit-board-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 0 32px rgba(0, 180, 255, 0.28);
+    }
+
+    .unit-board-card.status-transporting {
+        border-color: rgba(255, 214, 107, .65);
+        box-shadow: 0 0 28px rgba(255, 214, 107, .14);
+    }
+
+    .unit-board-card.status-enroute {
+        border-color: rgba(76, 201, 255, .65);
+    }
+
+    .unit-board-card.status-on-scene {
+        border-color: rgba(105, 255, 185, .55);
+    }
+
+    .unit-board-card.status-cleared {
+        opacity: .78;
+    }
+
+    .unit-board-number {
+        color: #ffffff;
+        font-size: 1.8rem;
+        font-weight: 950;
+        letter-spacing: 1px;
+    }
+
+    .unit-board-status {
+        display: inline-block;
+        padding: 7px 11px;
+        border-radius: 999px;
+        background: rgba(105, 255, 185, .16);
+        color: #69ffb9;
+        font-size: .82rem;
+        font-weight: 900;
+        letter-spacing: .6px;
+        white-space: nowrap;
+    }
+
+    .unit-board-status.transporting {
+        background: rgba(255, 214, 107, .16);
+        color: #ffd66b;
+    }
+
+    .unit-board-status.enroute {
+        background: rgba(76, 201, 255, .16);
+        color: #4cc9ff;
+    }
+
+    .unit-board-status.cleared {
+        background: rgba(150, 160, 175, .16);
+        color: #c4ced8;
+    }
+
+    .unit-timer-box {
+        margin-top: 15px;
+        padding: 13px;
+        border-radius: 14px;
+        background: rgba(255, 214, 107, .08);
+        border: 1px solid rgba(255, 214, 107, .22);
+    }
+
+    .unit-status-timer {
+        color: #ffd66b;
+        font-size: 1.45rem;
+        font-weight: 950;
+        letter-spacing: 1px;
+    }
+
+    .unit-board-meta {
+        color: #8fb7d9;
+        font-size: .9rem;
+    }
+
+    .unit-call-title {
+        color: #ffffff;
+        font-size: 1.05rem;
+        font-weight: 900;
+        margin-top: 12px;
+    }
+
+    .unit-call-location {
+        color: #dbeeff;
+        font-size: .9rem;
+        margin-top: 8px;
+    }
+
+    .unit-time-grid {
+        border-top: 1px solid rgba(255,255,255,.08);
+        margin-top: 14px;
+        padding-top: 12px;
+    }
+
+    .unit-time-value {
+        color: #ffffff;
+        font-size: .86rem;
+        font-weight: 800;
+    }
+
+    .cad-time {
+        white-space: nowrap;
+    }
+</style>
+
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+        <div class="unit-board-title">Live Unit Board</div>
+        <div class="unit-board-subtitle">
+            Active CAD units with command-log-backed status and time-in-status tracking
+        </div>
+    </div>
+
+    <div class="text-end">
+        <div class="text-info fw-bold">CAD STATUS</div>
+        {% if cad_status == "Connected" %}
+            <div class="text-success fw-bold">CONNECTED</div>
+        {% else %}
+            <div class="text-danger fw-bold">DISCONNECTED</div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="unit-board-status-bar mb-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <div class="text-info fw-bold">UNIT OPERATIONS</div>
+            <h3 class="mb-0">
+                {{ stats.total_units }} Active Assigned Unit{% if stats.total_units != 1 %}s{% endif %}
+            </h3>
+            <div class="text-secondary">
+                Last updated:
+                <span class="cad-time" data-cad-time="{{ last_updated }}">{{ last_updated }}</span>
+            </div>
+        </div>
+
+        <div>
+            {% if stats.status_summary %}
+                {% for item in stats.status_summary %}
+                    <span class="status-chip">
+                        {{ item.status }}
+                        <span class="status-chip-count">{{ item.count }}</span>
+                    </span>
+                {% endfor %}
+            {% else %}
+                <span class="text-secondary">No active unit status data.</span>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+
+    <div class="col-md-3">
+        <div class="glass p-4 unit-kpi">
+            <div class="unit-kpi-label">TOTAL UNITS</div>
+            <div class="unit-kpi-number">{{ stats.total_units }}</div>
+            <div class="unit-kpi-subtitle">Units on active CAD calls</div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="glass p-4 unit-kpi">
+            <div class="unit-kpi-label">ENROUTE</div>
+            <div class="unit-kpi-number text-info">{{ stats.enroute_units }}</div>
+            <div class="unit-kpi-subtitle">Responding units</div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="glass p-4 unit-kpi">
+            <div class="unit-kpi-label">ON SCENE</div>
+            <div class="unit-kpi-number text-success">{{ stats.on_scene_units }}</div>
+            <div class="unit-kpi-subtitle">Units at incident scenes</div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="glass p-4 unit-kpi">
+            <div class="unit-kpi-label">TRANSPORTING</div>
+            <div class="unit-kpi-number text-warning">{{ stats.transporting_units }}</div>
+            <div class="unit-kpi-subtitle">Units transporting</div>
+        </div>
+    </div>
+
+</div>
+
+<div class="glass p-4">
+
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+        <div>
+            <h4 class="text-warning mb-0">ACTIVE UNIT ASSIGNMENTS</h4>
+            <div class="text-secondary">
+                Sorted by unit status, incident priority, and unit number
+            </div>
+        </div>
+
+        <span class="badge text-bg-success p-2">LIVE CAD DATA</span>
+    </div>
+
+    {% if unit_rows %}
+        <div class="row g-4">
+            {% for unit in unit_rows %}
+                {% set status_class = unit.status_group|lower|replace(' ', '-') %}
+
+                <div class="col-xl-4 col-lg-6">
+                    <a href="/calls/{{ unit.cfs_number }}" target="_blank" class="unit-card-link">
+                        <div class="unit-board-card status-{{ status_class }}">
+
+                            <div class="d-flex justify-content-between align-items-start gap-3">
+                                <div>
+                                    <div class="unit-board-number">{{ unit.unit_number }}</div>
+
+                                    {% if unit.unit_type %}
+                                        <div class="unit-board-meta">{{ unit.unit_type }}</div>
+                                    {% endif %}
+
+                                    {% if unit.agency %}
+                                        <div class="unit-board-meta">{{ unit.agency }}</div>
+                                    {% endif %}
+                                </div>
+
+                                <div class="unit-board-status {{ status_class }}">
+                                    {{ unit.status_group }}
+                                </div>
+                            </div>
+
+                            <div class="unit-timer-box">
+                                <div class="label">TIME IN STATUS</div>
+                                <div
+                                    class="unit-status-timer"
+                                    data-status-start="{{ unit.status_timer_start }}"
+                                >
+                                    --:--:--
+                                </div>
+
+                                {% if unit.status_timer_start %}
+                                    <div class="unit-board-meta mt-1">
+                                        Since
+                                        <span class="cad-time" data-cad-time="{{ unit.status_timer_start }}">
+                                            {{ unit.status_timer_start }}
+                                        </span>
+                                    </div>
+                                {% else %}
+                                    <div class="unit-board-meta mt-1">
+                                        Status timestamp not returned
+                                    </div>
+                                {% endif %}
+                            </div>
+
+                            <div class="unit-call-title">
+                                {{ unit.incident_description }}
+                            </div>
+
+                            <div class="unit-board-meta">
+                                {{ unit.cfs_number }} • {{ unit.incident_code }} • PRI {{ unit.priority }}
+                            </div>
+
+                            <div class="unit-call-location">
+                                <i class="bi bi-geo-alt-fill text-info"></i>
+                                {{ unit.location }}
+                            </div>
+
+                            <div class="unit-time-grid">
+                                <div class="row g-2 small">
+                                    <div class="col-6">
+                                        <div class="label">DISPATCH</div>
+                                        <div class="unit-time-value">
+                                            {% if unit.dispatch_time %}
+                                                <span class="cad-time" data-cad-time="{{ unit.dispatch_time }}">
+                                                    {{ unit.dispatch_time }}
+                                                </span>
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </div>
+                                    </div>
+
+                                    <div class="col-6 text-end">
+                                        <div class="label">ENROUTE</div>
+                                        <div class="unit-time-value">
+                                            {% if unit.enroute_time %}
+                                                <span class="cad-time" data-cad-time="{{ unit.enroute_time }}">
+                                                    {{ unit.enroute_time }}
+                                                </span>
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </div>
+                                    </div>
+
+                                    <div class="col-6">
+                                        <div class="label">ARRIVAL</div>
+                                        <div class="unit-time-value">
+                                            {% if unit.arrival_time %}
+                                                <span class="cad-time" data-cad-time="{{ unit.arrival_time }}">
+                                                    {{ unit.arrival_time }}
+                                                </span>
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </div>
+                                    </div>
+
+                                    <div class="col-6 text-end">
+                                        <div class="label">TRANSPORT</div>
+                                        <div class="unit-time-value">
+                                            {% if unit.transport_time %}
+                                                <span class="cad-time" data-cad-time="{{ unit.transport_time }}">
+                                                    {{ unit.transport_time }}
+                                                </span>
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </div>
+                                    </div>
+
+                                    <div class="col-6">
+                                        <div class="label">CLEAR</div>
+                                        <div class="unit-time-value">
+                                            {% if unit.clear_time %}
+                                                <span class="cad-time" data-cad-time="{{ unit.clear_time }}">
+                                                    {{ unit.clear_time }}
+                                                </span>
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </div>
+                                    </div>
+
+                                    <div class="col-6 text-end">
+                                        <div class="label">OPEN VIEW</div>
+                                        <div class="unit-time-value text-info">
+                                            Command View
+                                            <i class="bi bi-box-arrow-up-right"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </a>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="text-center text-secondary py-5">
+            No units assigned to active CAD calls.
+        </div>
+    {% endif %}
+
+</div>
+
+<script>
+    function parseCadDateTime(value) {
+        if (!value) {
+            return null;
+        }
+
+        let cleanedValue = value;
+
+        if (cleanedValue.includes(".") && cleanedValue.endsWith("Z")) {
+            cleanedValue = cleanedValue.replace(/\.(\d{3})\d*Z$/, ".$1Z");
+        }
+
+        const parsedDate = new Date(cleanedValue);
+
+        if (isNaN(parsedDate.getTime())) {
+            return null;
+        }
+
+        return parsedDate;
+    }
+
+    function formatElapsedTime(startDate) {
+        const now = new Date();
+
+        let totalSeconds = Math.floor((now - startDate) / 1000);
+
+        if (totalSeconds < 0) {
+            totalSeconds = 0;
+        }
+
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+
+        return (
+            String(hours).padStart(2, "0") + ":" +
+            String(minutes).padStart(2, "0") + ":" +
+            String(seconds).padStart(2, "0")
+        );
+    }
+
+    function formatCadDisplayTime(value) {
+        const date = parseCadDateTime(value);
+
+        if (!date) {
+            return value || "-";
+        }
+
+        const datePart = date.toLocaleDateString([], {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit"
+        });
+
+        const timePart = date.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false
+        });
+
+        return datePart + " " + timePart;
+    }
+
+    function updateCadDisplayTimes() {
+        const timeElements = document.querySelectorAll(".cad-time");
+
+        timeElements.forEach(function (element) {
+            const rawValue = element.dataset.cadTime;
+
+            if (!rawValue) {
+                element.textContent = "-";
+                return;
+            }
+
+            element.textContent = formatCadDisplayTime(rawValue);
+        });
+    }
+
+    function updateUnitStatusTimers() {
+        const unitTimerElements = document.querySelectorAll(".unit-status-timer");
+
+        unitTimerElements.forEach(function (element) {
+            const statusStart = parseCadDateTime(element.dataset.statusStart);
+
+            if (!statusStart) {
+                element.textContent = "No Time";
+                return;
+            }
+
+            element.textContent = formatElapsedTime(statusStart);
+        });
+    }
+
+    function updateUnitBoard() {
+        updateCadDisplayTimes();
+        updateUnitStatusTimers();
+    }
+
+    setInterval(updateUnitBoard, 1000);
+    updateUnitBoard();
+</script>
+
+{% endblock %}
