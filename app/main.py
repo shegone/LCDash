@@ -206,6 +206,55 @@ def dashboard(request: Request):
     )
 
 
+@app.get("/active-calls")
+def active_calls_page(request: Request):
+    try:
+        snapshot = get_live_operations_snapshot()
+        cad_status = "Connected"
+        system_status = "Connected"
+        error = None
+    except CentralSquareAPIError as exc:
+        snapshot = build_empty_operations_snapshot()
+        cad_status = "Disconnected"
+        system_status = "Unknown"
+        error = str(exc)
+
+    calls = snapshot["calls"]
+    stats = snapshot["dashboard_stats"]
+
+    agency_options = sorted(
+        {
+            call.get("agency")
+            for call in calls
+            if call.get("agency")
+        }
+    )
+    status_options = sorted(
+        {
+            call.get("status")
+            for call in calls
+            if call.get("status")
+        }
+    )
+
+    return templates.TemplateResponse(
+        request=request,
+        name="active_calls.html",
+        context={
+            "system_status": system_status,
+            "cad_status": cad_status,
+            "error": error,
+            "calls": calls,
+            "active_calls": stats["active_calls"],
+            "high_priority_calls": stats["high_priority_calls"],
+            "agency_options": agency_options,
+            "status_options": status_options,
+            "last_updated": snapshot["last_updated"],
+            "version": "0.3.0",
+        },
+    )
+
+
 @app.get("/units")
 def units_board(request: Request):
     try:

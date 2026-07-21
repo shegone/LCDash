@@ -88,6 +88,8 @@ def _unit_list(call: dict) -> str:
 
 def _latest_status(call: dict) -> str:
     command_log = call.get("CommandLog") or []
+    candidates = []
+    fallback_status = ""
 
     for entry in command_log:
         if not isinstance(entry, dict):
@@ -95,9 +97,28 @@ def _latest_status(call: dict) -> str:
 
         status = entry.get("Status")
         if isinstance(status, dict):
-            return _safe_text(status.get("Description"), "Unknown")
+            description = _safe_text(status.get("Description"))
 
-    return "Open"
+            if not description:
+                continue
+
+            if not fallback_status:
+                fallback_status = description
+
+            timestamp = _log_timestamp(entry)
+            if timestamp:
+                candidates.append(
+                    {
+                        "description": description,
+                        "sort_time": _parse_sort_datetime(timestamp),
+                    }
+                )
+
+    if candidates:
+        latest_status = max(candidates, key=lambda item: item["sort_time"])
+        return latest_status["description"]
+
+    return fallback_status or "Open"
 
 
 def _log_timestamp(log: dict) -> str:

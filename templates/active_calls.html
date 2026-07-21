@@ -1,0 +1,487 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}LCDash Active Calls{% endblock %}
+
+{% block content %}
+
+<style>
+    .active-calls-title {
+        color: #ffffff;
+        font-size: 2rem;
+        font-weight: 950;
+        letter-spacing: 1px;
+        margin-bottom: 4px;
+    }
+
+    .active-calls-subtitle {
+        color: #8fb7d9;
+        font-size: 1rem;
+    }
+
+    .active-calls-status {
+        padding: 18px 22px;
+        border: 1px solid rgba(76, 201, 255, .30);
+        border-radius: 20px;
+        background: linear-gradient(90deg, rgba(8, 24, 43, .95), rgba(17, 43, 70, .95));
+        box-shadow: 0 0 28px rgba(0, 148, 255, .12);
+    }
+
+    .active-calls-status-item {
+        min-width: 135px;
+        padding: 10px 14px;
+        border: 1px solid rgba(255, 255, 255, .07);
+        border-radius: 16px;
+        background: rgba(0, 0, 0, .18);
+    }
+
+    .active-calls-filter-label {
+        color: #8fb7d9;
+        font-size: .72rem;
+        font-weight: 900;
+        letter-spacing: 1.2px;
+        margin-bottom: 6px;
+    }
+
+    .active-calls-filter {
+        color: #ffffff;
+        background: #0b1c31;
+        border: 1px solid rgba(76, 201, 255, .32);
+    }
+
+    .active-calls-filter:focus {
+        color: #ffffff;
+        background: #0b1c31;
+        border-color: #4cc9ff;
+        box-shadow: 0 0 0 .2rem rgba(76, 201, 255, .12);
+    }
+
+    .active-calls-filter option {
+        color: #ffffff;
+        background: #0b1c31;
+    }
+
+    .active-calls-counter {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 13px;
+        border: 1px solid rgba(76, 201, 255, .22);
+        border-radius: 999px;
+        color: #dbeeff;
+        background: rgba(76, 201, 255, .12);
+        font-weight: 800;
+    }
+
+    .active-calls-counter strong {
+        color: #ffd66b;
+    }
+
+    .active-calls-empty {
+        display: none;
+        padding: 50px 20px;
+        text-align: center;
+        color: #8fb7d9;
+    }
+
+    .active-calls-disconnected {
+        border-color: rgba(255, 76, 76, .55);
+        box-shadow: 0 0 30px rgba(255, 76, 76, .14);
+    }
+
+    @media (max-width: 767px) {
+        .active-calls-status-item {
+            min-width: 120px;
+            flex: 1 1 120px;
+        }
+    }
+</style>
+
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+        <div class="active-calls-title">Active Calls</div>
+        <div class="active-calls-subtitle">
+            Search and filter the current CentralSquare CAD incident list
+        </div>
+    </div>
+
+    <div class="text-end">
+        <div class="text-info fw-bold">OPERATIONAL VIEW</div>
+        <div class="text-secondary">Priority and age order</div>
+    </div>
+</div>
+
+<div class="active-calls-status {% if cad_status != 'Connected' %}active-calls-disconnected{% endif %} mb-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <div class="text-info fw-bold">CENTRALSQUARE CAD</div>
+            {% if cad_status == "Connected" %}
+                <h3 class="text-success mb-0">Connected</h3>
+            {% else %}
+                <h3 class="text-danger mb-0">Disconnected</h3>
+                <div class="text-secondary">Active-call information is currently unavailable.</div>
+            {% endif %}
+        </div>
+
+        <div class="d-flex gap-3 flex-wrap justify-content-end">
+            <div class="active-calls-status-item">
+                <div class="label">TOTAL ACTIVE</div>
+                <div class="value">{{ active_calls }}</div>
+            </div>
+
+            <div class="active-calls-status-item">
+                <div class="label">HIGH PRIORITY</div>
+                <div class="value {% if high_priority_calls > 0 %}text-warning{% else %}text-success{% endif %}">
+                    {{ high_priority_calls }}
+                </div>
+            </div>
+
+            <div class="active-calls-status-item">
+                <div class="label">LAST UPDATED</div>
+                <div id="last-updated" class="value" data-last-updated="{{ last_updated }}">Loading...</div>
+            </div>
+
+            <div class="active-calls-status-item">
+                <div class="label">AUTO REFRESH</div>
+                <div id="refresh-countdown" class="value">30s</div>
+            </div>
+
+            <div class="active-calls-status-item">
+                <div class="label">LOCAL TIME</div>
+                <div id="active-calls-local-time" class="value">--:--:--</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="glass p-4 mb-4">
+    <div class="row g-3 align-items-end">
+        <div class="col-xl-4 col-lg-6">
+            <label for="call-search" class="active-calls-filter-label">SEARCH</label>
+            <input
+                id="call-search"
+                class="form-control active-calls-filter"
+                type="search"
+                placeholder="CFS, incident, address, or unit"
+                autocomplete="off"
+            >
+        </div>
+
+        <div class="col-xl-2 col-md-4">
+            <label for="agency-filter" class="active-calls-filter-label">AGENCY</label>
+            <select id="agency-filter" class="form-select active-calls-filter">
+                <option value="">All agencies</option>
+                {% for agency in agency_options %}
+                    <option value="{{ agency|lower }}">{{ agency }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="col-xl-2 col-md-4">
+            <label for="priority-filter" class="active-calls-filter-label">PRIORITY</label>
+            <select id="priority-filter" class="form-select active-calls-filter">
+                <option value="">All priorities</option>
+                <option value="high">High priority (1-15)</option>
+                <option value="20">Priority 20</option>
+                <option value="30">Priority 30</option>
+                <option value="other">Other / unknown</option>
+            </select>
+        </div>
+
+        <div class="col-xl-2 col-md-4">
+            <label for="status-filter" class="active-calls-filter-label">CAD STATUS</label>
+            <select id="status-filter" class="form-select active-calls-filter">
+                <option value="">All statuses</option>
+                {% for status in status_options %}
+                    <option value="{{ status|lower }}">{{ status }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="col-xl-2 col-md-4">
+            <label for="assignment-filter" class="active-calls-filter-label">ASSIGNMENT</label>
+            <select id="assignment-filter" class="form-select active-calls-filter">
+                <option value="">All calls</option>
+                <option value="assigned">Units assigned</option>
+                <option value="unassigned">No units assigned</option>
+            </select>
+        </div>
+
+        <div class="col-xl-3 col-md-5">
+            <label for="sort-filter" class="active-calls-filter-label">SORT</label>
+            <select id="sort-filter" class="form-select active-calls-filter">
+                <option value="priority">Priority and age</option>
+                <option value="oldest">Oldest first</option>
+                <option value="newest">Newest first</option>
+                <option value="agency">Agency A-Z</option>
+                <option value="incident">Incident type A-Z</option>
+                <option value="cfs">CFS number</option>
+                <option value="status">Status A-Z</option>
+            </select>
+        </div>
+
+        <div class="col-xl-3 col-md-4">
+            <button id="clear-filters" type="button" class="btn btn-outline-info w-100">
+                <i class="bi bi-arrow-counterclockwise"></i> Clear Filters
+            </button>
+        </div>
+
+        <div class="col-xl-6 col-md-3 text-md-end">
+            <span class="active-calls-counter">
+                SHOWING <strong id="visible-call-count">{{ active_calls }}</strong> OF {{ active_calls }}
+            </span>
+        </div>
+    </div>
+</div>
+
+<div class="glass p-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+        <div>
+            <h4 class="text-warning mb-0">ACTIVE INCIDENTS</h4>
+            <div class="text-secondary">Open a card to view the complete Incident Command View</div>
+        </div>
+        {% if cad_status == "Connected" %}
+            <span class="badge text-bg-success p-2">LIVE CAD DATA</span>
+        {% else %}
+            <span class="badge text-bg-danger p-2">CAD DISCONNECTED</span>
+        {% endif %}
+    </div>
+
+    {% if cad_status != "Connected" %}
+        <div class="text-center text-danger py-5">
+            The active-call list could not be loaded from CentralSquare CAD.
+            <div class="text-secondary mt-2">Please contact the LCDash administrator if the connection does not recover.</div>
+        </div>
+    {% elif calls %}
+        <div id="active-call-grid" class="row g-4">
+            {% for call in calls %}
+                <div
+                    class="col-xl-4 col-lg-6 active-call-item"
+                    data-agency="{{ call.agency|lower }}"
+                    data-priority="{{ call.priority }}"
+                    data-status="{{ call.status|lower }}"
+                    data-assigned="{% if call.assigned_units %}assigned{% else %}unassigned{% endif %}"
+                    data-call-time="{{ call.call_datetime }}"
+                    data-cfs="{{ call.cfs_number|lower }}"
+                    data-incident="{{ call.incident_description|lower }}"
+                    data-search="{{ (call.cfs_number ~ ' ' ~ call.incident_code ~ ' ' ~ call.incident_description ~ ' ' ~ call.location ~ ' ' ~ call.units ~ ' ' ~ call.agency ~ ' ' ~ call.status)|lower }}"
+                >
+                    {% include "components/incident_card.html" %}
+                </div>
+            {% endfor %}
+        </div>
+
+        <div id="filtered-empty-state" class="active-calls-empty">
+            <i class="bi bi-search fs-1 d-block mb-3"></i>
+            No active calls match the selected filters.
+        </div>
+    {% else %}
+        <div class="text-center text-secondary py-5">
+            No active calls returned from CAD.
+        </div>
+    {% endif %}
+</div>
+
+<script>
+    (function () {
+        const storageKey = "lcdash-active-call-filters";
+        const searchInput = document.getElementById("call-search");
+        const agencyFilter = document.getElementById("agency-filter");
+        const priorityFilter = document.getElementById("priority-filter");
+        const statusFilter = document.getElementById("status-filter");
+        const assignmentFilter = document.getElementById("assignment-filter");
+        const sortFilter = document.getElementById("sort-filter");
+        const clearButton = document.getElementById("clear-filters");
+        const grid = document.getElementById("active-call-grid");
+        const emptyState = document.getElementById("filtered-empty-state");
+        const visibleCount = document.getElementById("visible-call-count");
+
+        function controls() {
+            return [searchInput, agencyFilter, priorityFilter, statusFilter, assignmentFilter, sortFilter];
+        }
+
+        function priorityMatches(filterValue, rawPriority) {
+            if (!filterValue) {
+                return true;
+            }
+
+            const priority = Number.parseInt(rawPriority, 10);
+
+            if (filterValue === "high") {
+                return Number.isFinite(priority) && priority >= 1 && priority <= 15;
+            }
+
+            if (filterValue === "other") {
+                return !Number.isFinite(priority) || ![20, 30].includes(priority) && !(priority >= 1 && priority <= 15);
+            }
+
+            return String(priority) === filterValue;
+        }
+
+        function parseCallTime(value) {
+            const parsed = LCDashTime.parseCadDateTime(value);
+            return parsed ? parsed.getTime() : null;
+        }
+
+        function compareCallTimes(leftValue, rightValue, newestFirst) {
+            const leftTime = parseCallTime(leftValue);
+            const rightTime = parseCallTime(rightValue);
+
+            if (leftTime === null && rightTime === null) {
+                return 0;
+            }
+
+            if (leftTime === null) {
+                return 1;
+            }
+
+            if (rightTime === null) {
+                return -1;
+            }
+
+            return newestFirst ? rightTime - leftTime : leftTime - rightTime;
+        }
+
+        function compareItems(left, right) {
+            const sortValue = sortFilter ? sortFilter.value : "priority";
+
+            if (sortValue === "oldest" || sortValue === "newest") {
+                return compareCallTimes(
+                    left.dataset.callTime,
+                    right.dataset.callTime,
+                    sortValue === "newest"
+                );
+            }
+
+            if (sortValue === "agency") {
+                return left.dataset.agency.localeCompare(right.dataset.agency);
+            }
+
+            if (sortValue === "incident") {
+                return left.dataset.incident.localeCompare(right.dataset.incident);
+            }
+
+            if (sortValue === "cfs") {
+                return left.dataset.cfs.localeCompare(right.dataset.cfs, undefined, { numeric: true });
+            }
+
+            if (sortValue === "status") {
+                return left.dataset.status.localeCompare(right.dataset.status);
+            }
+
+            const leftPriority = Number.parseInt(left.dataset.priority, 10);
+            const rightPriority = Number.parseInt(right.dataset.priority, 10);
+            const safeLeftPriority = Number.isFinite(leftPriority) ? leftPriority : 999;
+            const safeRightPriority = Number.isFinite(rightPriority) ? rightPriority : 999;
+
+            return safeLeftPriority - safeRightPriority || compareCallTimes(
+                left.dataset.callTime,
+                right.dataset.callTime,
+                false
+            );
+        }
+
+        function saveFilters() {
+            if (!searchInput) {
+                return;
+            }
+
+            sessionStorage.setItem(storageKey, JSON.stringify({
+                search: searchInput.value,
+                agency: agencyFilter.value,
+                priority: priorityFilter.value,
+                status: statusFilter.value,
+                assignment: assignmentFilter.value,
+                sort: sortFilter.value
+            }));
+        }
+
+        function restoreFilters() {
+            if (!searchInput) {
+                return;
+            }
+
+            try {
+                const saved = JSON.parse(sessionStorage.getItem(storageKey) || "{}");
+                searchInput.value = saved.search || "";
+                agencyFilter.value = saved.agency || "";
+                priorityFilter.value = saved.priority || "";
+                statusFilter.value = saved.status || "";
+                assignmentFilter.value = saved.assignment || "";
+                sortFilter.value = saved.sort || "priority";
+            } catch (error) {
+                sessionStorage.removeItem(storageKey);
+            }
+        }
+
+        function applyFilters() {
+            if (!grid) {
+                return;
+            }
+
+            const items = Array.from(grid.querySelectorAll(".active-call-item"));
+            const searchValue = searchInput.value.trim().toLowerCase();
+            const agencyValue = agencyFilter.value;
+            const priorityValue = priorityFilter.value;
+            const statusValue = statusFilter.value;
+            const assignmentValue = assignmentFilter.value;
+            let shown = 0;
+
+            items.sort(compareItems).forEach(function (item) {
+                const matches =
+                    (!searchValue || item.dataset.search.includes(searchValue)) &&
+                    (!agencyValue || item.dataset.agency === agencyValue) &&
+                    priorityMatches(priorityValue, item.dataset.priority) &&
+                    (!statusValue || item.dataset.status === statusValue) &&
+                    (!assignmentValue || item.dataset.assigned === assignmentValue);
+
+                item.style.display = matches ? "" : "none";
+                grid.appendChild(item);
+
+                if (matches) {
+                    shown += 1;
+                }
+            });
+
+            visibleCount.textContent = shown;
+            emptyState.style.display = shown === 0 ? "block" : "none";
+            saveFilters();
+        }
+
+        restoreFilters();
+
+        controls().forEach(function (control) {
+            if (control) {
+                control.addEventListener(control === searchInput ? "input" : "change", applyFilters);
+            }
+        });
+
+        if (clearButton) {
+            clearButton.addEventListener("click", function () {
+                searchInput.value = "";
+                agencyFilter.value = "";
+                priorityFilter.value = "";
+                statusFilter.value = "";
+                assignmentFilter.value = "";
+                sortFilter.value = "priority";
+                sessionStorage.removeItem(storageKey);
+                applyFilters();
+                searchInput.focus();
+            });
+        }
+
+        applyFilters();
+
+        LCDashTime.startDashboardTimers({
+            refreshSeconds: 30,
+            refreshElementId: "refresh-countdown",
+            lastUpdatedElementId: "last-updated",
+            localTimeElementId: "active-calls-local-time",
+            onRefreshComplete: function () {
+                saveFilters();
+                window.location.reload();
+            }
+        });
+    })();
+</script>
+
+{% endblock %}

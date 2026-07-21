@@ -49,7 +49,7 @@ def build_dashboard_stats(calls: list) -> dict:
     for call in calls:
         priority = _safe_priority_level(call)
 
-        if priority <= 15:
+        if 1 <= priority <= 15:
             high_priority_calls += 1
 
         agency = call.get("agency") or "Unknown"
