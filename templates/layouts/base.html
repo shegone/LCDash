@@ -6,6 +6,14 @@
     <title>{% block title %}LCDash{% endblock %}</title>
 
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#07111f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="LCDash">
+
+    <link rel="manifest" href="/static/manifest.webmanifest">
+    <link rel="icon" type="image/png" href="/static/img/logan911-logo.png">
+    <link rel="apple-touch-icon" href="/static/img/logan911-logo.png">
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
@@ -198,11 +206,23 @@
             border-color: rgba(105, 255, 185, 0.4);
         }
     </style>
+    <link href="/static/css/lcdash-mobile.css" rel="stylesheet">
 </head>
 
 <body>
 
-<div class="sidebar">
+<div class="mobile-nav-overlay" id="mobile-nav-overlay" aria-hidden="true"></div>
+
+<aside class="sidebar" id="lcdash-sidebar" aria-label="LCDash navigation">
+    <button
+        class="mobile-nav-close"
+        id="mobile-nav-close"
+        type="button"
+        aria-label="Close navigation"
+    >
+        <i class="bi bi-x-lg"></i>
+    </button>
+
     <img src="/static/img/logan911-logo.png" class="logo">
     <h4>LCDash</h4>
 
@@ -217,14 +237,25 @@
         <a class="nav-link" href="#"><i class="bi bi-robot"></i> AI Assistant</a>
         <a class="nav-link" href="#"><i class="bi bi-gear-fill"></i> Settings</a>
     </div>
-</div>
+</aside>
 
 <div class="main">
 
     <div class="topbar glass">
-        <div>
+        <button
+            class="mobile-menu-button"
+            id="mobile-menu-button"
+            type="button"
+            aria-label="Open navigation"
+            aria-controls="lcdash-sidebar"
+            aria-expanded="false"
+        >
+            <i class="bi bi-list"></i>
+        </button>
+
+        <div class="topbar-brand">
             <h3>Logan County 911</h3>
-            <div style="color:#7ea8d3;">WV's First NG911 Center</div>
+            <div class="topbar-subtitle">WV's First NG911 Center</div>
         </div>
 
         <div class="clock" id="clock"></div>
@@ -238,6 +269,7 @@
 <script>
     LCDashTime.startClock("clock");
 </script>
+<script src="/static/js/lcdash-mobile.js"></script>
 
 </body>
 </html>

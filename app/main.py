@@ -47,6 +47,8 @@ async def prevent_stale_static_assets(request: Request, call_next):
     response = await call_next(request)
     if request.url.path.startswith("/static/"):
         response.headers["Cache-Control"] = "no-cache, max-age=0, must-revalidate"
+    if request.url.path == "/static/service-worker.js":
+        response.headers["Service-Worker-Allowed"] = "/"
     return response
 
 

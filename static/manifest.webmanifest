@@ -1,0 +1,19 @@
+{
+  "name": "Logan County 911 Operations Dashboard",
+  "short_name": "LCDash",
+  "description": "Secure supervisor access to Logan County 911 operational information.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#07111f",
+  "theme_color": "#07111f",
+  "icons": [
+    {
+      "src": "/static/img/logan911-logo.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

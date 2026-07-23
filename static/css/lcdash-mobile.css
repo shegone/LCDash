@@ -1,0 +1,260 @@
+:root {
+    color-scheme: dark;
+}
+
+.mobile-menu-button,
+.mobile-nav-close,
+.mobile-nav-overlay {
+    display: none;
+}
+
+.topbar-subtitle {
+    color: #7ea8d3;
+}
+
+@media (max-width: 991.98px) {
+    html,
+    body {
+        min-height: 100%;
+        overflow-x: hidden;
+    }
+
+    body {
+        overflow-y: auto;
+        -webkit-text-size-adjust: 100%;
+    }
+
+    body.mobile-nav-open {
+        overflow: hidden;
+    }
+
+    .sidebar {
+        z-index: 1050;
+        width: min(86vw, 320px);
+        transform: translateX(-105%);
+        transition: transform .22s ease;
+        box-shadow: 18px 0 48px rgba(0, 0, 0, .42);
+    }
+
+    .sidebar.mobile-open {
+        transform: translateX(0);
+    }
+
+    .mobile-nav-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 1040;
+        background: rgba(2, 8, 17, .74);
+        backdrop-filter: blur(3px);
+    }
+
+    .mobile-nav-overlay.mobile-open {
+        display: block;
+    }
+
+    .mobile-nav-close {
+        display: inline-grid;
+        position: absolute;
+        top: 14px;
+        right: 14px;
+        width: 44px;
+        height: 44px;
+        place-items: center;
+        border: 1px solid rgba(76, 201, 255, .34);
+        border-radius: 12px;
+        background: rgba(10, 33, 57, .92);
+        color: #dff5ff;
+        font-size: 1.25rem;
+    }
+
+    .sidebar .logo {
+        width: 108px;
+        margin-top: 18px;
+        margin-bottom: 8px;
+    }
+
+    .sidebar h4 {
+        margin-bottom: 16px;
+    }
+
+    .sidebar .nav-link {
+        min-height: 48px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 18px;
+    }
+
+    .main {
+        margin-left: 0;
+        width: 100%;
+        height: auto;
+        min-height: 100dvh;
+        padding: 12px;
+        overflow: visible;
+    }
+
+    .topbar {
+        position: sticky;
+        top: 8px;
+        z-index: 1000;
+        min-height: 66px;
+        margin-bottom: 16px;
+        padding: 10px 12px;
+        gap: 10px;
+        border-radius: 16px;
+        backdrop-filter: blur(14px);
+    }
+
+    .mobile-menu-button {
+        display: inline-grid;
+        flex: 0 0 46px;
+        width: 46px;
+        height: 46px;
+        place-items: center;
+        border: 1px solid rgba(76, 201, 255, .38);
+        border-radius: 13px;
+        background: linear-gradient(180deg, rgba(24, 64, 99, .98), rgba(9, 30, 52, .98));
+        color: #dff7ff;
+        box-shadow: 0 0 18px rgba(76, 201, 255, .12);
+        font-size: 1.55rem;
+    }
+
+    .mobile-menu-button:focus-visible,
+    .mobile-nav-close:focus-visible {
+        outline: 3px solid rgba(76, 201, 255, .55);
+        outline-offset: 2px;
+    }
+
+    .topbar-brand {
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+
+    .topbar h3 {
+        margin: 0;
+        font-size: clamp(1.05rem, 5vw, 1.35rem);
+        line-height: 1.15;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .topbar-subtitle {
+        margin-top: 2px;
+        font-size: .72rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .clock {
+        flex: 0 0 auto;
+        max-width: 92px;
+        font-size: .72rem;
+        line-height: 1.25;
+        text-align: right;
+    }
+
+    .glass {
+        border-radius: 16px;
+    }
+
+    .incident-card {
+        padding: 17px;
+        border-radius: 17px;
+    }
+
+    .incident-title {
+        font-size: 1.08rem;
+    }
+
+    .priority-badge {
+        padding: 7px 10px;
+        font-size: .76rem;
+    }
+
+    .main h1 {
+        font-size: clamp(1.7rem, 8vw, 2.25rem);
+    }
+
+    .main h2 {
+        font-size: clamp(1.4rem, 7vw, 1.8rem);
+    }
+
+    .main h3 {
+        font-size: clamp(1.15rem, 6vw, 1.5rem);
+    }
+
+    .main h4 {
+        font-size: 1.08rem;
+    }
+
+    .main .p-4 {
+        padding: 1rem !important;
+    }
+
+    .main .gap-4 {
+        gap: 1rem !important;
+    }
+
+    .main .table-responsive {
+        border-radius: 14px;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .main .form-control,
+    .main .form-select,
+    .main .btn {
+        min-height: 44px;
+    }
+
+    #operations-map,
+    #heatmap-map,
+    #incident-map {
+        height: min(58dvh, 520px) !important;
+        min-height: 340px;
+        border-radius: 15px !important;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .main {
+        padding: 8px;
+    }
+
+    .topbar {
+        top: 5px;
+        margin-bottom: 12px;
+        padding: 8px;
+    }
+
+    .topbar-subtitle {
+        font-size: .66rem;
+    }
+
+    .clock {
+        display: none;
+    }
+
+    .incident-card {
+        padding: 15px;
+    }
+
+    .main .row {
+        --bs-gutter-x: .75rem;
+        --bs-gutter-y: .75rem;
+    }
+
+    .main .badge {
+        white-space: normal;
+        text-align: center;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sidebar,
+    .incident-card {
+        transition: none !important;
+    }
+}
