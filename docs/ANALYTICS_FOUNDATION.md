@@ -68,3 +68,39 @@ later run to retry.
 
 On the Linux server, run the collector every five minutes or trigger it from a completion
 webhook. Retain a scheduled reconciliation run as a safety net.
+
+## Docker deployment
+
+LCDash now runs in a dedicated Compose platform with its own PostgreSQL database,
+five-minute analytics worker, daily backup service, local Ollama AI service, and
+authenticated Open WebUI. The web interfaces remain published only on server loopback
+until LCDash has authentication and role-based access.
+
+Build and start the web application:
+
+```bash
+docker compose -f deploy/compose.yaml up -d --build
+```
+
+Initialize the analytics schema:
+
+```bash
+docker compose -f deploy/compose.yaml exec lcdash python scripts/init_analytics_db.py
+```
+
+Run a controlled completed-call synchronization:
+
+```bash
+docker compose -f deploy/compose.yaml exec analytics-worker python scripts/sync_analytics.py
+```
+
+From an authorized workstation, use an SSH tunnel to view the protected application:
+
+```powershell
+ssh -i "$env:USERPROFILE\.ssh\lcdash_server_ed25519" `
+    -L 8010:127.0.0.1:8010 `
+    -L 3000:127.0.0.1:3000 `
+    ted@14.1.1.177
+```
+
+Then open `http://127.0.0.1:8010` locally.

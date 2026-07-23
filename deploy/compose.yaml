@@ -1,0 +1,185 @@
+name: lcdash-platform
+
+x-lcdash-environment: &lcdash-environment
+  CENTRALSQUARE_TOKEN_URL: https://api-wv-logan-911.centralsquarecloudgov.com/api/token
+  CENTRALSQUARE_CAD_BASE_URL: https://api-wv-logan-911.centralsquarecloudgov.com/api/cad/v1
+  CENTRALSQUARE_SYSTEM_BASE_URL: https://api-wv-logan-911.centralsquarecloudgov.com/api/system/v1
+  CENTRALSQUARE_USERNAME_FILE: /run/secrets/centralsquare_username
+  CENTRALSQUARE_PASSWORD_FILE: /run/secrets/centralsquare_password
+  CENTRALSQUARE_FROM_HEADER: LCDash-Logan911
+  DATABASE_URL_FILE: /run/secrets/database_url
+  LCDASH_DEBUG: "false"
+  ANALYTICS_INITIAL_LOOKBACK_HOURS: "24"
+  ANALYTICS_OVERLAP_MINUTES: "120"
+  ANALYTICS_MAX_CALLS_PER_RUN: "250"
+  ANALYTICS_REQUEST_DELAY_MS: "100"
+
+x-lcdash-secrets: &lcdash-secrets
+  - centralsquare_username
+  - centralsquare_password
+  - database_url
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: lcdash-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: lcdash
+      POSTGRES_USER: lcdash_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    volumes:
+      - lcdash_postgres_data:/var/lib/postgresql/data
+    networks:
+      - lcdash_private
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lcdash_user -d lcdash"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+
+  lcdash:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: lcdash-web
+    restart: unless-stopped
+    user: "1000:1000"
+    environment: *lcdash-environment
+    secrets: *lcdash-secrets
+    ports:
+      - "127.0.0.1:8010:8000"
+    networks:
+      - lcdash_private
+    depends_on:
+      postgres:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+
+  analytics-worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: lcdash-analytics-worker
+    restart: unless-stopped
+    user: "1000:1000"
+    command: ["python", "scripts/analytics_worker.py"]
+    environment:
+      <<: *lcdash-environment
+      ANALYTICS_SYNC_INTERVAL_SECONDS: "300"
+    secrets: *lcdash-secrets
+    networks:
+      - lcdash_private
+    depends_on:
+      postgres:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      disable: true
+
+  postgres-backup:
+    image: postgres:17
+    container_name: lcdash-postgres-backup
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-lc"]
+    command:
+      - >-
+        while true; do
+          /bin/sh /opt/lcdash/backup-postgres.sh;
+          sleep 86400;
+        done
+    environment:
+      POSTGRES_DB: lcdash
+      POSTGRES_USER: lcdash_user
+      POSTGRES_BACKUP_RETENTION_DAYS: "30"
+    secrets:
+      - postgres_password
+    volumes:
+      - ./backup-postgres.sh:/opt/lcdash/backup-postgres.sh:ro
+      - /home/ted/lcdash-platform/backups:/backups
+    networks:
+      - lcdash_private
+    depends_on:
+      postgres:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: lcdash-ollama
+    restart: unless-stopped
+    environment:
+      OLLAMA_VULKAN: "1"
+      OLLAMA_IGPU_ENABLE: "1"
+      OLLAMA_KEEP_ALIVE: "10m"
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    volumes:
+      - lcdash_ollama_data:/root/.ollama
+    networks:
+      - lcdash_private
+    security_opt:
+      - no-new-privileges:true
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:v0.10.1
+    container_name: lcdash-open-webui
+    restart: unless-stopped
+    entrypoint: ["/bin/bash", "-lc"]
+    command:
+      - >-
+        export WEBUI_SECRET_KEY="$$(cat /run/secrets/openwebui_secret_key)";
+        export WEBUI_ADMIN_PASSWORD="$$(cat /run/secrets/openwebui_admin_password)";
+        exec bash /app/backend/start.sh
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      WEBUI_AUTH: "True"
+      ENABLE_SIGNUP: "False"
+      ENABLE_API_KEYS: "True"
+      DEFAULT_USER_ROLE: pending
+      WEBUI_ADMIN_EMAIL: admin@logan911.local
+      WEBUI_ADMIN_NAME: Logan 911 Administrator
+    secrets:
+      - openwebui_secret_key
+      - openwebui_admin_password
+    ports:
+      - "127.0.0.1:3000:8080"
+    volumes:
+      - lcdash_openwebui_data:/app/backend/data
+    networks:
+      - lcdash_private
+    depends_on:
+      - ollama
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  lcdash_private:
+    name: lcdash_private
+
+volumes:
+  lcdash_postgres_data:
+  lcdash_ollama_data:
+  lcdash_openwebui_data:
+
+secrets:
+  centralsquare_username:
+    file: /home/ted/lcdash-platform/secrets/centralsquare_username
+  centralsquare_password:
+    file: /home/ted/lcdash-platform/secrets/centralsquare_password
+  database_url:
+    file: /home/ted/lcdash-platform/secrets/database_url
+  postgres_password:
+    file: /home/ted/lcdash-platform/secrets/postgres_password
+  openwebui_secret_key:
+    file: /home/ted/lcdash-platform/secrets/openwebui_secret_key
+  openwebui_admin_password:
+    file: /home/ted/lcdash-platform/secrets/openwebui_admin_password
