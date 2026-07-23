@@ -31,6 +31,20 @@
         }
     }
 
+    function optionalText(id, value) {
+        const element = document.getElementById(id);
+        if (!element) {
+            return;
+        }
+
+        const hasValue = Boolean(value && String(value).trim());
+        element.textContent = hasValue ? value : "";
+        const detail = element.closest("[data-alert-detail]");
+        if (detail) {
+            detail.classList.toggle("d-none", !hasValue);
+        }
+    }
+
     function parseInitialData() {
         if (!initialDataElement) {
             return {};
@@ -334,9 +348,26 @@
     function renderAlertMap(alert) {
         const mapWrap = document.getElementById("alert-map-wrap");
         const unavailable = document.getElementById("alert-map-unavailable");
+        const streetViewLink = document.getElementById("alert-street-view");
+        const googleMapsLink = document.getElementById("alert-google-maps");
         const hasCoordinates = validCoordinate(alert.latitude, -90, 90) &&
             validCoordinate(alert.longitude, -180, 180) &&
             !(Number(alert.latitude) === 0 && Number(alert.longitude) === 0);
+        const locationQuery = encodeURIComponent(alert.location || "");
+
+        if (streetViewLink) {
+            streetViewLink.href = hasCoordinates
+                ? "https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=" +
+                    Number(alert.latitude) + "," + Number(alert.longitude)
+                : "https://www.google.com/maps/search/?api=1&query=" + locationQuery;
+        }
+
+        if (googleMapsLink) {
+            googleMapsLink.href = hasCoordinates
+                ? "https://www.google.com/maps/search/?api=1&query=" +
+                    Number(alert.latitude) + "," + Number(alert.longitude)
+                : "https://www.google.com/maps/search/?api=1&query=" + locationQuery;
+        }
 
         if (alertMap) {
             alertMap.remove();
@@ -378,6 +409,10 @@
         text("alert-units", (alert.unit_numbers || []).join(", ") || "Unit unavailable");
         text("alert-cfs-number", alert.cfs_number || "TEST ALERT");
         text("alert-dispatch-time", formatCadTime(alert.dispatch_datetime || new Date().toISOString()));
+        optionalText("alert-alternate-location", alert.alternate_location);
+        optionalText("alert-caller-report", alert.caller_report);
+        optionalText("alert-response-plan", alert.response_plan);
+        optionalText("alert-safety-notes", alert.safety_notes);
 
         const soundNotice = document.getElementById("alert-sound-notice");
         soundNotice.textContent = soundArmed
@@ -411,15 +446,19 @@
         }
 
         const demo = {
-            incident_code: "TEST",
-            incident_description: "Station Alert Test",
-            priority: "10",
-            location: "This is only a test of the LCDash station display.",
-            unit_numbers: ["TEST UNIT"],
-            cfs_number: "TEST-ALERT",
+            incident_code: "STRUCT",
+            incident_description: "TEST — Commercial Structure Fire",
+            priority: "5",
+            location: "911 Mark Spurlock Drive, Logan, WV 25601",
+            alternate_location: "Also mapped as 28 1/2 Main Avenue, Logan",
+            caller_report: "TEST CALL: Multiple callers report smoke and flames visible from the second floor. Building evacuation is in progress.",
+            response_plan: "TEST RESPONSE: Establish command, complete a primary search, secure a water supply, and position the ladder on the address side.",
+            safety_notes: "TEST INFORMATION: Possible occupants inside. Use caution around parked vehicles and the rear service area.",
+            unit_numbers: ["TEST ENG 1", "TEST LAD 1", "TEST RESCUE 1", "TEST MEDIC 1", "TEST CHIEF 1"],
+            cfs_number: "TEST-CFS-STRUCTURE-FIRE",
             dispatch_datetime: new Date().toISOString(),
-            latitude: null,
-            longitude: null
+            latitude: 37.8507803,
+            longitude: -81.9975482
         };
         showAlert(demo, true);
         window.setTimeout(function () {

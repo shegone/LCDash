@@ -189,8 +189,21 @@ class StationAlertPageTests(unittest.TestCase):
         self.assertIn("Enable Loud Alerts", response.text)
         self.assertIn("Test Two-Tone Alert", response.text)
         self.assertIn("dispatch-alert-overlay", response.text)
+        self.assertIn("alert-caller-report", response.text)
+        self.assertIn("alert-response-plan", response.text)
+        self.assertIn("alert-safety-notes", response.text)
+        self.assertIn("alert-google-maps", response.text)
+        self.assertIn("alert-street-view", response.text)
         self.assertIn("lcdash-station-alerts.js", response.text)
         self.assertIn("STA 100", response.text)
+
+        script_response = self.client.get("/static/js/lcdash-station-alerts.js")
+        self.assertEqual(script_response.status_code, 200)
+        self.assertIn("TEST — Commercial Structure Fire", script_response.text)
+        self.assertIn("911 Mark Spurlock Drive, Logan, WV 25601", script_response.text)
+        self.assertIn("28 1/2 Main Avenue", script_response.text)
+        self.assertIn("37.8507803", script_response.text)
+        self.assertIn("map_action=pano", script_response.text)
 
     @patch("app.main.get_live_station_alert_snapshot")
     def test_api_returns_sanitized_station_snapshot_and_no_store(self, snapshot_mock):

@@ -207,6 +207,13 @@
         margin-top: 18px;
     }
 
+    .dispatch-alternate-location {
+        color: var(--alert-blue);
+        font-size: 1rem;
+        font-weight: 800;
+        margin-top: 8px;
+    }
+
     .dispatch-meta-box {
         padding: 17px;
         border-radius: 16px;
@@ -220,6 +227,28 @@
         border-radius: 18px;
         border: 1px solid rgba(76, 201, 255, .4);
         overflow: hidden;
+    }
+
+    .dispatch-detail-box {
+        padding: 17px;
+        border-radius: 16px;
+        background: rgba(6, 17, 31, .78);
+        border: 1px solid rgba(76, 201, 255, .18);
+        height: 100%;
+    }
+
+    .dispatch-detail-text {
+        color: #eef8ff;
+        font-size: 1rem;
+        font-weight: 700;
+        line-height: 1.45;
+        margin-top: 7px;
+    }
+
+    .map-action {
+        border-radius: 13px;
+        font-weight: 900;
+        min-height: 46px;
     }
 
     .sound-warning {
@@ -385,6 +414,10 @@
             </div>
 
             <div id="alert-location" class="dispatch-location">Location unavailable</div>
+            <div class="dispatch-alternate-location d-none" data-alert-detail>
+                <i class="bi bi-signpost-split-fill"></i>
+                <span id="alert-alternate-location"></span>
+            </div>
             <div id="alert-sound-notice" class="sound-warning mt-2"></div>
 
             <div class="row g-3 mt-3">
@@ -408,11 +441,42 @@
                 </div>
             </div>
 
+            <div class="row g-3 mt-1">
+                <div class="col-lg-4 d-none" data-alert-detail>
+                    <div class="dispatch-detail-box">
+                        <div class="eyebrow">CALLER REPORT</div>
+                        <div id="alert-caller-report" class="dispatch-detail-text"></div>
+                    </div>
+                </div>
+                <div class="col-lg-4 d-none" data-alert-detail>
+                    <div class="dispatch-detail-box">
+                        <div class="eyebrow">RESPONSE PLAN</div>
+                        <div id="alert-response-plan" class="dispatch-detail-text"></div>
+                    </div>
+                </div>
+                <div class="col-lg-4 d-none" data-alert-detail>
+                    <div class="dispatch-detail-box">
+                        <div class="eyebrow">SAFETY NOTES</div>
+                        <div id="alert-safety-notes" class="dispatch-detail-text"></div>
+                    </div>
+                </div>
+            </div>
+
             <div id="alert-map-wrap" class="mt-4">
                 <div id="alert-map"></div>
             </div>
             <div id="alert-map-unavailable" class="empty-state mt-4 d-none">
                 No verified CAD coordinates were returned for this incident.
+            </div>
+            <div class="d-flex flex-wrap gap-3 mt-3">
+                <a id="alert-google-maps" class="btn btn-outline-info map-action px-4"
+                   href="#" target="_blank" rel="noopener noreferrer">
+                    <i class="bi bi-map-fill"></i> Open Google Map
+                </a>
+                <a id="alert-street-view" class="btn btn-outline-light map-action px-4"
+                   href="#" target="_blank" rel="noopener noreferrer">
+                    <i class="bi bi-binoculars-fill"></i> Open Google Street View
+                </a>
             </div>
 
             <button id="acknowledge-station-alert" type="button"
