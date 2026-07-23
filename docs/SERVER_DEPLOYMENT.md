@@ -44,6 +44,25 @@ cd /home/ted/lcdash
 docker compose -f deploy/compose.yaml up -d --build
 ```
 
+## One-click Windows deployment
+
+After committing and pushing with GitHub Desktop, run:
+
+```powershell
+E:\Projects\LCDash\scripts\deploy_server.ps1
+```
+
+The deployment tool:
+
+1. Requires the `feature/authentication` branch.
+2. Refuses to deploy uncommitted files.
+3. Confirms Windows and GitHub point to the same commit.
+4. Packages only Git-tracked files.
+5. Transfers the release through the dedicated SSH key.
+6. Validates and rebuilds the private Docker platform.
+7. Checks LCDash and Open WebUI.
+8. Automatically restores the previous release if health checks fail.
+
 ## Check status
 
 ```bash
