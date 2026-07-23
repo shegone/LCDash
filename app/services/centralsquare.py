@@ -54,6 +54,10 @@ class CentralSquareClient:
         url = f"{settings.cad_base_url}/cfs_core/{cfs_number}"
         return self.get(url)
 
+    def get_cfs_analytics(self, cfs_number: str) -> dict:
+        url = f"{settings.cad_base_url}/cfs_analytics/{cfs_number}"
+        return self.get(url)
+
     def get(self, url: str, params: dict | None = None) -> dict:
         try:
             response = httpx.get(

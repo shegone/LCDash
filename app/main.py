@@ -25,6 +25,7 @@ from app.services.station_alert_service import (
     build_empty_station_alert_snapshot,
     get_live_station_alert_snapshot,
 )
+from app.services.analytics_database import get_analytics_database_status
 from app.services.centralsquare import (
     CentralSquareClient,
     CentralSquareAPIError,
@@ -472,6 +473,26 @@ def station_alerts_page(request: Request, station: str = ""):
             "cad_status": "Connected" if alert_data["connected"] else "Disconnected",
             "system_status": "Connected" if alert_data["connected"] else "Unknown",
             "last_updated": alert_data["generated_at"],
+            "version": "0.3.0",
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/analytics/status")
+def analytics_status_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    return get_analytics_database_status()
+
+
+@app.get("/analytics")
+def analytics_page(request: Request):
+    database_status = get_analytics_database_status()
+    return templates.TemplateResponse(
+        request=request,
+        name="analytics.html",
+        context={
+            "database_status": database_status,
             "version": "0.3.0",
         },
         headers={"Cache-Control": "no-store"},
