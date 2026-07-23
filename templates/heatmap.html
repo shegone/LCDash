@@ -1,0 +1,347 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}LCDash Historical Call Heat Map{% endblock %}
+
+{% block content %}
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+<style>
+    .heatmap-view-tabs {
+        display: inline-flex;
+        gap: 6px;
+        padding: 5px;
+        border-radius: 14px;
+        background: rgba(5, 17, 31, .82);
+        border: 1px solid rgba(76, 201, 255, .22);
+    }
+
+    .heatmap-view-tab {
+        padding: 8px 14px;
+        border-radius: 10px;
+        color: #8fb7d9;
+        font-weight: 850;
+        text-decoration: none;
+    }
+
+    .heatmap-view-tab:hover,
+    .heatmap-view-tab.active {
+        color: #ffffff;
+        background: rgba(76, 201, 255, .16);
+    }
+
+    .heatmap-page-title {
+        color: #ffffff;
+        font-size: 2rem;
+        font-weight: 950;
+        letter-spacing: 1px;
+    }
+
+    .heatmap-status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 13px;
+        border-radius: 999px;
+        font-size: .82rem;
+        font-weight: 900;
+        letter-spacing: .6px;
+    }
+
+    .heatmap-status-pill.connected {
+        color: #69ffb9;
+        background: rgba(105, 255, 185, .12);
+        border: 1px solid rgba(105, 255, 185, .28);
+    }
+
+    .heatmap-status-pill.disconnected {
+        color: #ff7777;
+        background: rgba(255, 76, 76, .12);
+        border: 1px solid rgba(255, 76, 76, .28);
+    }
+
+    .heatmap-window-control {
+        display: inline-flex;
+        gap: 7px;
+        padding: 6px;
+        border-radius: 15px;
+        background: rgba(5, 17, 31, .85);
+        border: 1px solid rgba(76, 201, 255, .24);
+    }
+
+    .heatmap-window-button {
+        min-width: 64px;
+        padding: 9px 14px;
+        border-radius: 10px;
+        color: #8fb7d9;
+        text-align: center;
+        font-weight: 900;
+        text-decoration: none;
+    }
+
+    .heatmap-window-button:hover,
+    .heatmap-window-button.active {
+        color: #07111f;
+        background: #4cc9ff;
+        box-shadow: 0 0 15px rgba(76, 201, 255, .32);
+    }
+
+    .heatmap-window-selection {
+        color: #4cc9ff;
+        font-size: 1.05rem;
+        font-weight: 950;
+        letter-spacing: .5px;
+    }
+
+    .heatmap-kpi {
+        min-height: 118px;
+        padding: 19px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .heatmap-kpi::after {
+        content: "";
+        position: absolute;
+        width: 120px;
+        height: 120px;
+        right: -45px;
+        top: -45px;
+        background: radial-gradient(circle, rgba(76, 201, 255, .16), transparent 70%);
+    }
+
+    .heatmap-kpi-label {
+        color: #8fb7d9;
+        font-size: .72rem;
+        font-weight: 900;
+        letter-spacing: 1.2px;
+    }
+
+    .heatmap-kpi-value {
+        color: #ffffff;
+        font-size: 2.2rem;
+        font-weight: 950;
+        line-height: 1;
+        margin-top: 10px;
+    }
+
+    .heatmap-controls {
+        padding: 15px 18px;
+    }
+
+    .heatmap-controls .form-select {
+        color: #dbeeff;
+        background-color: rgba(5, 17, 31, .9);
+        border-color: rgba(76, 201, 255, .28);
+    }
+
+    .heatmap-display-control {
+        display: inline-flex;
+        gap: 5px;
+        padding: 5px;
+        border-radius: 12px;
+        background: rgba(5, 17, 31, .9);
+        border: 1px solid rgba(76, 201, 255, .24);
+    }
+
+    .heatmap-display-button {
+        border: 0;
+        border-radius: 9px;
+        padding: 7px 12px;
+        color: #8fb7d9;
+        background: transparent;
+        font-size: .82rem;
+        font-weight: 900;
+    }
+
+    .heatmap-display-button:hover,
+    .heatmap-display-button.active {
+        color: #07111f;
+        background: #4cc9ff;
+        box-shadow: 0 0 13px rgba(76, 201, 255, .28);
+    }
+
+    .heatmap-legend {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        color: #bcd3e8;
+        font-size: .82rem;
+    }
+
+    .heatmap-gradient {
+        width: 220px;
+        height: 12px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #3578ff, #28d7ff, #ffd84d, #ff8a3d, #ff4c4c);
+    }
+
+    #activity-map {
+        height: 65vh;
+        min-height: 540px;
+        border-radius: 20px;
+        border: 1px solid rgba(76, 201, 255, .38);
+        box-shadow: 0 0 28px rgba(0, 148, 255, .15);
+        background: #081522;
+    }
+
+    .heatmap-notice {
+        padding: 12px 15px;
+        border-radius: 14px;
+        color: #ffd66b;
+        background: rgba(255, 214, 107, .08);
+        border: 1px solid rgba(255, 214, 107, .22);
+    }
+
+    .heatmap-popup {
+        min-width: 190px;
+        color: #12263a;
+    }
+</style>
+
+<div class="heatmap-view-tabs mb-4">
+    <a class="heatmap-view-tab" href="/map">
+        <i class="bi bi-broadcast-pin"></i> Live Operations
+    </a>
+    <a class="heatmap-view-tab active" href="/map/heatmap?hours={{ selected_hours }}">
+        <i class="bi bi-fire"></i> Recent Activity
+    </a>
+</div>
+
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+        <div class="text-info fw-bold">RECENT CALL ACTIVITY</div>
+        <div class="heatmap-page-title">Historical Call Heat Map</div>
+        <div class="text-secondary">
+            Blended CAD activity using approximate map cells; individual incident details are not displayed
+        </div>
+    </div>
+
+    <div class="text-end">
+        <div class="heatmap-status-pill {{ 'connected' if heatmap_data.cad_connected else 'disconnected' }}">
+            <i class="bi {{ 'bi-check-circle-fill' if heatmap_data.cad_connected else 'bi-exclamation-triangle-fill' }}"></i>
+            CAD {{ cad_status|upper }}
+        </div>
+        <div class="text-secondary small mt-2">
+            Updated <span class="cad-time" data-cad-time="{{ last_updated }}">{{ last_updated }}</span>
+            &nbsp;•&nbsp; Refresh <span id="heatmap-refresh-countdown">300s</span>
+        </div>
+    </div>
+</div>
+
+<div class="glass p-3 mb-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <div class="label">TIME WINDOW</div>
+        <div class="heatmap-window-selection">Viewing the last {{ selected_hours }} hours</div>
+        <div class="text-secondary small">Select a different period to reload its CAD activity</div>
+    </div>
+    <div class="heatmap-window-control">
+        {% for hours in allowed_hours %}
+            <a
+                class="heatmap-window-button {% if hours == selected_hours %}active{% endif %}"
+                href="/map/heatmap?hours={{ hours }}"
+                {% if hours == selected_hours %}aria-current="page"{% endif %}
+            >{% if hours == selected_hours %}<i class="bi bi-check-circle-fill"></i> {% endif %}{{ hours }}h</a>
+        {% endfor %}
+    </div>
+</div>
+
+{% if not heatmap_data.cad_connected %}
+    <div class="alert alert-danger">
+        Historical CAD activity is unavailable. No heat-map data is being displayed.
+    </div>
+{% endif %}
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="glass heatmap-kpi">
+            <div class="heatmap-kpi-label">CALLS IN WINDOW</div>
+            <div class="heatmap-kpi-value text-info">{{ summary.within_window_calls }}</div>
+            <div class="text-secondary small mt-2">last {{ selected_hours }} hours</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="glass heatmap-kpi">
+            <div class="heatmap-kpi-label">MAPPED CALLS</div>
+            <div class="heatmap-kpi-value text-success">{{ summary.mapped_calls }}</div>
+            <div class="text-secondary small mt-2">valid incident coordinates</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="glass heatmap-kpi">
+            <div class="heatmap-kpi-label">HEAT AREAS</div>
+            <div class="heatmap-kpi-value text-warning" id="heatmap-visible-cells">{{ summary.displayed_cells }}</div>
+            <div class="text-secondary small mt-2"><span id="heatmap-visible-calls">{{ summary.displayed_calls }}</span> grouped calls</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="glass heatmap-kpi">
+            <div class="heatmap-kpi-label">NOT MAPPED</div>
+            <div class="heatmap-kpi-value text-secondary">{{ summary.not_mapped_calls }}</div>
+            <div class="text-secondary small mt-2">missing or unusable coordinates</div>
+        </div>
+    </div>
+</div>
+
+<div class="glass heatmap-controls mb-3">
+    <div class="row g-3 align-items-center">
+        <div class="col-md-4">
+            <label for="heatmap-agency-filter" class="label mb-1">AGENCY</label>
+            <select id="heatmap-agency-filter" class="form-select form-select-sm">
+                <option value="">All agencies</option>
+                {% for agency in heatmap_data.agencies %}
+                    <option value="{{ agency }}">{{ agency }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-4">
+            <div class="label mb-1">DISPLAY</div>
+            <div class="heatmap-display-control" role="group" aria-label="Map display style">
+                <button type="button" class="heatmap-display-button active" id="heatmap-mode-blended" aria-pressed="true">
+                    <i class="bi bi-fire"></i> Blended Heat
+                </button>
+                <button type="button" class="heatmap-display-button" id="heatmap-mode-individual" aria-pressed="false">
+                    <i class="bi bi-geo-alt-fill"></i> Individual Calls
+                </button>
+            </div>
+        </div>
+        <div class="col-auto ms-md-auto">
+            <button type="button" class="btn btn-outline-info btn-sm" id="fit-heatmap-activity">
+                <i class="bi bi-arrows-fullscreen"></i> Fit Activity
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="clear-heatmap-filters">
+                Clear Filter
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="heatmap-legend mb-3" id="heatmap-legend">
+    <strong>RELATIVE ACTIVITY</strong>
+    <span>Lower</span>
+    <span class="heatmap-gradient"></span>
+    <span>Higher</span>
+</div>
+
+{% if heatmap_data.cad_connected and summary.within_window_calls == 0 %}
+    <div class="heatmap-notice mb-3">No calls were received during the selected time window.</div>
+{% elif heatmap_data.cad_connected and summary.mapped_calls == 0 %}
+    <div class="heatmap-notice mb-3">Calls were returned, but none had valid incident coordinates.</div>
+{% endif %}
+
+<div id="activity-map" aria-label="Historical call activity heat map"></div>
+
+<script type="application/json" id="heatmap-data">{{ heatmap_data|tojson }}</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script src="/static/js/lcdash-heatmap.js"></script>
+<script>
+    LCDashTime.updateCadDisplayTimes();
+    LCDashTime.startRefreshCountdown({
+        elementId: "heatmap-refresh-countdown",
+        seconds: 300
+    });
+</script>
+
+{% endblock %}

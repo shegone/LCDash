@@ -24,9 +24,18 @@ class CentralSquareClient:
         params = {"configuration": configuration}
         return self.get(url, params=params)
 
-    def search_cfs_core(self, search_body: dict) -> dict:
+    def search_cfs_core(
+        self,
+        search_body: dict,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> dict:
         url = f"{settings.cad_base_url}/cfs_core/search"
-        return self.post(url, json=search_body)
+        params = {
+            "skip": max(skip, 0),
+            "limit": min(max(limit, 1), 100),
+        }
+        return self.post(url, json=search_body, params=params)
 
     def search_units(
         self,

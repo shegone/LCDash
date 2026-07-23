@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
@@ -14,6 +14,12 @@ from app.services.operations_service import (
 from app.services.map_service import (
     build_empty_map_snapshot,
     get_live_map_snapshot,
+)
+from app.services.heatmap_service import (
+    ALLOWED_HEATMAP_HOURS,
+    build_empty_heatmap_snapshot,
+    get_live_heatmap_snapshot,
+    validate_heatmap_hours,
 )
 from app.services.centralsquare import (
     CentralSquareClient,
@@ -222,6 +228,24 @@ def map_api(response: Response):
         return build_empty_map_snapshot(str(exc))
 
 
+def _validated_heatmap_hours(hours: int) -> int:
+    try:
+        return validate_heatmap_hours(hours)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/operations/map/heatmap")
+def heatmap_api(response: Response, hours: int = 8):
+    selected_hours = _validated_heatmap_hours(hours)
+    response.headers["Cache-Control"] = "no-store"
+
+    try:
+        return get_live_heatmap_snapshot(selected_hours)
+    except CentralSquareAPIError:
+        return build_empty_heatmap_snapshot(selected_hours)
+
+
 @app.get("/dashboard")
 def dashboard(request: Request):
     try:
@@ -386,6 +410,32 @@ def gis_map(request: Request):
             "cad_status": "Connected" if map_data["cad_connected"] else "Disconnected",
             "system_status": "Connected" if map_data["cad_connected"] else "Unknown",
             "last_updated": map_data["generated_at"],
+            "version": "0.3.0",
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/map/heatmap")
+def heatmap_page(request: Request, hours: int = 8):
+    selected_hours = _validated_heatmap_hours(hours)
+
+    try:
+        heatmap_data = get_live_heatmap_snapshot(selected_hours)
+    except CentralSquareAPIError:
+        heatmap_data = build_empty_heatmap_snapshot(selected_hours)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="heatmap.html",
+        context={
+            "heatmap_data": heatmap_data,
+            "summary": heatmap_data["summary"],
+            "selected_hours": selected_hours,
+            "allowed_hours": ALLOWED_HEATMAP_HOURS,
+            "cad_status": "Connected" if heatmap_data["cad_connected"] else "Disconnected",
+            "system_status": "Connected" if heatmap_data["cad_connected"] else "Unknown",
+            "last_updated": heatmap_data["generated_at"],
             "version": "0.3.0",
         },
         headers={"Cache-Control": "no-store"},
