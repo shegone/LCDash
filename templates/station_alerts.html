@@ -1,0 +1,429 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Station Alerts | LCDash{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+<style>
+    .station-alert-shell {
+        --alert-blue: #4cc9ff;
+        --alert-green: #69ffb9;
+        --alert-yellow: #ffd66b;
+        --alert-red: #ff5252;
+    }
+
+    .station-hero {
+        padding: 26px;
+        overflow: hidden;
+        position: relative;
+    }
+
+    .station-hero::after {
+        content: "";
+        position: absolute;
+        width: 320px;
+        height: 320px;
+        right: -120px;
+        top: -150px;
+        background: radial-gradient(circle, rgba(76, 201, 255, .22), transparent 70%);
+        pointer-events: none;
+    }
+
+    .station-title {
+        font-size: clamp(1.8rem, 3vw, 2.7rem);
+        font-weight: 950;
+        letter-spacing: .5px;
+    }
+
+    .eyebrow {
+        color: var(--alert-blue);
+        font-weight: 900;
+        letter-spacing: 1.5px;
+        font-size: .78rem;
+    }
+
+    .station-control {
+        background: rgba(5, 15, 28, .72);
+        border: 1px solid rgba(76, 201, 255, .28);
+        border-radius: 16px;
+        color: white;
+        min-height: 48px;
+    }
+
+    .station-control:focus {
+        background: #0c1c30;
+        border-color: var(--alert-blue);
+        color: white;
+        box-shadow: 0 0 0 .2rem rgba(76, 201, 255, .14);
+    }
+
+    .station-control option {
+        background: #0c1c30;
+        color: white;
+    }
+
+    .alert-action {
+        min-height: 48px;
+        border-radius: 14px;
+        font-weight: 900;
+        letter-spacing: .4px;
+    }
+
+    .arm-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 13px;
+        border-radius: 999px;
+        background: rgba(255, 82, 82, .13);
+        border: 1px solid rgba(255, 82, 82, .35);
+        color: #ff9191;
+        font-weight: 900;
+    }
+
+    .arm-status.armed {
+        background: rgba(105, 255, 185, .12);
+        border-color: rgba(105, 255, 185, .4);
+        color: var(--alert-green);
+        box-shadow: 0 0 18px rgba(105, 255, 185, .12);
+    }
+
+    .status-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: currentColor;
+        box-shadow: 0 0 10px currentColor;
+    }
+
+    .station-stat {
+        padding: 20px;
+        min-height: 130px;
+    }
+
+    .station-stat-value {
+        color: white;
+        font-size: 2rem;
+        font-weight: 950;
+        line-height: 1;
+        margin-top: 9px;
+    }
+
+    .station-unit-row,
+    .station-call-row {
+        display: grid;
+        grid-template-columns: minmax(90px, .65fr) minmax(110px, .8fr) minmax(130px, 1fr);
+        gap: 14px;
+        align-items: center;
+        padding: 14px 16px;
+        border-radius: 14px;
+        background: rgba(5, 15, 28, .55);
+        border: 1px solid rgba(255, 255, 255, .07);
+        margin-bottom: 10px;
+    }
+
+    .unit-number-strong {
+        color: white;
+        font-size: 1.05rem;
+        font-weight: 950;
+    }
+
+    .unit-status-chip {
+        display: inline-block;
+        padding: 6px 10px;
+        border-radius: 999px;
+        color: var(--alert-green);
+        background: rgba(105, 255, 185, .12);
+        font-size: .78rem;
+        font-weight: 900;
+    }
+
+    .empty-state {
+        border: 1px dashed rgba(143, 183, 217, .25);
+        border-radius: 16px;
+        color: #8fb7d9;
+        padding: 30px;
+        text-align: center;
+    }
+
+    .dispatch-overlay {
+        --alert-blue: #4cc9ff;
+        --alert-green: #69ffb9;
+        --alert-yellow: #ffd66b;
+        --alert-red: #ff5252;
+        position: fixed;
+        inset: 0;
+        z-index: 5000;
+        display: none;
+        overflow: auto;
+        padding: 26px;
+        background:
+            radial-gradient(circle at 50% 12%, rgba(255, 82, 82, .28), transparent 38%),
+            rgba(2, 7, 14, .97);
+    }
+
+    .dispatch-overlay.visible {
+        display: block;
+        animation: alert-in .22s ease-out;
+    }
+
+    .dispatch-alert-card {
+        max-width: 1250px;
+        margin: 0 auto;
+        border: 3px solid var(--alert-red);
+        border-radius: 28px;
+        overflow: hidden;
+        background: linear-gradient(180deg, #14243a, #07111f);
+        box-shadow: 0 0 60px rgba(255, 82, 82, .4);
+        animation: alert-pulse 1.2s infinite alternate;
+    }
+
+    .dispatch-banner {
+        padding: 16px 24px;
+        background: var(--alert-red);
+        color: white;
+        font-weight: 1000;
+        letter-spacing: 2px;
+        text-align: center;
+        font-size: clamp(1.2rem, 2.5vw, 2rem);
+    }
+
+    .dispatch-content {
+        padding: 28px;
+    }
+
+    .dispatch-incident {
+        color: white;
+        font-size: clamp(2rem, 5vw, 4.8rem);
+        font-weight: 1000;
+        line-height: 1.02;
+    }
+
+    .dispatch-location {
+        color: #dcefff;
+        font-size: clamp(1.35rem, 3vw, 2.5rem);
+        font-weight: 850;
+        margin-top: 18px;
+    }
+
+    .dispatch-meta-box {
+        padding: 17px;
+        border-radius: 16px;
+        background: rgba(0, 0, 0, .25);
+        border: 1px solid rgba(255, 255, 255, .1);
+        height: 100%;
+    }
+
+    #alert-map {
+        height: 330px;
+        border-radius: 18px;
+        border: 1px solid rgba(76, 201, 255, .4);
+        overflow: hidden;
+    }
+
+    .sound-warning {
+        color: var(--alert-yellow);
+        font-weight: 850;
+    }
+
+    @keyframes alert-in {
+        from { opacity: 0; transform: scale(.98); }
+        to { opacity: 1; transform: scale(1); }
+    }
+
+    @keyframes alert-pulse {
+        from { box-shadow: 0 0 34px rgba(255, 82, 82, .28); }
+        to { box-shadow: 0 0 75px rgba(255, 82, 82, .6); }
+    }
+
+    @media (max-width: 750px) {
+        .station-unit-row,
+        .station-call-row {
+            grid-template-columns: 1fr;
+            gap: 5px;
+        }
+
+        .dispatch-overlay {
+            padding: 8px;
+        }
+
+        .dispatch-content {
+            padding: 18px;
+        }
+    }
+</style>
+
+<div class="station-alert-shell">
+    <div class="glass station-hero mb-4">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+            <div>
+                <div class="eyebrow">LCDASH STATION NOTIFICATION</div>
+                <div class="station-title">Fire & EMS Station Alerts</div>
+                <div class="text-secondary mt-2">
+                    Select a CAD station, enable sound, and keep this display open.
+                </div>
+            </div>
+
+            <div class="text-end">
+                <div class="eyebrow">CAD CONNECTION</div>
+                <div id="station-connection-status"
+                     class="fw-bold {% if alert_data.connected %}text-success{% else %}text-danger{% endif %}">
+                    {{ cad_status|upper }}
+                </div>
+                <div class="text-secondary small">
+                    Updated <span id="station-last-updated"
+                                  data-cad-time="{{ alert_data.generated_at }}">{{ alert_data.generated_at }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3 mt-3 align-items-end">
+            <div class="col-lg-5">
+                <label class="eyebrow mb-2" for="station-selector">STATION TO MONITOR</label>
+                <select id="station-selector" class="form-select station-control">
+                    <option value="">Choose a CAD station...</option>
+                    {% for station in alert_data.stations %}
+                        <option value="{{ station.name }}"
+                                {% if station.name|lower == selected_station|lower %}selected{% endif %}>
+                            {{ station.name }} — {{ station.unit_count }} unit{% if station.unit_count != 1 %}s{% endif %}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-lg-auto">
+                <button id="arm-station-alerts" type="button" class="btn btn-danger alert-action px-4">
+                    <i class="bi bi-volume-up-fill"></i> Enable Loud Alerts
+                </button>
+            </div>
+
+            <div class="col-lg-auto">
+                <button id="test-station-alert" type="button" class="btn btn-outline-warning alert-action px-4">
+                    <i class="bi bi-bell-fill"></i> Test Two-Tone Alert
+                </button>
+            </div>
+
+            <div class="col-lg-auto">
+                <div id="station-alert-arm-status" class="arm-status">
+                    <span class="status-dot"></span>
+                    SOUND DISARMED
+                </div>
+            </div>
+        </div>
+
+        <div id="station-alert-message" class="sound-warning mt-3">
+            “Test Two-Tone Alert” will enable browser audio and play the complete paging sequence.
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-md-4">
+            <div class="glass station-stat">
+                <div class="eyebrow">MONITORED STATION</div>
+                <div id="station-name" class="station-stat-value">
+                    {{ alert_data.selected_station or "None selected" }}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="glass station-stat">
+                <div class="eyebrow">STATION UNITS</div>
+                <div id="station-unit-count" class="station-stat-value">{{ alert_data.station_units|length }}</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="glass station-stat">
+                <div class="eyebrow">ACTIVE ASSIGNMENTS</div>
+                <div id="station-active-count" class="station-stat-value">{{ alert_data.alerts|length }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-xl-5">
+            <div class="glass p-4 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <div class="eyebrow">CAD ROSTER</div>
+                        <h4 class="mb-0">Station Units</h4>
+                    </div>
+                    <span class="badge text-bg-info">60-SECOND ROSTER CACHE</span>
+                </div>
+                <div id="station-units-list"></div>
+            </div>
+        </div>
+
+        <div class="col-xl-7">
+            <div class="glass p-4 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <div class="eyebrow">CURRENT OPERATIONS</div>
+                        <h4 class="mb-0">Station Assignments</h4>
+                    </div>
+                    <span class="badge text-bg-success">5-SECOND CAD CHECK</span>
+                </div>
+                <div id="station-current-alerts"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="dispatch-alert-overlay" class="dispatch-overlay" role="dialog" aria-modal="true"
+     aria-label="New CAD dispatch alert">
+    <div class="dispatch-alert-card">
+        <div class="dispatch-banner">
+            NEW CAD DISPATCH — <span id="alert-station-name">STATION</span>
+        </div>
+        <div class="dispatch-content">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                <div>
+                    <div id="alert-incident-code" class="eyebrow">CAD DISPATCH</div>
+                    <div id="alert-incident-title" class="dispatch-incident">INCIDENT</div>
+                </div>
+                <div id="alert-priority" class="priority-badge">PRI —</div>
+            </div>
+
+            <div id="alert-location" class="dispatch-location">Location unavailable</div>
+            <div id="alert-sound-notice" class="sound-warning mt-2"></div>
+
+            <div class="row g-3 mt-3">
+                <div class="col-md-4">
+                    <div class="dispatch-meta-box">
+                        <div class="eyebrow">UNITS</div>
+                        <div id="alert-units" class="fs-3 fw-bold text-white">—</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="dispatch-meta-box">
+                        <div class="eyebrow">CFS NUMBER</div>
+                        <div id="alert-cfs-number" class="fs-4 fw-bold text-white">—</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="dispatch-meta-box">
+                        <div class="eyebrow">DISPATCH TIME</div>
+                        <div id="alert-dispatch-time" class="fs-4 fw-bold text-white">—</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="alert-map-wrap" class="mt-4">
+                <div id="alert-map"></div>
+            </div>
+            <div id="alert-map-unavailable" class="empty-state mt-4 d-none">
+                No verified CAD coordinates were returned for this incident.
+            </div>
+
+            <button id="acknowledge-station-alert" type="button"
+                    class="btn btn-light btn-lg w-100 mt-4 py-3 fw-bold">
+                <i class="bi bi-check-circle-fill"></i> Acknowledge Alert
+            </button>
+        </div>
+    </div>
+</div>
+
+<script id="station-alert-data" type="application/json">{{ alert_data|tojson }}</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/static/js/lcdash-station-alerts.js"></script>
+{% endblock %}

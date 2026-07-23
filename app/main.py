@@ -21,6 +21,10 @@ from app.services.heatmap_service import (
     get_live_heatmap_snapshot,
     validate_heatmap_hours,
 )
+from app.services.station_alert_service import (
+    build_empty_station_alert_snapshot,
+    get_live_station_alert_snapshot,
+)
 from app.services.centralsquare import (
     CentralSquareClient,
     CentralSquareAPIError,
@@ -246,6 +250,16 @@ def heatmap_api(response: Response, hours: int = 8):
         return build_empty_heatmap_snapshot(selected_hours)
 
 
+@app.get("/api/operations/station-alerts")
+def station_alerts_api(response: Response, station: str = ""):
+    response.headers["Cache-Control"] = "no-store"
+
+    try:
+        return get_live_station_alert_snapshot(station)
+    except CentralSquareAPIError as exc:
+        return build_empty_station_alert_snapshot(station, str(exc))
+
+
 @app.get("/dashboard")
 def dashboard(request: Request):
     try:
@@ -436,6 +450,28 @@ def heatmap_page(request: Request, hours: int = 8):
             "cad_status": "Connected" if heatmap_data["cad_connected"] else "Disconnected",
             "system_status": "Connected" if heatmap_data["cad_connected"] else "Unknown",
             "last_updated": heatmap_data["generated_at"],
+            "version": "0.3.0",
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/station-alerts")
+def station_alerts_page(request: Request, station: str = ""):
+    try:
+        alert_data = get_live_station_alert_snapshot(station)
+    except CentralSquareAPIError as exc:
+        alert_data = build_empty_station_alert_snapshot(station, str(exc))
+
+    return templates.TemplateResponse(
+        request=request,
+        name="station_alerts.html",
+        context={
+            "alert_data": alert_data,
+            "selected_station": station,
+            "cad_status": "Connected" if alert_data["connected"] else "Disconnected",
+            "system_status": "Connected" if alert_data["connected"] else "Unknown",
+            "last_updated": alert_data["generated_at"],
             "version": "0.3.0",
         },
         headers={"Cache-Control": "no-store"},
