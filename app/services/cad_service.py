@@ -558,8 +558,8 @@ def simplify_call(call: dict) -> dict:
     }
 
 
-def get_active_calls() -> list:
-    client = CentralSquareClient()
+def get_active_calls(client: CentralSquareClient | None = None) -> list:
+    client = client or CentralSquareClient()
 
     result = client.search_cfs_core(
         {

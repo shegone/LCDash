@@ -6,7 +6,9 @@ from app.config.settings import settings
 from app.auth.oauth import get_access_token, CentralSquareAuthError
 from app.services.cad_service import get_call_detail
 from app.services.operations_service import (
+    build_empty_unit_snapshot,
     build_empty_operations_snapshot,
+    get_live_unit_snapshot,
     get_live_operations_snapshot,
 )
 from app.services.centralsquare import (
@@ -155,24 +157,42 @@ def active_calls_api():
 @app.get("/api/operations/units")
 def units_api():
     try:
-        snapshot = get_live_operations_snapshot()
+        snapshot = get_live_unit_snapshot()
 
         return {
             "connected": True,
+            "roster_connected": snapshot["roster_connected"],
+            "roster_warning": snapshot["roster_warning"],
             "last_updated": snapshot["last_updated"],
-            "stats": snapshot["unit_stats"],
-            "units": snapshot["unit_rows"],
+            "stats": snapshot["active_stats"],
+            "units": snapshot["active_units"],
+            "roster_stats": snapshot["roster_stats"],
+            "all_units": snapshot["all_units"],
+            "active_units": snapshot["active_units"],
+            "operational_units": snapshot["operational_units"],
+            "available_units": snapshot["available_units"],
+            "unavailable_units": snapshot["unavailable_units"],
+            "unknown_units": snapshot["unknown_units"],
         }
 
     except CentralSquareAPIError as exc:
-        snapshot = build_empty_operations_snapshot()
+        snapshot = build_empty_unit_snapshot()
 
         return {
             "connected": False,
+            "roster_connected": False,
+            "roster_warning": snapshot["roster_warning"],
             "error": str(exc),
             "last_updated": snapshot["last_updated"],
-            "stats": snapshot["unit_stats"],
-            "units": snapshot["unit_rows"],
+            "stats": snapshot["active_stats"],
+            "units": snapshot["active_units"],
+            "roster_stats": snapshot["roster_stats"],
+            "all_units": snapshot["all_units"],
+            "active_units": snapshot["active_units"],
+            "operational_units": snapshot["operational_units"],
+            "available_units": snapshot["available_units"],
+            "unavailable_units": snapshot["unavailable_units"],
+            "unknown_units": snapshot["unknown_units"],
         }
 
 
@@ -258,11 +278,11 @@ def active_calls_page(request: Request):
 @app.get("/units")
 def units_board(request: Request):
     try:
-        snapshot = get_live_operations_snapshot()
+        snapshot = get_live_unit_snapshot()
         cad_status = "Connected"
         system_status = "Connected"
     except CentralSquareAPIError:
-        snapshot = build_empty_operations_snapshot()
+        snapshot = build_empty_unit_snapshot()
         cad_status = "Disconnected"
         system_status = "Unknown"
 
@@ -273,8 +293,14 @@ def units_board(request: Request):
             "system_status": system_status,
             "cad_status": cad_status,
             "calls": snapshot["calls"],
-            "unit_rows": snapshot["unit_rows"],
-            "stats": snapshot["unit_stats"],
+            "roster_connected": snapshot["roster_connected"],
+            "roster_warning": snapshot["roster_warning"],
+            "unit_rows": snapshot["active_units"],
+            "operational_units": snapshot["operational_units"],
+            "available_units": snapshot["available_units"],
+            "unavailable_units": snapshot["unavailable_units"],
+            "unknown_units": snapshot["unknown_units"],
+            "stats": snapshot["roster_stats"],
             "last_updated": snapshot["last_updated"],
             "version": "0.3.0",
         },

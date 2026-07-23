@@ -28,6 +28,19 @@ class CentralSquareClient:
         url = f"{settings.cad_base_url}/cfs_core/search"
         return self.post(url, json=search_body)
 
+    def search_units(
+        self,
+        search_body: dict | None = None,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> dict:
+        url = f"{settings.cad_base_url}/units/search"
+        params = {
+            "skip": max(skip, 0),
+            "limit": min(max(limit, 1), 100),
+        }
+        return self.post(url, json=search_body or {}, params=params)
+
     def get_cfs_core(self, cfs_number: str) -> dict:
         url = f"{settings.cad_base_url}/cfs_core/{cfs_number}"
         return self.get(url)
@@ -48,12 +61,18 @@ class CentralSquareClient:
                 f"GET request failed: {exc}"
             ) from exc
 
-    def post(self, url: str, json: dict | None = None) -> dict:
+    def post(
+        self,
+        url: str,
+        json: dict | None = None,
+        params: dict | None = None,
+    ) -> dict:
         try:
             response = httpx.post(
                 url,
                 headers=self.headers(),
                 json=json or {},
+                params=params,
                 timeout=30,
             )
             response.raise_for_status()

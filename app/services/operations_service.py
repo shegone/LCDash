@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 
 from app.services.cad_service import get_active_calls
+from app.services.centralsquare import CentralSquareAPIError, CentralSquareClient
+from app.services.unit_service import classify_unit, get_all_units
 
 
 def _safe_priority_level(call: dict) -> int:
@@ -232,4 +234,176 @@ def get_live_operations_snapshot() -> dict:
         "dashboard_stats": build_dashboard_stats(calls),
         "unit_rows": unit_rows,
         "unit_stats": build_unit_board_stats(unit_rows),
+    }
+
+
+def build_full_unit_roster(roster_units: list, active_unit_rows: list) -> dict:
+    assignments_by_unit = {}
+
+    for assignment in active_unit_rows:
+        unit_number = assignment.get("unit_number") or ""
+        if not unit_number:
+            continue
+
+        assignments_by_unit.setdefault(unit_number.upper(), []).append(assignment)
+
+    roster_by_unit = {}
+
+    for unit in roster_units:
+        unit_number = unit.get("unit_number") or ""
+        if not unit_number:
+            continue
+
+        roster_by_unit.setdefault(unit_number.upper(), unit)
+
+    groups = {
+        "active_units": [],
+        "operational_units": [],
+        "available_units": [],
+        "unavailable_units": [],
+        "unknown_units": [],
+    }
+
+    for unit_key, unit in roster_by_unit.items():
+        assignments = assignments_by_unit.pop(unit_key, [])
+
+        if assignments:
+            primary_assignment = assignments[0]
+            merged_unit = {
+                **unit,
+                **primary_assignment,
+                "roster_status": unit.get("status") or "Unknown",
+                "roster_last_status_time": unit.get("last_status_time") or "",
+                "assignments": assignments,
+            }
+
+            for metadata_field in ("unit_type", "agency", "responder"):
+                if not merged_unit.get(metadata_field):
+                    merged_unit[metadata_field] = unit.get(metadata_field) or ""
+
+            groups["active_units"].append(merged_unit)
+            continue
+
+        group_name = classify_unit(unit)
+
+        if group_name == "active":
+            groups["operational_units"].append(
+                {
+                    **unit,
+                    "assignments": [],
+                }
+            )
+            continue
+
+        groups[f"{group_name}_units"].append(
+            {
+                **unit,
+                "assignments": [],
+            }
+        )
+
+    for assignments in assignments_by_unit.values():
+        primary_assignment = assignments[0]
+        groups["active_units"].append(
+            {
+                **primary_assignment,
+                "roster_status": "Not returned by unit roster",
+                "roster_last_status_time": "",
+                "assignments": assignments,
+            }
+        )
+
+    groups["active_units"] = sorted(
+        groups["active_units"],
+        key=lambda unit: (
+            unit_status_rank(unit.get("status")),
+            _safe_priority_level({"priority": unit.get("priority")}),
+            unit.get("unit_number") or "",
+        ),
+    )
+
+    for group_name in (
+        "operational_units",
+        "available_units",
+        "unavailable_units",
+        "unknown_units",
+    ):
+        groups[group_name] = sorted(
+            groups[group_name],
+            key=lambda unit: (
+                unit.get("agency") or "",
+                unit.get("unit_number") or "",
+            ),
+        )
+
+    all_units = (
+        groups["active_units"]
+        + groups["operational_units"]
+        + groups["available_units"]
+        + groups["unavailable_units"]
+        + groups["unknown_units"]
+    )
+
+    status_counts = {}
+    for unit in all_units:
+        status = unit.get("roster_status") or unit.get("status") or "Unknown"
+        status_counts[status] = status_counts.get(status, 0) + 1
+
+    groups["all_units"] = all_units
+    groups["roster_stats"] = {
+        "total_units": len(all_units),
+        "active_units": len(groups["active_units"]) + len(groups["operational_units"]),
+        "assigned_units": len(groups["active_units"]),
+        "operational_units": len(groups["operational_units"]),
+        "available_units": len(groups["available_units"]),
+        "unavailable_units": len(groups["unavailable_units"]),
+        "unknown_units": len(groups["unknown_units"]),
+        "status_summary": [
+            {"status": status, "count": count}
+            for status, count in sorted(
+                status_counts.items(),
+                key=lambda item: (-item[1], item[0]),
+            )
+        ],
+    }
+
+    return groups
+
+
+def build_empty_unit_snapshot() -> dict:
+    groups = build_full_unit_roster([], [])
+
+    return {
+        "last_updated": datetime.now(timezone.utc).isoformat(),
+        "calls": [],
+        "roster_connected": False,
+        "roster_warning": "Full unit roster unavailable.",
+        "active_stats": build_unit_board_stats(groups["active_units"]),
+        **groups,
+    }
+
+
+def get_live_unit_snapshot() -> dict:
+    client = CentralSquareClient()
+    calls = sort_dashboard_calls(get_active_calls(client=client))
+    active_unit_rows = build_unit_board(calls)
+
+    try:
+        roster_units = get_all_units(client=client)
+        roster_connected = True
+        roster_warning = ""
+    except CentralSquareAPIError:
+        roster_units = []
+        roster_connected = False
+        roster_warning = "Full unit roster unavailable; showing active-call units only."
+
+    groups = build_full_unit_roster(roster_units, active_unit_rows)
+
+    return {
+        "last_updated": datetime.now(timezone.utc).isoformat(),
+        "calls": calls,
+        "roster_connected": roster_connected,
+        "roster_warning": roster_warning,
+        "active_stats": build_unit_board_stats(groups["active_units"]),
+        **groups,
     }
