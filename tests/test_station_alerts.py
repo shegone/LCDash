@@ -199,6 +199,10 @@ class StationAlertPageTests(unittest.TestCase):
 
         script_response = self.client.get("/static/js/lcdash-station-alerts.js")
         self.assertEqual(script_response.status_code, 200)
+        self.assertEqual(
+            script_response.headers["cache-control"],
+            "no-cache, max-age=0, must-revalidate",
+        )
         self.assertIn("TEST — Commercial Structure Fire", script_response.text)
         self.assertIn("911 Mark Spurlock Drive, Logan, WV 25601", script_response.text)
         self.assertIn("28 1/2 Main Avenue", script_response.text)

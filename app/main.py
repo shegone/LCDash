@@ -42,6 +42,14 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 
+@app.middleware("http")
+async def prevent_stale_static_assets(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache, max-age=0, must-revalidate"
+    return response
+
+
 def _units_without_positions(units: list) -> list:
     sanitized_units = []
 
