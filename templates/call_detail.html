@@ -582,11 +582,21 @@
 </div>
 
 {% if call.latitude and call.longitude %}
+<script type="application/json" id="incident-map-data">{{ {
+    "latitude": call.latitude,
+    "longitude": call.longitude,
+    "incident_description": call.incident_description,
+    "location": call.location,
+    "cfs_number": call.cfs_number
+}|tojson }}</script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-    const incidentLat = {{ call.latitude }};
-    const incidentLng = {{ call.longitude }};
+    const incidentMapData = JSON.parse(
+        document.getElementById("incident-map-data").textContent
+    );
+    const incidentLat = Number(incidentMapData.latitude);
+    const incidentLng = Number(incidentMapData.longitude);
 
     const map = L.map("incident-map").setView([incidentLat, incidentLng], 16);
 
@@ -595,13 +605,20 @@
         attribution: "&copy; OpenStreetMap contributors"
     }).addTo(map);
 
+    const popup = document.createElement("div");
+    const popupTitle = document.createElement("strong");
+    popupTitle.textContent = incidentMapData.incident_description || "Active Incident";
+    popup.appendChild(popupTitle);
+
+    [incidentMapData.location, incidentMapData.cfs_number].forEach(function (value) {
+        if (!value) return;
+        popup.appendChild(document.createElement("br"));
+        popup.appendChild(document.createTextNode(String(value)));
+    });
+
     L.marker([incidentLat, incidentLng])
         .addTo(map)
-        .bindPopup(`
-            <strong>{{ call.incident_description }}</strong><br>
-            {{ call.location }}<br>
-            {{ call.cfs_number }}
-        `)
+        .bindPopup(popup)
         .openPopup();
 </script>
 {% endif %}

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
@@ -10,6 +10,10 @@ from app.services.operations_service import (
     build_empty_operations_snapshot,
     get_live_unit_snapshot,
     get_live_operations_snapshot,
+)
+from app.services.map_service import (
+    build_empty_map_snapshot,
+    get_live_map_snapshot,
 )
 from app.services.centralsquare import (
     CentralSquareClient,
@@ -24,6 +28,17 @@ app = FastAPI(
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
+
+
+def _units_without_positions(units: list) -> list:
+    sanitized_units = []
+
+    for unit in units:
+        sanitized_unit = dict(unit)
+        sanitized_unit.pop("position", None)
+        sanitized_units.append(sanitized_unit)
+
+    return sanitized_units
 
 
 @app.get("/")
@@ -155,7 +170,9 @@ def active_calls_api():
 
 
 @app.get("/api/operations/units")
-def units_api():
+def units_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+
     try:
         snapshot = get_live_unit_snapshot()
 
@@ -165,16 +182,15 @@ def units_api():
             "roster_warning": snapshot["roster_warning"],
             "last_updated": snapshot["last_updated"],
             "stats": snapshot["active_stats"],
-            "units": snapshot["active_units"],
+            "units": _units_without_positions(snapshot["active_units"]),
             "roster_stats": snapshot["roster_stats"],
-            "all_units": snapshot["all_units"],
-            "active_units": snapshot["active_units"],
-            "operational_units": snapshot["operational_units"],
-            "available_units": snapshot["available_units"],
-            "unavailable_units": snapshot["unavailable_units"],
-            "unknown_units": snapshot["unknown_units"],
+            "all_units": _units_without_positions(snapshot["all_units"]),
+            "active_units": _units_without_positions(snapshot["active_units"]),
+            "operational_units": _units_without_positions(snapshot["operational_units"]),
+            "available_units": _units_without_positions(snapshot["available_units"]),
+            "unavailable_units": _units_without_positions(snapshot["unavailable_units"]),
+            "unknown_units": _units_without_positions(snapshot["unknown_units"]),
         }
-
     except CentralSquareAPIError as exc:
         snapshot = build_empty_unit_snapshot()
 
@@ -185,15 +201,25 @@ def units_api():
             "error": str(exc),
             "last_updated": snapshot["last_updated"],
             "stats": snapshot["active_stats"],
-            "units": snapshot["active_units"],
+            "units": _units_without_positions(snapshot["active_units"]),
             "roster_stats": snapshot["roster_stats"],
-            "all_units": snapshot["all_units"],
-            "active_units": snapshot["active_units"],
-            "operational_units": snapshot["operational_units"],
-            "available_units": snapshot["available_units"],
-            "unavailable_units": snapshot["unavailable_units"],
-            "unknown_units": snapshot["unknown_units"],
+            "all_units": _units_without_positions(snapshot["all_units"]),
+            "active_units": _units_without_positions(snapshot["active_units"]),
+            "operational_units": _units_without_positions(snapshot["operational_units"]),
+            "available_units": _units_without_positions(snapshot["available_units"]),
+            "unavailable_units": _units_without_positions(snapshot["unavailable_units"]),
+            "unknown_units": _units_without_positions(snapshot["unknown_units"]),
         }
+
+
+@app.get("/api/operations/map")
+def map_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+
+    try:
+        return get_live_map_snapshot()
+    except CentralSquareAPIError as exc:
+        return build_empty_map_snapshot(str(exc))
 
 
 @app.get("/dashboard")
@@ -327,4 +353,40 @@ def call_detail(request: Request, cfs_number: str):
             "error": error,
             "version": "0.3.0",
         },
+    )
+
+
+@app.get("/map")
+def gis_map(request: Request):
+    try:
+        map_data = get_live_map_snapshot()
+    except CentralSquareAPIError as exc:
+        map_data = build_empty_map_snapshot(str(exc))
+
+    features = map_data["features"]
+    call_features = [
+        feature
+        for feature in features
+        if feature.get("properties", {}).get("kind") == "call"
+    ]
+    unit_features = [
+        feature
+        for feature in features
+        if feature.get("properties", {}).get("kind") == "unit"
+    ]
+
+    return templates.TemplateResponse(
+        request=request,
+        name="map.html",
+        context={
+            "map_data": map_data,
+            "summary": map_data["summary"],
+            "call_features": call_features,
+            "unit_features": unit_features,
+            "cad_status": "Connected" if map_data["cad_connected"] else "Disconnected",
+            "system_status": "Connected" if map_data["cad_connected"] else "Unknown",
+            "last_updated": map_data["generated_at"],
+            "version": "0.3.0",
+        },
+        headers={"Cache-Control": "no-store"},
     )

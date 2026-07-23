@@ -104,6 +104,75 @@ def _parse_datetime(value: str) -> datetime:
         return datetime.min.replace(tzinfo=timezone.utc)
 
 
+def _valid_coordinate_pair(latitude, longitude) -> bool:
+    try:
+        latitude_value = float(latitude)
+        longitude_value = float(longitude)
+    except (TypeError, ValueError):
+        return False
+
+    if latitude_value == 0 and longitude_value == 0:
+        return False
+
+    return (
+        -90 <= latitude_value <= 90
+        and -180 <= longitude_value <= 180
+    )
+
+
+def _extract_unit_position(unit: dict) -> dict:
+    candidates = []
+    fallback_timestamp = _safe_text(unit.get("LastLocationUpdateTime"))
+
+    for source_key, source_name, source_rank in (
+        ("UnitLocation", "unit_location", 1),
+        ("AVL", "avl", 2),
+        ("PLT", "plt", 3),
+    ):
+        source = unit.get(source_key) or {}
+        if not isinstance(source, dict):
+            continue
+
+        latitude = source.get("Latitude")
+        longitude = source.get("Longitude")
+        if not _valid_coordinate_pair(latitude, longitude):
+            continue
+
+        observed_at = _safe_text(
+            source.get("Timestamp")
+            or source.get("DateTime")
+            or source.get("LocationTime")
+            or source.get("LastUpdateTime")
+            or source.get("LastLocationUpdateTime")
+            or fallback_timestamp
+        )
+
+        candidates.append(
+            {
+                "latitude": float(latitude),
+                "longitude": float(longitude),
+                "source": source_name,
+                "observed_at": observed_at,
+                "source_rank": source_rank,
+                "speed": source.get("Speed"),
+                "direction": source.get("Direction"),
+                "avl_source": _safe_text(source.get("AVLSource")),
+            }
+        )
+
+    if not candidates:
+        return {}
+
+    selected_position = dict(max(
+        candidates,
+        key=lambda candidate: (
+            _parse_datetime(candidate.get("observed_at")),
+            -candidate["source_rank"],
+        ),
+    ))
+    selected_position.pop("source_rank", None)
+    return selected_position
+
 def normalize_unit(unit: dict) -> dict:
     status = unit.get("Status") or unit.get("CurrentStatus") or unit.get("UnitStatus") or {}
     agency = unit.get("Agency") or {}
@@ -136,6 +205,7 @@ def normalize_unit(unit: dict) -> dict:
         "last_status_time": _safe_text(unit.get("LastStatusTime")),
         "last_assigned_time": _safe_text(unit.get("LastAssignedTime")),
         "last_location_update_time": _safe_text(unit.get("LastLocationUpdateTime")),
+        "position": _extract_unit_position(unit),
         "station": _dropdown_text(station, "Description", "Name", "Code", "Abbreviation"),
         "beat": _dropdown_text(beat, "Description", "Name", "Code", "Abbreviation"),
         "cfs_number": _safe_text(incident.get("CFSNumber")),

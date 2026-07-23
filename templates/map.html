@@ -1,0 +1,318 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}LCDash GIS Map{% endblock %}
+
+{% block content %}
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+<style>
+    .map-page-title {
+        color: #ffffff;
+        font-size: 2rem;
+        font-weight: 950;
+        letter-spacing: 1px;
+    }
+
+    .map-status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 13px;
+        border-radius: 999px;
+        font-size: .82rem;
+        font-weight: 900;
+        letter-spacing: .6px;
+    }
+
+    .map-status-pill.connected {
+        color: #69ffb9;
+        background: rgba(105, 255, 185, .12);
+        border: 1px solid rgba(105, 255, 185, .28);
+    }
+
+    .map-status-pill.disconnected {
+        color: #ff7777;
+        background: rgba(255, 76, 76, .12);
+        border: 1px solid rgba(255, 76, 76, .28);
+    }
+
+    .map-kpi {
+        min-height: 120px;
+        padding: 20px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .map-kpi::after {
+        content: "";
+        position: absolute;
+        width: 130px;
+        height: 130px;
+        right: -48px;
+        top: -48px;
+        background: radial-gradient(circle, rgba(76, 201, 255, .16), transparent 70%);
+    }
+
+    .map-kpi-label {
+        color: #8fb7d9;
+        font-size: .72rem;
+        font-weight: 900;
+        letter-spacing: 1.25px;
+    }
+
+    .map-kpi-value {
+        color: #ffffff;
+        font-size: 2.25rem;
+        font-weight: 950;
+        line-height: 1;
+        margin-top: 10px;
+    }
+
+    .map-control-panel {
+        padding: 16px 18px;
+    }
+
+    .map-control-panel .form-select {
+        color: #dbeeff;
+        background-color: rgba(5, 17, 31, .9);
+        border-color: rgba(76, 201, 255, .28);
+    }
+
+    .map-control-panel .form-check-label {
+        color: #dbeeff;
+        font-weight: 800;
+    }
+
+    #operations-map {
+        height: 68vh;
+        min-height: 560px;
+        border-radius: 20px;
+        border: 1px solid rgba(76, 201, 255, .38);
+        box-shadow: 0 0 28px rgba(0, 148, 255, .15);
+        background: #081522;
+    }
+
+    .map-legend {
+        display: flex;
+        gap: 15px;
+        align-items: center;
+        flex-wrap: wrap;
+        color: #bcd3e8;
+        font-size: .82rem;
+    }
+
+    .legend-item {
+        display: inline-flex;
+        gap: 6px;
+        align-items: center;
+    }
+
+    .legend-dot {
+        width: 11px;
+        height: 11px;
+        border: 2px solid white;
+        border-radius: 50%;
+    }
+
+    .legend-unit {
+        width: 13px;
+        height: 13px;
+        background: #4cc9ff;
+        border: 2px solid white;
+        transform: rotate(45deg);
+    }
+
+    .map-warning {
+        color: #ffd66b;
+        background: rgba(255, 214, 107, .08);
+        border: 1px solid rgba(255, 214, 107, .22);
+        border-radius: 14px;
+        padding: 11px 14px;
+    }
+
+    .lcdash-unit-marker-shell {
+        background: transparent;
+        border: 0;
+    }
+
+    .lcdash-unit-marker {
+        display: block;
+        width: 20px;
+        height: 20px;
+        border: 3px solid #ffffff;
+        background: var(--unit-color);
+        transform: rotate(45deg);
+        box-shadow: 0 0 14px var(--unit-color);
+    }
+
+    .lcdash-map-popup {
+        min-width: 220px;
+        color: #12263a;
+    }
+
+    .map-popup-title {
+        color: #07111f;
+        font-size: 1rem;
+        font-weight: 900;
+        margin-bottom: 8px;
+    }
+
+    .map-popup-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        border-top: 1px solid #d9e3ec;
+        padding: 5px 0;
+    }
+
+    .map-popup-row span {
+        color: #4d657a;
+    }
+
+    .map-popup-row strong {
+        text-align: right;
+    }
+
+    .map-popup-link {
+        display: block;
+        margin-top: 10px;
+        color: #087ca7;
+        font-weight: 900;
+    }
+
+    @media (max-width: 991px) {
+        #operations-map {
+            height: 62vh;
+            min-height: 480px;
+        }
+    }
+</style>
+
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+        <div class="text-info fw-bold">LIVE OPERATIONS</div>
+        <div class="map-page-title">GIS Map</div>
+        <div class="text-secondary">
+            Active CAD incidents and current, fresh unit AVL positions
+        </div>
+    </div>
+
+    <div class="text-end">
+        <div class="map-status-pill {{ 'connected' if map_data.cad_connected else 'disconnected' }}">
+            <i class="bi {{ 'bi-check-circle-fill' if map_data.cad_connected else 'bi-exclamation-triangle-fill' }}"></i>
+            CAD {{ cad_status|upper }}
+        </div>
+        <div class="text-secondary small mt-2">
+            Updated <span class="cad-time" data-cad-time="{{ last_updated }}">{{ last_updated }}</span>
+            &nbsp;•&nbsp; Refresh <span id="map-refresh-countdown">60s</span>
+        </div>
+    </div>
+</div>
+
+{% if not map_data.cad_connected %}
+    <div class="alert alert-danger">
+        Live CAD map data is unavailable. The map will remain empty until the connection returns.
+    </div>
+{% elif map_data.roster_warning %}
+    <div class="map-warning mb-4">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>{{ map_data.roster_warning }}
+    </div>
+{% endif %}
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="glass map-kpi">
+            <div class="map-kpi-label">MAPPED CALLS</div>
+            <div class="map-kpi-value text-info">{{ summary.mapped_calls }}</div>
+            <div class="text-secondary small mt-2">of {{ summary.total_calls }} active</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="glass map-kpi">
+            <div class="map-kpi-label">FRESH UNIT LOCATIONS</div>
+            <div class="map-kpi-value text-success">{{ summary.mapped_units }}</div>
+            <div class="text-secondary small mt-2">active or available only</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="glass map-kpi">
+            <div class="map-kpi-label">UNMAPPED CALLS</div>
+            <div class="map-kpi-value text-warning">{{ summary.unmapped_calls }}</div>
+            <div class="text-secondary small mt-2">missing valid CAD coordinates</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="glass map-kpi">
+            <div class="map-kpi-label">STALE UNIT LOCATIONS</div>
+            <div class="map-kpi-value text-secondary">{{ summary.stale_units }}</div>
+            <div class="text-secondary small mt-2">hidden for operational safety</div>
+        </div>
+    </div>
+</div>
+
+<div class="glass map-control-panel mb-3">
+    <div class="row g-3 align-items-center">
+        <div class="col-auto">
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="show-calls" checked>
+                <label class="form-check-label" for="show-calls">Calls</label>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="show-units" checked>
+                <label class="form-check-label" for="show-units">Units</label>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <select class="form-select form-select-sm" id="map-agency-filter"></select>
+        </div>
+        <div class="col-md-2">
+            <select class="form-select form-select-sm" id="map-priority-filter"></select>
+        </div>
+        <div class="col-md-2">
+            <select class="form-select form-select-sm" id="map-status-filter"></select>
+        </div>
+        <div class="col-auto ms-md-auto">
+            <button type="button" class="btn btn-outline-info btn-sm" id="fit-visible-markers">
+                <i class="bi bi-arrows-fullscreen"></i> Fit Visible
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="clear-map-filters">
+                Clear Filters
+            </button>
+        </div>
+        <div class="col-auto text-secondary small">
+            <strong class="text-white" id="visible-marker-count">0</strong> visible
+        </div>
+    </div>
+</div>
+
+<div class="map-legend mb-3">
+    <span class="legend-item"><span class="legend-dot" style="background:#ff4c4c"></span> Priority 1–10</span>
+    <span class="legend-item"><span class="legend-dot" style="background:#ffd66b"></span> Priority 15</span>
+    <span class="legend-item"><span class="legend-dot" style="background:#4cc9ff"></span> Priority 20</span>
+    <span class="legend-item"><span class="legend-dot" style="background:#69ffb9"></span> Other calls</span>
+    <span class="legend-item"><span class="legend-unit"></span> CAD unit</span>
+</div>
+
+{% if map_data.cad_connected and not map_data.features %}
+    <div class="map-warning mb-3">
+        No active records currently have valid, operationally fresh coordinates. The map is centered on Logan County.
+    </div>
+{% endif %}
+
+<div id="operations-map" aria-label="Live operations map"></div>
+
+<script type="application/json" id="map-data">{{ map_data|tojson }}</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/static/js/lcdash-map.js"></script>
+<script>
+    LCDashTime.updateCadDisplayTimes();
+    LCDashTime.startRefreshCountdown({
+        elementId: "map-refresh-countdown",
+        seconds: 60
+    });
+</script>
+
+{% endblock %}

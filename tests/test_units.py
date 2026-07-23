@@ -238,6 +238,11 @@ class UnitsPageTests(unittest.TestCase):
             "unit_number": "MED30",
             "status": "Enroute",
             "status_group": "Enroute",
+            "position": {
+                "latitude": 37.84,
+                "longitude": -82.01,
+                "observed_at": "2026-07-21T15:00:00Z",
+            },
         }
         snapshot_mock.return_value = {
             **self.snapshot,
@@ -263,10 +268,21 @@ class UnitsPageTests(unittest.TestCase):
         payload = response.json()
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(payload["units"], [active_unit])
+        self.assertEqual(
+            payload["units"],
+            [
+                {
+                    "unit_number": "MED30",
+                    "status": "Enroute",
+                    "status_group": "Enroute",
+                }
+            ],
+        )
         self.assertEqual(payload["stats"]["total_units"], 1)
         self.assertEqual(len(payload["all_units"]), 3)
         self.assertEqual(payload["roster_stats"]["total_units"], 3)
+        self.assertNotIn("position", str(payload).lower())
+        self.assertEqual(response.headers["cache-control"], "no-store")
 
 
 if __name__ == "__main__":
