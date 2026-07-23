@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
@@ -54,6 +55,11 @@ def _units_without_positions(units: list) -> list:
 
 @app.get("/")
 def home():
+    return RedirectResponse(url="/dashboard", status_code=307)
+
+
+@app.get("/health")
+def health():
     return {
         "application": "LCDash",
         "version": "0.3.0",
