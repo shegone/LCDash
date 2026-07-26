@@ -1,0 +1,112 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}MAE | LCDash{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="/static/css/lcdash-mae.css">
+
+<section class="mae-shell" aria-labelledby="mae-title">
+    <header class="mae-hero glass">
+        <div class="mae-identity">
+            <div class="mae-orb" aria-hidden="true">
+                <i class="bi bi-stars"></i>
+            </div>
+            <div>
+                <div class="mae-eyebrow">LOGAN COUNTY 911 INTELLIGENCE</div>
+                <h1 id="mae-title">MAE</h1>
+                <p>Mission Assistance Engine</p>
+            </div>
+        </div>
+        <div class="mae-guardrail">
+            <i class="bi bi-shield-lock-fill"></i>
+            <div>
+                <strong>Inquiry-only mode</strong>
+                <span>MAE cannot add, change, dispatch, or delete CAD information.</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="mae-status-grid" aria-label="MAE service status">
+        <div class="mae-status-card glass" id="mae-ai-status">
+            <i class="bi bi-cpu"></i>
+            <div><span>Local AI</span><strong>Checking…</strong></div>
+        </div>
+        <div class="mae-status-card glass" id="mae-db-status">
+            <i class="bi bi-database-check"></i>
+            <div><span>Historical database</span><strong>Checking…</strong></div>
+        </div>
+        <div class="mae-status-card glass" id="mae-cad-status">
+            <i class="bi bi-broadcast-pin"></i>
+            <div><span>CentralSquare</span><strong>Checking…</strong></div>
+        </div>
+    </div>
+
+    <div class="mae-workspace glass">
+        <aside class="mae-prompts">
+            <div class="mae-panel-title">Suggested inquiries</div>
+            <button type="button" data-mae-prompt="Summarize current active calls and identify anything that may need supervisor attention.">
+                <i class="bi bi-lightning-charge"></i>
+                Current operations
+            </button>
+            <button type="button" data-mae-prompt="Which units are currently on scene or transporting, and how long have they been in that status?">
+                <i class="bi bi-truck"></i>
+                Unit status
+            </button>
+            <button type="button" data-mae-prompt="Summarize call volume and the busiest incident types for the last 30 days.">
+                <i class="bi bi-graph-up"></i>
+                30-day activity
+            </button>
+            <button type="button" data-mae-prompt="Which stations handled the most calls in the last 7 days, grouped by discipline?">
+                <i class="bi bi-building"></i>
+                Station workload
+            </button>
+            <div class="mae-source-note">
+                <i class="bi bi-info-circle"></i>
+                MAE checks stored analytics for historical questions and requests
+                live CAD data only when current information is needed.
+            </div>
+        </aside>
+
+        <div class="mae-chat">
+            <div class="mae-messages" id="mae-messages" aria-live="polite">
+                <article class="mae-message mae-message-assistant">
+                    <div class="mae-avatar"><i class="bi bi-stars"></i></div>
+                    <div class="mae-bubble">
+                        <div class="mae-message-name">MAE</div>
+                        <p>
+                            I’m ready to help with live operational awareness and
+                            historical analysis. Ask me about active calls, units,
+                            response activity, stations, or trends.
+                        </p>
+                    </div>
+                </article>
+            </div>
+
+            <div class="mae-thinking" id="mae-thinking" hidden>
+                <span></span><span></span><span></span>
+                MAE is reviewing authorized read-only sources…
+            </div>
+
+            <form class="mae-composer" id="mae-form">
+                <label class="visually-hidden" for="mae-question">Ask MAE a question</label>
+                <textarea
+                    id="mae-question"
+                    rows="2"
+                    maxlength="4000"
+                    placeholder="Ask MAE about operations or analytics…"
+                    required
+                ></textarea>
+                <button type="submit" id="mae-send" aria-label="Send question">
+                    <i class="bi bi-arrow-up"></i>
+                </button>
+            </form>
+            <div class="mae-disclaimer">
+                Verify critical information in CAD. MAE supports decisions; it does
+                not replace dispatcher or supervisor judgment.
+            </div>
+        </div>
+    </div>
+</section>
+
+<script src="/static/js/lcdash-mae.js"></script>
+{% endblock %}

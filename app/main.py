@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request, Response
+from pydantic import BaseModel, Field
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -32,6 +33,11 @@ from app.services.analytics_reporting import (
     PERIOD_OPTIONS,
     get_analytics_overview,
 )
+from app.services.mae_service import (
+    MAEServiceError,
+    ask_mae,
+    get_mae_status,
+)
 from app.services.centralsquare import (
     CentralSquareClient,
     CentralSquareAPIError,
@@ -45,6 +51,16 @@ app = FastAPI(
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
+
+
+class MAEHistoryMessage(BaseModel):
+    role: str
+    content: str = Field(max_length=4000)
+
+
+class MAEChatRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=4000)
+    history: list[MAEHistoryMessage] = Field(default_factory=list, max_length=8)
 
 
 @app.middleware("http")
@@ -557,3 +573,33 @@ def analytics_page(
         },
         headers={"Cache-Control": "no-store"},
     )
+
+
+@app.get("/mae")
+def mae_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="mae.html",
+        context={
+            "version": "0.3.0",
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/mae/status")
+def mae_status_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    return get_mae_status()
+
+
+@app.post("/api/mae/chat")
+def mae_chat_api(chat_request: MAEChatRequest, response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return ask_mae(
+            chat_request.question,
+            [message.model_dump() for message in chat_request.history],
+        )
+    except MAEServiceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc

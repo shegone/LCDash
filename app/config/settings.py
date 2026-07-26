@@ -50,6 +50,12 @@ class Settings:
         "ANALYTICS_REQUEST_DELAY_MS",
         100,
     )
+    ollama_base_url: str = _env("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+    mae_model: str = _env("MAE_MODEL", "qwen3:8b")
+    mae_request_timeout_seconds: int = _env_int(
+        "MAE_REQUEST_TIMEOUT_SECONDS",
+        120,
+    )
 
 
 settings = Settings()

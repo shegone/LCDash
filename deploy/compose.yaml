@@ -13,6 +13,9 @@ x-lcdash-environment: &lcdash-environment
   ANALYTICS_OVERLAP_MINUTES: "120"
   ANALYTICS_MAX_CALLS_PER_RUN: "250"
   ANALYTICS_REQUEST_DELAY_MS: "100"
+  OLLAMA_BASE_URL: http://ollama:11434
+  MAE_MODEL: qwen3:8b
+  MAE_REQUEST_TIMEOUT_SECONDS: "120"
 
 x-lcdash-secrets: &lcdash-secrets
   - centralsquare_username
@@ -58,6 +61,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      ollama:
+        condition: service_started
     security_opt:
       - no-new-privileges:true
 
