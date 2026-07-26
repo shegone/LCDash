@@ -17,7 +17,7 @@ from app.services.operations_service import get_live_operations_snapshot
 LOCAL_TIMEZONE = ZoneInfo("America/New_York")
 MAX_HISTORY_MESSAGES = 8
 MAX_MESSAGE_LENGTH = 4000
-MAX_CONTEXT_CHARACTERS = 50000
+MAX_CONTEXT_CHARACTERS = 24000
 
 SYSTEM_PROMPT = """You are MAE, the Mission Assistance Engine for Logan County 911.
 You assist authorized supervisors with operational awareness and analysis.
@@ -85,8 +85,8 @@ def _trim_rows(value: Any, limit: int = 20) -> Any:
     return value
 
 
-def _safe_call_context(call: dict) -> dict:
-    return {
+def _safe_call_context(call: dict, detailed: bool = False) -> dict:
+    result = {
         "cfs_number": call.get("cfs_number"),
         "incident_code": call.get("incident_code"),
         "incident_description": call.get("incident_description"),
@@ -98,12 +98,18 @@ def _safe_call_context(call: dict) -> dict:
         "call_datetime": call.get("call_datetime"),
         "latitude": call.get("latitude"),
         "longitude": call.get("longitude"),
-        "assigned_units": _trim_rows(call.get("assigned_units") or [], 30),
-        "command_logs": _trim_rows(call.get("command_logs") or [], 40),
-        "reporter": call.get("reporter") or {},
-        "rapidsos": (call.get("raw") or {}).get("RapidSOS") or {},
-        "proqa": (call.get("raw") or {}).get("ProQA") or {},
+        "assigned_units": _trim_rows(call.get("assigned_units") or [], 20),
     }
+    if detailed:
+        result.update(
+            {
+                "command_logs": _trim_rows(call.get("command_logs") or [], 30),
+                "reporter": call.get("reporter") or {},
+                "rapidsos": (call.get("raw") or {}).get("RapidSOS") or {},
+                "proqa": (call.get("raw") or {}).get("ProQA") or {},
+            }
+        )
+    return result
 
 
 def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
@@ -144,7 +150,7 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
                 {
                     "source": "CentralSquare live CFS detail",
                     "purpose": f"Current detail for {cfs_number}",
-                    "data": _safe_call_context(call),
+                    "data": _safe_call_context(call, detailed=True),
                 }
             )
             sources.append(
@@ -185,7 +191,7 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
                         "dashboard_stats": snapshot.get("dashboard_stats"),
                         "calls": [
                             _safe_call_context(call)
-                            for call in (snapshot.get("calls") or [])[:50]
+                            for call in (snapshot.get("calls") or [])[:25]
                         ],
                         "unit_stats": snapshot.get("unit_stats"),
                         "unit_rows": _trim_rows(snapshot.get("unit_rows") or [], 100),
@@ -327,7 +333,7 @@ def ask_mae(question: str, history: list[dict] | None = None) -> dict:
         "think": False,
         "options": {
             "temperature": 0.2,
-            "num_ctx": 8192,
+            "num_ctx": 4096,
         },
     }
 
