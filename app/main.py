@@ -27,6 +27,11 @@ from app.services.station_alert_service import (
     get_live_station_alert_snapshot,
 )
 from app.services.analytics_database import get_analytics_database_status
+from app.services.analytics_reporting import (
+    AnalyticsRangeError,
+    PERIOD_OPTIONS,
+    get_analytics_overview,
+)
 from app.services.centralsquare import (
     CentralSquareClient,
     CentralSquareAPIError,
@@ -501,14 +506,53 @@ def analytics_status_api(response: Response):
     return get_analytics_database_status()
 
 
+@app.get("/api/analytics/overview")
+def analytics_overview_api(
+    response: Response,
+    period: str = "30d",
+    start: str = "",
+    end: str = "",
+):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return get_analytics_overview(period=period, start=start, end=end)
+    except AnalyticsRangeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.get("/analytics")
-def analytics_page(request: Request):
+def analytics_page(
+    request: Request,
+    period: str = "30d",
+    start: str = "",
+    end: str = "",
+):
     database_status = get_analytics_database_status()
+    range_error = ""
+    try:
+        analytics_snapshot = get_analytics_overview(
+            period=period,
+            start=start,
+            end=end,
+        )
+    except AnalyticsRangeError as exc:
+        range_error = str(exc)
+        analytics_snapshot = get_analytics_overview(
+            period="30d",
+            start="",
+            end="",
+        )
+
     return templates.TemplateResponse(
         request=request,
         name="analytics.html",
         context={
             "database_status": database_status,
+            "analytics_snapshot": analytics_snapshot,
+            "period_options": [
+                (key, value[0]) for key, value in PERIOD_OPTIONS.items()
+            ],
+            "range_error": range_error,
             "version": "0.3.0",
         },
         headers={"Cache-Control": "no-store"},

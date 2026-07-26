@@ -13,23 +13,23 @@
     .analytics-hero::after {
         content: "";
         position: absolute;
-        width: 340px;
-        height: 340px;
-        top: -180px;
+        width: 380px;
+        height: 380px;
+        top: -210px;
         right: -110px;
-        background: radial-gradient(circle, rgba(76, 201, 255, .22), transparent 70%);
+        background: radial-gradient(circle, rgba(76, 201, 255, .24), transparent 70%);
         pointer-events: none;
     }
 
     .analytics-eyebrow {
         color: #4cc9ff;
-        font-size: .78rem;
+        font-size: .76rem;
         font-weight: 900;
-        letter-spacing: 1.5px;
+        letter-spacing: 1.45px;
     }
 
     .analytics-title {
-        color: white;
+        color: #fff;
         font-size: clamp(2rem, 4vw, 3.2rem);
         font-weight: 950;
     }
@@ -37,9 +37,10 @@
     .analytics-status {
         display: inline-flex;
         align-items: center;
-        gap: 9px;
+        gap: 8px;
         border-radius: 999px;
-        padding: 9px 14px;
+        padding: 8px 13px;
+        font-size: .82rem;
         font-weight: 900;
     }
 
@@ -55,128 +56,427 @@
         border: 1px solid rgba(255, 214, 107, .32);
     }
 
+    .analytics-filter-bar {
+        padding: 18px 20px;
+    }
+
+    .period-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 38px;
+        padding: 7px 13px;
+        border-radius: 999px;
+        border: 1px solid rgba(76, 201, 255, .22);
+        color: #b8d7ef;
+        text-decoration: none;
+        font-weight: 800;
+        font-size: .84rem;
+    }
+
+    .period-link:hover,
+    .period-link.active {
+        color: #fff;
+        background: rgba(76, 201, 255, .16);
+        border-color: rgba(76, 201, 255, .58);
+    }
+
+    .date-control {
+        color-scheme: dark;
+        min-height: 40px;
+        border-radius: 10px;
+        border: 1px solid rgba(76, 201, 255, .24);
+        background: rgba(5, 16, 30, .72);
+        color: #fff;
+        padding: 7px 10px;
+    }
+
     .analytics-kpi {
-        padding: 22px;
-        min-height: 145px;
+        padding: 20px;
+        min-height: 142px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .analytics-kpi::after {
+        content: "";
+        position: absolute;
+        width: 120px;
+        height: 120px;
+        right: -52px;
+        top: -52px;
+        background: radial-gradient(circle, rgba(76, 201, 255, .16), transparent 70%);
     }
 
     .analytics-value {
-        color: white;
-        font-size: 2.5rem;
+        color: #fff;
+        font-size: 2.25rem;
         font-weight: 950;
-        margin-top: 8px;
+        line-height: 1.1;
+        margin-top: 9px;
     }
 
-    .foundation-card {
-        padding: 22px;
+    .analytics-subvalue {
+        color: #8fb7d9;
+        font-size: .86rem;
+        margin-top: 7px;
+    }
+
+    .chart-card,
+    .list-card {
+        padding: 21px;
         height: 100%;
     }
 
-    .foundation-icon {
-        width: 48px;
-        height: 48px;
+    .chart-wrap {
+        position: relative;
+        height: 300px;
+        margin-top: 15px;
+    }
+
+    .chart-wrap.compact {
+        height: 260px;
+    }
+
+    .analytics-list-row {
         display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 14px;
+        padding: 12px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, .07);
+    }
+
+    .analytics-list-row:last-child {
+        border-bottom: 0;
+    }
+
+    .analytics-rank {
+        display: inline-grid;
         place-items: center;
-        border-radius: 14px;
+        width: 28px;
+        height: 28px;
+        margin-right: 8px;
+        border-radius: 9px;
         color: #4cc9ff;
-        background: rgba(76, 201, 255, .12);
-        font-size: 1.35rem;
-        margin-bottom: 15px;
+        background: rgba(76, 201, 255, .10);
+        font-weight: 900;
+    }
+
+    .analytics-count {
+        color: #ffd66b;
+        font-size: 1.05rem;
+        font-weight: 950;
+        white-space: nowrap;
+    }
+
+    .analytics-table {
+        --bs-table-bg: transparent;
+        --bs-table-color: #dbeeff;
+        --bs-table-border-color: rgba(255, 255, 255, .08);
+        margin-bottom: 0;
+    }
+
+    .analytics-table th {
+        color: #8fb7d9;
+        font-size: .73rem;
+        letter-spacing: .8px;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+
+    .analytics-empty {
+        padding: 42px 24px;
+        text-align: center;
+    }
+
+    .data-note {
+        color: #8fb7d9;
+        font-size: .82rem;
+    }
+
+    @media (max-width: 767.98px) {
+        .analytics-hero,
+        .analytics-filter-bar,
+        .chart-card,
+        .list-card {
+            padding: 17px;
+        }
+
+        .analytics-kpi {
+            min-height: 122px;
+        }
+
+        .analytics-value {
+            font-size: 1.8rem;
+        }
+
+        .chart-wrap {
+            height: 245px;
+        }
+
+        .period-link {
+            flex: 1 1 auto;
+        }
     }
 </style>
 
 <div class="glass analytics-hero mb-4">
-    <div class="analytics-eyebrow">LCDASH DATA PLATFORM</div>
-    <div class="analytics-title">Operations Analytics</div>
-    <div class="text-secondary mt-2">
-        CentralSquare powers live operations. PostgreSQL powers historical analysis.
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+        <div>
+            <div class="analytics-eyebrow">Supervisor Operations Review</div>
+            <div class="analytics-title">Operations Analytics</div>
+            <div class="text-secondary mt-2">
+                Historical workload and response performance from the LCDash PostgreSQL warehouse.
+            </div>
+        </div>
+        <div>
+            {% if database_status.connected and analytics_snapshot.available %}
+                <span class="analytics-status ready">
+                    <i class="bi bi-database-check"></i> POSTGRESQL CONNECTED
+                </span>
+            {% elif database_status.configured %}
+                <span class="analytics-status pending">
+                    <i class="bi bi-database-exclamation"></i> POSTGRESQL UNAVAILABLE
+                </span>
+            {% else %}
+                <span class="analytics-status pending">
+                    <i class="bi bi-database-gear"></i> READY FOR DATABASE SETUP
+                </span>
+            {% endif %}
+        </div>
     </div>
 
-    <div class="mt-4">
-        {% if database_status.connected %}
-            <span class="analytics-status ready">
-                <i class="bi bi-database-check"></i> POSTGRESQL CONNECTED
-            </span>
-        {% elif database_status.configured %}
-            <span class="analytics-status pending">
-                <i class="bi bi-database-exclamation"></i> POSTGRESQL UNAVAILABLE
-            </span>
-        {% else %}
-            <span class="analytics-status pending">
-                <i class="bi bi-database-gear"></i> READY FOR DATABASE SETUP
+    <div class="mt-4 d-flex flex-wrap gap-3 data-note">
+        <span><i class="bi bi-calendar3 text-info"></i> {{ analytics_snapshot.period_label }}</span>
+        {% if analytics_snapshot.latest_data_at %}
+            <span>
+                <i class="bi bi-arrow-repeat text-success"></i>
+                Latest collected data:
+                <span class="cad-time" data-cad-time="{{ analytics_snapshot.latest_data_at }}">
+                    {{ analytics_snapshot.latest_data_at }}
+                </span>
             </span>
         {% endif %}
     </div>
 </div>
 
-<div class="row g-4 mb-4">
-    <div class="col-md-4">
-        <div class="glass analytics-kpi">
-            <div class="analytics-eyebrow">CALLS STORED</div>
-            <div class="analytics-value">{{ database_status.calls_stored }}</div>
-            <div class="text-secondary">Completed CAD incidents</div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="glass analytics-kpi">
-            <div class="analytics-eyebrow">UNIT RESPONSES</div>
-            <div class="analytics-value">{{ database_status.unit_responses_stored }}</div>
-            <div class="text-secondary">Response timing records</div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="glass analytics-kpi">
-            <div class="analytics-eyebrow">LAST SYNC</div>
-            <div class="analytics-value fs-3">
-                {{ database_status.last_run.status|default("Not run", true)|upper }}
-            </div>
-            <div class="text-secondary">
-                {{ database_status.last_run.completed_at|default("Waiting for PostgreSQL", true) }}
+<div class="glass analytics-filter-bar mb-4">
+    <div class="d-flex justify-content-between align-items-end flex-wrap gap-3">
+        <div>
+            <div class="analytics-eyebrow mb-2">REPORTING WINDOW</div>
+            <div class="d-flex flex-wrap gap-2">
+                {% for value, label in period_options %}
+                    <a
+                        class="period-link {% if analytics_snapshot.period_key == value %}active{% endif %}"
+                        href="/analytics?period={{ value }}"
+                    >{{ label }}</a>
+                {% endfor %}
             </div>
         </div>
+
+        <form method="get" action="/analytics" class="d-flex align-items-end flex-wrap gap-2">
+            <div>
+                <label class="analytics-eyebrow d-block mb-1" for="analytics-start">START</label>
+                <input
+                    class="date-control"
+                    type="date"
+                    id="analytics-start"
+                    name="start"
+                    value="{{ analytics_snapshot.start_date }}"
+                >
+            </div>
+            <div>
+                <label class="analytics-eyebrow d-block mb-1" for="analytics-end">END</label>
+                <input
+                    class="date-control"
+                    type="date"
+                    id="analytics-end"
+                    name="end"
+                    value="{{ analytics_snapshot.end_date }}"
+                >
+            </div>
+            <button class="btn btn-info fw-bold" type="submit">
+                <i class="bi bi-funnel-fill"></i> Apply
+            </button>
+        </form>
     </div>
+
+    {% if range_error %}
+        <div class="alert alert-warning mt-3 mb-0">{{ range_error }}</div>
+    {% endif %}
 </div>
 
-<div class="row g-4">
-    <div class="col-lg-4">
-        <div class="glass foundation-card">
-            <div class="foundation-icon"><i class="bi bi-stopwatch-fill"></i></div>
-            <h4>Response Performance</h4>
-            <p class="text-secondary mb-0">
-                Call processing, turnout, travel, total response, transport, destination
-                turnaround, and commitment times.
-            </p>
-        </div>
-    </div>
-    <div class="col-lg-4">
-        <div class="glass foundation-card">
-            <div class="foundation-icon"><i class="bi bi-buildings-fill"></i></div>
-            <h4>Units & Stations</h4>
-            <p class="text-secondary mb-0">
-                Workload, utilization, availability, station demand, simultaneous calls,
-                and coverage patterns.
-            </p>
-        </div>
-    </div>
-    <div class="col-lg-4">
-        <div class="glass foundation-card">
-            <div class="foundation-icon"><i class="bi bi-shield-check"></i></div>
-            <h4>Privacy-Minimized</h4>
-            <p class="text-secondary mb-0">
-                No caller names, telephone numbers, narratives, command logs, exact street
-                addresses, or raw API payloads are stored.
-            </p>
-        </div>
-    </div>
-</div>
+{% if analytics_snapshot.available %}
+    {% set metrics = analytics_snapshot.metrics %}
 
-{% if database_status.message %}
-    <div class="glass p-4 mt-4">
-        <div class="analytics-eyebrow">CURRENT STATUS</div>
-        <div class="text-warning mt-2">{{ database_status.message }}</div>
-        <div class="text-secondary mt-2">
-            The analytics code and schema are ready. Configure PostgreSQL before the first synchronization.
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-xl">
+            <div class="glass analytics-kpi">
+                <div class="analytics-eyebrow">TOTAL CALLS</div>
+                <div class="analytics-value">{{ metrics.total_calls }}</div>
+                <div class="analytics-subvalue">Completed CAD incidents</div>
+            </div>
+        </div>
+        <div class="col-6 col-xl">
+            <div class="glass analytics-kpi">
+                <div class="analytics-eyebrow">UNIT RESPONSES</div>
+                <div class="analytics-value">{{ metrics.unit_responses }}</div>
+                <div class="analytics-subvalue">Unit-to-call assignments</div>
+            </div>
+        </div>
+        <div class="col-6 col-xl">
+            <div class="glass analytics-kpi">
+                <div class="analytics-eyebrow">CALL PROCESSING</div>
+                <div class="analytics-value">{{ metrics.average_processing }}</div>
+                <div class="analytics-subvalue">Average received to dispatch</div>
+            </div>
+        </div>
+        <div class="col-6 col-xl">
+            <div class="glass analytics-kpi">
+                <div class="analytics-eyebrow">AVG RESPONSE</div>
+                <div class="analytics-value">{{ metrics.average_response }}</div>
+                <div class="analytics-subvalue">Received to first on scene</div>
+            </div>
+        </div>
+        <div class="col-12 col-xl">
+            <div class="glass analytics-kpi">
+                <div class="analytics-eyebrow">MEDIAN RESPONSE</div>
+                <div class="analytics-value">{{ metrics.median_response }}</div>
+                <div class="analytics-subvalue">
+                    {{ metrics.response_coverage_percent }}% of calls have on-scene timing
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if metrics.total_calls %}
+        <div class="row g-4 mb-4">
+            <div class="col-xl-8">
+                <div class="glass chart-card">
+                    <div class="analytics-eyebrow">CALL VOLUME TREND</div>
+                    <h4 class="mb-0">Calls by Day</h4>
+                    <div class="chart-wrap"><canvas id="daily-volume-chart"></canvas></div>
+                </div>
+            </div>
+            <div class="col-xl-4">
+                <div class="glass chart-card">
+                    <div class="analytics-eyebrow">WORKLOAD MIX</div>
+                    <h4 class="mb-0">Calls by Agency</h4>
+                    <div class="chart-wrap"><canvas id="agency-mix-chart"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4 mb-4">
+            <div class="col-xl-7">
+                <div class="glass chart-card">
+                    <div class="analytics-eyebrow">TIME-OF-DAY DEMAND</div>
+                    <h4 class="mb-0">Calls by Hour</h4>
+                    <div class="chart-wrap compact"><canvas id="hourly-volume-chart"></canvas></div>
+                </div>
+            </div>
+            <div class="col-xl-5">
+                <div class="glass list-card">
+                    <div class="analytics-eyebrow">CALL PROFILE</div>
+                    <h4>Top Incident Types</h4>
+                    {% for incident in analytics_snapshot.incident_types %}
+                        <div class="analytics-list-row">
+                            <div class="text-truncate">
+                                <span class="analytics-rank">{{ loop.index }}</span>
+                                {{ incident.label }}
+                            </div>
+                            <div class="analytics-count">
+                                {{ incident.count }}
+                                <span class="data-note">({{ incident.percent }}%)</span>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="text-secondary py-4">No incident-type data in this range.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-xl-7">
+                <div class="glass list-card">
+                    <div class="analytics-eyebrow">RESOURCE WORKLOAD</div>
+                    <h4>Busiest Units</h4>
+                    <div class="table-responsive mt-3">
+                        <table class="table analytics-table align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Unit</th>
+                                    <th>Station</th>
+                                    <th class="text-end">Responses</th>
+                                    <th class="text-end">Avg Response</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for unit in analytics_snapshot.busiest_units %}
+                                    <tr>
+                                        <td class="fw-bold text-white">{{ unit.unit_number }}</td>
+                                        <td>{{ unit.station }}</td>
+                                        <td class="text-end text-warning fw-bold">{{ unit.responses }}</td>
+                                        <td class="text-end">{{ unit.average_response }}</td>
+                                    </tr>
+                                {% else %}
+                                    <tr><td colspan="4" class="text-secondary py-4">No unit responses in this range.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-xl-5">
+                <div class="glass list-card">
+                    <div class="analytics-eyebrow">STATION DEMAND</div>
+                    <h4>Busiest Stations</h4>
+                    {% for station in analytics_snapshot.busiest_stations %}
+                        <div class="analytics-list-row">
+                            <div>
+                                <span class="analytics-rank">{{ loop.index }}</span>
+                                {{ station.station }}
+                            </div>
+                            <div class="analytics-count">{{ station.calls }} calls</div>
+                        </div>
+                    {% else %}
+                        <div class="text-secondary py-4">Station data has not been populated yet.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <div class="glass analytics-empty">
+            <i class="bi bi-bar-chart-line fs-1 text-info"></i>
+            <h3 class="mt-3">No completed calls in this reporting window</h3>
+            <div class="text-secondary">Choose a wider date range or wait for the next analytics synchronization.</div>
+        </div>
+    {% endif %}
+{% else %}
+    <div class="glass analytics-empty">
+        <i class="bi bi-database-exclamation fs-1 text-warning"></i>
+        <h3 class="mt-3">Historical analytics are temporarily unavailable</h3>
+        <div class="text-secondary">{{ analytics_snapshot.message }}</div>
+        <div class="data-note mt-3">
+            Live CAD pages continue operating independently from this historical database.
         </div>
     </div>
 {% endif %}
+
+<div class="data-note mt-4">
+    <strong class="text-info">Privacy-Minimized:</strong>
+    Metrics use completed calls stored in PostgreSQL. Average response is measured from call received
+    to the earliest valid on-scene time. No caller names, phone numbers, narratives, command logs,
+    or street addresses are stored in the analytics warehouse.
+</div>
+
+<script id="analytics-snapshot" type="application/json">{{ analytics_snapshot|tojson }}</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="/static/js/lcdash-analytics.js"></script>
+<script>
+    LCDashTime.updateCadDisplayTimes();
+</script>
 {% endblock %}

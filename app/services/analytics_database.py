@@ -60,6 +60,12 @@ class AnalyticsRepository(AbstractContextManager):
         if self.connection is not None:
             self.connection.commit()
 
+    def fetchone(self, query: str, params=None):
+        return self._execute(query, params).fetchone()
+
+    def fetchall(self, query: str, params=None):
+        return self._execute(query, params).fetchall()
+
     def initialize_schema(self):
         schema_sql = SCHEMA_PATH.read_text(encoding="utf-8")
         self._execute(schema_sql)
