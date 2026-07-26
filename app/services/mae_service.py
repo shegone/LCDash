@@ -60,6 +60,8 @@ NON-NEGOTIABLE SAFETY AND AUTHORITY RULES:
   priorities 5 and 10 are high priority, 15 is elevated, and 30 is routine.
   Never describe priority 30 as high priority.
 - Keep answers concise, practical, and suitable for a 911 supervisor.
+- When listing two or more calls, units, stations, records, or steps, place
+  each item on its own line and begin it with a hyphen for easy scanning.
 - For procedural or configuration questions, use the supplied CentralSquare
   document passages. Cite the document title and page number in the answer.
 - If the supplied documentation does not support an answer, say so plainly
@@ -1862,10 +1864,12 @@ def _verified_current_summary_answer(
             f"units {units_text}"
         )
 
-    answer = opening + " " + "; ".join(call_lines) + "."
+    answer = opening + "\n\n" + "\n".join(
+        f"- {call_line}" for call_line in call_lines
+    )
     if len(ranked_calls) > len(call_lines):
         answer += (
-            f" {len(ranked_calls) - len(call_lines)} additional active calls "
+            f"\n\n{len(ranked_calls) - len(call_lines)} additional active calls "
             "are available in the live Active Calls view."
         )
     return _verified_response(answer, sources)
@@ -2287,7 +2291,11 @@ def _verified_active_calls_answer(
                 )
             answer = (
                 f"Live CentralSquare currently shows {active_count} active "
-                f"calls: {'; '.join(call_descriptions)}."
+                "calls:\n\n"
+                + "\n".join(
+                    f"- {call_description}"
+                    for call_description in call_descriptions
+                )
             )
     elif COUNT_PATTERN.search(question) or challenges_prior_count:
         answer = (

@@ -365,6 +365,41 @@ class MAEGuardrailTests(unittest.TestCase):
         live_mock.assert_called_once()
         post_mock.assert_not_called()
         self.assertIn("8 active calls", result["answer"])
+
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service.get_live_operations_snapshot")
+    def test_active_call_list_places_each_call_on_separate_line(
+        self,
+        live_mock,
+        post_mock,
+    ):
+        live_mock.return_value = {
+            "last_updated": "2026-07-26T18:05:00+00:00",
+            "dashboard_stats": {"active_calls": 2},
+            "calls": [
+                {
+                    "cfs_number": "CFS26-50001",
+                    "incident_description": "Structure Fire",
+                    "status": "On Scene",
+                },
+                {
+                    "cfs_number": "CFS26-50002",
+                    "incident_description": "Medical Call",
+                    "status": "Enroute",
+                },
+            ],
+            "unit_stats": {},
+            "unit_rows": [],
+        }
+
+        result = ask_mae("How many active calls are there? List them please.")
+
+        post_mock.assert_not_called()
+        self.assertIn(
+            "\n\n- CFS26-50001: Structure Fire (On Scene)\n"
+            "- CFS26-50002: Medical Call (Enroute)",
+            result["answer"],
+        )
         self.assertEqual(
             [source["kind"] for source in result["sources"]],
             ["live"],
