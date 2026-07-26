@@ -1148,10 +1148,14 @@ def _verified_busy_now_answer(
     if active_calls == 0:
         workload_text = "There are no active calls in live CentralSquare."
     else:
+        active_call_label = "call" if active_calls == 1 else "calls"
+        assigned_unit_label = "unit" if assigned_units == 1 else "units"
+        priority_call_label = "call" if high_priority == 1 else "calls"
         workload_text = (
-            f"Live CentralSquare currently shows {active_calls} active calls, "
-            f"{assigned_units} assigned units, and {high_priority} calls at "
-            "priority 15 or more urgent."
+            f"Live CentralSquare currently shows {active_calls} active "
+            f"{active_call_label}, {assigned_units} assigned "
+            f"{assigned_unit_label}, and {high_priority} "
+            f"{priority_call_label} at priority 15 or more urgent."
         )
     return _verified_response(f"{workload_text} {area_text}", sources)
 
@@ -1176,8 +1180,11 @@ def _format_elapsed_duration(started_at: datetime) -> str:
     hours, remainder = divmod(elapsed_seconds, 3600)
     minutes = remainder // 60
     if hours:
-        return f"{hours} hours {minutes} minutes"
-    return f"{minutes} minutes"
+        hour_label = "hour" if hours == 1 else "hours"
+        minute_label = "minute" if minutes == 1 else "minutes"
+        return f"{hours} {hour_label} {minutes} {minute_label}"
+    minute_label = "minute" if minutes == 1 else "minutes"
+    return f"{minutes} {minute_label}"
 
 
 def _verified_longest_active_unit_answer(
