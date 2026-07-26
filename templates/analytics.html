@@ -138,6 +138,37 @@
         height: 260px;
     }
 
+    .station-chart-wrap {
+        position: relative;
+        min-height: 420px;
+        margin-top: 18px;
+    }
+
+    .discipline-law {
+        color: #4cc9ff !important;
+    }
+
+    .discipline-ems {
+        color: #69ffb9 !important;
+    }
+
+    .discipline-fire {
+        color: #ff7b9c !important;
+    }
+
+    .station-quality {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 7px 11px;
+        border-radius: 999px;
+        color: #69ffb9;
+        background: rgba(105, 255, 185, .10);
+        border: 1px solid rgba(105, 255, 185, .22);
+        font-size: .78rem;
+        font-weight: 800;
+    }
+
     .analytics-list-row {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
@@ -398,7 +429,7 @@
             </div>
         </div>
 
-        <div class="row g-4">
+        <div class="row g-4 mb-4">
             <div class="col-xl-7">
                 <div class="glass list-card">
                     <div class="analytics-eyebrow">RESOURCE WORKLOAD</div>
@@ -447,6 +478,67 @@
                     {% endfor %}
                 </div>
             </div>
+        </div>
+
+        <div class="glass chart-card">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                <div>
+                    <div class="analytics-eyebrow">STATION AND DISCIPLINE DEMAND</div>
+                    <h4 class="mb-1">Calls by Station: Law, EMS, and Fire</h4>
+                    <div class="data-note">
+                        Each incident is counted once per responding station and discipline,
+                        even when multiple units from that station respond.
+                    </div>
+                </div>
+                {% set station_quality = analytics_snapshot.station_discipline_quality %}
+                <span class="station-quality">
+                    <i class="bi bi-check-circle-fill"></i>
+                    {{ station_quality.coverage_percent }}% discipline coverage
+                </span>
+            </div>
+
+            {% if analytics_snapshot.station_discipline %}
+                <div class="station-chart-wrap">
+                    <canvas id="station-discipline-chart"></canvas>
+                </div>
+
+                <div class="table-responsive mt-4">
+                    <table class="table analytics-table align-middle">
+                        <thead>
+                            <tr>
+                                <th>Station</th>
+                                <th class="text-end discipline-law">Law</th>
+                                <th class="text-end discipline-ems">EMS</th>
+                                <th class="text-end discipline-fire">Fire</th>
+                                <th class="text-end">Total Calls</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for station in analytics_snapshot.station_discipline %}
+                                <tr>
+                                    <td class="fw-bold text-white">{{ station.station }}</td>
+                                    <td class="text-end discipline-law fw-bold">{{ station.law }}</td>
+                                    <td class="text-end discipline-ems fw-bold">{{ station.ems }}</td>
+                                    <td class="text-end discipline-fire fw-bold">{{ station.fire }}</td>
+                                    <td class="text-end text-warning fw-bold">{{ station.total }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                {% if station_quality.unassigned_station_responses %}
+                    <div class="data-note mt-3">
+                        <i class="bi bi-info-circle text-warning"></i>
+                        {{ station_quality.unassigned_station_responses }} unit response(s) did not include a station
+                        and are not shown in this station table.
+                    </div>
+                {% endif %}
+            {% else %}
+                <div class="text-secondary py-4">
+                    No classified station responses were found in this reporting window.
+                </div>
+            {% endif %}
         </div>
     {% else %}
         <div class="glass analytics-empty">

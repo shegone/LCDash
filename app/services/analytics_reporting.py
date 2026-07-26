@@ -138,6 +138,13 @@ def _empty_overview(window: AnalyticsWindow, message: str) -> dict:
         "incident_types": [],
         "busiest_units": [],
         "busiest_stations": [],
+        "station_discipline": [],
+        "station_discipline_quality": {
+            "classified_responses": 0,
+            "total_responses": 0,
+            "coverage_percent": 0,
+            "unassigned_station_responses": 0,
+        },
     }
 
 
@@ -394,6 +401,127 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
         for row in station_rows
     ]
 
+    station_discipline_rows = repository.fetchall(
+        """
+        WITH selected_calls AS (
+            SELECT cfs_number
+            FROM lcdash_analytics.calls
+            WHERE call_received_at >= %(window_start)s
+              AND call_received_at < %(window_end)s
+        ),
+        normalized_responses AS (
+            SELECT
+                COALESCE(
+                    NULLIF(unit_record.station, ''),
+                    NULLIF(unit_response.station, ''),
+                    'Unassigned'
+                ) AS station,
+                UPPER(COALESCE(NULLIF(unit_record.agency, ''), '')) AS agency,
+                UPPER(COALESCE(
+                    NULLIF(unit_record.unit_type, ''),
+                    NULLIF(unit_response.unit_type, ''),
+                    ''
+                )) AS unit_type,
+                unit_response.cfs_number
+            FROM selected_calls
+            JOIN lcdash_analytics.unit_responses AS unit_response
+                ON unit_response.cfs_number = selected_calls.cfs_number
+            LEFT JOIN lcdash_analytics.units AS unit_record
+                ON unit_record.unit_number = unit_response.unit_number
+        ),
+        classified_responses AS (
+            SELECT
+                station,
+                cfs_number,
+                CASE
+                    WHEN unit_type LIKE 'EMS %%' OR agency = 'LEASA' THEN 'EMS'
+                    WHEN unit_type LIKE 'FIRE %%' OR agency LIKE 'FC %%' THEN 'Fire'
+                    WHEN unit_type IN ('PATROL CAR', 'COUNTY ADMIN')
+                      OR agency IN ('CPD', 'DNR', 'DPS', 'LCSO', 'LPD', 'MPD', 'WVSP')
+                        THEN 'Law'
+                    ELSE NULL
+                END AS discipline
+            FROM normalized_responses
+        )
+        SELECT
+            station,
+            COUNT(DISTINCT cfs_number) FILTER (WHERE discipline = 'Law') AS law_calls,
+            COUNT(DISTINCT cfs_number) FILTER (WHERE discipline = 'EMS') AS ems_calls,
+            COUNT(DISTINCT cfs_number) FILTER (WHERE discipline = 'Fire') AS fire_calls,
+            COUNT(DISTINCT cfs_number) FILTER (WHERE discipline IS NOT NULL) AS total_calls
+        FROM classified_responses
+        WHERE station <> 'Unassigned'
+          AND discipline IS NOT NULL
+        GROUP BY station
+        ORDER BY total_calls DESC, station
+        """,
+        params,
+    )
+    station_discipline = [
+        {
+            "station": row[0],
+            "law": int(row[1] or 0),
+            "ems": int(row[2] or 0),
+            "fire": int(row[3] or 0),
+            "total": int(row[4] or 0),
+        }
+        for row in station_discipline_rows
+    ]
+
+    station_quality_row = repository.fetchone(
+        """
+        WITH selected_calls AS (
+            SELECT cfs_number
+            FROM lcdash_analytics.calls
+            WHERE call_received_at >= %(window_start)s
+              AND call_received_at < %(window_end)s
+        ),
+        normalized_responses AS (
+            SELECT
+                COALESCE(
+                    NULLIF(unit_record.station, ''),
+                    NULLIF(unit_response.station, ''),
+                    'Unassigned'
+                ) AS station,
+                UPPER(COALESCE(NULLIF(unit_record.agency, ''), '')) AS agency,
+                UPPER(COALESCE(
+                    NULLIF(unit_record.unit_type, ''),
+                    NULLIF(unit_response.unit_type, ''),
+                    ''
+                )) AS unit_type
+            FROM selected_calls
+            JOIN lcdash_analytics.unit_responses AS unit_response
+                ON unit_response.cfs_number = selected_calls.cfs_number
+            LEFT JOIN lcdash_analytics.units AS unit_record
+                ON unit_record.unit_number = unit_response.unit_number
+        )
+        SELECT
+            COUNT(*) AS total_responses,
+            COUNT(*) FILTER (
+                WHERE unit_type LIKE 'EMS %%'
+                   OR agency = 'LEASA'
+                   OR unit_type LIKE 'FIRE %%'
+                   OR agency LIKE 'FC %%'
+                   OR unit_type IN ('PATROL CAR', 'COUNTY ADMIN')
+                   OR agency IN ('CPD', 'DNR', 'DPS', 'LCSO', 'LPD', 'MPD', 'WVSP')
+            ) AS classified_responses,
+            COUNT(*) FILTER (WHERE station = 'Unassigned')
+                AS unassigned_station_responses
+        FROM normalized_responses
+        """,
+        params,
+    ) or (0, 0, 0)
+    total_station_responses = int(station_quality_row[0] or 0)
+    classified_station_responses = int(station_quality_row[1] or 0)
+    station_discipline_quality = {
+        "classified_responses": classified_station_responses,
+        "total_responses": total_station_responses,
+        "coverage_percent": round(
+            (classified_station_responses / total_station_responses) * 100
+        ) if total_station_responses else 0,
+        "unassigned_station_responses": int(station_quality_row[2] or 0),
+    }
+
     latest_data = metrics_row[6]
     return {
         "available": True,
@@ -419,6 +547,8 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
         "incident_types": incident_types,
         "busiest_units": busiest_units,
         "busiest_stations": busiest_stations,
+        "station_discipline": station_discipline,
+        "station_discipline_quality": station_discipline_quality,
     }
 
 

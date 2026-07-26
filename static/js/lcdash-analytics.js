@@ -130,6 +130,73 @@
         });
     }
 
+    function renderStationDiscipline(snapshot) {
+        const canvas = document.getElementById("station-discipline-chart");
+        const rows = snapshot.station_discipline || [];
+        if (!canvas || !rows.length) {
+            return;
+        }
+
+        const chartWrap = canvas.closest(".station-chart-wrap");
+        if (chartWrap) {
+            chartWrap.style.height = Math.max(420, rows.length * 34) + "px";
+        }
+
+        const options = baseOptions();
+        options.indexAxis = "y";
+        options.plugins.tooltip.callbacks = {
+            label(context) {
+                const value = context.parsed.x || 0;
+                return `${context.dataset.label}: ${value} ${value === 1 ? "call" : "calls"}`;
+            }
+        };
+        options.scales.x.stacked = false;
+        options.scales.x.title = {
+            display: true,
+            text: "Distinct calls",
+            color: "#8fb7d9"
+        };
+        options.scales.y.stacked = false;
+        options.scales.y.ticks = {
+            color: "#dbeeff",
+            autoSkip: false
+        };
+
+        new Chart(canvas, {
+            type: "bar",
+            data: {
+                labels: rows.map((row) => row.station),
+                datasets: [
+                    {
+                        label: "Law",
+                        data: rows.map((row) => row.law),
+                        backgroundColor: "rgba(76, 201, 255, .68)",
+                        borderColor: "#4cc9ff",
+                        borderWidth: 1,
+                        borderRadius: 4
+                    },
+                    {
+                        label: "EMS",
+                        data: rows.map((row) => row.ems),
+                        backgroundColor: "rgba(105, 255, 185, .68)",
+                        borderColor: "#69ffb9",
+                        borderWidth: 1,
+                        borderRadius: 4
+                    },
+                    {
+                        label: "Fire",
+                        data: rows.map((row) => row.fire),
+                        backgroundColor: "rgba(255, 123, 156, .72)",
+                        borderColor: "#ff7b9c",
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }
+                ]
+            },
+            options
+        });
+    }
+
     function start() {
         const snapshot = readSnapshot();
         if (!snapshot || !snapshot.available || typeof Chart === "undefined") {
@@ -140,6 +207,7 @@
         renderDaily(snapshot);
         renderHourly(snapshot);
         renderAgencies(snapshot);
+        renderStationDiscipline(snapshot);
     }
 
     if (document.readyState === "loading") {

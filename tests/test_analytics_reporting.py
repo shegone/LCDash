@@ -59,6 +59,11 @@ class AnalyticsWindowTests(unittest.TestCase):
 
         self.assertFalse(result["available"])
         self.assertEqual(result["metrics"]["total_calls"], 0)
+        self.assertEqual(result["station_discipline"], [])
+        self.assertEqual(
+            result["station_discipline_quality"]["coverage_percent"],
+            0,
+        )
         self.assertNotIn("password", str(result).lower())
         self.assertNotIn("database_url", str(result).lower())
 
@@ -104,6 +109,21 @@ class AnalyticsOverviewRouteTests(unittest.TestCase):
                 }
             ],
             "busiest_stations": [{"station": "Station 1", "calls": 18}],
+            "station_discipline": [
+                {
+                    "station": "Station 1",
+                    "law": 4,
+                    "ems": 12,
+                    "fire": 2,
+                    "total": 18,
+                }
+            ],
+            "station_discipline_quality": {
+                "classified_responses": 80,
+                "total_responses": 80,
+                "coverage_percent": 100,
+                "unassigned_station_responses": 0,
+            },
         }
 
     @patch("app.main.get_analytics_overview")
@@ -123,6 +143,9 @@ class AnalyticsOverviewRouteTests(unittest.TestCase):
         self.assertIn("Calls by Day", response.text)
         self.assertIn("Top Incident Types", response.text)
         self.assertIn("Busiest Units", response.text)
+        self.assertIn("Calls by Station: Law, EMS, and Fire", response.text)
+        self.assertIn("station-discipline-chart", response.text)
+        self.assertIn("100% discipline coverage", response.text)
         self.assertIn("MED10", response.text)
         self.assertIn("/static/js/lcdash-analytics.js", response.text)
         overview_mock.assert_called_once_with(period="30d", start="", end="")
