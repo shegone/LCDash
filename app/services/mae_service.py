@@ -316,6 +316,7 @@ def get_mae_unit_snapshot() -> dict:
 def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
     context: list[dict] = []
     sources: list[dict] = []
+    analytics_for_comparison: dict | None = None
     cfs_match = CFS_PATTERN.search(question)
     recent_hours = _hours_from_question(question)
     wants_latest_call = bool(LATEST_CALL_PATTERN.search(question))
@@ -370,6 +371,7 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
     elif wants_analytics:
         period = _period_from_question(question)
         analytics = get_analytics_overview(period=period)
+        analytics_for_comparison = analytics
         context.append(
             {
                 "source": "PostgreSQL analytics",
@@ -389,7 +391,85 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
         if not analytics.get("available") and looks_operational:
             wants_live = True
 
-    if recent_hours or wants_latest_call:
+    if wants_comparison:
+        try:
+            recent_window_hours = 3
+            recent_cad = get_recent_cad_activity(recent_window_hours)
+            live_snapshot = get_live_operations_snapshot()
+            baseline_total = int(
+                ((analytics_for_comparison or {}).get("metrics") or {}).get(
+                    "total_calls"
+                )
+                or 0
+            )
+            baseline_days = {
+                "24h": 1,
+                "7d": 7,
+                "30d": 30,
+                "90d": 90,
+                "365d": 365,
+            }.get((analytics_for_comparison or {}).get("period_key"), 30)
+            baseline_windows = max((baseline_days * 24) / recent_window_hours, 1)
+            baseline_average = round(baseline_total / baseline_windows, 2)
+            current_recent_calls = int(recent_cad.get("calls_returned") or 0)
+            comparison_ratio = (
+                round(current_recent_calls / baseline_average, 2)
+                if baseline_average
+                else None
+            )
+            context.append(
+                {
+                    "source": "LCDash workload comparison",
+                    "purpose": (
+                        "Compare current three-hour call arrivals and active calls "
+                        "with the equivalent historical average"
+                    ),
+                    "data": {
+                        "comparison_window_hours": recent_window_hours,
+                        "current_calls_created": current_recent_calls,
+                        "current_active_calls": (
+                            live_snapshot.get("dashboard_stats") or {}
+                        ).get("active_calls", 0),
+                        "historical_period": (
+                            analytics_for_comparison or {}
+                        ).get("period_label", "Last 30 days"),
+                        "historical_total_calls": baseline_total,
+                        "historical_average_calls_per_3_hours": baseline_average,
+                        "current_to_average_ratio": comparison_ratio,
+                        "recent_cad_truncated": bool(
+                            recent_cad.get("truncated")
+                        ),
+                        "live_generated_at": recent_cad.get("generated_at"),
+                    },
+                }
+            )
+            sources.append(
+                {
+                    "name": "CentralSquare CAD",
+                    "kind": "live",
+                    "detail": "3-hour arrivals and active operations",
+                    "available": True,
+                    "timestamp": recent_cad.get("generated_at") or "",
+                }
+            )
+        except CentralSquareAPIError as exc:
+            context.append(
+                {
+                    "source": "LCDash workload comparison",
+                    "purpose": "Live workload verification",
+                    "error": str(exc),
+                }
+            )
+            sources.append(
+                {
+                    "name": "CentralSquare CAD",
+                    "kind": "live",
+                    "detail": "Workload comparison",
+                    "available": False,
+                    "timestamp": "",
+                }
+            )
+    elif recent_hours or wants_latest_call:
         cad_hours = recent_hours or 24
         try:
             recent_cad = get_recent_cad_activity(cad_hours)

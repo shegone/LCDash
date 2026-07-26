@@ -171,19 +171,29 @@ class MAEGuardrailTests(unittest.TestCase):
         self.assertIn("CFS26-50001", result["answer"])
 
     @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service.get_recent_cad_activity")
     @patch("app.services.mae_service.get_live_operations_snapshot")
     @patch("app.services.mae_service.get_analytics_overview")
     def test_comparison_question_checks_database_and_live_cad(
         self,
         analytics_mock,
         live_mock,
+        recent_cad_mock,
         post_mock,
     ):
         analytics_mock.return_value = {
             "available": True,
+            "period_key": "30d",
             "period_label": "Last 30 days",
             "latest_data_at": "2026-07-26T18:00:00+00:00",
             "metrics": {"total_calls": 500},
+        }
+        recent_cad_mock.return_value = {
+            "available": True,
+            "hours": 3,
+            "calls_returned": 5,
+            "generated_at": "2026-07-26T18:05:00+00:00",
+            "truncated": False,
         }
         live_mock.return_value = {
             "last_updated": "2026-07-26T18:05:00+00:00",
@@ -202,6 +212,7 @@ class MAEGuardrailTests(unittest.TestCase):
         result = ask_mae("Are we busier than normal right now?")
 
         analytics_mock.assert_called_once_with(period="30d")
+        recent_cad_mock.assert_called_once_with(3)
         live_mock.assert_called_once()
         self.assertTrue(result["research"]["database_first"])
         self.assertTrue(result["research"]["live_verified"])
