@@ -666,6 +666,125 @@ def _ollama_messages(
     return messages
 
 
+def _context_data(context: list[dict], source_name: str) -> dict:
+    for item in context:
+        if item.get("source") == source_name:
+            data = item.get("data")
+            return data if isinstance(data, dict) else {}
+    return {}
+
+
+def _research_summary(sources: list[dict]) -> dict:
+    source_kinds = {source.get("kind") for source in sources}
+    return {
+        "database_first": "historical" in source_kinds,
+        "live_verified": "live" in source_kinds,
+        "compared_sources": (
+            "historical" in source_kinds and "live" in source_kinds
+        ),
+    }
+
+
+def _verified_recent_count_answer(
+    question: str,
+    context: list[dict],
+    sources: list[dict],
+) -> dict | None:
+    hours = _hours_from_question(question)
+    if hours is None or not re.search(
+        r"\b(how many|number of|count)\b",
+        question,
+        re.IGNORECASE,
+    ):
+        return None
+
+    live_data = _context_data(context, "CentralSquare recent call activity")
+    database_data = _context_data(context, "PostgreSQL recent activity")
+    if not live_data.get("available"):
+        return None
+
+    live_count = int(live_data.get("calls_returned") or 0)
+    completed_count = (
+        int(database_data.get("completed_calls_stored") or 0)
+        if database_data.get("available")
+        else None
+    )
+    truncated = bool(live_data.get("truncated"))
+    count_phrase = f"at least {live_count}" if truncated else str(live_count)
+    answer = (
+        f"CentralSquare shows {count_phrase} calls created in the last "
+        f"{hours} hours."
+    )
+    if completed_count is not None:
+        answer += (
+            f" PostgreSQL currently contains {completed_count} completed calls "
+            "from that same window."
+        )
+        difference = live_count - completed_count
+        if difference > 0:
+            answer += (
+                f" The {difference}-call difference can include active calls or "
+                "recent calls not yet stored as completed, so the live "
+                "CentralSquare count is the current all-call total."
+            )
+    if truncated:
+        answer += " The live result reached its safety limit, so the true count may be higher."
+
+    return {
+        "answer": answer,
+        "sources": sources,
+        "model": "LCDash verified read tools",
+        "generated_at": datetime.now(LOCAL_TIMEZONE).isoformat(),
+        "write_access": False,
+        "research": _research_summary(sources),
+    }
+
+
+def _verified_latest_call_answer(
+    question: str,
+    context: list[dict],
+    sources: list[dict],
+) -> dict | None:
+    if not LATEST_CALL_PATTERN.search(question):
+        return None
+
+    live_data = _context_data(context, "CentralSquare recent call activity")
+    latest = live_data.get("latest_call") or {}
+    if not latest:
+        return None
+
+    call_time = str(latest.get("call_datetime") or "")
+    local_time = call_time
+    try:
+        parsed_time = datetime.fromisoformat(call_time.replace("Z", "+00:00"))
+        if parsed_time.tzinfo is None:
+            parsed_time = parsed_time.replace(tzinfo=timezone.utc)
+        local_time = parsed_time.astimezone(LOCAL_TIMEZONE).strftime(
+            "%m/%d/%Y %I:%M:%S %p %Z"
+        )
+    except ValueError:
+        pass
+
+    details = [
+        str(latest.get("cfs_number") or "Unknown CFS"),
+        str(latest.get("incident_description") or latest.get("incident_code") or ""),
+        str(latest.get("location") or ""),
+    ]
+    details = [detail for detail in details if detail]
+    answer = "The latest call returned by live CentralSquare is " + " — ".join(details)
+    if local_time:
+        answer += f". It was received at {local_time}."
+
+    return {
+        "answer": answer,
+        "sources": sources,
+        "model": "LCDash verified read tools",
+        "generated_at": datetime.now(LOCAL_TIMEZONE).isoformat(),
+        "write_access": False,
+        "research": _research_summary(sources),
+    }
+
+
 def get_mae_status() -> dict:
     model_names: list[str] = []
     ai_error = ""
@@ -732,8 +851,12 @@ def ask_mae(question: str, history: list[dict] | None = None) -> dict:
         }
 
     context, sources = _build_read_context(clean_question)
-    source_kinds = {source.get("kind") for source in sources}
-    compared_live = "historical" in source_kinds and "live" in source_kinds
+    verified_answer = (
+        _verified_recent_count_answer(clean_question, context, sources)
+        or _verified_latest_call_answer(clean_question, context, sources)
+    )
+    if verified_answer:
+        return verified_answer
     payload = {
         "model": settings.mae_model,
         "messages": _ollama_messages(clean_question, history or [], context),
@@ -765,13 +888,5 @@ def ask_mae(question: str, history: list[dict] | None = None) -> dict:
         "model": settings.mae_model,
         "generated_at": datetime.now(LOCAL_TIMEZONE).isoformat(),
         "write_access": False,
-        "research": {
-            "database_first": bool(
-                any(source.get("kind") == "historical" for source in sources)
-            ),
-            "live_verified": bool(
-                any(source.get("kind") == "live" for source in sources)
-            ),
-            "compared_sources": compared_live,
-        },
+        "research": _research_summary(sources),
     }

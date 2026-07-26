@@ -139,8 +139,11 @@ class MAEGuardrailTests(unittest.TestCase):
 
         database_mock.assert_called_once_with(3)
         cad_mock.assert_called_once_with(3)
+        post_mock.assert_not_called()
         self.assertEqual(len(result["sources"]), 2)
         self.assertIn("Last 3 hours", result["sources"][1]["detail"])
+        self.assertIn("9 calls", result["answer"])
+        self.assertIn("8 completed calls", result["answer"])
 
     @patch("app.services.mae_service.httpx.post")
     @patch("app.services.mae_service.get_recent_cad_activity")
@@ -168,6 +171,7 @@ class MAEGuardrailTests(unittest.TestCase):
 
         database_mock.assert_called_once_with(24)
         cad_mock.assert_called_once_with(24)
+        post_mock.assert_not_called()
         self.assertIn("CFS26-50001", result["answer"])
 
     @patch("app.services.mae_service.httpx.post")
