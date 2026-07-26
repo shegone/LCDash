@@ -362,12 +362,25 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
 
     if wants_knowledge:
         passages = search_knowledge(question, limit=8)
-        if passages:
+        best_passage = passages[0] if passages else {}
+        query_terms = best_passage.get("query_terms") or []
+        minimum_matches = min(2, len(query_terms))
+        has_direct_support = bool(
+            passages
+            and float(best_passage.get("coverage", 1.0)) >= 0.5
+            and len(best_passage.get("matched_terms") or query_terms)
+            >= minimum_matches
+        )
+        if has_direct_support:
             context.append(
                 {
                     "source": "CentralSquare documentation library",
                     "purpose": "Read-only procedural and configuration guidance",
-                    "data": {"question": question, "passages": passages},
+                    "data": {
+                        "question": question,
+                        "supported": True,
+                        "passages": passages,
+                    },
                 }
             )
             seen_document_pages: set[tuple[str, int]] = set()
@@ -395,6 +408,22 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
                         "timestamp": passage.get("indexed_at") or "",
                     }
                 )
+        else:
+            context.append(
+                {
+                    "source": "CentralSquare documentation library",
+                    "purpose": "Read-only procedural and configuration guidance",
+                    "data": {
+                        "question": question,
+                        "supported": False,
+                        "passages": [],
+                        "message": (
+                            "No sufficiently direct passage was found in the "
+                            "indexed CentralSquare manuals."
+                        ),
+                    },
+                }
+            )
 
     # Unknown operational wording is handled conservatively: compare a
     # historical baseline with current CAD rather than guessing from one source.
@@ -849,6 +878,34 @@ def _verified_latest_call_answer(
     }
 
 
+def _verified_unsupported_knowledge_answer(
+    question: str,
+    context: list[dict],
+    sources: list[dict],
+) -> dict | None:
+    if not KNOWLEDGE_PATTERN.search(question):
+        return None
+    knowledge_data = _context_data(
+        context,
+        "CentralSquare documentation library",
+    )
+    if knowledge_data.get("supported") is not False:
+        return None
+    return {
+        "answer": (
+            "I could not find a sufficiently direct passage in the indexed "
+            "CentralSquare manuals to answer that safely. Try using the exact "
+            "screen, field, or feature name, or review the Knowledge Library. "
+            "I will not invent configuration steps."
+        ),
+        "sources": sources,
+        "model": "LCDash verified document search",
+        "generated_at": datetime.now(LOCAL_TIMEZONE).isoformat(),
+        "write_access": False,
+        "research": _research_summary(sources),
+    }
+
+
 def get_mae_status() -> dict:
     model_names: list[str] = []
     ai_error = ""
@@ -921,6 +978,11 @@ def ask_mae(question: str, history: list[dict] | None = None) -> dict:
     verified_answer = (
         _verified_recent_count_answer(clean_question, context, sources)
         or _verified_latest_call_answer(clean_question, context, sources)
+        or _verified_unsupported_knowledge_answer(
+            clean_question,
+            context,
+            sources,
+        )
     )
     if verified_answer:
         return verified_answer

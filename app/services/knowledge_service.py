@@ -152,11 +152,20 @@ def _fallback_terms(question: str) -> list[str]:
         "about",
         "and",
         "can",
+        "configuration",
+        "configure",
         "does",
         "for",
         "from",
         "how",
         "into",
+        "option",
+        "procedure",
+        "set",
+        "setting",
+        "settings",
+        "setup",
+        "steps",
         "the",
         "this",
         "what",
@@ -238,13 +247,25 @@ def search_knowledge(question: str, limit: int = 8) -> list[dict]:
                         ORDER BY rank DESC, documents.title, chunks.page_number
                         LIMIT %s
                         """,
-                        (or_query, result_limit),
+                        (or_query, result_limit * 5),
                     ).fetchall()
     except (KnowledgeServiceError, psycopg.Error):
         return []
 
-    return [
-        {
+    query_terms = _fallback_terms(clean_question)
+    ranked_results = []
+    for row in rows:
+        searchable_text = f"{row[1]} {row[4]}".lower()
+        matched_terms = [
+            term for term in query_terms if term in searchable_text
+        ]
+        coverage = (
+            len(matched_terms) / len(query_terms)
+            if query_terms
+            else 1.0
+        )
+        ranked_results.append(
+            {
             "document_id": int(row[0]),
             "title": row[1],
             "file_name": row[2],
@@ -252,6 +273,18 @@ def search_knowledge(question: str, limit: int = 8) -> list[dict]:
             "content": row[4],
             "indexed_at": row[5].isoformat() if row[5] else "",
             "rank": round(float(row[6] or 0), 4),
+            "matched_terms": matched_terms,
+            "query_terms": query_terms,
+            "coverage": round(coverage, 4),
         }
-        for row in rows
-    ]
+        )
+
+    ranked_results.sort(
+        key=lambda result: (
+            result["coverage"],
+            len(result["matched_terms"]),
+            result["rank"],
+        ),
+        reverse=True,
+    )
+    return ranked_results[:result_limit]

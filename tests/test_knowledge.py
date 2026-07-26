@@ -87,6 +87,9 @@ class MAEKnowledgeRoutingTests(unittest.TestCase):
                 "content": "Open Machine Settings and select CAD Terminal ID.",
                 "indexed_at": "2026-07-26T12:00:00-04:00",
                 "rank": 0.8,
+                "matched_terms": ["cad", "terminal"],
+                "query_terms": ["cad", "terminal"],
+                "coverage": 1.0,
             }
         ]
         fake_response = Mock()
@@ -126,6 +129,9 @@ class MAEKnowledgeRoutingTests(unittest.TestCase):
                 "content": "Set the CAD Terminal ID in Machine Settings.",
                 "indexed_at": "",
                 "rank": 1.0,
+                "matched_terms": ["cad", "terminal"],
+                "query_terms": ["cad", "terminal"],
+                "coverage": 1.0,
             }
         ]
         fake_response = Mock()
@@ -141,6 +147,34 @@ class MAEKnowledgeRoutingTests(unittest.TestCase):
 
         self.assertNotIn("currently inquiry-only", result["answer"])
         self.assertEqual(result["sources"][0]["kind"], "document")
+
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service.search_knowledge")
+    def test_weak_document_match_returns_safe_not_found_answer(
+        self,
+        search_mock,
+        post_mock,
+    ):
+        search_mock.return_value = [
+            {
+                "title": "GPS Guide",
+                "file_name": "gps.pdf",
+                "page_number": 4,
+                "content": "Configure a GPS device port.",
+                "indexed_at": "",
+                "rank": 0.4,
+                "matched_terms": ["machine"],
+                "query_terms": ["cad", "terminal", "machine"],
+                "coverage": 0.3333,
+            }
+        ]
+
+        result = ask_mae("Where do I set the CAD Terminal ID machine setting?")
+
+        self.assertIn("could not find", result["answer"].lower())
+        self.assertIn("will not invent", result["answer"].lower())
+        self.assertEqual(result["sources"], [])
+        post_mock.assert_not_called()
 
 
 if __name__ == "__main__":
