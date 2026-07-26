@@ -27,7 +27,8 @@ class MindsharePageTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("JACK", response.text)
-        self.assertIn("Documentation-only mode", response.text)
+        self.assertIn("memorial voice, not an impersonation", response.text)
+        self.assertIn("named in memory of", response.text)
         self.assertIn("/static/js/lcdash-mindshare.js", response.text)
 
     @patch("app.main.list_knowledge_documents")
