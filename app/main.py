@@ -58,6 +58,11 @@ from app.services.knowledge_service import (
     get_knowledge_status,
     list_knowledge_documents,
 )
+from app.services.mindshare_service import (
+    MindshareServiceError,
+    ask_mindshare,
+    get_mindshare_status,
+)
 from app.services.centralsquare import (
     CentralSquareClient,
     CentralSquareAPIError,
@@ -92,6 +97,11 @@ class MAEChatRequest(BaseModel):
     entities: MAEConversationEntities = Field(
         default_factory=MAEConversationEntities
     )
+
+
+class MindshareChatRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=4000)
+    history: list[MAEHistoryMessage] = Field(default_factory=list, max_length=6)
 
 
 class MAEFeedbackRequest(BaseModel):
@@ -682,12 +692,95 @@ def knowledge_page(request: Request):
     )
 
 
+@app.get("/mindshare")
+def mindshare_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="mindshare.html",
+        context={"version": "0.4.0"},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/mindshare/technical")
+def mindshare_technical_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="mindshare_technical.html",
+        context={"version": "0.4.0"},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/mindshare/library")
+def mindshare_library_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="mindshare_library.html",
+        context={
+            "knowledge_status": get_knowledge_status(
+                library_key="mindshare",
+                source_dir=settings.mindshare_knowledge_source_dir,
+            ),
+            "documents": list_knowledge_documents(
+                library_key="mindshare",
+            ),
+            "version": "0.4.0",
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/mindshare/radio")
+def mindshare_radio_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="mindshare_radio.html",
+        context={"version": "0.4.0"},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.get("/api/knowledge/status")
 def knowledge_status_api(response: Response):
     response.headers["Cache-Control"] = "no-store"
     status = get_knowledge_status()
     status["document_list"] = list_knowledge_documents()
     return status
+
+
+@app.get("/api/mindshare/status")
+def mindshare_status_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    return get_mindshare_status()
+
+
+@app.get("/api/mindshare/knowledge/status")
+def mindshare_knowledge_status_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    status = get_knowledge_status(
+        library_key="mindshare",
+        source_dir=settings.mindshare_knowledge_source_dir,
+    )
+    status["document_list"] = list_knowledge_documents(
+        library_key="mindshare",
+    )
+    return status
+
+
+@app.post("/api/mindshare/chat")
+def mindshare_chat_api(
+    chat_request: MindshareChatRequest,
+    response: Response,
+):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return ask_mindshare(
+            chat_request.question,
+            [message.model_dump() for message in chat_request.history],
+        )
+    except MindshareServiceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.get("/api/mae/status")

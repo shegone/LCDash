@@ -12,6 +12,12 @@ CREATE TABLE IF NOT EXISTS lcdash_knowledge.documents (
     indexed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE lcdash_knowledge.documents
+    ADD COLUMN IF NOT EXISTS library_key TEXT NOT NULL DEFAULT 'centralsquare';
+
+CREATE INDEX IF NOT EXISTS knowledge_documents_library_idx
+    ON lcdash_knowledge.documents(library_key, title);
+
 CREATE TABLE IF NOT EXISTS lcdash_knowledge.chunks (
     chunk_id BIGSERIAL PRIMARY KEY,
     document_id BIGINT NOT NULL
@@ -54,3 +60,20 @@ CREATE TABLE IF NOT EXISTS lcdash_knowledge.index_state (
 INSERT INTO lcdash_knowledge.index_state (state_id)
 VALUES (TRUE)
 ON CONFLICT (state_id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS lcdash_knowledge.library_index_state (
+    library_key TEXT PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'never_run',
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    documents_found INTEGER NOT NULL DEFAULT 0,
+    documents_indexed INTEGER NOT NULL DEFAULT 0,
+    documents_unchanged INTEGER NOT NULL DEFAULT 0,
+    documents_failed INTEGER NOT NULL DEFAULT 0,
+    chunks_stored INTEGER NOT NULL DEFAULT 0,
+    error_summary TEXT NOT NULL DEFAULT ''
+);
+
+INSERT INTO lcdash_knowledge.library_index_state (library_key)
+VALUES ('centralsquare'), ('mindshare')
+ON CONFLICT (library_key) DO NOTHING;

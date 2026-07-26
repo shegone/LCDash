@@ -15,8 +15,10 @@ class KnowledgeServiceError(Exception):
     """Raised when the MAE knowledge library is unavailable."""
 
 
-def _drive_sync_status() -> dict:
-    status_path = Path(settings.knowledge_source_dir) / ".drive-sync-status"
+def _drive_sync_status(source_dir: str | None = None) -> dict:
+    status_path = Path(
+        source_dir or settings.knowledge_source_dir
+    ) / ".drive-sync-status"
     try:
         lines = status_path.read_text(encoding="utf-8").splitlines()
     except OSError:
@@ -50,7 +52,13 @@ def ensure_knowledge_schema(connection) -> None:
     connection.commit()
 
 
-def get_knowledge_status() -> dict:
+def get_knowledge_status(
+    library_key: str = "centralsquare",
+    source_dir: str | None = None,
+) -> dict:
+    library_name = (
+        "Mindshare" if library_key == "mindshare" else "CentralSquare"
+    )
     if not knowledge_is_configured():
         return {
             "configured": False,
@@ -58,8 +66,8 @@ def get_knowledge_status() -> dict:
             "documents": 0,
             "chunks": 0,
             "index_state": {},
-            "message": "The CentralSquare knowledge library is not configured.",
-            "drive_sync": _drive_sync_status(),
+            "message": f"The {library_name} knowledge library is not configured.",
+            "drive_sync": _drive_sync_status(source_dir),
         }
 
     try:
@@ -68,9 +76,20 @@ def get_knowledge_status() -> dict:
             counts = connection.execute(
                 """
                 SELECT
-                    (SELECT COUNT(*) FROM lcdash_knowledge.documents),
-                    (SELECT COUNT(*) FROM lcdash_knowledge.chunks)
-                """
+                    (
+                        SELECT COUNT(*)
+                        FROM lcdash_knowledge.documents
+                        WHERE library_key = %s
+                    ),
+                    (
+                        SELECT COUNT(*)
+                        FROM lcdash_knowledge.chunks AS chunks
+                        JOIN lcdash_knowledge.documents AS documents
+                            ON documents.document_id = chunks.document_id
+                        WHERE documents.library_key = %s
+                    )
+                """,
+                (library_key, library_key),
             ).fetchone() or (0, 0)
             state = connection.execute(
                 """
@@ -84,9 +103,10 @@ def get_knowledge_status() -> dict:
                     documents_failed,
                     chunks_stored,
                     error_summary
-                FROM lcdash_knowledge.index_state
-                WHERE state_id = TRUE
-                """
+                FROM lcdash_knowledge.library_index_state
+                WHERE library_key = %s
+                """,
+                (library_key,),
             ).fetchone()
     except (KnowledgeServiceError, psycopg.Error):
         return {
@@ -95,8 +115,8 @@ def get_knowledge_status() -> dict:
             "documents": 0,
             "chunks": 0,
             "index_state": {},
-            "message": "The CentralSquare knowledge library is unavailable.",
-            "drive_sync": _drive_sync_status(),
+            "message": f"The {library_name} knowledge library is unavailable.",
+            "drive_sync": _drive_sync_status(source_dir),
         }
 
     index_state = {}
@@ -119,11 +139,14 @@ def get_knowledge_status() -> dict:
         "chunks": int(counts[1] or 0),
         "index_state": index_state,
         "message": "",
-        "drive_sync": _drive_sync_status(),
+        "drive_sync": _drive_sync_status(source_dir),
     }
 
 
-def list_knowledge_documents(limit: int = 200) -> list[dict]:
+def list_knowledge_documents(
+    limit: int = 200,
+    library_key: str = "centralsquare",
+) -> list[dict]:
     try:
         with _connect() as connection:
             ensure_knowledge_schema(connection)
@@ -143,10 +166,11 @@ def list_knowledge_documents(limit: int = 200) -> list[dict]:
                         WHERE chunks.document_id = documents.document_id
                     ) AS chunk_count
                 FROM lcdash_knowledge.documents AS documents
+                WHERE documents.library_key = %s
                 ORDER BY title
                 LIMIT %s
                 """,
-                (min(max(limit, 1), 500),),
+                (library_key, min(max(limit, 1), 500)),
             ).fetchall()
     except (KnowledgeServiceError, psycopg.Error):
         return []
@@ -230,7 +254,11 @@ def _cosine_similarity(left: list[float], right: list[float]) -> float:
     return numerator / (left_length * right_length)
 
 
-def _semantic_results(question: str, limit: int) -> list[dict]:
+def _semantic_results(
+    question: str,
+    limit: int,
+    library_key: str = "centralsquare",
+) -> list[dict]:
     query_embedding = _query_embedding(question)
     if not query_embedding:
         return []
@@ -256,10 +284,15 @@ def _semantic_results(question: str, limit: int) -> list[dict]:
                     ON documents.document_id = chunks.document_id
                 WHERE chunks.embedding IS NOT NULL
                   AND chunks.embedding_model = %s
+                  AND documents.library_key = %s
                 ORDER BY chunks.chunk_id DESC
                 LIMIT %s
                 """,
-                (settings.mae_embedding_model, candidate_limit),
+                (
+                    settings.mae_embedding_model,
+                    library_key,
+                    candidate_limit,
+                ),
             ).fetchall()
     except (KnowledgeServiceError, psycopg.Error):
         return []
@@ -285,7 +318,11 @@ def _semantic_results(question: str, limit: int) -> list[dict]:
     return results[: max(limit * 3, 12)]
 
 
-def search_knowledge(question: str, limit: int = 8) -> list[dict]:
+def search_knowledge(
+    question: str,
+    limit: int = 8,
+    library_key: str = "centralsquare",
+) -> list[dict]:
     clean_question = (question or "").strip()
     if not clean_question or not knowledge_is_configured():
         return []
@@ -312,11 +349,13 @@ def search_knowledge(question: str, limit: int = 8) -> list[dict]:
                     ON documents.document_id = chunks.document_id
                 CROSS JOIN query
                 WHERE chunks.search_vector @@ query.value
+                  AND documents.library_key = %(library_key)s
                 ORDER BY rank DESC, documents.title, chunks.page_number
                 LIMIT %(limit)s
                 """,
                 {
                     "question": clean_question,
+                    "library_key": library_key,
                     "limit": result_limit,
                 },
             ).fetchall()
@@ -351,10 +390,11 @@ def search_knowledge(question: str, limit: int = 8) -> list[dict]:
                             ON documents.document_id = chunks.document_id
                         CROSS JOIN query
                         WHERE chunks.search_vector @@ query.value
+                          AND documents.library_key = %s
                         ORDER BY rank DESC, documents.title, chunks.page_number
                         LIMIT %s
                         """,
-                        (or_query, result_limit * 5),
+                        (or_query, library_key, result_limit * 5),
                     ).fetchall()
     except (KnowledgeServiceError, psycopg.Error):
         return []
@@ -397,7 +437,11 @@ def search_knowledge(question: str, limit: int = 8) -> list[dict]:
         )
         combined[key] = result
 
-    for semantic in _semantic_results(clean_question, result_limit):
+    for semantic in _semantic_results(
+        clean_question,
+        result_limit,
+        library_key,
+    ):
         key = (
             semantic["document_id"],
             semantic["page_number"],

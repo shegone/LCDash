@@ -1,0 +1,111 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Mindshare Technical Assistant | LCDash{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="/static/css/lcdash-mae.css?v=20260726">
+<link rel="stylesheet" href="/static/css/lcdash-mindshare.css?v=20260726">
+
+<section class="mae-shell mindshare-assistant" aria-labelledby="mindshare-title">
+    <header class="mae-hero glass">
+        <div class="mae-identity">
+            <div class="mae-orb" aria-hidden="true">
+                <i class="bi bi-broadcast-pin"></i>
+            </div>
+            <div>
+                <div class="mae-eyebrow">MINDSHARE TECHNICAL INTELLIGENCE</div>
+                <h1 id="mindshare-title">MTA</h1>
+                <p>Mindshare Technical Assistant</p>
+            </div>
+        </div>
+        <div class="mae-guardrail">
+            <i class="bi bi-shield-lock-fill"></i>
+            <div>
+                <strong>Documentation-only mode</strong>
+                <span>No CAD access and no device, console, or firmware changes.</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="mae-status-grid" aria-label="Mindshare service status">
+        <div class="mae-status-card glass" id="mindshare-ai-status">
+            <i class="bi bi-cpu"></i>
+            <div><span>Local AI</span><strong>Checking...</strong></div>
+        </div>
+        <div class="mae-status-card glass" id="mindshare-library-status">
+            <i class="bi bi-journal-check"></i>
+            <div><span>Mindshare library</span><strong>Checking...</strong></div>
+        </div>
+        <div class="mae-status-card glass is-online">
+            <i class="bi bi-eye"></i>
+            <div><span>Access mode</span><strong>Read only</strong></div>
+        </div>
+    </div>
+
+    <div class="mae-workspace glass">
+        <aside class="mae-prompts">
+            <div class="mae-panel-title">Suggested questions</div>
+            <button type="button" data-mindshare-prompt="How do I update the Mindshare Radio Interface 2 safely?">
+                <i class="bi bi-router"></i> MRI2 update
+            </button>
+            <button type="button" data-mindshare-prompt="What are the troubleshooting steps for lost console audio?">
+                <i class="bi bi-volume-mute"></i> Console audio
+            </button>
+            <button type="button" data-mindshare-prompt="Explain the documented multicast and network requirements.">
+                <i class="bi bi-diagram-3"></i> Network settings
+            </button>
+            <button type="button" data-mindshare-prompt="Which current release notes mention the Mindshare Radio Interface 2?">
+                <i class="bi bi-file-earmark-text"></i> Release notes
+            </button>
+            <button type="button" data-mindshare-prompt="What Mindshare equipment and versions are documented for Logan County?">
+                <i class="bi bi-building-gear"></i> Logan system
+            </button>
+            <div class="mae-source-note">
+                <i class="bi bi-info-circle"></i>
+                Answers are limited to the indexed Mindshare library. The
+                assistant refuses unsupported answers instead of guessing.
+            </div>
+        </aside>
+
+        <section class="mae-chat">
+            <div class="mae-messages" id="mindshare-messages" aria-live="polite">
+                <article class="mae-message mae-message-assistant">
+                    <div class="mae-avatar"><i class="bi bi-broadcast-pin"></i></div>
+                    <div class="mae-bubble">
+                        <div class="mae-message-name">MTA</div>
+                        <p>
+                            I can help with Mindshare manuals, procedures,
+                            application notes, release notes, and Logan County
+                            system documentation. What would you like to find?
+                        </p>
+                    </div>
+                </article>
+            </div>
+
+            <div class="mae-thinking" id="mindshare-thinking" hidden>
+                <span></span><span></span><span></span>
+                Checking the Mindshare library...
+            </div>
+
+            <form class="mae-composer" id="mindshare-form">
+                <textarea
+                    id="mindshare-question"
+                    rows="2"
+                    maxlength="4000"
+                    placeholder="Ask a Mindshare technical question..."
+                    aria-label="Mindshare technical question"
+                ></textarea>
+                <button id="mindshare-send" type="submit" aria-label="Send question">
+                    <i class="bi bi-send-fill"></i>
+                </button>
+            </form>
+            <div class="mae-disclaimer">
+                Verify model, hardware, installed version, and backups before any
+                software or firmware change.
+            </div>
+        </section>
+    </div>
+</section>
+
+<script src="/static/js/lcdash-mindshare.js?v=20260726"></script>
+{% endblock %}

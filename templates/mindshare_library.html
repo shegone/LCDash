@@ -1,0 +1,107 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Mindshare Technical Library | LCDash{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="/static/css/lcdash-mindshare.css?v=20260726">
+{% set index_state = knowledge_status.index_state or {} %}
+{% set drive_sync = knowledge_status.drive_sync or {} %}
+
+<section class="mindshare-hero glass">
+    <div>
+        <div class="mindshare-eyebrow">CONTROLLED TECHNICAL REFERENCE</div>
+        <h1>Mindshare Technical Library</h1>
+        <p>
+            Current manuals and Logan County reference documents synchronized
+            from Google Drive and indexed separately from CentralSquare.
+        </p>
+    </div>
+    {% if knowledge_status.connected and knowledge_status.documents %}
+        <div class="mindshare-badge is-ready">
+            <i class="bi bi-check-circle-fill"></i> Ready
+        </div>
+    {% else %}
+        <div class="mindshare-badge">
+            <i class="bi bi-hourglass-split"></i> Waiting for index
+        </div>
+    {% endif %}
+</section>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="glass mindshare-stat">
+            <i class="bi bi-file-earmark-text"></i>
+            <strong>{{ knowledge_status.documents }}</strong>
+            <span>Indexed documents</span>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="glass mindshare-stat">
+            <i class="bi bi-card-text"></i>
+            <strong>{{ knowledge_status.chunks }}</strong>
+            <span>Searchable passages</span>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="glass mindshare-stat">
+            <i class="bi bi-arrow-repeat"></i>
+            <strong>{{ drive_sync.status|default("not reported")|replace("_", " ")|title }}</strong>
+            <span>Google Drive sync</span>
+        </div>
+    </div>
+</div>
+
+<section class="glass p-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3">
+        <div>
+            <h3 class="mb-1">Available Mindshare sources</h3>
+            <div class="text-secondary">
+                Software archives, credentials, and license files are excluded
+                from the assistant's searchable document index.
+            </div>
+        </div>
+        <a class="btn btn-info fw-bold" href="/mindshare/technical">
+            <i class="bi bi-chat-dots"></i> Ask MTA
+        </a>
+    </div>
+
+    {% if documents %}
+        <div class="table-responsive">
+            <table class="table mindshare-table align-middle">
+                <thead>
+                    <tr>
+                        <th>Document</th>
+                        <th>Pages</th>
+                        <th>Passages</th>
+                        <th>Indexed</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for document in documents %}
+                        <tr>
+                            <td>
+                                <strong>{{ document.title }}</strong>
+                                <small>{{ document.file_name }}</small>
+                            </td>
+                            <td>{{ document.page_count }}</td>
+                            <td>{{ document.chunk_count }}</td>
+                            <td>
+                                <span class="cad-time" data-cad-time="{{ document.indexed_at }}">
+                                    {{ document.indexed_at }}
+                                </span>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="text-center text-secondary py-5">
+            <i class="bi bi-cloud-arrow-down fs-1 d-block mb-3"></i>
+            The Mindshare document index is waiting for its first server sync.
+        </div>
+    {% endif %}
+</section>
+
+<script>LCDashTime.updateCadDisplayTimes();</script>
+{% endblock %}

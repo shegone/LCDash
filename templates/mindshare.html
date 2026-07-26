@@ -1,0 +1,57 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Mindshare | LCDash{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="/static/css/lcdash-mindshare.css?v=20260726">
+
+<section class="mindshare-hero glass">
+    <div>
+        <div class="mindshare-eyebrow">LOGAN COUNTY RADIO TECHNOLOGY</div>
+        <h1>Mindshare Operations</h1>
+        <p>
+            Technical knowledge and future radio intelligence are intentionally
+            separated so each can receive its own users and permissions.
+        </p>
+    </div>
+    <div class="mindshare-badge">
+        <i class="bi bi-shield-lock-fill"></i>
+        Read-only foundation
+    </div>
+</section>
+
+<div class="mindshare-module-grid">
+    <a class="mindshare-module glass" href="/mindshare/technical">
+        <div class="mindshare-module-icon"><i class="bi bi-cpu-fill"></i></div>
+        <div class="mindshare-module-state is-ready">AVAILABLE</div>
+        <h2>Technical Assistant</h2>
+        <p>
+            Ask questions grounded in Mindshare manuals, application notes,
+            procedures, release notes, and Logan County system documents.
+        </p>
+        <span>Open assistant <i class="bi bi-arrow-right"></i></span>
+    </a>
+
+    <a class="mindshare-module glass" href="/mindshare/library">
+        <div class="mindshare-module-icon"><i class="bi bi-journals"></i></div>
+        <div class="mindshare-module-state is-ready">SYNCHRONIZED</div>
+        <h2>Technical Library</h2>
+        <p>
+            Review indexed documents, synchronization health, page counts, and
+            the source material available to the assistant.
+        </p>
+        <span>View library <i class="bi bi-arrow-right"></i></span>
+    </a>
+
+    <a class="mindshare-module glass is-planned" href="/mindshare/radio">
+        <div class="mindshare-module-icon"><i class="bi bi-soundwave"></i></div>
+        <div class="mindshare-module-state">FUTURE MODULE</div>
+        <h2>Radio Intelligence</h2>
+        <p>
+            A separate listen-only multicast audio, transcription, and radio
+            activity area. It remains inactive until the radio NIC is connected.
+        </p>
+        <span>View roadmap <i class="bi bi-arrow-right"></i></span>
+    </a>
+</div>
+{% endblock %}

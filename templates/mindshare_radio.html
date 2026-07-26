@@ -1,0 +1,57 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Mindshare Radio Intelligence | LCDash{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="/static/css/lcdash-mindshare.css?v=20260726">
+
+<section class="mindshare-hero glass">
+    <div>
+        <div class="mindshare-eyebrow">FUTURE LISTEN-ONLY SERVICE</div>
+        <h1>Radio Intelligence</h1>
+        <p>
+            Multicast monitoring, speech-to-text, talkgroup activity, and
+            searchable radio transcripts will live here after the dedicated
+            radio-network interface and GPU node are installed.
+        </p>
+    </div>
+    <div class="mindshare-badge">
+        <i class="bi bi-plug"></i> Not connected
+    </div>
+</section>
+
+<div class="mindshare-roadmap">
+    <div class="glass">
+        <span>01</span>
+        <i class="bi bi-ethernet"></i>
+        <h3>Network capture</h3>
+        <p>Connect a dedicated NIC to the isolated Mindshare multicast network.</p>
+    </div>
+    <div class="glass">
+        <span>02</span>
+        <i class="bi bi-soundwave"></i>
+        <h3>Audio validation</h3>
+        <p>Identify channel addresses, ports, codecs, packet loss, and talkgroup mapping.</p>
+    </div>
+    <div class="glass">
+        <span>03</span>
+        <i class="bi bi-mic-fill"></i>
+        <h3>Local transcription</h3>
+        <p>Use the planned RTX 3080 compute node for high-quality local speech recognition.</p>
+    </div>
+    <div class="glass">
+        <span>04</span>
+        <i class="bi bi-shield-check"></i>
+        <h3>Controlled access</h3>
+        <p>Apply separate permissions, retention rules, auditing, and supervisor-only search.</p>
+    </div>
+</div>
+
+<div class="glass p-4 mt-4">
+    <h3 class="text-warning">No radio traffic is being captured</h3>
+    <p class="text-secondary mb-0">
+        This page is deliberately inactive. It does not connect to, transmit on,
+        record, or alter the Mindshare radio system.
+    </p>
+</div>
+{% endblock %}

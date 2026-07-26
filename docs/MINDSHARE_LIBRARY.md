@@ -1,0 +1,69 @@
+# Mindshare Technical Library
+
+## Purpose
+
+LCDash maintains a Mindshare knowledge library that is separate from MAE and
+CentralSquare CAD. It is intended for technical manuals, procedures,
+application notes, release notes, and approved Logan County system-reference
+documents.
+
+The Mindshare Technical Assistant is read-only. It cannot change consoles,
+gateways, radios, firmware, software, or CAD records.
+
+## Google Drive layout
+
+`Mindshare Documents/Current Documentation`
+
+- Current vendor user manuals
+- Current vendor procedures
+- Current vendor application notes
+- Current vendor release notes
+
+`Mindshare Documents/Logan County System`
+
+- Current approved Logan County system-information documents
+- Sanitized configuration references suitable for technical support
+- No passwords, private keys, tokens, or license secrets
+
+`Mindshare Documents/Software Catalog`
+
+- Software and firmware version inventory
+- Product/model applicability
+- Vendor publication date
+- File size and checksum when an archive is retained
+- Installation status and review notes
+
+`Mindshare Documents/Vendor Archives`
+
+- Dated source archives downloaded from the authorized customer portal
+- Retained as a recovery and provenance copy
+- Not indexed directly when an extracted current-document copy exists
+
+## Server layout
+
+The Linux server synchronizes supported documents into:
+
+`/home/ted/lcdash-platform/knowledge/mindshare`
+
+Only document and configuration-reference formats are synchronized. Executable
+installers, disk images, firmware archives, license files, credentials, and
+secrets are excluded from the assistant index.
+
+## Firmware and software rule
+
+Never select or install a package only because it is the newest version.
+Confirm:
+
+1. Exact Mindshare product and hardware model.
+2. Current installed software and firmware versions.
+3. Vendor-supported upgrade path.
+4. Required backups and rollback method.
+5. Maintenance window and operational approval.
+6. Matching release notes and installation procedure.
+
+## Access boundaries
+
+- Mindshare Technical Assistant access can be granted independently of MAE/CAD.
+- Future Radio Intelligence access will be controlled separately.
+- Radio Intelligence remains inactive until the isolated multicast network is
+  connected, validated, and covered by approved retention and audit rules.

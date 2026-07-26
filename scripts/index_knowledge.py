@@ -5,6 +5,7 @@ import re
 
 import httpx
 import psycopg
+from docx import Document
 from pypdf import PdfReader
 
 from app.config.settings import settings
@@ -14,6 +15,27 @@ from app.services.knowledge_service import ensure_knowledge_schema
 CHUNK_SIZE = 1400
 CHUNK_OVERLAP = 180
 EMBEDDING_BATCH_SIZE = 24
+SUPPORTED_SUFFIXES = {
+    ".pdf",
+    ".docx",
+    ".txt",
+    ".md",
+    ".cfg",
+    ".ini",
+    ".conf",
+    ".json",
+    ".xml",
+    ".csv",
+    ".yaml",
+    ".yml",
+}
+BLOCKED_FILE_PATTERNS = (
+    ".env",
+    "credential",
+    "password",
+    "private_key",
+    "secret",
+)
 
 
 def _normalize_text(value: str) -> str:
@@ -48,6 +70,40 @@ def _sha256(path: Path) -> str:
         for block in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def _is_supported_document(path: Path) -> bool:
+    lowered_name = path.name.lower()
+    return (
+        path.is_file()
+        and path.suffix.lower() in SUPPORTED_SUFFIXES
+        and not any(
+            blocked_pattern in lowered_name
+            for blocked_pattern in BLOCKED_FILE_PATTERNS
+        )
+    )
+
+
+def _extract_pages(path: Path) -> list[str]:
+    suffix = path.suffix.lower()
+    if suffix == ".pdf":
+        reader = PdfReader(str(path), strict=False)
+        pages = []
+        for page in reader.pages:
+            try:
+                pages.append(page.extract_text() or "")
+            except Exception:
+                pages.append("")
+        return pages
+    if suffix == ".docx":
+        document = Document(str(path))
+        content = "\n".join(
+            paragraph.text
+            for paragraph in document.paragraphs
+            if paragraph.text.strip()
+        )
+        return [content]
+    return [path.read_text(encoding="utf-8", errors="replace")]
 
 
 def _embed_texts(texts: list[str]) -> list[list[float]]:
@@ -94,16 +150,27 @@ def _embed_chunk_rows(connection, chunk_rows: list[tuple[int, str]]) -> None:
         connection.commit()
 
 
-def _index_document(connection, source_root: Path, path: Path) -> tuple[str, int]:
+def _index_document(
+    connection,
+    source_root: Path,
+    path: Path,
+    library_key: str,
+) -> tuple[str, int]:
     relative_path = path.relative_to(source_root).as_posix()
+    stored_source_path = (
+        relative_path
+        if library_key == "centralsquare"
+        else f"{library_key}/{relative_path}"
+    )
     content_hash = _sha256(path)
     existing = connection.execute(
         """
         SELECT document_id, content_hash
         FROM lcdash_knowledge.documents
         WHERE source_path = %s
+          AND library_key = %s
         """,
-        (relative_path,),
+        (stored_source_path, library_key),
     ).fetchone()
     if existing and existing[1] == content_hash:
         missing_embedding_rows = connection.execute(
@@ -125,11 +192,12 @@ def _index_document(connection, source_root: Path, path: Path) -> tuple[str, int
         )
         return "unchanged", 0
 
-    reader = PdfReader(str(path), strict=False)
+    pages = _extract_pages(path)
     document_id = connection.execute(
         """
         INSERT INTO lcdash_knowledge.documents (
             source_path,
+            library_key,
             file_name,
             title,
             content_hash,
@@ -138,8 +206,9 @@ def _index_document(connection, source_root: Path, path: Path) -> tuple[str, int
             page_count,
             indexed_at
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
         ON CONFLICT (source_path) DO UPDATE SET
+            library_key = EXCLUDED.library_key,
             file_name = EXCLUDED.file_name,
             title = EXCLUDED.title,
             content_hash = EXCLUDED.content_hash,
@@ -150,13 +219,14 @@ def _index_document(connection, source_root: Path, path: Path) -> tuple[str, int
         RETURNING document_id
         """,
         (
-            relative_path,
+            stored_source_path,
+            library_key,
             path.name,
             path.stem,
             content_hash,
             path.stat().st_size,
             datetime.fromtimestamp(path.stat().st_mtime, timezone.utc),
-            len(reader.pages),
+            len(pages),
         ),
     ).fetchone()[0]
     connection.execute(
@@ -166,11 +236,7 @@ def _index_document(connection, source_root: Path, path: Path) -> tuple[str, int
 
     stored_chunks = 0
     chunk_rows: list[tuple[int, str]] = []
-    for page_number, page in enumerate(reader.pages, start=1):
-        try:
-            page_text = page.extract_text() or ""
-        except Exception:
-            page_text = ""
+    for page_number, page_text in enumerate(pages, start=1):
         for chunk_index, content in enumerate(_page_chunks(page_text)):
             row = connection.execute(
                 """
@@ -192,14 +258,17 @@ def _index_document(connection, source_root: Path, path: Path) -> tuple[str, int
     return "indexed", stored_chunks
 
 
-def run_index() -> dict:
-    source_root = Path(settings.knowledge_source_dir)
+def run_index(
+    source_dir: str | None = None,
+    library_key: str = "centralsquare",
+) -> dict:
+    source_root = Path(source_dir or settings.knowledge_source_dir)
     source_root.mkdir(parents=True, exist_ok=True)
-    pdf_paths = sorted(
-        path for path in source_root.rglob("*") if path.is_file() and path.suffix.lower() == ".pdf"
+    document_paths = sorted(
+        path for path in source_root.rglob("*") if _is_supported_document(path)
     )
     stats = {
-        "documents_found": len(pdf_paths),
+        "documents_found": len(document_paths),
         "documents_indexed": 0,
         "documents_unchanged": 0,
         "documents_failed": 0,
@@ -211,22 +280,32 @@ def run_index() -> dict:
         ensure_knowledge_schema(connection)
         connection.execute(
             """
-            UPDATE lcdash_knowledge.index_state
+            UPDATE lcdash_knowledge.library_index_state
             SET status = 'running',
                 started_at = NOW(),
                 error_summary = ''
-            WHERE state_id = TRUE
-            """
+            WHERE library_key = %s
+            """,
+            (library_key,),
         )
         connection.commit()
 
         present_paths = {
-            path.relative_to(source_root).as_posix()
-            for path in pdf_paths
+            (
+                path.relative_to(source_root).as_posix()
+                if library_key == "centralsquare"
+                else f"{library_key}/{path.relative_to(source_root).as_posix()}"
+            )
+            for path in document_paths
         }
-        for path in pdf_paths:
+        for path in document_paths:
             try:
-                outcome, chunks = _index_document(connection, source_root, path)
+                outcome, chunks = _index_document(
+                    connection,
+                    source_root,
+                    path,
+                    library_key,
+                )
                 if outcome == "indexed":
                     stats["documents_indexed"] += 1
                     stats["chunks_stored"] += chunks
@@ -239,7 +318,12 @@ def run_index() -> dict:
                 stats["errors"].append(f"{path.name}: {exc}")
 
         existing_paths = connection.execute(
-            "SELECT source_path FROM lcdash_knowledge.documents"
+            """
+            SELECT source_path
+            FROM lcdash_knowledge.documents
+            WHERE library_key = %s
+            """,
+            (library_key,),
         ).fetchall()
         removed_paths = [
             row[0] for row in existing_paths if row[0] not in present_paths
@@ -253,7 +337,7 @@ def run_index() -> dict:
         status = "complete" if not stats["documents_failed"] else "partial"
         connection.execute(
             """
-            UPDATE lcdash_knowledge.index_state
+            UPDATE lcdash_knowledge.library_index_state
             SET status = %s,
                 completed_at = NOW(),
                 documents_found = %s,
@@ -261,10 +345,14 @@ def run_index() -> dict:
                 documents_unchanged = %s,
                 documents_failed = %s,
                 chunks_stored = (
-                    SELECT COUNT(*) FROM lcdash_knowledge.chunks
+                    SELECT COUNT(*)
+                    FROM lcdash_knowledge.chunks AS chunks
+                    JOIN lcdash_knowledge.documents AS documents
+                        ON documents.document_id = chunks.document_id
+                    WHERE documents.library_key = %s
                 ),
                 error_summary = %s
-            WHERE state_id = TRUE
+            WHERE library_key = %s
             """,
             (
                 status,
@@ -272,7 +360,9 @@ def run_index() -> dict:
                 stats["documents_indexed"],
                 stats["documents_unchanged"],
                 stats["documents_failed"],
+                library_key,
                 "\n".join(stats["errors"][:20]),
+                library_key,
             ),
         )
         connection.commit()

@@ -60,6 +60,10 @@ class Settings:
         "KNOWLEDGE_SOURCE_DIR",
         "knowledge/centralsquare",
     )
+    mindshare_knowledge_source_dir: str = _env(
+        "MINDSHARE_KNOWLEDGE_SOURCE_DIR",
+        "knowledge/mindshare",
+    )
     knowledge_index_interval_seconds: int = _env_int(
         "KNOWLEDGE_INDEX_INTERVAL_SECONDS",
         3600,

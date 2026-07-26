@@ -21,6 +21,8 @@ x-lcdash-environment: &lcdash-environment
   KNOWLEDGE_SEMANTIC_CANDIDATES: "5000"
   KNOWLEDGE_SOURCE_DIR: /knowledge/centralsquare
   KNOWLEDGE_INDEX_INTERVAL_SECONDS: "3600"
+  MINDSHARE_KNOWLEDGE_SOURCE_DIR: /knowledge/mindshare
+  MINDSHARE_KNOWLEDGE_INDEX_INTERVAL_SECONDS: "3600"
 
 x-lcdash-secrets: &lcdash-secrets
   - centralsquare_username
@@ -63,6 +65,7 @@ services:
       - "127.0.0.1:8010:8000"
     volumes:
       - /home/ted/lcdash-platform/knowledge/centralsquare:/knowledge/centralsquare:ro
+      - /home/ted/lcdash-platform/knowledge/mindshare:/knowledge/mindshare:ro
     networks:
       - lcdash_private
     depends_on:
@@ -119,6 +122,30 @@ services:
     healthcheck:
       disable: true
 
+  mindshare-knowledge-worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: lcdash-mindshare-knowledge-worker
+    restart: unless-stopped
+    user: "1000:1000"
+    command: ["python", "scripts/mindshare_knowledge_worker.py"]
+    environment: *lcdash-environment
+    secrets: *lcdash-secrets
+    volumes:
+      - /home/ted/lcdash-platform/knowledge/mindshare:/knowledge/mindshare:ro
+    networks:
+      - lcdash_private
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama-model-loader:
+        condition: service_completed_successfully
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      disable: true
+
   knowledge-drive-sync:
     image: rclone/rclone:latest
     container_name: lcdash-knowledge-drive-sync
@@ -134,6 +161,28 @@ services:
       - ../scripts/sync_knowledge_drive.sh:/opt/lcdash/sync_knowledge_drive.sh:ro
       - /home/ted/.config/rclone/rclone.conf:/config/rclone/rclone.conf:ro
       - /home/ted/lcdash-platform/knowledge/centralsquare:/knowledge/centralsquare
+    networks:
+      - lcdash_private
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      disable: true
+
+  mindshare-drive-sync:
+    image: rclone/rclone:latest
+    container_name: lcdash-mindshare-drive-sync
+    restart: unless-stopped
+    profiles: ["mindshare-drive"]
+    user: "1000:1000"
+    entrypoint: ["/bin/sh", "/opt/lcdash/sync_mindshare_drive.sh"]
+    environment:
+      MINDSHARE_KNOWLEDGE_RCLONE_REMOTE: "${MINDSHARE_KNOWLEDGE_RCLONE_REMOTE:-lcdash-drive:Mindshare Documents}"
+      MINDSHARE_KNOWLEDGE_SYNC_TARGET: /knowledge/mindshare
+      MINDSHARE_KNOWLEDGE_SYNC_INTERVAL_SECONDS: "900"
+    volumes:
+      - ../scripts/sync_mindshare_drive.sh:/opt/lcdash/sync_mindshare_drive.sh:ro
+      - /home/ted/.config/rclone/rclone.conf:/config/rclone/rclone.conf:ro
+      - /home/ted/lcdash-platform/knowledge/mindshare:/knowledge/mindshare
     networks:
       - lcdash_private
     security_opt:
