@@ -439,6 +439,84 @@ class MAEGuardrailTests(unittest.TestCase):
         self.assertIn("remains active", result["answer"])
 
     @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service.get_call_detail")
+    @patch("app.services.mae_service.get_live_operations_snapshot")
+    def test_patient_name_question_resolves_incident_and_scans_command_log(
+        self,
+        live_mock,
+        call_detail_mock,
+        post_mock,
+    ):
+        live_mock.return_value = {
+            "calls": [
+                {
+                    "cfs_number": "CFS26-24430",
+                    "incident_code": "N/V",
+                    "incident_description": "Nausea / Vomiting",
+                },
+                {
+                    "cfs_number": "CFS26-24438",
+                    "incident_code": "FIRE",
+                    "incident_description": "Fire Other",
+                },
+            ]
+        }
+        call_detail_mock.return_value = {
+            "cfs_number": "CFS26-24430",
+            "incident_description": "Nausea / Vomiting",
+            "assigned_units": [],
+            "command_logs": [
+                {"text": "PT HAS TROUBLE WALKING"},
+                {"text": "PT KENNETH EVANS"},
+            ],
+            "raw": {},
+        }
+
+        result = ask_mae("The nausa call, what is the pt name?")
+
+        call_detail_mock.assert_called_once_with("CFS26-24430")
+        post_mock.assert_not_called()
+        self.assertIn("Kenneth Evans", result["answer"])
+        self.assertIn('"PT KENNETH EVANS"', result["answer"])
+        self.assertEqual(
+            result["model"],
+            "LCDash verified read tools",
+        )
+
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service.get_call_detail")
+    @patch("app.services.mae_service.get_live_operations_snapshot")
+    def test_command_log_followup_uses_cfs_from_conversation(
+        self,
+        live_mock,
+        call_detail_mock,
+        post_mock,
+    ):
+        call_detail_mock.return_value = {
+            "cfs_number": "CFS26-24430",
+            "incident_description": "Nausea / Vomiting",
+            "assigned_units": [],
+            "command_logs": [{"text": "PT KENNETH EVANS"}],
+            "raw": {},
+        }
+        history = [
+            {
+                "role": "assistant",
+                "content": "The Nausea call is CFS26-24430.",
+            }
+        ]
+
+        result = ask_mae(
+            "Use the command log information and tell me the pt name.",
+            history,
+        )
+
+        live_mock.assert_not_called()
+        call_detail_mock.assert_called_once_with("CFS26-24430")
+        post_mock.assert_not_called()
+        self.assertIn("Kenneth Evans", result["answer"])
+
+    @patch("app.services.mae_service.httpx.post")
     @patch("app.services.mae_service.get_live_operations_snapshot")
     def test_plain_language_busy_now_question_is_verified(
         self,

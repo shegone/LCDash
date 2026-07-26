@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from difflib import SequenceMatcher
 import json
 import re
 from typing import Any
@@ -150,10 +151,31 @@ FOLLOWUP_PATTERN = re.compile(
     r"where is|why did you say|why was)\b",
     re.IGNORECASE,
 )
+CALL_DETAIL_PATTERN = re.compile(
+    r"\b(call details?|command logs?|cad logs?|notes?|narrative|"
+    r"pt name|patient name|medical hx|medical history|weight|"
+    r"caller name|reporter|hazards?|cautions?)\b",
+    re.IGNORECASE,
+)
+PATIENT_NAME_PATTERN = re.compile(
+    r"\b(?:pt|patient)(?:'s)?\s+name\b|"
+    r"\bwho\s+is\s+the\s+(?:pt|patient)\b",
+    re.IGNORECASE,
+)
+PATIENT_NAME_ENTRY_PATTERN = re.compile(
+    r"^\s*PT(?:IENT)?(?:\s+NAME)?\s*[:\-]?\s+"
+    r"(?!HAS\b|IS\b|WAS\b|NEEDS\b|REPORTS\b|COMPLAINS\b|"
+    r"CANNOT\b|WITH\b|STATES\b)"
+    r"([A-Z][A-Z'.\-]+(?:\s+[A-Z][A-Z'.\-]+){1,3})\s*$",
+    re.IGNORECASE,
+)
 
 
 def _routing_question(question: str, history: list[dict]) -> str:
-    if not FOLLOWUP_PATTERN.search(question):
+    if not (
+        FOLLOWUP_PATTERN.search(question)
+        or CALL_DETAIL_PATTERN.search(question)
+    ):
         return question
 
     previous_user = ""
@@ -173,6 +195,67 @@ def _routing_question(question: str, history: list[dict]) -> str:
     else:
         parts = [part for part in (previous_user, question) if part]
     return "\nFollow-up context: ".join(parts) if parts else question
+
+
+def _call_reference_score(question: str, call: dict) -> float:
+    ignored_words = {
+        "call",
+        "calls",
+        "details",
+        "information",
+        "name",
+        "patient",
+        "pt",
+        "the",
+        "what",
+    }
+    question_words = [
+        word
+        for word in re.findall(r"[a-z0-9]+", question.lower())
+        if len(word) >= 4 and word not in ignored_words
+    ]
+    reference_text = " ".join(
+        [
+            str(call.get("incident_description") or ""),
+            str(call.get("incident_code") or ""),
+        ]
+    )
+    reference_words = [
+        word
+        for word in re.findall(r"[a-z0-9]+", reference_text.lower())
+        if len(word) >= 3 and word not in ignored_words
+    ]
+    if not question_words or not reference_words:
+        return 0.0
+
+    word_scores = [
+        max(
+            SequenceMatcher(None, reference_word, question_word).ratio()
+            for question_word in question_words
+        )
+        for reference_word in reference_words
+    ]
+    return max(word_scores, default=0.0)
+
+
+def _resolve_live_call_reference(question: str, calls: list[dict]) -> str:
+    candidates = []
+    for call in calls:
+        if not isinstance(call, dict):
+            continue
+        cfs_number = str(call.get("cfs_number") or "").strip()
+        if not cfs_number:
+            continue
+        score = _call_reference_score(question, call)
+        if score >= 0.78:
+            candidates.append((score, cfs_number))
+
+    candidates.sort(key=lambda item: (-item[0], item[1]))
+    if not candidates:
+        return ""
+    if len(candidates) > 1 and candidates[0][0] - candidates[1][0] < 0.05:
+        return ""
+    return candidates[0][1]
 
 
 class MAEServiceError(Exception):
@@ -431,6 +514,7 @@ def get_discipline_database_activity(hours: int) -> dict:
 def get_recent_cad_activity(
     hours: int,
     client: CentralSquareClient | None = None,
+    returned_call_limit: int = 10,
 ) -> dict:
     current_time = datetime.now(timezone.utc)
     search_body = {
@@ -476,7 +560,7 @@ def get_recent_cad_activity(
         "hours": hours,
         "calls_returned": len(calls),
         "latest_call": calls[0] if calls else {},
-        "recent_calls": calls[:10],
+        "recent_calls": calls[: max(1, min(returned_call_limit, 100))],
         "generated_at": current_time.isoformat(),
         "result_limit": max_pages * 100,
         "truncated": truncated,
@@ -509,7 +593,7 @@ def _safe_call_context(call: dict, detailed: bool = False) -> dict:
     if detailed:
         result.update(
             {
-                "command_logs": _trim_rows(call.get("command_logs") or [], 30),
+                "command_logs": _trim_rows(call.get("command_logs") or [], 100),
                 "reporter": call.get("reporter") or {},
                 "rapidsos": (call.get("raw") or {}).get("RapidSOS") or {},
                 "proqa": (call.get("raw") or {}).get("ProQA") or {},
@@ -623,6 +707,30 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
     sources: list[dict] = []
     analytics_for_comparison: dict | None = None
     cfs_match = CFS_PATTERN.search(question)
+    target_cfs_number = (
+        cfs_match.group(0).upper().replace(" ", "-")
+        if cfs_match
+        else ""
+    )
+    wants_call_detail = bool(CALL_DETAIL_PATTERN.search(question))
+    if wants_call_detail and not target_cfs_number:
+        try:
+            call_snapshot = get_live_operations_snapshot()
+            target_cfs_number = _resolve_live_call_reference(
+                question,
+                call_snapshot.get("calls") or [],
+            )
+            if not target_cfs_number:
+                recent_calls = get_recent_cad_activity(
+                    24,
+                    returned_call_limit=100,
+                )
+                target_cfs_number = _resolve_live_call_reference(
+                    question,
+                    recent_calls.get("recent_calls") or [],
+                )
+        except CentralSquareAPIError:
+            target_cfs_number = ""
     recent_hours = _hours_from_question(question)
     wants_latest_call = bool(LATEST_CALL_PATTERN.search(question))
     wants_active_calls = bool(ACTIVE_CALL_PATTERN.search(question))
@@ -640,7 +748,7 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
     )
     explicit_live_intent = bool(
         LIVE_PATTERN.search(question)
-        or CFS_PATTERN.search(question)
+        or target_cfs_number
         or RECENT_HOURS_PATTERN.search(question)
         or LATEST_CALL_PATTERN.search(question)
         or COMPARISON_PATTERN.search(question)
@@ -656,7 +764,7 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
     )
     wants_live = bool(
         LIVE_PATTERN.search(question)
-        or cfs_match
+        or target_cfs_number
         or recent_hours
         or wants_latest_call
         or wants_units
@@ -743,7 +851,7 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
     if looks_operational and not wants_knowledge and not (
         recent_hours
         or wants_latest_call
-        or cfs_match
+        or target_cfs_number
         or wants_analytics
         or wants_live
     ):
@@ -948,8 +1056,8 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
                     "timestamp": "",
                 }
             )
-    elif cfs_match:
-        cfs_number = cfs_match.group(0).upper().replace(" ", "-")
+    elif target_cfs_number:
+        cfs_number = target_cfs_number
         try:
             call = get_call_detail(cfs_number)
             context.append(
@@ -1093,6 +1201,51 @@ def _verified_response(answer: str, sources: list[dict]) -> dict:
         "write_access": False,
         "research": _research_summary(sources),
     }
+
+
+def _verified_patient_name_answer(
+    question: str,
+    context: list[dict],
+    sources: list[dict],
+) -> dict | None:
+    if not PATIENT_NAME_PATTERN.search(question):
+        return None
+
+    call = _context_data(context, "CentralSquare live CFS detail")
+    if not call:
+        return None
+
+    cfs_number = str(call.get("cfs_number") or "the selected call")
+    command_logs = call.get("command_logs") or []
+    for entry in command_logs:
+        if not isinstance(entry, dict):
+            continue
+        text = str(entry.get("text") or "").strip()
+        match = PATIENT_NAME_ENTRY_PATTERN.match(text)
+        if not match:
+            continue
+        patient_name = " ".join(
+            part.capitalize()
+            for part in match.group(1).split()
+        )
+        return _verified_response(
+            (
+                f"The patient name documented in the command log for "
+                f"{cfs_number} is {patient_name}. The supporting CAD entry "
+                f"reads: \"{text}\"."
+            ),
+            sources,
+        )
+
+    return _verified_response(
+        (
+            f"I checked {len(command_logs)} command-log entries for "
+            f"{cfs_number}, but none contained a clearly identified patient "
+            "name. I will not infer the patient's identity from the reporter "
+            "or responder fields."
+        ),
+        sources,
+    )
 
 
 def _verified_busy_now_answer(
@@ -1821,7 +1974,12 @@ def ask_mae(question: str, history: list[dict] | None = None) -> dict:
     )
     context, sources = _build_read_context(routing_question)
     verified_answer = (
-        _verified_busy_now_answer(
+        _verified_patient_name_answer(
+            routing_question,
+            context,
+            sources,
+        )
+        or _verified_busy_now_answer(
             routing_question,
             context,
             sources,
