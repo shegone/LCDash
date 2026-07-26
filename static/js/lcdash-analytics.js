@@ -200,11 +200,75 @@
         });
     }
 
+    function printAnalyticsTable(snapshot, sectionId, reportTitle) {
+        const section = document.getElementById(sectionId);
+        const table = section ? section.querySelector("table") : null;
+        if (!table) {
+            return;
+        }
+
+        const existingShell = document.getElementById("analytics-print-shell");
+        if (existingShell) {
+            existingShell.remove();
+        }
+
+        const printShell = document.createElement("div");
+        printShell.id = "analytics-print-shell";
+
+        const title = document.createElement("h1");
+        title.textContent = reportTitle;
+        printShell.appendChild(title);
+
+        const subtitle = document.createElement("div");
+        subtitle.className = "print-report-subtitle";
+        const generatedAt = snapshot.generated_at
+            ? new Date(snapshot.generated_at).toLocaleString()
+            : new Date().toLocaleString();
+        subtitle.textContent =
+            `Logan County 911 Operations Analytics | ${snapshot.period_label} | Generated ${generatedAt}`;
+        printShell.appendChild(subtitle);
+        printShell.appendChild(table.cloneNode(true));
+
+        document.body.appendChild(printShell);
+        document.body.classList.add("analytics-printing");
+
+        let cleanedUp = false;
+        function cleanupPrintView() {
+            if (cleanedUp) {
+                return;
+            }
+            cleanedUp = true;
+            document.body.classList.remove("analytics-printing");
+            printShell.remove();
+        }
+
+        window.addEventListener("afterprint", cleanupPrintView, { once: true });
+        window.print();
+        window.setTimeout(cleanupPrintView, 30000);
+    }
+
+    function bindPrintButtons(snapshot) {
+        document.querySelectorAll("[data-print-analytics]").forEach((button) => {
+            if (button.dataset.printReady === "true") {
+                return;
+            }
+            button.dataset.printReady = "true";
+            button.addEventListener("click", () => {
+                printAnalyticsTable(
+                    snapshot,
+                    button.dataset.printAnalytics,
+                    button.dataset.printTitle || "Operations Analytics"
+                );
+            });
+        });
+    }
+
     function start() {
         const snapshot = readSnapshot();
         if (!snapshot || !snapshot.available) {
             return;
         }
+        bindPrintButtons(snapshot);
         if (typeof Chart === "undefined") {
             document.querySelectorAll(".chart-wrap, .station-chart-wrap")
                 .forEach((chartWrap) => {

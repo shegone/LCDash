@@ -242,6 +242,87 @@
         white-space: nowrap;
     }
 
+    .analytics-print-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 7px 11px;
+        border-radius: 10px;
+        border: 1px solid rgba(76, 201, 255, .32);
+        background: rgba(76, 201, 255, .10);
+        color: #dbeeff;
+        font-size: .78rem;
+        font-weight: 850;
+    }
+
+    .analytics-print-button:hover {
+        color: #fff;
+        background: rgba(76, 201, 255, .20);
+        border-color: rgba(76, 201, 255, .58);
+    }
+
+    #analytics-print-shell {
+        display: none;
+    }
+
+    @media print {
+        @page {
+            size: landscape;
+            margin: .45in;
+        }
+
+        body.analytics-printing {
+            overflow: visible !important;
+            background: #fff !important;
+            color: #111 !important;
+        }
+
+        body.analytics-printing > *:not(#analytics-print-shell) {
+            display: none !important;
+        }
+
+        body.analytics-printing #analytics-print-shell {
+            display: block !important;
+            color: #111;
+            font-family: Arial, sans-serif;
+        }
+
+        #analytics-print-shell h1 {
+            margin: 0 0 5px;
+            font-size: 24px;
+        }
+
+        #analytics-print-shell .print-report-subtitle {
+            margin-bottom: 18px;
+            color: #444;
+            font-size: 12px;
+        }
+
+        #analytics-print-shell table {
+            width: 100%;
+            border-collapse: collapse;
+            color: #111 !important;
+        }
+
+        #analytics-print-shell th,
+        #analytics-print-shell td {
+            padding: 7px 9px;
+            border: 1px solid #aaa !important;
+            color: #111 !important;
+            background: #fff !important;
+        }
+
+        #analytics-print-shell th {
+            background: #e9eef3 !important;
+            text-transform: uppercase;
+        }
+
+        #analytics-print-shell .station-group-row td {
+            background: #dbe8f2 !important;
+            font-weight: 800;
+        }
+    }
+
     .analytics-empty {
         padding: 42px 24px;
         text-align: center;
@@ -458,9 +539,21 @@
         <div class="row g-4 mb-4">
             <div class="col-xl-7">
                 <div class="glass list-card">
-                    <div class="analytics-eyebrow">RESOURCE WORKLOAD</div>
-                    <h4>Busiest Units</h4>
-                    <div class="table-responsive mt-3">
+                    <div class="d-flex justify-content-between align-items-start gap-3">
+                        <div>
+                            <div class="analytics-eyebrow">RESOURCE WORKLOAD</div>
+                            <h4>Busiest Units</h4>
+                        </div>
+                        <button
+                            class="analytics-print-button"
+                            type="button"
+                            data-print-analytics="busiest-units-table"
+                            data-print-title="Busiest Units"
+                        >
+                            <i class="bi bi-printer-fill"></i> Print / PDF
+                        </button>
+                    </div>
+                    <div class="table-responsive mt-3" id="busiest-units-table">
                         <table class="table analytics-table align-middle">
                             <thead>
                                 <tr>
@@ -517,10 +610,20 @@
                     </div>
                 </div>
                 {% set station_quality = analytics_snapshot.station_discipline_quality %}
-                <span class="station-quality">
-                    <i class="bi bi-check-circle-fill"></i>
-                    {{ station_quality.coverage_percent }}% discipline coverage
-                </span>
+                <div class="d-flex align-items-center flex-wrap gap-2">
+                    <span class="station-quality">
+                        <i class="bi bi-check-circle-fill"></i>
+                        {{ station_quality.coverage_percent }}% discipline coverage
+                    </span>
+                    <button
+                        class="analytics-print-button"
+                        type="button"
+                        data-print-analytics="station-discipline-table"
+                        data-print-title="Calls by Station: Law, EMS, and Fire"
+                    >
+                        <i class="bi bi-printer-fill"></i> Print / PDF
+                    </button>
+                </div>
             </div>
 
             {% if analytics_snapshot.station_discipline %}
@@ -528,7 +631,7 @@
                     <canvas id="station-discipline-chart"></canvas>
                 </div>
 
-                <div class="table-responsive mt-4">
+                <div class="table-responsive mt-4" id="station-discipline-table">
                     <table class="table analytics-table align-middle">
                         <thead>
                             <tr>
