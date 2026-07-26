@@ -161,7 +161,7 @@ class MAEGuardrailTests(unittest.TestCase):
         )
         self.assertEqual(
             post_mock.call_args.kwargs["json"]["options"]["num_predict"],
-            160,
+            120,
         )
 
     @patch("app.services.mae_service.httpx.post")

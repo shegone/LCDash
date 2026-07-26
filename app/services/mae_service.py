@@ -26,9 +26,10 @@ from app.services.operations_service import (
 LOCAL_TIMEZONE = ZoneInfo("America/New_York")
 MAX_HISTORY_MESSAGES = 8
 MAX_MESSAGE_LENGTH = 4000
-MAX_CONTEXT_CHARACTERS = 12000
+MAX_CONTEXT_CHARACTERS = 8000
 MAE_CONTEXT_TOKENS = 8192
-MAE_MAX_RESPONSE_TOKENS = 160
+MAE_DEFAULT_RESPONSE_TOKENS = 120
+MAE_DETAILED_RESPONSE_TOKENS = 220
 
 SYSTEM_PROMPT = """You are MAE, the Mission Assistance Engine for Logan County 911.
 You assist authorized supervisors with operational awareness and analysis.
@@ -1220,7 +1221,11 @@ def _ollama_messages(
         if role in {"user", "assistant"} and content:
             messages.append({"role": role, "content": content})
 
-    context_json = json.dumps(context, ensure_ascii=False, default=str)
+    context_json = json.dumps(
+        _compact_model_context(context),
+        ensure_ascii=False,
+        default=str,
+    )
     if len(context_json) > MAX_CONTEXT_CHARACTERS:
         context_json = context_json[:MAX_CONTEXT_CHARACTERS] + "\n[context truncated]"
 
@@ -1232,11 +1237,78 @@ def _ollama_messages(
                 f"Read-only source context:\n{context_json}\n\n"
                 f"Supervisor question: {question}\n\n"
                 "Answer the question using the source context when relevant. "
-                "Do not imply access to data that is not present."
+                "Do not imply access to data that is not present. Lead with "
+                "the direct answer and remain concise."
             ),
         }
     )
     return messages
+
+
+def _compact_model_context(context: list[dict]) -> list[dict]:
+    compact_context = []
+    for item in context:
+        if not isinstance(item, dict):
+            continue
+        compact_item = {
+            "source": item.get("source"),
+            "purpose": item.get("purpose"),
+        }
+        if item.get("error"):
+            compact_item["error"] = item.get("error")
+            compact_context.append(compact_item)
+            continue
+
+        data = item.get("data")
+        if (
+            item.get("source") == "CentralSquare live operations"
+            and isinstance(data, dict)
+        ):
+            compact_calls = []
+            for call in (data.get("calls") or [])[:15]:
+                if not isinstance(call, dict):
+                    continue
+                compact_calls.append(
+                    {
+                        "cfs_number": call.get("cfs_number"),
+                        "incident_code": call.get("incident_code"),
+                        "incident_description": call.get(
+                            "incident_description"
+                        ),
+                        "location": call.get("location"),
+                        "priority": call.get("priority"),
+                        "agency": call.get("agency"),
+                        "status": call.get("status"),
+                        "call_datetime": call.get("call_datetime"),
+                        "assigned_units": [
+                            {
+                                "unit_number": unit.get("unit_number"),
+                                "status": (
+                                    unit.get("status_group")
+                                    or unit.get("status")
+                                ),
+                            }
+                            for unit in (call.get("assigned_units") or [])[:10]
+                            if isinstance(unit, dict)
+                        ],
+                    }
+                )
+            compact_item["data"] = {
+                "last_updated": data.get("last_updated"),
+                "dashboard_stats": data.get("dashboard_stats"),
+                "calls": compact_calls,
+                "unit_stats": data.get("unit_stats"),
+            }
+        else:
+            compact_item["data"] = _trim_rows(data, 30)
+        compact_context.append(compact_item)
+    return compact_context
+
+
+def _response_token_budget(question: str) -> int:
+    if KNOWLEDGE_PATTERN.search(question) or CALL_DETAIL_PATTERN.search(question):
+        return MAE_DETAILED_RESPONSE_TOKENS
+    return MAE_DEFAULT_RESPONSE_TOKENS
 
 
 def _context_data(context: list[dict], source_name: str) -> dict:
@@ -2448,7 +2520,7 @@ def ask_mae(
         "options": {
             "temperature": 0.2,
             "num_ctx": MAE_CONTEXT_TOKENS,
-            "num_predict": MAE_MAX_RESPONSE_TOKENS,
+            "num_predict": _response_token_budget(routing_question),
         },
     }
 
