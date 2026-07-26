@@ -37,16 +37,28 @@ class MAEPageTests(unittest.TestCase):
         self.assertFalse(response.json()["write_access"])
         self.assertEqual(response.headers["cache-control"], "no-store")
 
+    @patch("app.main.record_mae_interaction")
     @patch("app.main.ask_mae")
-    def test_chat_endpoint_accepts_question_and_history(self, ask_mock):
+    def test_chat_endpoint_accepts_question_and_history(
+        self,
+        ask_mock,
+        audit_mock,
+    ):
         ask_mock.return_value = {
             "answer": "Three active calls.",
             "sources": [],
             "write_access": False,
         }
+        audit_mock.return_value = {
+            "saved": True,
+            "interaction_id": "11111111-1111-1111-1111-111111111111",
+        }
 
         response = self.client.post(
             "/api/mae/chat",
+            headers={
+                "cf-access-authenticated-user-email": "supervisor@example.com"
+            },
             json={
                 "question": "How many calls are active?",
                 "history": [{"role": "user", "content": "Hello"}],
@@ -55,8 +67,45 @@ class MAEPageTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["answer"], "Three active calls.")
+        self.assertTrue(response.json()["audit_saved"])
+        self.assertEqual(
+            response.json()["interaction_id"],
+            "11111111-1111-1111-1111-111111111111",
+        )
         self.assertEqual(response.headers["cache-control"], "no-store")
         ask_mock.assert_called_once()
+        audit_mock.assert_called_once()
+        self.assertEqual(
+            audit_mock.call_args.kwargs["user_email"],
+            "supervisor@example.com",
+        )
+
+    @patch("app.main.record_mae_feedback")
+    def test_feedback_endpoint_records_supervisor_rating(self, feedback_mock):
+        feedback_mock.return_value = {
+            "saved": True,
+            "interaction_id": "11111111-1111-1111-1111-111111111111",
+            "rating": "helpful",
+        }
+
+        response = self.client.post(
+            "/api/mae/feedback",
+            headers={
+                "cf-access-authenticated-user-email": "supervisor@example.com"
+            },
+            json={
+                "interaction_id": "11111111-1111-1111-1111-111111111111",
+                "rating": "helpful",
+                "comment": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["saved"])
+        self.assertEqual(
+            feedback_mock.call_args.kwargs["user_email"],
+            "supervisor@example.com",
+        )
 
 
 class MAEGuardrailTests(unittest.TestCase):
@@ -464,7 +513,8 @@ class MAEGuardrailTests(unittest.TestCase):
         call_detail_mock.return_value = {
             "cfs_number": "CFS26-24430",
             "incident_description": "Nausea / Vomiting",
-            "assigned_units": [],
+            "location": "244 UNIVERSITY AVENUE, LOGAN",
+            "assigned_units": [{"unit_number": "MED60"}],
             "command_logs": [
                 {"text": "PT HAS TROUBLE WALKING"},
                 {"text": "PT KENNETH EVANS"},
@@ -482,6 +532,47 @@ class MAEGuardrailTests(unittest.TestCase):
             result["model"],
             "LCDash verified read tools",
         )
+        self.assertIn("CFS26-24430", result["entities"]["cfs_numbers"])
+        self.assertIn("MED60", result["entities"]["unit_numbers"])
+        self.assertIn(
+            "244 UNIVERSITY AVENUE, LOGAN",
+            result["entities"]["addresses"],
+        )
+        evidence_text = str(result["evidence"])
+        self.assertIn("PT KENNETH EVANS", evidence_text)
+
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service.get_recent_cad_activity")
+    @patch("app.services.mae_service.get_live_operations_snapshot")
+    def test_ambiguous_call_reference_requires_supervisor_selection(
+        self,
+        live_mock,
+        recent_mock,
+        post_mock,
+    ):
+        live_mock.return_value = {"calls": []}
+        recent_mock.return_value = {
+            "recent_calls": [
+                {
+                    "cfs_number": "CFS26-24430",
+                    "incident_description": "Nausea / Vomiting",
+                    "location": "244 UNIVERSITY AVENUE, LOGAN",
+                },
+                {
+                    "cfs_number": "CFS26-24428",
+                    "incident_description": "Nausea / Vomiting",
+                    "location": "100 MAIN STREET, LOGAN",
+                },
+            ]
+        }
+
+        result = ask_mae("What is the patient name on the nausea call?")
+
+        post_mock.assert_not_called()
+        self.assertTrue(result["clarification_required"])
+        self.assertEqual(len(result["choices"]), 2)
+        self.assertIn("CFS26-24430", result["answer"])
+        self.assertIn("CFS26-24428", result["answer"])
 
     @patch("app.services.mae_service.httpx.post")
     @patch("app.services.mae_service.get_call_detail")

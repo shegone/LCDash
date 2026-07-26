@@ -92,6 +92,32 @@ CREATE TABLE IF NOT EXISTS lcdash_analytics.sync_runs (
     error_summary TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS lcdash_analytics.mae_interactions (
+    interaction_id UUID PRIMARY KEY,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    user_email TEXT NOT NULL DEFAULT '',
+    question TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    model TEXT NOT NULL DEFAULT '',
+    source_metadata JSONB NOT NULL DEFAULT '[]'::JSONB,
+    evidence_metadata JSONB NOT NULL DEFAULT '[]'::JSONB,
+    entities JSONB NOT NULL DEFAULT '{}'::JSONB,
+    write_access BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+CREATE TABLE IF NOT EXISTS lcdash_analytics.mae_feedback (
+    feedback_id BIGSERIAL PRIMARY KEY,
+    interaction_id UUID NOT NULL
+        REFERENCES lcdash_analytics.mae_interactions(interaction_id)
+        ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    user_email TEXT NOT NULL DEFAULT '',
+    rating TEXT NOT NULL CHECK (
+        rating IN ('helpful', 'incorrect', 'incomplete', 'wrong_source')
+    ),
+    comment TEXT NOT NULL DEFAULT ''
+);
+
 CREATE INDEX IF NOT EXISTS idx_analytics_calls_received
     ON lcdash_analytics.calls(call_received_at);
 CREATE INDEX IF NOT EXISTS idx_analytics_calls_agency_received
@@ -104,6 +130,12 @@ CREATE INDEX IF NOT EXISTS idx_analytics_unit_responses_unit
     ON lcdash_analytics.unit_responses(unit_number, dispatched_at);
 CREATE INDEX IF NOT EXISTS idx_analytics_unit_responses_station
     ON lcdash_analytics.unit_responses(station, dispatched_at);
+CREATE INDEX IF NOT EXISTS idx_mae_interactions_created
+    ON lcdash_analytics.mae_interactions(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_mae_interactions_user
+    ON lcdash_analytics.mae_interactions(user_email, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_mae_feedback_interaction
+    ON lcdash_analytics.mae_feedback(interaction_id, created_at DESC);
 
 CREATE OR REPLACE VIEW lcdash_analytics.unit_response_metrics AS
 SELECT

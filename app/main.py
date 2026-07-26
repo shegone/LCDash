@@ -38,6 +38,10 @@ from app.services.mae_service import (
     ask_mae,
     get_mae_status,
 )
+from app.services.mae_audit_service import (
+    record_mae_feedback,
+    record_mae_interaction,
+)
 from app.services.knowledge_service import (
     get_knowledge_status,
     list_knowledge_documents,
@@ -62,9 +66,38 @@ class MAEHistoryMessage(BaseModel):
     content: str = Field(max_length=4000)
 
 
+class MAEConversationEntities(BaseModel):
+    cfs_numbers: list[str] = Field(default_factory=list, max_length=10)
+    unit_numbers: list[str] = Field(default_factory=list, max_length=10)
+    stations: list[str] = Field(default_factory=list, max_length=10)
+    addresses: list[str] = Field(default_factory=list, max_length=5)
+    incidents: list[str] = Field(default_factory=list, max_length=5)
+
+
 class MAEChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
     history: list[MAEHistoryMessage] = Field(default_factory=list, max_length=8)
+    entities: MAEConversationEntities = Field(
+        default_factory=MAEConversationEntities
+    )
+
+
+class MAEFeedbackRequest(BaseModel):
+    interaction_id: str = Field(min_length=36, max_length=36)
+    rating: str = Field(min_length=3, max_length=30)
+    comment: str = Field(default="", max_length=1000)
+
+
+def _authenticated_user_email(request: Request) -> str:
+    for header_name in (
+        "cf-access-authenticated-user-email",
+        "x-auth-request-email",
+        "x-forwarded-user",
+    ):
+        value = str(request.headers.get(header_name) or "").strip()
+        if value:
+            return value
+    return "local-session"
 
 
 @app.middleware("http")
@@ -620,12 +653,49 @@ def mae_status_api(response: Response):
 
 
 @app.post("/api/mae/chat")
-def mae_chat_api(chat_request: MAEChatRequest, response: Response):
+def mae_chat_api(
+    chat_request: MAEChatRequest,
+    request: Request,
+    response: Response,
+):
     response.headers["Cache-Control"] = "no-store"
     try:
-        return ask_mae(
+        result = ask_mae(
             chat_request.question,
             [message.model_dump() for message in chat_request.history],
+            chat_request.entities.model_dump(),
         )
+        audit = record_mae_interaction(
+            user_email=_authenticated_user_email(request),
+            question=chat_request.question,
+            result=result,
+        )
+        result["interaction_id"] = audit.get("interaction_id") or ""
+        result["audit_saved"] = bool(audit.get("saved"))
+        return result
     except MAEServiceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/api/mae/feedback")
+def mae_feedback_api(
+    feedback_request: MAEFeedbackRequest,
+    request: Request,
+    response: Response,
+):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        result = record_mae_feedback(
+            interaction_id=feedback_request.interaction_id,
+            user_email=_authenticated_user_email(request),
+            rating=feedback_request.rating,
+            comment=feedback_request.comment,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not result.get("saved"):
+        raise HTTPException(
+            status_code=503,
+            detail=result.get("message") or "MAE feedback could not be saved.",
+        )
+    return result

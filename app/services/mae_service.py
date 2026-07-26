@@ -171,7 +171,11 @@ PATIENT_NAME_ENTRY_PATTERN = re.compile(
 )
 
 
-def _routing_question(question: str, history: list[dict]) -> str:
+def _routing_question(
+    question: str,
+    history: list[dict],
+    conversation_entities: dict | None = None,
+) -> str:
     if not (
         FOLLOWUP_PATTERN.search(question)
         or CALL_DETAIL_PATTERN.search(question)
@@ -189,6 +193,13 @@ def _routing_question(question: str, history: list[dict]) -> str:
         if item.get("role") == "user" and content:
             previous_user = content
             break
+
+    if not previous_cfs:
+        entity_cfs_numbers = (
+            (conversation_entities or {}).get("cfs_numbers") or []
+        )
+        if entity_cfs_numbers:
+            previous_cfs = str(entity_cfs_numbers[-1])
 
     if previous_cfs:
         parts = [previous_cfs, question]
@@ -238,7 +249,10 @@ def _call_reference_score(question: str, call: dict) -> float:
     return max(word_scores, default=0.0)
 
 
-def _resolve_live_call_reference(question: str, calls: list[dict]) -> str:
+def _live_call_reference_candidates(
+    question: str,
+    calls: list[dict],
+) -> list[dict]:
     candidates = []
     for call in calls:
         if not isinstance(call, dict):
@@ -248,14 +262,37 @@ def _resolve_live_call_reference(question: str, calls: list[dict]) -> str:
             continue
         score = _call_reference_score(question, call)
         if score >= 0.78:
-            candidates.append((score, cfs_number))
+            candidates.append(
+                {
+                    "score": score,
+                    "cfs_number": cfs_number,
+                    "incident_description": str(
+                        call.get("incident_description") or ""
+                    ),
+                    "location": str(call.get("location") or ""),
+                    "call_datetime": str(call.get("call_datetime") or ""),
+                }
+            )
 
-    candidates.sort(key=lambda item: (-item[0], item[1]))
+    candidates.sort(
+        key=lambda item: (
+            -float(item["score"]),
+            str(item["cfs_number"]),
+        )
+    )
+    return candidates
+
+
+def _resolve_live_call_reference(question: str, calls: list[dict]) -> str:
+    candidates = _live_call_reference_candidates(question, calls)
     if not candidates:
         return ""
-    if len(candidates) > 1 and candidates[0][0] - candidates[1][0] < 0.05:
+    if (
+        len(candidates) > 1
+        and float(candidates[0]["score"]) - float(candidates[1]["score"]) < 0.05
+    ):
         return ""
-    return candidates[0][1]
+    return str(candidates[0]["cfs_number"])
 
 
 class MAEServiceError(Exception):
@@ -712,25 +749,47 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
         if cfs_match
         else ""
     )
+    call_reference_candidates: list[dict] = []
     wants_call_detail = bool(CALL_DETAIL_PATTERN.search(question))
     if wants_call_detail and not target_cfs_number:
         try:
             call_snapshot = get_live_operations_snapshot()
+            active_calls = call_snapshot.get("calls") or []
             target_cfs_number = _resolve_live_call_reference(
                 question,
-                call_snapshot.get("calls") or [],
+                active_calls,
             )
-            if not target_cfs_number:
+            call_reference_candidates = _live_call_reference_candidates(
+                question,
+                active_calls,
+            )
+            if not target_cfs_number and not call_reference_candidates:
                 recent_calls = get_recent_cad_activity(
                     24,
                     returned_call_limit=100,
                 )
+                recent_call_rows = recent_calls.get("recent_calls") or []
                 target_cfs_number = _resolve_live_call_reference(
                     question,
-                    recent_calls.get("recent_calls") or [],
+                    recent_call_rows,
+                )
+                call_reference_candidates = _live_call_reference_candidates(
+                    question,
+                    recent_call_rows,
                 )
         except CentralSquareAPIError:
             target_cfs_number = ""
+            call_reference_candidates = []
+    if not target_cfs_number and len(call_reference_candidates) > 1:
+        context.append(
+            {
+                "source": "MAE call reference candidates",
+                "purpose": "Clarify which CAD call the supervisor means",
+                "data": {
+                    "candidates": call_reference_candidates[:6],
+                },
+            }
+        )
     recent_hours = _hours_from_question(question)
     wants_latest_call = bool(LATEST_CALL_PATTERN.search(question))
     wants_active_calls = bool(ACTIVE_CALL_PATTERN.search(question))
@@ -1201,6 +1260,237 @@ def _verified_response(answer: str, sources: list[dict]) -> dict:
         "write_access": False,
         "research": _research_summary(sources),
     }
+
+
+def _verified_ambiguous_call_answer(
+    question: str,
+    context: list[dict],
+    sources: list[dict],
+) -> dict | None:
+    candidate_data = _context_data(context, "MAE call reference candidates")
+    candidates = candidate_data.get("candidates") or []
+    if len(candidates) < 2:
+        return None
+
+    choices = []
+    answer_lines = [
+        "I found more than one matching call. Select the intended incident "
+        "so I do not use information from the wrong CFS:"
+    ]
+    for candidate in candidates[:6]:
+        cfs_number = str(candidate.get("cfs_number") or "")
+        incident = str(
+            candidate.get("incident_description") or "Unknown incident"
+        )
+        location = str(candidate.get("location") or "Unknown location")
+        label = f"{cfs_number} — {incident} — {location}"
+        answer_lines.append(f"• {label}")
+        choices.append(
+            {
+                "label": label,
+                "value": f"For {cfs_number}, {question}",
+                "cfs_number": cfs_number,
+            }
+        )
+
+    response = _verified_response("\n".join(answer_lines), sources)
+    response["clarification_required"] = True
+    response["choices"] = choices
+    return response
+
+
+def _compact_json(value: Any, limit: int = 1800) -> str:
+    text = json.dumps(value, ensure_ascii=False, default=str)
+    if len(text) > limit:
+        return text[:limit] + "…"
+    return text
+
+
+def _build_response_evidence(
+    context: list[dict],
+    sources: list[dict],
+) -> list[dict]:
+    evidence: list[dict] = []
+    for context_item in context:
+        source_name = str(context_item.get("source") or "")
+        data = context_item.get("data")
+        if not isinstance(data, dict):
+            continue
+        if source_name == "MAE call reference candidates":
+            continue
+
+        kind_hint = ""
+        if source_name.startswith("CentralSquare"):
+            kind_hint = "live"
+        elif source_name.startswith("PostgreSQL"):
+            kind_hint = "historical"
+        elif "documentation" in source_name.lower():
+            kind_hint = "document"
+        source_metadata = next(
+            (
+                source
+                for source in sources
+                if (
+                    kind_hint
+                    and str(source.get("kind") or "") == kind_hint
+                )
+                or str(source.get("name") or "") in source_name
+            ),
+            {},
+        )
+        items: list[dict] = []
+        if source_name == "CentralSquare live CFS detail":
+            cfs_number = str(data.get("cfs_number") or "")
+            items.append(
+                {
+                    "label": "Incident",
+                    "text": " · ".join(
+                        part
+                        for part in (
+                            cfs_number,
+                            str(data.get("incident_description") or ""),
+                            str(data.get("location") or ""),
+                            str(data.get("status") or ""),
+                        )
+                        if part
+                    ),
+                }
+            )
+            for log in (data.get("command_logs") or [])[:25]:
+                if not isinstance(log, dict):
+                    continue
+                log_text = str(log.get("text") or log.get("status") or "")
+                if not log_text:
+                    continue
+                items.append(
+                    {
+                        "label": str(log.get("timestamp") or "Command log"),
+                        "text": log_text,
+                    }
+                )
+        elif source_name == "CentralSquare documentation library":
+            for passage in (data.get("passages") or [])[:6]:
+                if not isinstance(passage, dict):
+                    continue
+                title = str(
+                    passage.get("title")
+                    or passage.get("file_name")
+                    or "Documentation"
+                )
+                page = passage.get("page_number")
+                items.append(
+                    {
+                        "label": f"{title} · Page {page}" if page else title,
+                        "text": str(passage.get("text") or "")[:1200],
+                    }
+                )
+        elif source_name == "CentralSquare live operations":
+            stats = data.get("dashboard_stats") or {}
+            items.append(
+                {
+                    "label": "Live operations summary",
+                    "text": _compact_json(stats, 800),
+                }
+            )
+            for call in (data.get("calls") or [])[:10]:
+                if not isinstance(call, dict):
+                    continue
+                items.append(
+                    {
+                        "label": str(call.get("cfs_number") or "Active call"),
+                        "text": " · ".join(
+                            part
+                            for part in (
+                                str(call.get("incident_description") or ""),
+                                str(call.get("location") or ""),
+                                str(call.get("status") or ""),
+                            )
+                            if part
+                        ),
+                    }
+                )
+        else:
+            items.append(
+                {
+                    "label": str(context_item.get("purpose") or source_name),
+                    "text": _compact_json(data),
+                }
+            )
+
+        evidence.append(
+            {
+                "source": source_name,
+                "kind": str(source_metadata.get("kind") or "read-only"),
+                "detail": str(
+                    source_metadata.get("detail")
+                    or context_item.get("purpose")
+                    or ""
+                ),
+                "timestamp": str(source_metadata.get("timestamp") or ""),
+                "items": items,
+            }
+        )
+    return evidence
+
+
+def _response_entities(
+    question: str,
+    answer: str,
+    context: list[dict],
+) -> dict:
+    combined_text = f"{question}\n{answer}"
+    cfs_numbers = []
+    for match in CFS_PATTERN.finditer(combined_text):
+        cfs_number = match.group(0).upper().replace(" ", "-")
+        if cfs_number not in cfs_numbers:
+            cfs_numbers.append(cfs_number)
+
+    unit_numbers: list[str] = []
+    stations: list[str] = []
+    addresses: list[str] = []
+    incidents: list[str] = []
+    call = _context_data(context, "CentralSquare live CFS detail")
+    if call:
+        location = str(call.get("location") or "")
+        incident = str(call.get("incident_description") or "")
+        if location:
+            addresses.append(location)
+        if incident:
+            incidents.append(incident)
+        for unit in call.get("assigned_units") or []:
+            if not isinstance(unit, dict):
+                continue
+            unit_number = str(unit.get("unit_number") or "")
+            station = str(unit.get("station") or "")
+            if unit_number and unit_number not in unit_numbers:
+                unit_numbers.append(unit_number)
+            if station and station not in stations:
+                stations.append(station)
+
+    return {
+        "cfs_numbers": cfs_numbers[-10:],
+        "unit_numbers": unit_numbers[-10:],
+        "stations": stations[-10:],
+        "addresses": addresses[-5:],
+        "incidents": incidents[-5:],
+    }
+
+
+def _finalize_mae_response(
+    response: dict,
+    question: str,
+    context: list[dict],
+    sources: list[dict],
+) -> dict:
+    response["evidence"] = _build_response_evidence(context, sources)
+    response["entities"] = _response_entities(
+        question,
+        str(response.get("answer") or ""),
+        context,
+    )
+    response.setdefault("clarification_required", False)
+    response.setdefault("choices", [])
+    return response
 
 
 def _verified_patient_name_answer(
@@ -1942,7 +2232,11 @@ def get_mae_status() -> dict:
     }
 
 
-def ask_mae(question: str, history: list[dict] | None = None) -> dict:
+def ask_mae(
+    question: str,
+    history: list[dict] | None = None,
+    conversation_entities: dict | None = None,
+) -> dict:
     clean_question = (question or "").strip()
     if not clean_question:
         raise MAEServiceError("Please enter a question for MAE.")
@@ -1965,16 +2259,26 @@ def ask_mae(question: str, history: list[dict] | None = None) -> dict:
             "model": settings.mae_model,
             "generated_at": datetime.now(LOCAL_TIMEZONE).isoformat(),
             "write_access": False,
+            "evidence": [],
+            "entities": conversation_entities or {},
+            "clarification_required": False,
+            "choices": [],
         }
 
     conversation_history = history or []
     routing_question = _routing_question(
         clean_question,
         conversation_history,
+        conversation_entities,
     )
     context, sources = _build_read_context(routing_question)
     verified_answer = (
-        _verified_patient_name_answer(
+        _verified_ambiguous_call_answer(
+            clean_question,
+            context,
+            sources,
+        )
+        or _verified_patient_name_answer(
             routing_question,
             context,
             sources,
@@ -2044,7 +2348,12 @@ def ask_mae(question: str, history: list[dict] | None = None) -> dict:
         )
     )
     if verified_answer:
-        return verified_answer
+        return _finalize_mae_response(
+            verified_answer,
+            routing_question,
+            context,
+            sources,
+        )
     payload = {
         "model": settings.mae_model,
         "messages": _ollama_messages(
@@ -2074,11 +2383,11 @@ def ask_mae(question: str, history: list[dict] | None = None) -> dict:
     if not answer:
         raise MAEServiceError("The local MAE model returned an empty response.")
 
-    return {
+    return _finalize_mae_response({
         "answer": answer,
         "sources": sources,
         "model": settings.mae_model,
         "generated_at": datetime.now(LOCAL_TIMEZONE).isoformat(),
         "write_access": False,
         "research": _research_summary(sources),
-    }
+    }, routing_question, context, sources)
