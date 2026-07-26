@@ -208,11 +208,12 @@ def search_knowledge(question: str, limit: int = 8) -> list[dict]:
             if not rows:
                 terms = _fallback_terms(clean_question)
                 if terms:
-                    conditions = " OR ".join(
-                        ["chunks.content ILIKE %s"] * len(terms)
-                    )
+                    or_query = " OR ".join(terms)
                     rows = connection.execute(
-                        f"""
+                        """
+                        WITH query AS (
+                            SELECT websearch_to_tsquery('english', %s) AS value
+                        )
                         SELECT
                             documents.document_id,
                             documents.title,
@@ -220,15 +221,24 @@ def search_knowledge(question: str, limit: int = 8) -> list[dict]:
                             chunks.page_number,
                             chunks.content,
                             documents.indexed_at,
-                            0.0 AS rank
+                            (
+                                ts_rank_cd(chunks.search_vector, query.value)
+                                + (
+                                    2.0 * ts_rank_cd(
+                                        to_tsvector('english', documents.title),
+                                        query.value
+                                    )
+                                )
+                            ) AS rank
                         FROM lcdash_knowledge.chunks AS chunks
                         JOIN lcdash_knowledge.documents AS documents
                             ON documents.document_id = chunks.document_id
-                        WHERE {conditions}
-                        ORDER BY documents.title, chunks.page_number
+                        CROSS JOIN query
+                        WHERE chunks.search_vector @@ query.value
+                        ORDER BY rank DESC, documents.title, chunks.page_number
                         LIMIT %s
                         """,
-                        tuple([f"%{term}%" for term in terms] + [result_limit]),
+                        (or_query, result_limit),
                     ).fetchall()
     except (KnowledgeServiceError, psycopg.Error):
         return []
