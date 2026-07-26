@@ -26,6 +26,7 @@ LOCAL_TIMEZONE = ZoneInfo("America/New_York")
 MAX_HISTORY_MESSAGES = 8
 MAX_MESSAGE_LENGTH = 4000
 MAX_CONTEXT_CHARACTERS = 24000
+MAE_CONTEXT_TOKENS = 8192
 
 SYSTEM_PROMPT = """You are MAE, the Mission Assistance Engine for Logan County 911.
 You assist authorized supervisors with operational awareness and analysis.
@@ -122,6 +123,26 @@ COUNT_PATTERN = re.compile(
 )
 DISCIPLINE_PATTERN = re.compile(
     r"\b(ems|fire|law|medical|police)\b",
+    re.IGNORECASE,
+)
+BUSY_NOW_PATTERN = re.compile(
+    r"(?:\b(?:busy|activity|happening|workload)\b.*"
+    r"\b(?:now|right now|currently)\b|"
+    r"\b(?:now|right now|currently)\b.*"
+    r"\b(?:busy|activity|happening|workload)\b)",
+    re.IGNORECASE,
+)
+LONGEST_ACTIVE_UNIT_PATTERN = re.compile(
+    r"(?:\b(?:which|what)\s+unit\b.*\b(?:longest|tied up)\b|"
+    r"\b(?:longest|tied up)\b.*\bunit\b)",
+    re.IGNORECASE,
+)
+TODAY_YESTERDAY_PATTERN = re.compile(
+    r"(?:\btoday\b.*\byesterday\b|\byesterday\b.*\btoday\b)",
+    re.IGNORECASE,
+)
+API_ACCESS_PATTERN = re.compile(
+    r"\b(?:api access|api user|api system user|professional api)\b",
     re.IGNORECASE,
 )
 FOLLOWUP_PATTERN = re.compile(
@@ -234,6 +255,175 @@ def get_recent_database_activity(hours: int) -> dict:
         "important_note": (
             "This database contains completed calls. Calls that are still active "
             "may not be included, so live CAD is also checked."
+        ),
+    }
+
+
+def get_today_yesterday_activity(now: datetime | None = None) -> dict:
+    local_now = now or datetime.now(LOCAL_TIMEZONE)
+    if local_now.tzinfo is None:
+        local_now = local_now.replace(tzinfo=LOCAL_TIMEZONE)
+    else:
+        local_now = local_now.astimezone(LOCAL_TIMEZONE)
+
+    today_start = datetime.combine(
+        local_now.date(),
+        datetime.min.time(),
+        LOCAL_TIMEZONE,
+    )
+    yesterday_start = today_start - timedelta(days=1)
+    yesterday_same_time = datetime.combine(
+        yesterday_start.date(),
+        local_now.time().replace(tzinfo=None),
+        LOCAL_TIMEZONE,
+    )
+    params = {
+        "today_start": today_start.astimezone(timezone.utc),
+        "now": local_now.astimezone(timezone.utc),
+        "yesterday_start": yesterday_start.astimezone(timezone.utc),
+        "yesterday_same_time": yesterday_same_time.astimezone(timezone.utc),
+    }
+
+    try:
+        with AnalyticsRepository() as repository:
+            row = repository.fetchone(
+                """
+                SELECT
+                    COUNT(*) FILTER (
+                        WHERE call_received_at >= %(today_start)s
+                          AND call_received_at < %(now)s
+                    ),
+                    COUNT(*) FILTER (
+                        WHERE call_received_at >= %(yesterday_start)s
+                          AND call_received_at < %(yesterday_same_time)s
+                    ),
+                    COUNT(*) FILTER (
+                        WHERE call_received_at >= %(yesterday_start)s
+                          AND call_received_at < %(today_start)s
+                    ),
+                    MAX(call_received_at)
+                FROM lcdash_analytics.calls
+                WHERE call_received_at >= %(yesterday_start)s
+                  AND call_received_at < %(now)s
+                """,
+                params,
+            ) or (0, 0, 0, None)
+    except AnalyticsDatabaseError as exc:
+        return {"available": False, "message": str(exc)}
+
+    return {
+        "available": True,
+        "today_so_far": int(row[0] or 0),
+        "yesterday_same_time": int(row[1] or 0),
+        "yesterday_full_day": int(row[2] or 0),
+        "comparison_time_local": local_now.strftime("%I:%M %p %Z"),
+        "today_date": local_now.date().isoformat(),
+        "yesterday_date": yesterday_start.date().isoformat(),
+        "latest_stored_at": row[3].isoformat() if row[3] else "",
+        "important_note": (
+            "These are completed calls stored in PostgreSQL. Today is compared "
+            "with the same elapsed portion of yesterday for a fair comparison."
+        ),
+    }
+
+
+def get_discipline_database_activity(hours: int) -> dict:
+    start_at = datetime.now(timezone.utc) - timedelta(hours=hours)
+    try:
+        with AnalyticsRepository() as repository:
+            row = repository.fetchone(
+                """
+                WITH selected_calls AS (
+                    SELECT cfs_number
+                    FROM lcdash_analytics.calls
+                    WHERE call_received_at >= %(start_at)s
+                ),
+                classified_responses AS (
+                    SELECT
+                        unit_response.cfs_number,
+                        CASE
+                            WHEN UPPER(COALESCE(
+                                NULLIF(unit_record.unit_type, ''),
+                                NULLIF(unit_response.unit_type, ''),
+                                ''
+                            )) LIKE 'EMS %%'
+                              OR UPPER(COALESCE(
+                                NULLIF(unit_record.agency, ''),
+                                ''
+                              )) = 'LEASA'
+                                THEN 'EMS'
+                            WHEN UPPER(COALESCE(
+                                NULLIF(unit_record.unit_type, ''),
+                                NULLIF(unit_response.unit_type, ''),
+                                ''
+                            )) LIKE 'FIRE %%'
+                              OR UPPER(COALESCE(
+                                NULLIF(unit_record.agency, ''),
+                                ''
+                              )) LIKE 'FC %%'
+                                THEN 'Fire'
+                            WHEN UPPER(COALESCE(
+                                NULLIF(unit_record.unit_type, ''),
+                                NULLIF(unit_response.unit_type, ''),
+                                ''
+                            )) IN ('PATROL CAR', 'COUNTY ADMIN')
+                              OR UPPER(COALESCE(
+                                NULLIF(unit_record.agency, ''),
+                                ''
+                              )) IN (
+                                'CPD', 'DNR', 'DPS', 'LCSO',
+                                'LPD', 'MPD', 'WVSP'
+                              )
+                                THEN 'Law'
+                            ELSE NULL
+                        END AS discipline
+                    FROM selected_calls
+                    JOIN lcdash_analytics.unit_responses AS unit_response
+                        ON unit_response.cfs_number = selected_calls.cfs_number
+                    LEFT JOIN lcdash_analytics.units AS unit_record
+                        ON unit_record.unit_number = unit_response.unit_number
+                )
+                SELECT
+                    (
+                        SELECT COUNT(*)
+                        FROM selected_calls
+                    ),
+                    COUNT(DISTINCT cfs_number) FILTER (
+                        WHERE discipline = 'Fire'
+                    ),
+                    COUNT(DISTINCT cfs_number) FILTER (
+                        WHERE discipline = 'EMS'
+                    ),
+                    COUNT(DISTINCT cfs_number) FILTER (
+                        WHERE discipline = 'Law'
+                    ),
+                    COUNT(DISTINCT cfs_number) FILTER (
+                        WHERE discipline IS NOT NULL
+                    )
+                FROM classified_responses
+                """,
+                {"start_at": start_at},
+            ) or (0, 0, 0, 0, 0)
+    except AnalyticsDatabaseError as exc:
+        return {
+            "available": False,
+            "hours": hours,
+            "message": str(exc),
+        }
+
+    return {
+        "available": True,
+        "hours": hours,
+        "completed_calls": int(row[0] or 0),
+        "fire_calls": int(row[1] or 0),
+        "ems_calls": int(row[2] or 0),
+        "law_calls": int(row[3] or 0),
+        "classified_calls": int(row[4] or 0),
+        "latest_stored_at": "",
+        "important_note": (
+            "A mutual-aid call can be counted in more than one discipline. "
+            "Calls without a classifiable responding unit are not assigned to "
+            "Fire, EMS, or Law."
         ),
     }
 
@@ -437,6 +627,17 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
     wants_latest_call = bool(LATEST_CALL_PATTERN.search(question))
     wants_active_calls = bool(ACTIVE_CALL_PATTERN.search(question))
     wants_knowledge = bool(KNOWLEDGE_PATTERN.search(question))
+    wants_busy_now = bool(BUSY_NOW_PATTERN.search(question))
+    wants_longest_active_unit = bool(
+        LONGEST_ACTIVE_UNIT_PATTERN.search(question)
+    )
+    wants_today_yesterday = bool(
+        TODAY_YESTERDAY_PATTERN.search(question)
+    )
+    wants_discipline_breakdown = bool(
+        DISCIPLINE_PATTERN.search(question)
+        and COUNT_PATTERN.search(question)
+    )
     explicit_live_intent = bool(
         LIVE_PATTERN.search(question)
         or CFS_PATTERN.search(question)
@@ -447,8 +648,12 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
     wants_units = bool(
         UNIT_PATTERN.search(question)
         and (not wants_knowledge or explicit_live_intent)
+        and not wants_longest_active_unit
     )
-    wants_comparison = bool(COMPARISON_PATTERN.search(question))
+    wants_comparison = bool(
+        COMPARISON_PATTERN.search(question)
+        and not wants_today_yesterday
+    )
     wants_live = bool(
         LIVE_PATTERN.search(question)
         or cfs_match
@@ -456,11 +661,15 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
         or wants_latest_call
         or wants_units
         or wants_comparison
+        or wants_busy_now
+        or wants_longest_active_unit
     )
     wants_analytics = bool(
         ANALYTICS_PATTERN.search(question)
         or recent_hours
         or wants_comparison
+        or wants_today_yesterday
+        or wants_discipline_breakdown
     )
     looks_operational = bool(OPERATIONAL_PATTERN.search(question))
 
@@ -544,7 +753,28 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
         wants_live = False
         wants_analytics = False
 
-    if recent_hours:
+    if wants_today_yesterday:
+        comparison = get_today_yesterday_activity()
+        context.append(
+            {
+                "source": "PostgreSQL today-yesterday comparison",
+                "purpose": (
+                    "Compare completed calls today so far with the same "
+                    "elapsed time yesterday"
+                ),
+                "data": comparison,
+            }
+        )
+        sources.append(
+            {
+                "name": "PostgreSQL analytics",
+                "kind": "historical",
+                "detail": "Today versus yesterday at the same local time",
+                "available": bool(comparison.get("available")),
+                "timestamp": comparison.get("latest_stored_at") or "",
+            }
+        )
+    elif recent_hours:
         database_hours = recent_hours
         database_activity = get_recent_database_activity(database_hours)
         context.append(
@@ -563,6 +793,20 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
                 "timestamp": database_activity.get("latest_stored_at") or "",
             }
         )
+        if wants_discipline_breakdown:
+            discipline_activity = get_discipline_database_activity(
+                database_hours
+            )
+            context.append(
+                {
+                    "source": "PostgreSQL discipline activity",
+                    "purpose": (
+                        f"Completed Fire, EMS, and Law calls in the last "
+                        f"{database_hours} hours"
+                    ),
+                    "data": discipline_activity,
+                }
+            )
     elif wants_analytics:
         period = _period_from_question(question)
         analytics = get_analytics_overview(period=period)
@@ -840,6 +1084,283 @@ def _research_summary(sources: list[dict]) -> dict:
     }
 
 
+def _verified_response(answer: str, sources: list[dict]) -> dict:
+    return {
+        "answer": answer,
+        "sources": sources,
+        "model": "LCDash verified read tools",
+        "generated_at": datetime.now(LOCAL_TIMEZONE).isoformat(),
+        "write_access": False,
+        "research": _research_summary(sources),
+    }
+
+
+def _verified_busy_now_answer(
+    question: str,
+    context: list[dict],
+    sources: list[dict],
+) -> dict | None:
+    if not BUSY_NOW_PATTERN.search(question):
+        return None
+
+    live_data = _context_data(context, "CentralSquare live operations")
+    stats = live_data.get("dashboard_stats") or {}
+    calls = live_data.get("calls") or []
+    if not stats:
+        return None
+
+    active_calls = int(stats.get("active_calls") or 0)
+    assigned_units = int(stats.get("assigned_units") or 0)
+    high_priority = int(stats.get("high_priority_calls") or 0)
+    area_counts: dict[str, int] = {}
+    for call in calls:
+        location = str(call.get("location") or "").strip()
+        if not location:
+            continue
+        parts = [part.strip() for part in location.split(",") if part.strip()]
+        area = parts[-1] if len(parts) > 1 else location
+        area_counts[area] = area_counts.get(area, 0) + 1
+
+    ranked_areas = sorted(
+        area_counts.items(),
+        key=lambda item: (-item[1], item[0]),
+    )
+    if ranked_areas:
+        highest_count = ranked_areas[0][1]
+        leaders = [
+            area
+            for area, count in ranked_areas
+            if count == highest_count
+        ][:3]
+        if highest_count > 1:
+            area_text = (
+                f"The greatest concentration is in {', '.join(leaders)} "
+                f"with {highest_count} active calls."
+            )
+        else:
+            area_text = (
+                "The active calls are geographically spread out; no returned "
+                "area has more than one active call."
+            )
+    else:
+        area_text = "CAD did not return usable locations for concentration."
+
+    if active_calls == 0:
+        workload_text = "There are no active calls in live CentralSquare."
+    else:
+        workload_text = (
+            f"Live CentralSquare currently shows {active_calls} active calls, "
+            f"{assigned_units} assigned units, and {high_priority} calls at "
+            "priority 15 or more urgent."
+        )
+    return _verified_response(f"{workload_text} {area_text}", sources)
+
+
+def _parse_source_datetime(value: Any) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _format_elapsed_duration(started_at: datetime) -> str:
+    elapsed_seconds = max(
+        int((datetime.now(timezone.utc) - started_at).total_seconds()),
+        0,
+    )
+    hours, remainder = divmod(elapsed_seconds, 3600)
+    minutes = remainder // 60
+    if hours:
+        return f"{hours} hours {minutes} minutes"
+    return f"{minutes} minutes"
+
+
+def _verified_longest_active_unit_answer(
+    question: str,
+    context: list[dict],
+    sources: list[dict],
+) -> dict | None:
+    if not LONGEST_ACTIVE_UNIT_PATTERN.search(question):
+        return None
+
+    live_data = _context_data(context, "CentralSquare live operations")
+    unit_rows = live_data.get("unit_rows") or []
+    candidates = []
+    for unit in unit_rows:
+        if not isinstance(unit, dict) or not unit.get("cfs_number"):
+            continue
+        status = str(
+            unit.get("status_group")
+            or unit.get("status")
+            or ""
+        )
+        if re.search(
+            r"\b(available|clear|cleared|complete|completed|unknown)\b",
+            status,
+            re.IGNORECASE,
+        ):
+            continue
+        started_at = (
+            _parse_source_datetime(unit.get("dispatch_time"))
+            or _parse_source_datetime(unit.get("call_datetime"))
+            or _parse_source_datetime(unit.get("status_timer_start"))
+        )
+        if not started_at or started_at > datetime.now(timezone.utc):
+            continue
+        candidates.append((started_at, unit))
+
+    if not candidates:
+        return _verified_response(
+            "Live CentralSquare did not return a current active assignment "
+            "with enough timing information to identify the longest tied-up "
+            "unit safely.",
+            sources,
+        )
+
+    started_at, unit = min(candidates, key=lambda item: item[0])
+    unit_number = str(unit.get("unit_number") or "Unknown unit")
+    cfs_number = str(unit.get("cfs_number") or "Unknown CFS")
+    incident = str(
+        unit.get("incident_description")
+        or unit.get("incident_code")
+        or "Unspecified incident"
+    )
+    status = str(
+        unit.get("status_group")
+        or unit.get("status")
+        or "Status not returned"
+    )
+    location = str(unit.get("location") or "").strip()
+    answer = (
+        f"{unit_number} has the longest current active assignment at about "
+        f"{_format_elapsed_duration(started_at)}. It is {status} on "
+        f"{cfs_number}, {incident}"
+    )
+    if location:
+        answer += f", at {location}"
+    answer += (
+        ". This uses active-call assignment timing and ignores stale roster "
+        "timestamps from units that are not attached to an active call."
+    )
+    return _verified_response(answer, sources)
+
+
+def _verified_today_yesterday_answer(
+    question: str,
+    context: list[dict],
+    sources: list[dict],
+) -> dict | None:
+    if not TODAY_YESTERDAY_PATTERN.search(question):
+        return None
+
+    data = _context_data(
+        context,
+        "PostgreSQL today-yesterday comparison",
+    )
+    if not data.get("available"):
+        return None
+
+    today = int(data.get("today_so_far") or 0)
+    yesterday_same = int(data.get("yesterday_same_time") or 0)
+    yesterday_full = int(data.get("yesterday_full_day") or 0)
+    if today > yesterday_same:
+        comparison = f"Today is busier by {today - yesterday_same} calls"
+    elif today < yesterday_same:
+        comparison = (
+            f"Today is less busy by {yesterday_same - today} calls"
+        )
+    else:
+        comparison = "The call volume is the same"
+
+    return _verified_response(
+        f"PostgreSQL contains {today} completed calls today so far, compared "
+        f"with {yesterday_same} by the same time yesterday. {comparison} at "
+        f"this point in the day. Yesterday finished with {yesterday_full} "
+        "completed calls. Active calls may not appear until they are "
+        "completed and stored.",
+        sources,
+    )
+
+
+def _verified_discipline_count_answer(
+    question: str,
+    context: list[dict],
+    sources: list[dict],
+) -> dict | None:
+    if not (
+        DISCIPLINE_PATTERN.search(question)
+        and COUNT_PATTERN.search(question)
+    ):
+        return None
+
+    data = _context_data(context, "PostgreSQL discipline activity")
+    if not data.get("available"):
+        return None
+
+    hours = int(data.get("hours") or 0)
+    fire_calls = int(data.get("fire_calls") or 0)
+    ems_calls = int(data.get("ems_calls") or 0)
+    law_calls = int(data.get("law_calls") or 0)
+    completed_calls = int(data.get("completed_calls") or 0)
+    classified_calls = int(data.get("classified_calls") or 0)
+    unclassified = max(completed_calls - classified_calls, 0)
+    answer = (
+        f"For completed calls stored during the last {hours} hours, "
+        f"Fire handled {fire_calls}, EMS handled {ems_calls}, and Law handled "
+        f"{law_calls}. PostgreSQL contains {completed_calls} completed calls "
+        f"in that window"
+    )
+    if unclassified:
+        answer += f", including {unclassified} without a classified discipline"
+    answer += (
+        ". A mutual-aid call can appear in more than one discipline, and "
+        "active calls may not be stored until completion."
+    )
+    return _verified_response(answer, sources)
+
+
+def _verified_api_access_answer(
+    question: str,
+    context: list[dict],
+    sources: list[dict],
+) -> dict | None:
+    if not API_ACCESS_PATTERN.search(question):
+        return None
+    knowledge_data = _context_data(
+        context,
+        "CentralSquare documentation library",
+    )
+    if knowledge_data.get("supported") is not True:
+        return None
+
+    document_sources = [
+        source
+        for source in sources
+        if source.get("kind") == "document"
+    ]
+    citation = ""
+    if document_sources:
+        citation = (
+            f" ({document_sources[0].get('name')}, "
+            f"{document_sources[0].get('detail')})"
+        )
+    return _verified_response(
+        "In CentralSquare, open the person in the Personnel module and go to "
+        "Sign In Credentials. Enable Public Safety Suite Professional API. "
+        "For a server-to-server service account, also enable API System User "
+        "when that option is available. Save the account, then grant only the "
+        "endpoint permissions the integration requires. Use a dedicated "
+        "service account rather than a supervisor's personal login."
+        f"{citation}",
+        sources,
+    )
+
+
 def _verified_recent_count_answer(
     question: str,
     context: list[dict],
@@ -851,6 +1372,8 @@ def _verified_recent_count_answer(
         question,
         re.IGNORECASE,
     ):
+        return None
+    if DISCIPLINE_PATTERN.search(question):
         return None
 
     live_data = _context_data(context, "CentralSquare recent call activity")
@@ -1291,7 +1814,36 @@ def ask_mae(question: str, history: list[dict] | None = None) -> dict:
     )
     context, sources = _build_read_context(routing_question)
     verified_answer = (
-        _verified_recent_count_answer(routing_question, context, sources)
+        _verified_busy_now_answer(
+            routing_question,
+            context,
+            sources,
+        )
+        or _verified_longest_active_unit_answer(
+            routing_question,
+            context,
+            sources,
+        )
+        or _verified_today_yesterday_answer(
+            routing_question,
+            context,
+            sources,
+        )
+        or _verified_discipline_count_answer(
+            routing_question,
+            context,
+            sources,
+        )
+        or _verified_api_access_answer(
+            routing_question,
+            context,
+            sources,
+        )
+        or _verified_recent_count_answer(
+            routing_question,
+            context,
+            sources,
+        )
         or _verified_combined_unit_call_answer(
             routing_question,
             context,
@@ -1339,7 +1891,7 @@ def ask_mae(question: str, history: list[dict] | None = None) -> dict:
         "think": False,
         "options": {
             "temperature": 0.2,
-            "num_ctx": 4096,
+            "num_ctx": MAE_CONTEXT_TOKENS,
         },
     }
 

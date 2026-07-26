@@ -106,6 +106,10 @@ class MAEGuardrailTests(unittest.TestCase):
         analytics_mock.assert_called_once_with(period="7d")
         self.assertEqual(result["answer"], "There were 42 calls.")
         self.assertEqual(result["sources"][0]["kind"], "historical")
+        self.assertEqual(
+            post_mock.call_args.kwargs["json"]["options"]["num_ctx"],
+            8192,
+        )
 
     @patch("app.services.mae_service.httpx.post")
     @patch("app.services.mae_service.get_recent_cad_activity")
@@ -433,6 +437,179 @@ class MAEGuardrailTests(unittest.TestCase):
         post_mock.assert_not_called()
         self.assertIn("On Scene", result["answer"])
         self.assertIn("remains active", result["answer"])
+
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service.get_live_operations_snapshot")
+    def test_plain_language_busy_now_question_is_verified(
+        self,
+        live_mock,
+        post_mock,
+    ):
+        live_mock.return_value = {
+            "last_updated": "2026-07-26T18:05:00+00:00",
+            "dashboard_stats": {
+                "active_calls": 3,
+                "assigned_units": 5,
+                "high_priority_calls": 1,
+            },
+            "calls": [
+                {"location": "100 MAIN ST, LOGAN"},
+                {"location": "200 MAIN ST, LOGAN"},
+                {"location": "300 MAIN ST, CHAPMANVILLE"},
+            ],
+            "unit_stats": {},
+            "unit_rows": [],
+        }
+
+        result = ask_mae(
+            "Are we busy right now and where is most of the activity?"
+        )
+
+        post_mock.assert_not_called()
+        self.assertIn("3 active calls", result["answer"])
+        self.assertIn("5 assigned units", result["answer"])
+        self.assertIn("LOGAN", result["answer"])
+        self.assertIn("2 active calls", result["answer"])
+
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service.get_live_operations_snapshot")
+    def test_longest_tied_up_unit_uses_active_assignments_only(
+        self,
+        live_mock,
+        post_mock,
+    ):
+        live_mock.return_value = {
+            "last_updated": "2026-07-26T18:05:00+00:00",
+            "dashboard_stats": {"active_calls": 2},
+            "calls": [],
+            "unit_stats": {},
+            "unit_rows": [
+                {
+                    "unit_number": "MED10",
+                    "status_group": "On Scene",
+                    "dispatch_time": "2026-07-26T17:30:00+00:00",
+                    "cfs_number": "CFS26-50001",
+                    "incident_description": "Structure Fire",
+                    "location": "100 MAIN ST, LOGAN",
+                },
+                {
+                    "unit_number": "MED20",
+                    "status_group": "Enroute",
+                    "dispatch_time": "2026-07-26T18:00:00+00:00",
+                    "cfs_number": "CFS26-50002",
+                    "incident_description": "Medical Call",
+                },
+            ],
+        }
+
+        result = ask_mae(
+            "Which unit has been tied up the longest and what call are they working?"
+        )
+
+        post_mock.assert_not_called()
+        self.assertIn("MED10", result["answer"])
+        self.assertIn("CFS26-50001", result["answer"])
+        self.assertIn("Structure Fire", result["answer"])
+        self.assertIn("ignores stale roster timestamps", result["answer"])
+
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service.get_today_yesterday_activity")
+    @patch("app.services.mae_service.get_analytics_overview")
+    def test_today_yesterday_question_uses_matching_elapsed_windows(
+        self,
+        analytics_mock,
+        comparison_mock,
+        post_mock,
+    ):
+        comparison_mock.return_value = {
+            "available": True,
+            "today_so_far": 42,
+            "yesterday_same_time": 35,
+            "yesterday_full_day": 61,
+            "latest_stored_at": "2026-07-26T18:00:00+00:00",
+        }
+
+        result = ask_mae("Have we been busier today than yesterday?")
+
+        analytics_mock.assert_not_called()
+        post_mock.assert_not_called()
+        self.assertIn("42 completed calls today", result["answer"])
+        self.assertIn("35 by the same time yesterday", result["answer"])
+        self.assertIn("busier by 7 calls", result["answer"])
+        self.assertIn("61 completed calls", result["answer"])
+
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service.get_recent_cad_activity")
+    @patch("app.services.mae_service.get_discipline_database_activity")
+    @patch("app.services.mae_service.get_recent_database_activity")
+    def test_discipline_question_returns_fire_ems_and_law_counts(
+        self,
+        database_mock,
+        discipline_mock,
+        cad_mock,
+        post_mock,
+    ):
+        database_mock.return_value = {
+            "available": True,
+            "hours": 24,
+            "completed_calls_stored": 100,
+        }
+        discipline_mock.return_value = {
+            "available": True,
+            "hours": 24,
+            "completed_calls": 100,
+            "fire_calls": 12,
+            "ems_calls": 55,
+            "law_calls": 40,
+            "classified_calls": 95,
+        }
+        cad_mock.return_value = {
+            "available": True,
+            "hours": 24,
+            "calls_returned": 105,
+            "generated_at": "2026-07-26T18:05:00+00:00",
+        }
+
+        result = ask_mae(
+            "How many calls have Fire, EMS, and Law handled in the last 24 hours?"
+        )
+
+        post_mock.assert_not_called()
+        self.assertIn("Fire handled 12", result["answer"])
+        self.assertIn("EMS handled 55", result["answer"])
+        self.assertIn("Law handled 40", result["answer"])
+        self.assertIn("5 without a classified discipline", result["answer"])
+
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service.search_knowledge")
+    def test_api_access_question_returns_precise_grounded_steps(
+        self,
+        search_mock,
+        post_mock,
+    ):
+        search_mock.return_value = [
+            {
+                "title": "Public Safety Suite Pro API User Guide",
+                "page_number": 5,
+                "coverage": 1.0,
+                "query_terms": ["api", "access"],
+                "matched_terms": ["api", "access"],
+                "indexed_at": "2026-07-26T18:00:00+00:00",
+                "text": "Manage API access in the Personnel module.",
+            }
+        ]
+
+        result = ask_mae(
+            "I forgot how to give somebody API access in CentralSquare. "
+            "What do I do?"
+        )
+
+        post_mock.assert_not_called()
+        self.assertIn("Personnel module", result["answer"])
+        self.assertIn("Sign In Credentials", result["answer"])
+        self.assertIn("Public Safety Suite Professional API", result["answer"])
+        self.assertIn("API System User", result["answer"])
+        self.assertIn("Page 5", result["answer"])
 
 
 if __name__ == "__main__":
