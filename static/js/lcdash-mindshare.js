@@ -85,7 +85,7 @@
         bubble.className = "mae-bubble";
         const name = document.createElement("div");
         name.className = "mae-message-name";
-        name.textContent = role === "assistant" ? "MTA" : "USER";
+        name.textContent = role === "assistant" ? "JACK" : "USER";
         const text = document.createElement("p");
         text.textContent = content;
         bubble.append(name, text);

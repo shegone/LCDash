@@ -7,7 +7,7 @@ CentralSquare CAD. It is intended for technical manuals, procedures,
 application notes, release notes, and approved Logan County system-reference
 documents.
 
-The Mindshare Technical Assistant is read-only. It cannot change consoles,
+JACK, the Mindshare Technical Assistant, is read-only. It cannot change consoles,
 gateways, radios, firmware, software, or CAD records.
 
 ## Google Drive layout
@@ -63,7 +63,7 @@ Confirm:
 
 ## Access boundaries
 
-- Mindshare Technical Assistant access can be granted independently of MAE/CAD.
+- JACK access can be granted independently of MAE/CAD.
 - Future Radio Intelligence access will be controlled separately.
 - Radio Intelligence remains inactive until the isolated multicast network is
   connected, validated, and covered by approved retention and audit rules.

@@ -10,7 +10,7 @@ from app.services.knowledge_service import (
 
 
 class MindshareServiceError(Exception):
-    """Raised when the Mindshare technical assistant is unavailable."""
+    """Raised when JACK, the Mindshare technical assistant, is unavailable."""
 
 
 def _ollama_status() -> dict:
@@ -157,7 +157,7 @@ def ask_mindshare(
             )
 
     system_prompt = """
-You are the Mindshare Technical Assistant for Logan County 911.
+You are JACK, the Mindshare Technical Assistant for Logan County 911.
 
 Scope and safety:
 - Answer only from the supplied Mindshare technical-library passages.
@@ -208,12 +208,12 @@ Scope and safety:
         ).strip()
     except (httpx.HTTPError, ValueError, TypeError) as exc:
         raise MindshareServiceError(
-            "The local Mindshare assistant could not complete the inquiry."
+            "JACK could not complete the Mindshare inquiry."
         ) from exc
 
     if not answer:
         raise MindshareServiceError(
-            "The local Mindshare assistant returned an empty response."
+            "JACK returned an empty response."
         )
 
     top_score = max(

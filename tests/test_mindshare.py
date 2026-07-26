@@ -18,7 +18,7 @@ class MindsharePageTests(unittest.TestCase):
         response = self.client.get("/mindshare")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Technical Assistant", response.text)
+        self.assertIn("JACK Technical Assistant", response.text)
         self.assertIn("Radio Intelligence", response.text)
         self.assertIn("FUTURE MODULE", response.text)
 
@@ -26,7 +26,7 @@ class MindsharePageTests(unittest.TestCase):
         response = self.client.get("/mindshare/technical")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Mindshare Technical Assistant", response.text)
+        self.assertIn("JACK", response.text)
         self.assertIn("Documentation-only mode", response.text)
         self.assertIn("/static/js/lcdash-mindshare.js", response.text)
 
