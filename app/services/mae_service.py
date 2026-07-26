@@ -44,6 +44,10 @@ NON-NEGOTIABLE SAFETY AND AUTHORITY RULES:
   PostgreSQL contains completed calls and can lag current activity; live
   CentralSquare data takes precedence for active, latest, and current facts.
 - If counts differ, explain the likely reason instead of silently choosing one.
+- Never use PostgreSQL to answer what is active, open, current, in progress,
+  available, or latest. Those facts must come from live CentralSquare data.
+- Calls and units are different measures. Never report a unit count as a call
+  count or infer the number of calls from unit statuses.
 - In Logan County CAD, lower numeric priority values are more urgent:
   priorities 5 and 10 are high priority, 15 is elevated, and 30 is routine.
   Never describe priority 30 as high priority.
@@ -63,12 +67,12 @@ WRITE_ACTION_PATTERN = re.compile(
 )
 CFS_PATTERN = re.compile(r"\bCFS(?:\d{2})?[- ]?\d{3,}\b", re.IGNORECASE)
 LIVE_PATTERN = re.compile(
-    r"\b(active|available|current|currently|live|now|on scene|"
-    r"enroute|transporting|unit status|right now)\b",
+    r"\b(active|available|current|currently|in progress|live|now|ongoing|"
+    r"on scene|open|enroute|transporting|unit status|right now)\b",
     re.IGNORECASE,
 )
 ANALYTICS_PATTERN = re.compile(
-    r"\b(analytics|average|busiest|calls by|historical|history|how many|"
+    r"\b(analytics|average|busiest|calls by|completed calls?|historical|history|"
     r"last \d+ (?:hours?|days?)|month|past|report|response time|"
     r"statistics|stats|trend|week|year|yesterday)\b",
     re.IGNORECASE,
@@ -78,12 +82,12 @@ RECENT_HOURS_PATTERN = re.compile(
     re.IGNORECASE,
 )
 LATEST_CALL_PATTERN = re.compile(
-    r"\b(?:last|latest|most recent)\s+(?:call|incident)\b",
+    r"\b(?:last|latest|most recent)\s+(?:calls?|incidents?)\b",
     re.IGNORECASE,
 )
 OPERATIONAL_PATTERN = re.compile(
-    r"\b(busy|cad|call|cfs|coverage|dispatch|ems|fire|happening|"
-    r"incident|law|response|staffing|station|unit|workload)\b",
+    r"\b(busy|cad|calls?|cfs|coverage|dispatch|ems|fire|happening|"
+    r"incidents?|law|response|staffing|stations?|units?|workload)\b",
     re.IGNORECASE,
 )
 UNIT_PATTERN = re.compile(
@@ -101,6 +105,53 @@ KNOWLEDGE_PATTERN = re.compile(
     r"steps|where do)\b",
     re.IGNORECASE,
 )
+ACTIVE_CALL_PATTERN = re.compile(
+    r"(?:\b(?:active|current|open|ongoing)\s+(?:calls?|incidents?)\b|"
+    r"\b(?:calls?|incidents?)\s+(?:are\s+)?(?:active|current|open|ongoing|"
+    r"in progress)\b|"
+    r"\b(?:calls?|incidents?)\s+in progress\b)",
+    re.IGNORECASE,
+)
+LIST_PATTERN = re.compile(
+    r"\b(list|name|show|what are|which)\b",
+    re.IGNORECASE,
+)
+COUNT_PATTERN = re.compile(
+    r"\b(count|how many|number of)\b",
+    re.IGNORECASE,
+)
+DISCIPLINE_PATTERN = re.compile(
+    r"\b(ems|fire|law|medical|police)\b",
+    re.IGNORECASE,
+)
+FOLLOWUP_PATTERN = re.compile(
+    r"\b(that|those|them|they|it|its|previous|still|what about|"
+    r"where is|why did you say|why was)\b",
+    re.IGNORECASE,
+)
+
+
+def _routing_question(question: str, history: list[dict]) -> str:
+    if not FOLLOWUP_PATTERN.search(question):
+        return question
+
+    previous_user = ""
+    previous_cfs = ""
+    for item in reversed(history[-MAX_HISTORY_MESSAGES:]):
+        content = str(item.get("content") or "")
+        if not previous_cfs:
+            cfs_match = CFS_PATTERN.search(content)
+            if cfs_match:
+                previous_cfs = cfs_match.group(0)
+        if item.get("role") == "user" and content:
+            previous_user = content
+            break
+
+    if previous_cfs:
+        parts = [previous_cfs, question]
+    else:
+        parts = [part for part in (previous_user, question) if part]
+    return "\nFollow-up context: ".join(parts) if parts else question
 
 
 class MAEServiceError(Exception):
@@ -324,6 +375,59 @@ def get_mae_unit_snapshot() -> dict:
     }
 
 
+def _append_live_operations_context(
+    context: list[dict],
+    sources: list[dict],
+) -> None:
+    try:
+        snapshot = get_live_operations_snapshot()
+        context.append(
+            {
+                "source": "CentralSquare live operations",
+                "purpose": "Current active calls and assigned units",
+                "data": {
+                    "last_updated": snapshot.get("last_updated"),
+                    "dashboard_stats": snapshot.get("dashboard_stats"),
+                    "calls": [
+                        _safe_call_context(call)
+                        for call in (snapshot.get("calls") or [])[:25]
+                    ],
+                    "unit_stats": snapshot.get("unit_stats"),
+                    "unit_rows": _trim_rows(
+                        snapshot.get("unit_rows") or [],
+                        100,
+                    ),
+                },
+            }
+        )
+        sources.append(
+            {
+                "name": "CentralSquare CAD",
+                "kind": "live",
+                "detail": "Active operations snapshot",
+                "available": True,
+                "timestamp": snapshot.get("last_updated") or "",
+            }
+        )
+    except CentralSquareAPIError as exc:
+        context.append(
+            {
+                "source": "CentralSquare live operations",
+                "purpose": "Current active calls and assigned units",
+                "error": str(exc),
+            }
+        )
+        sources.append(
+            {
+                "name": "CentralSquare CAD",
+                "kind": "live",
+                "detail": "Active operations snapshot",
+                "available": False,
+                "timestamp": "",
+            }
+        )
+
+
 def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
     context: list[dict] = []
     sources: list[dict] = []
@@ -331,13 +435,13 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
     cfs_match = CFS_PATTERN.search(question)
     recent_hours = _hours_from_question(question)
     wants_latest_call = bool(LATEST_CALL_PATTERN.search(question))
+    wants_active_calls = bool(ACTIVE_CALL_PATTERN.search(question))
     wants_knowledge = bool(KNOWLEDGE_PATTERN.search(question))
     explicit_live_intent = bool(
         LIVE_PATTERN.search(question)
         or CFS_PATTERN.search(question)
         or RECENT_HOURS_PATTERN.search(question)
         or LATEST_CALL_PATTERN.search(question)
-        or ANALYTICS_PATTERN.search(question)
         or COMPARISON_PATTERN.search(question)
     )
     wants_units = bool(
@@ -425,8 +529,8 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
                 }
             )
 
-    # Unknown operational wording is handled conservatively: compare a
-    # historical baseline with current CAD rather than guessing from one source.
+    # Unknown operational wording is handled with current CAD. Historical data
+    # is added only for an explicit time range, trend, report, or comparison.
     if looks_operational and not wants_knowledge and not (
         recent_hours
         or wants_latest_call
@@ -434,15 +538,14 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
         or wants_analytics
         or wants_live
     ):
-        wants_analytics = True
         wants_live = True
 
     if wants_knowledge and context and not explicit_live_intent:
         wants_live = False
         wants_analytics = False
 
-    if recent_hours or wants_latest_call:
-        database_hours = recent_hours or 24
+    if recent_hours:
+        database_hours = recent_hours
         database_activity = get_recent_database_activity(database_hours)
         context.append(
             {
@@ -677,51 +780,10 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
                     "timestamp": "",
                 }
             )
+        if wants_active_calls:
+            _append_live_operations_context(context, sources)
     elif wants_live:
-        try:
-            snapshot = get_live_operations_snapshot()
-            context.append(
-                {
-                    "source": "CentralSquare live operations",
-                    "purpose": "Current active calls and assigned units",
-                    "data": {
-                        "last_updated": snapshot.get("last_updated"),
-                        "dashboard_stats": snapshot.get("dashboard_stats"),
-                        "calls": [
-                            _safe_call_context(call)
-                            for call in (snapshot.get("calls") or [])[:25]
-                        ],
-                        "unit_stats": snapshot.get("unit_stats"),
-                        "unit_rows": _trim_rows(snapshot.get("unit_rows") or [], 100),
-                    },
-                }
-            )
-            sources.append(
-                {
-                    "name": "CentralSquare CAD",
-                    "kind": "live",
-                    "detail": "Active operations snapshot",
-                    "available": True,
-                    "timestamp": snapshot.get("last_updated") or "",
-                }
-            )
-        except CentralSquareAPIError as exc:
-            context.append(
-                {
-                    "source": "CentralSquare live operations",
-                    "purpose": "Current active calls and assigned units",
-                    "error": str(exc),
-                }
-            )
-            sources.append(
-                {
-                    "name": "CentralSquare CAD",
-                    "kind": "live",
-                    "detail": "Active operations snapshot",
-                    "available": False,
-                    "timestamp": "",
-                }
-            )
+        _append_live_operations_context(context, sources)
 
     return context, sources
 
@@ -825,6 +887,254 @@ def _verified_recent_count_answer(
 
     return {
         "answer": answer,
+        "sources": sources,
+        "model": "LCDash verified read tools",
+        "generated_at": datetime.now(LOCAL_TIMEZONE).isoformat(),
+        "write_access": False,
+        "research": _research_summary(sources),
+    }
+
+
+def _verified_combined_unit_call_answer(
+    question: str,
+    context: list[dict],
+    sources: list[dict],
+) -> dict | None:
+    if not (
+        COUNT_PATTERN.search(question)
+        and UNIT_PATTERN.search(question)
+        and ACTIVE_CALL_PATTERN.search(question)
+    ):
+        return None
+
+    unit_data = _context_data(context, "CentralSquare live unit roster")
+    live_data = _context_data(context, "CentralSquare live operations")
+    roster_stats = unit_data.get("roster_stats") or {}
+    dashboard_stats = live_data.get("dashboard_stats") or {}
+    if not roster_stats or not dashboard_stats:
+        return None
+
+    active_units = int(roster_stats.get("active_units") or 0)
+    active_calls = int(dashboard_stats.get("active_calls") or 0)
+    return {
+        "answer": (
+            f"Live CentralSquare currently shows {active_units} active units "
+            f"and {active_calls} active calls. These are separate measures: "
+            "multiple units may be assigned to one call."
+        ),
+        "sources": sources,
+        "model": "LCDash verified read tools",
+        "generated_at": datetime.now(LOCAL_TIMEZONE).isoformat(),
+        "write_access": False,
+        "research": _research_summary(sources),
+    }
+
+
+def _verified_active_calls_answer(
+    question: str,
+    routing_question: str,
+    context: list[dict],
+    sources: list[dict],
+) -> dict | None:
+    if not ACTIVE_CALL_PATTERN.search(routing_question):
+        return None
+    if DISCIPLINE_PATTERN.search(question):
+        return None
+    if UNIT_PATTERN.search(question) and not re.search(
+        r"\b(?:calls?|incidents?)\b",
+        question,
+        re.IGNORECASE,
+    ):
+        return None
+
+    live_data = _context_data(context, "CentralSquare live operations")
+    dashboard_stats = live_data.get("dashboard_stats") or {}
+    calls = live_data.get("calls") or []
+    if not dashboard_stats:
+        return None
+
+    active_count = int(dashboard_stats.get("active_calls") or 0)
+    asks_for_list = bool(LIST_PATTERN.search(question))
+    challenges_prior_count = bool(
+        re.search(
+            r"\b(cad shows|why did you say|why was|that number)\b",
+            question,
+            re.IGNORECASE,
+        )
+    )
+
+    if asks_for_list:
+        if not calls:
+            answer = "Live CentralSquare currently shows no active calls."
+        else:
+            call_descriptions = []
+            for call in calls:
+                cfs_number = str(call.get("cfs_number") or "Unknown CFS")
+                description = str(
+                    call.get("incident_description")
+                    or call.get("incident_code")
+                    or "Unspecified incident"
+                )
+                status = str(call.get("status") or "Status not returned")
+                call_descriptions.append(
+                    f"{cfs_number}: {description} ({status})"
+                )
+            answer = (
+                f"Live CentralSquare currently shows {active_count} active "
+                f"calls: {'; '.join(call_descriptions)}."
+            )
+    elif COUNT_PATTERN.search(question) or challenges_prior_count:
+        answer = (
+            f"The authoritative live CentralSquare total is {active_count} "
+            "active calls."
+        )
+        if challenges_prior_count:
+            answer += (
+                " A prior total should not be taken from PostgreSQL, unit "
+                "counts, or a subset of call statuses."
+            )
+    else:
+        return None
+
+    return {
+        "answer": answer,
+        "sources": sources,
+        "model": "LCDash verified read tools",
+        "generated_at": datetime.now(LOCAL_TIMEZONE).isoformat(),
+        "write_access": False,
+        "research": _research_summary(sources),
+    }
+
+
+def _verified_completed_call_count_answer(
+    question: str,
+    context: list[dict],
+    sources: list[dict],
+) -> dict | None:
+    if not (
+        COUNT_PATTERN.search(question)
+        and re.search(r"\bcompleted calls?\b", question, re.IGNORECASE)
+    ):
+        return None
+
+    analytics = _context_data(context, "PostgreSQL analytics")
+    metrics = analytics.get("metrics") or {}
+    if not analytics.get("available") or "total_calls" not in metrics:
+        return None
+
+    total_calls = int(metrics.get("total_calls") or 0)
+    period_label = str(analytics.get("period_label") or "the selected period")
+    return {
+        "answer": (
+            f"PostgreSQL contains {total_calls} completed calls for "
+            f"{period_label.lower()}. This is a historical completed-call "
+            "total, not the current active-call count."
+        ),
+        "sources": sources,
+        "model": "LCDash verified read tools",
+        "generated_at": datetime.now(LOCAL_TIMEZONE).isoformat(),
+        "write_access": False,
+        "research": _research_summary(sources),
+    }
+
+
+def _verified_workload_comparison_answer(
+    question: str,
+    context: list[dict],
+    sources: list[dict],
+) -> dict | None:
+    if not COMPARISON_PATTERN.search(question):
+        return None
+
+    comparison = _context_data(context, "LCDash workload comparison")
+    if not comparison:
+        return None
+
+    current_calls = int(comparison.get("current_calls_created") or 0)
+    active_calls = int(comparison.get("current_active_calls") or 0)
+    historical_average = float(
+        comparison.get("historical_average_calls_per_3_hours") or 0
+    )
+    ratio = comparison.get("current_to_average_ratio")
+    if not historical_average:
+        return None
+
+    if ratio is None:
+        comparison_text = "could not be calculated"
+    elif ratio >= 1.25:
+        comparison_text = f"is about {ratio:.2f} times the historical average"
+    elif ratio <= 0.75:
+        comparison_text = f"is about {ratio:.2f} times the historical average"
+    else:
+        comparison_text = "is close to the historical average"
+
+    return {
+        "answer": (
+            f"CentralSquare recorded {current_calls} calls created in the last "
+            f"3 hours, compared with a historical average of "
+            f"{historical_average:.2f} calls per 3 hours. The current arrival "
+            f"volume {comparison_text}. There are also {active_calls} active "
+            "calls right now; that active-call count is separate from the "
+            "three-hour arrival count."
+        ),
+        "sources": sources,
+        "model": "LCDash verified read tools",
+        "generated_at": datetime.now(LOCAL_TIMEZONE).isoformat(),
+        "write_access": False,
+        "research": _research_summary(sources),
+    }
+
+
+def _verified_cfs_status_followup_answer(
+    question: str,
+    routing_question: str,
+    context: list[dict],
+    sources: list[dict],
+) -> dict | None:
+    if not re.search(
+        r"\b(still active|still open|current status|what status)\b",
+        question,
+        re.IGNORECASE,
+    ):
+        return None
+    cfs_match = CFS_PATTERN.search(routing_question)
+    cfs_data = _context_data(context, "CentralSquare live CFS detail")
+    if not cfs_match or not cfs_data:
+        return None
+
+    cfs_number = cfs_match.group(0).upper().replace(" ", "-")
+    status = str(cfs_data.get("status") or "").strip()
+    if not status:
+        return None
+    closed_status = bool(
+        re.search(
+            r"\b(cancelled|canceled|clear|cleared|closed|complete|completed)\b",
+            status,
+            re.IGNORECASE,
+        )
+    )
+    active_status = bool(
+        re.search(
+            r"\b(assigned|dispatch|enroute|on scene|open|transport)\b",
+            status,
+            re.IGNORECASE,
+        )
+    )
+    if closed_status:
+        interpretation = "That indicates the call is no longer active."
+    elif active_status:
+        interpretation = "That indicates the call remains active."
+    else:
+        interpretation = (
+            "The returned status alone is not sufficient to classify it as "
+            "active or closed."
+        )
+
+    return {
+        "answer": (
+            f"Live CentralSquare currently reports {cfs_number} with status "
+            f"“{status}.” {interpretation}"
+        ),
         "sources": sources,
         "model": "LCDash verified read tools",
         "generated_at": datetime.now(LOCAL_TIMEZONE).isoformat(),
@@ -974,9 +1284,41 @@ def ask_mae(question: str, history: list[dict] | None = None) -> dict:
             "write_access": False,
         }
 
-    context, sources = _build_read_context(clean_question)
+    conversation_history = history or []
+    routing_question = _routing_question(
+        clean_question,
+        conversation_history,
+    )
+    context, sources = _build_read_context(routing_question)
     verified_answer = (
-        _verified_recent_count_answer(clean_question, context, sources)
+        _verified_recent_count_answer(routing_question, context, sources)
+        or _verified_combined_unit_call_answer(
+            routing_question,
+            context,
+            sources,
+        )
+        or _verified_active_calls_answer(
+            clean_question,
+            routing_question,
+            context,
+            sources,
+        )
+        or _verified_completed_call_count_answer(
+            routing_question,
+            context,
+            sources,
+        )
+        or _verified_workload_comparison_answer(
+            routing_question,
+            context,
+            sources,
+        )
+        or _verified_cfs_status_followup_answer(
+            clean_question,
+            routing_question,
+            context,
+            sources,
+        )
         or _verified_latest_call_answer(clean_question, context, sources)
         or _verified_unsupported_knowledge_answer(
             clean_question,
@@ -988,7 +1330,11 @@ def ask_mae(question: str, history: list[dict] | None = None) -> dict:
         return verified_answer
     payload = {
         "model": settings.mae_model,
-        "messages": _ollama_messages(clean_question, history or [], context),
+        "messages": _ollama_messages(
+            clean_question,
+            conversation_history,
+            context,
+        ),
         "stream": False,
         "think": False,
         "options": {

@@ -176,6 +176,59 @@ class MAEKnowledgeRoutingTests(unittest.TestCase):
         self.assertEqual(result["sources"], [])
         post_mock.assert_not_called()
 
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service.search_knowledge")
+    def test_document_followup_reuses_previous_user_subject(
+        self,
+        search_mock,
+        post_mock,
+    ):
+        search_mock.return_value = [
+            {
+                "title": "CAD Windows Quick Reference Guide",
+                "file_name": "cad-windows.pdf",
+                "page_number": 2,
+                "content": (
+                    "On the CAD Unit Screen, select Edit Columns or "
+                    "Edit/Create Filter."
+                ),
+                "indexed_at": "",
+                "rank": 1.0,
+                "matched_terms": ["cad", "window", "columns", "filters"],
+                "query_terms": ["cad", "window", "columns", "filters"],
+                "coverage": 1.0,
+            }
+        ]
+        fake_response = Mock()
+        fake_response.raise_for_status.return_value = None
+        fake_response.json.return_value = {
+            "message": {
+                "content": (
+                    "The option is on the CAD Unit Screen "
+                    "(CAD Windows Quick Reference Guide, page 2)."
+                )
+            }
+        }
+        post_mock.return_value = fake_response
+        history = [
+            {
+                "role": "user",
+                "content": "How do I configure CAD window columns and filters?",
+            },
+            {
+                "role": "assistant",
+                "content": "Use Edit Columns or Edit/Create Filter.",
+            },
+        ]
+
+        result = ask_mae("Where is that option?", history)
+
+        search_question = search_mock.call_args.args[0]
+        self.assertIn("configure CAD window columns", search_question)
+        self.assertIn("Where is that option", search_question)
+        self.assertIn("CAD Unit Screen", result["answer"])
+        self.assertEqual(result["sources"][0]["kind"], "document")
+
 
 if __name__ == "__main__":
     unittest.main()
