@@ -901,7 +901,10 @@ def ask_mae(question: str, history: list[dict] | None = None) -> dict:
             f"Questions may contain at most {MAX_MESSAGE_LENGTH} characters."
         )
 
-    if WRITE_ACTION_PATTERN.search(clean_question):
+    if (
+        WRITE_ACTION_PATTERN.search(clean_question)
+        and not KNOWLEDGE_PATTERN.search(clean_question)
+    ):
         return {
             "answer": (
                 "MAE is currently inquiry-only. I can research, summarize, and "

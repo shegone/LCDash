@@ -111,6 +111,37 @@ class MAEKnowledgeRoutingTests(unittest.TestCase):
         unit_mock.assert_not_called()
         operations_mock.assert_not_called()
 
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service.search_knowledge")
+    def test_instructional_set_question_is_researched_not_refused(
+        self,
+        search_mock,
+        post_mock,
+    ):
+        search_mock.return_value = [
+            {
+                "title": "CAD Configuration Guide",
+                "file_name": "cad-config.pdf",
+                "page_number": 10,
+                "content": "Set the CAD Terminal ID in Machine Settings.",
+                "indexed_at": "",
+                "rank": 1.0,
+            }
+        ]
+        fake_response = Mock()
+        fake_response.raise_for_status.return_value = None
+        fake_response.json.return_value = {
+            "message": {
+                "content": "Use Machine Settings (CAD Configuration Guide, page 10)."
+            }
+        }
+        post_mock.return_value = fake_response
+
+        result = ask_mae("Where do I set the CAD Terminal ID machine setting?")
+
+        self.assertNotIn("currently inquiry-only", result["answer"])
+        self.assertEqual(result["sources"][0]["kind"], "document")
+
 
 if __name__ == "__main__":
     unittest.main()
