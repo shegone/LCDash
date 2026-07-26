@@ -74,7 +74,7 @@ class Settings:
     )
     knowledge_semantic_candidates: int = _env_int(
         "KNOWLEDGE_SEMANTIC_CANDIDATES",
-        1500,
+        5000,
     )
 
 

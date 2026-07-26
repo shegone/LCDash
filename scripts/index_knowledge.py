@@ -91,6 +91,7 @@ def _embed_chunk_rows(connection, chunk_rows: list[tuple[int, str]]) -> None:
                 """,
                 (embedding, settings.mae_embedding_model, chunk_id),
             )
+        connection.commit()
 
 
 def _index_document(connection, source_root: Path, path: Path) -> tuple[str, int]:
