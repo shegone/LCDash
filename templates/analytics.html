@@ -169,6 +169,28 @@
         font-weight: 800;
     }
 
+    .station-group-row td {
+        padding-top: 18px;
+        padding-bottom: 10px;
+        border-bottom-color: rgba(255, 255, 255, .16);
+        font-size: .82rem;
+        font-weight: 950;
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+    }
+
+    .station-group-row:first-child td {
+        padding-top: 10px;
+    }
+
+    .station-group-count {
+        color: #8fb7d9;
+        font-size: .76rem;
+        font-weight: 700;
+        letter-spacing: 0;
+        text-transform: none;
+    }
+
     .analytics-list-row {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
@@ -514,14 +536,26 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for station in analytics_snapshot.station_discipline %}
-                                <tr>
-                                    <td class="fw-bold text-white">{{ station.station }}</td>
-                                    <td class="text-end discipline-law fw-bold">{{ station.law }}</td>
-                                    <td class="text-end discipline-ems fw-bold">{{ station.ems }}</td>
-                                    <td class="text-end discipline-fire fw-bold">{{ station.fire }}</td>
-                                    <td class="text-end text-warning fw-bold">{{ station.total }}</td>
+                            {% for group in analytics_snapshot.station_discipline_groups %}
+                                {% set group_class = "discipline-" ~ group.discipline|lower %}
+                                <tr class="station-group-row">
+                                    <td colspan="5" class="{{ group_class }}">
+                                        {{ group.discipline }}
+                                        <span class="station-group-count ms-2">
+                                            {{ group.stations|length }}
+                                            station{% if group.stations|length != 1 %}s{% endif %}
+                                        </span>
+                                    </td>
                                 </tr>
+                                {% for station in group.stations %}
+                                    <tr>
+                                        <td class="fw-bold text-white ps-4">{{ station.station }}</td>
+                                        <td class="text-end discipline-law fw-bold">{{ station.law }}</td>
+                                        <td class="text-end discipline-ems fw-bold">{{ station.ems }}</td>
+                                        <td class="text-end discipline-fire fw-bold">{{ station.fire }}</td>
+                                        <td class="text-end text-warning fw-bold">{{ station.total }}</td>
+                                    </tr>
+                                {% endfor %}
                             {% endfor %}
                         </tbody>
                     </table>

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
+import re
 from zoneinfo import ZoneInfo
 
 from app.services.analytics_database import (
@@ -139,6 +140,7 @@ def _empty_overview(window: AnalyticsWindow, message: str) -> dict:
         "busiest_units": [],
         "busiest_stations": [],
         "station_discipline": [],
+        "station_discipline_groups": [],
         "station_discipline_quality": {
             "classified_responses": 0,
             "total_responses": 0,
@@ -432,6 +434,7 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
         classified_responses AS (
             SELECT
                 station,
+                agency,
                 cfs_number,
                 CASE
                     WHEN unit_type LIKE 'EMS %%' OR agency = 'LEASA' THEN 'EMS'
@@ -442,6 +445,16 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
                     ELSE NULL
                 END AS discipline
             FROM normalized_responses
+        ),
+        labeled_responses AS (
+            SELECT
+                CASE
+                    WHEN discipline = 'Fire' AND agency LIKE 'FC %%' THEN agency
+                    ELSE station
+                END AS station,
+                cfs_number,
+                discipline
+            FROM classified_responses
         )
         SELECT
             station,
@@ -449,11 +462,10 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
             COUNT(DISTINCT cfs_number) FILTER (WHERE discipline = 'EMS') AS ems_calls,
             COUNT(DISTINCT cfs_number) FILTER (WHERE discipline = 'Fire') AS fire_calls,
             COUNT(DISTINCT cfs_number) FILTER (WHERE discipline IS NOT NULL) AS total_calls
-        FROM classified_responses
+        FROM labeled_responses
         WHERE station <> 'Unassigned'
           AND discipline IS NOT NULL
         GROUP BY station
-        ORDER BY total_calls DESC, station
         """,
         params,
     )
@@ -466,6 +478,43 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
             "total": int(row[4] or 0),
         }
         for row in station_discipline_rows
+    ]
+    discipline_order = {"Law": 0, "EMS": 1, "Fire": 2}
+    discipline_field = {"Law": "law", "EMS": "ems", "Fire": "fire"}
+    for station in station_discipline:
+        station["discipline"] = max(
+            discipline_order,
+            key=lambda discipline: (
+                station[discipline_field[discipline]],
+                -discipline_order[discipline],
+            ),
+        )
+
+    def natural_station_key(value: str):
+        return [
+            int(part) if part.isdigit() else part.casefold()
+            for part in re.split(r"(\d+)", value)
+        ]
+
+    station_discipline.sort(
+        key=lambda station: (
+            discipline_order[station["discipline"]],
+            natural_station_key(station["station"]),
+        )
+    )
+    station_discipline_groups = [
+        {
+            "discipline": discipline,
+            "stations": [
+                station
+                for station in station_discipline
+                if station["discipline"] == discipline
+            ],
+        }
+        for discipline in discipline_order
+    ]
+    station_discipline_groups = [
+        group for group in station_discipline_groups if group["stations"]
     ]
 
     station_quality_row = repository.fetchone(
@@ -548,6 +597,7 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
         "busiest_units": busiest_units,
         "busiest_stations": busiest_stations,
         "station_discipline": station_discipline,
+        "station_discipline_groups": station_discipline_groups,
         "station_discipline_quality": station_discipline_quality,
     }
 

@@ -60,6 +60,7 @@ class AnalyticsWindowTests(unittest.TestCase):
         self.assertFalse(result["available"])
         self.assertEqual(result["metrics"]["total_calls"], 0)
         self.assertEqual(result["station_discipline"], [])
+        self.assertEqual(result["station_discipline_groups"], [])
         self.assertEqual(
             result["station_discipline_quality"]["coverage_percent"],
             0,
@@ -116,6 +117,22 @@ class AnalyticsOverviewRouteTests(unittest.TestCase):
                     "ems": 12,
                     "fire": 2,
                     "total": 18,
+                    "discipline": "EMS",
+                }
+            ],
+            "station_discipline_groups": [
+                {
+                    "discipline": "EMS",
+                    "stations": [
+                        {
+                            "station": "Station 1",
+                            "law": 4,
+                            "ems": 12,
+                            "fire": 2,
+                            "total": 18,
+                            "discipline": "EMS",
+                        }
+                    ],
                 }
             ],
             "station_discipline_quality": {
@@ -146,6 +163,8 @@ class AnalyticsOverviewRouteTests(unittest.TestCase):
         self.assertIn("Calls by Station: Law, EMS, and Fire", response.text)
         self.assertIn("station-discipline-chart", response.text)
         self.assertIn("100% discipline coverage", response.text)
+        self.assertIn('class="station-group-row"', response.text)
+        self.assertIn("discipline-ems", response.text)
         self.assertIn("MED10", response.text)
         self.assertIn("/static/js/lcdash-analytics.js", response.text)
         overview_mock.assert_called_once_with(period="30d", start="", end="")

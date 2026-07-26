@@ -165,7 +165,7 @@
         new Chart(canvas, {
             type: "bar",
             data: {
-                labels: rows.map((row) => row.station),
+                labels: rows.map((row) => `${row.discipline} · ${row.station}`),
                 datasets: [
                     {
                         label: "Law",
