@@ -979,6 +979,11 @@ class MAEGuardrailTests(unittest.TestCase):
         self.assertIn("CFS26-24436", result["answer"])
         self.assertIn("- Status: On Scene", result["answer"])
         self.assertIn("  - FC100: On Scene", result["answer"])
+        self.assertIn(
+            "- Received: 07/26/2026 08:00:00 AM EDT",
+            result["answer"],
+        )
+        self.assertNotIn("2026-07-26T12:00:00", result["answer"])
         self.assertEqual(result["assurance"]["confidence"], "high")
         self.assertNotIn("stale warning", result["assurance"]["freshness"])
 
@@ -993,6 +998,38 @@ class MAEGuardrailTests(unittest.TestCase):
                 "Please change the incident address."
             )
         )
+
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service.get_call_detail")
+    @patch("app.services.mae_service.get_live_operations_snapshot")
+    def test_dispatcher_suffix_confirmation_is_verified_not_write_refusal(
+        self,
+        live_mock,
+        call_detail_mock,
+        post_mock,
+    ):
+        live_mock.return_value = {
+            "calls": [{"cfs_number": "CFS26-24436"}],
+        }
+        call_detail_mock.return_value = {
+            "cfs_number": "CFS26-24436",
+            "incident_description": "Stolen Property",
+            "status": "Assigned",
+            "assigned_units": [],
+            "command_logs": [],
+            "raw": {},
+        }
+
+        result = ask_mae(
+            "Do you see the call ending in 24436? That is how a dispatcher "
+            "would put it in, as CFS26 will not change until next year."
+        )
+
+        call_detail_mock.assert_called_once_with("CFS26-24436")
+        post_mock.assert_not_called()
+        self.assertIn("Yes. I found CFS26-24436", result["answer"])
+        self.assertNotIn("inquiry-only", result["answer"].lower())
+        self.assertEqual(result["assurance"]["confidence"], "high")
 
 
 if __name__ == "__main__":

@@ -210,6 +210,13 @@ CALL_SUMMARY_PATTERN = re.compile(
     r"(?:CFS(?:\d{2})?[- ]?)?\d{3,}\b",
     re.IGNORECASE,
 )
+CALL_REFERENCE_CONFIRM_PATTERN = re.compile(
+    r"\b(?:do\s+you\s+)?(?:see|find|recognize|locate)\b.{0,40}"
+    r"\b(?:call|cfs|incident)\b.{0,30}\b(?:ending\s+in\s+)?\d{4,8}\b|"
+    r"\b(?:call|cfs|incident)\b.{0,30}\b(?:ending\s+in\s+)?\d{4,8}\b"
+    r".{0,40}\b(?:see|find|recognize|locate)\b",
+    re.IGNORECASE,
+)
 PATIENT_NAME_PATTERN = re.compile(
     r"\b(?:pt|patient)(?:'s)?\s+name\b|"
     r"\bwho\s+is\s+the\s+(?:pt|patient)\b",
@@ -971,11 +978,14 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
         or wants_longest_active_unit
     )
     wants_analytics = bool(
-        ANALYTICS_PATTERN.search(question)
-        or recent_hours
-        or wants_comparison
-        or wants_today_yesterday
-        or wants_discipline_breakdown
+        not target_cfs_number
+        and (
+            ANALYTICS_PATTERN.search(question)
+            or recent_hours
+            or wants_comparison
+            or wants_today_yesterday
+            or wants_discipline_breakdown
+        )
     )
     looks_operational = bool(
         OPERATIONAL_PATTERN.search(question)
@@ -1760,6 +1770,21 @@ def _source_age_minutes(timestamp_value: str) -> int | None:
     )
 
 
+def _format_mae_local_datetime(timestamp_value: Any) -> str:
+    clean_value = str(timestamp_value or "").strip()
+    if not clean_value:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(clean_value.replace("Z", "+00:00"))
+    except ValueError:
+        return clean_value
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(LOCAL_TIMEZONE).strftime(
+        "%m/%d/%Y %I:%M:%S %p %Z"
+    )
+
+
 def _assurance_summary(response: dict, sources: list[dict]) -> dict:
     available_sources = [
         source for source in sources if source.get("available") is not False
@@ -1910,7 +1935,10 @@ def _verified_call_summary_answer(
         ("Location", call.get("location")),
         ("Agency", call.get("agency")),
         ("Call taker", call.get("call_taker")),
-        ("Received", call.get("call_datetime")),
+        (
+            "Received",
+            _format_mae_local_datetime(call.get("call_datetime")),
+        ),
     ):
         if value not in (None, ""):
             lines.append(f"- {label}: {value}")
@@ -1957,7 +1985,7 @@ def _verified_call_summary_answer(
             "most recent entries:"
         )
         for entry in command_logs[-10:]:
-            timestamp = str(entry.get("timestamp") or "").strip()
+            timestamp = _format_mae_local_datetime(entry.get("timestamp"))
             text = str(
                 entry.get("text")
                 or entry.get("status")
@@ -1974,6 +2002,38 @@ def _verified_call_summary_answer(
         lines.append("- ProQA: Data attached")
 
     return _verified_response("\n".join(lines), sources)
+
+
+def _verified_call_reference_confirmation_answer(
+    question: str,
+    context: list[dict],
+    sources: list[dict],
+) -> dict | None:
+    if not CALL_REFERENCE_CONFIRM_PATTERN.search(question):
+        return None
+
+    call = _context_data(context, "CentralSquare live CFS detail")
+    if not call:
+        return None
+
+    cfs_number = str(call.get("cfs_number") or "the selected call")
+    suffix = cfs_number.rsplit("-", 1)[-1]
+    description = str(
+        call.get("incident_description")
+        or call.get("incident_code")
+        or "incident description not returned"
+    )
+    status = str(call.get("status") or "status not returned")
+    return _verified_response(
+        (
+            f"Yes. I found {cfs_number} from the ending digits {suffix}. "
+            f"CentralSquare currently identifies it as {description} with "
+            f"status {status}. Dispatchers can use the ending digits when "
+            "asking MAE about a call; MAE will resolve them to the full CFS "
+            "number for the current CAD year."
+        ),
+        sources,
+    )
 
 
 def _verified_current_summary_answer(
@@ -2808,6 +2868,11 @@ def ask_mae(
             sources,
         )
         or _verified_call_summary_answer(
+            routing_question,
+            context,
+            sources,
+        )
+        or _verified_call_reference_confirmation_answer(
             routing_question,
             context,
             sources,
