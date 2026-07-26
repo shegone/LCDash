@@ -16,6 +16,8 @@ x-lcdash-environment: &lcdash-environment
   OLLAMA_BASE_URL: http://ollama:11434
   MAE_MODEL: qwen3:8b
   MAE_REQUEST_TIMEOUT_SECONDS: "120"
+  KNOWLEDGE_SOURCE_DIR: /knowledge/centralsquare
+  KNOWLEDGE_INDEX_INTERVAL_SECONDS: "3600"
 
 x-lcdash-secrets: &lcdash-secrets
   - centralsquare_username
@@ -56,6 +58,8 @@ services:
     secrets: *lcdash-secrets
     ports:
       - "127.0.0.1:8010:8000"
+    volumes:
+      - /home/ted/lcdash-platform/knowledge/centralsquare:/knowledge/centralsquare:ro
     networks:
       - lcdash_private
     depends_on:
@@ -78,6 +82,28 @@ services:
       <<: *lcdash-environment
       ANALYTICS_SYNC_INTERVAL_SECONDS: "300"
     secrets: *lcdash-secrets
+    networks:
+      - lcdash_private
+    depends_on:
+      postgres:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      disable: true
+
+  knowledge-worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: lcdash-knowledge-worker
+    restart: unless-stopped
+    user: "1000:1000"
+    command: ["python", "scripts/knowledge_worker.py"]
+    environment: *lcdash-environment
+    secrets: *lcdash-secrets
+    volumes:
+      - /home/ted/lcdash-platform/knowledge/centralsquare:/knowledge/centralsquare:ro
     networks:
       - lcdash_private
     depends_on:

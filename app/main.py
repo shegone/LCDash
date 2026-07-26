@@ -38,6 +38,10 @@ from app.services.mae_service import (
     ask_mae,
     get_mae_status,
 )
+from app.services.knowledge_service import (
+    get_knowledge_status,
+    list_knowledge_documents,
+)
 from app.services.centralsquare import (
     CentralSquareClient,
     CentralSquareAPIError,
@@ -585,6 +589,28 @@ def mae_page(request: Request):
         },
         headers={"Cache-Control": "no-store"},
     )
+
+
+@app.get("/knowledge")
+def knowledge_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="knowledge.html",
+        context={
+            "knowledge_status": get_knowledge_status(),
+            "documents": list_knowledge_documents(),
+            "version": "0.3.0",
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/knowledge/status")
+def knowledge_status_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    status = get_knowledge_status()
+    status["document_list"] = list_knowledge_documents()
+    return status
 
 
 @app.get("/api/mae/status")

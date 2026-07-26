@@ -15,6 +15,7 @@ from app.services.analytics_database import (
 from app.services.analytics_reporting import get_analytics_overview
 from app.services.cad_service import get_call_detail, simplify_call
 from app.services.centralsquare import CentralSquareAPIError, CentralSquareClient
+from app.services.knowledge_service import search_knowledge
 from app.services.operations_service import (
     get_live_operations_snapshot,
     get_live_unit_snapshot,
@@ -47,6 +48,10 @@ NON-NEGOTIABLE SAFETY AND AUTHORITY RULES:
   priorities 5 and 10 are high priority, 15 is elevated, and 30 is routine.
   Never describe priority 30 as high priority.
 - Keep answers concise, practical, and suitable for a 911 supervisor.
+- For procedural or configuration questions, use the supplied CentralSquare
+  document passages. Cite the document title and page number in the answer.
+- If the supplied documentation does not support an answer, say so plainly
+  instead of inventing steps.
 - When answering from supplied data, include the relevant time range or
   generated time when it helps interpretation.
 """
@@ -88,6 +93,12 @@ UNIT_PATTERN = re.compile(
 )
 COMPARISON_PATTERN = re.compile(
     r"\b(compare|compared|normal|unusual|busier|slower|trend right now)\b",
+    re.IGNORECASE,
+)
+KNOWLEDGE_PATTERN = re.compile(
+    r"\b(configure|configuration|documentation|enable|forgot|guide|how do|"
+    r"how to|instructions|manual|option|procedure|screen|set up|setup|"
+    r"steps|where do)\b",
     re.IGNORECASE,
 )
 
@@ -320,7 +331,19 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
     cfs_match = CFS_PATTERN.search(question)
     recent_hours = _hours_from_question(question)
     wants_latest_call = bool(LATEST_CALL_PATTERN.search(question))
-    wants_units = bool(UNIT_PATTERN.search(question))
+    wants_knowledge = bool(KNOWLEDGE_PATTERN.search(question))
+    explicit_live_intent = bool(
+        LIVE_PATTERN.search(question)
+        or CFS_PATTERN.search(question)
+        or RECENT_HOURS_PATTERN.search(question)
+        or LATEST_CALL_PATTERN.search(question)
+        or ANALYTICS_PATTERN.search(question)
+        or COMPARISON_PATTERN.search(question)
+    )
+    wants_units = bool(
+        UNIT_PATTERN.search(question)
+        and (not wants_knowledge or explicit_live_intent)
+    )
     wants_comparison = bool(COMPARISON_PATTERN.search(question))
     wants_live = bool(
         LIVE_PATTERN.search(question)
@@ -337,9 +360,45 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
     )
     looks_operational = bool(OPERATIONAL_PATTERN.search(question))
 
+    if wants_knowledge:
+        passages = search_knowledge(question, limit=8)
+        if passages:
+            context.append(
+                {
+                    "source": "CentralSquare documentation library",
+                    "purpose": "Read-only procedural and configuration guidance",
+                    "data": {"question": question, "passages": passages},
+                }
+            )
+            seen_document_pages: set[tuple[str, int]] = set()
+            for passage in passages:
+                title = str(
+                    passage.get("title")
+                    or passage.get("file_name")
+                    or "CentralSquare documentation"
+                )
+                page_number = int(passage.get("page_number") or 0)
+                source_key = (title, page_number)
+                if source_key in seen_document_pages:
+                    continue
+                seen_document_pages.add(source_key)
+                sources.append(
+                    {
+                        "name": title,
+                        "kind": "document",
+                        "detail": (
+                            f"Page {page_number}"
+                            if page_number
+                            else "Indexed documentation"
+                        ),
+                        "available": True,
+                        "timestamp": passage.get("indexed_at") or "",
+                    }
+                )
+
     # Unknown operational wording is handled conservatively: compare a
     # historical baseline with current CAD rather than guessing from one source.
-    if looks_operational and not (
+    if looks_operational and not wants_knowledge and not (
         recent_hours
         or wants_latest_call
         or cfs_match
@@ -348,6 +407,10 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
     ):
         wants_analytics = True
         wants_live = True
+
+    if wants_knowledge and context and not explicit_live_intent:
+        wants_live = False
+        wants_analytics = False
 
     if recent_hours or wants_latest_call:
         database_hours = recent_hours or 24
@@ -679,6 +742,7 @@ def _research_summary(sources: list[dict]) -> dict:
     return {
         "database_first": "historical" in source_kinds,
         "live_verified": "live" in source_kinds,
+        "documentation_used": "document" in source_kinds,
         "compared_sources": (
             "historical" in source_kinds and "live" in source_kinds
         ),

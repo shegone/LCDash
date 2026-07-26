@@ -56,6 +56,14 @@ class Settings:
         "MAE_REQUEST_TIMEOUT_SECONDS",
         120,
     )
+    knowledge_source_dir: str = _env(
+        "KNOWLEDGE_SOURCE_DIR",
+        "knowledge/centralsquare",
+    )
+    knowledge_index_interval_seconds: int = _env_int(
+        "KNOWLEDGE_INDEX_INTERVAL_SECONDS",
+        3600,
+    )
 
 
 settings = Settings()
