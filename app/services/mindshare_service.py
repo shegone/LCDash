@@ -13,6 +13,82 @@ class MindshareServiceError(Exception):
     """Raised when JACK, the Mindshare technical assistant, is unavailable."""
 
 
+_PRODUCT_FOCUS_RULES = (
+    (
+        "MRI2",
+        ("mri2", "radio interface 2", "mindshare radio interface 2"),
+        ("mri2", "radiointerface2", "radio interface 2"),
+    ),
+    (
+        "MAXplus",
+        ("maxplus", "max plus"),
+        ("maxplus", "max plus"),
+    ),
+    (
+        "Advanced ESChat Gateway",
+        ("aesgw", "advanced eschat gateway"),
+        ("aesgw", "advancedeschatgateway", "advanced eschat gateway"),
+    ),
+    (
+        "RoIP+ Gateway",
+        ("roip+", "roip plus", "rpg gateway"),
+        ("roipplus", "roip plus", "roip+gateway"),
+    ),
+    (
+        "NXIP Gateway",
+        ("nxip", "nxip gateway"),
+        ("nxip",),
+    ),
+    (
+        "DMR HDAP Gateway",
+        ("dmr hdap", "hdap gateway"),
+        ("dmrhdap", "dmr hdap"),
+    ),
+    (
+        "8-Line Telco Panel",
+        ("8-line telco", "8 line telco", "8ltp"),
+        ("8linetelco", "8 line telco", "8ltp"),
+    ),
+)
+
+
+def _product_focus(question: str) -> tuple[str, tuple[str, ...]] | None:
+    normalized_question = " ".join((question or "").lower().split())
+    for label, question_aliases, document_aliases in _PRODUCT_FOCUS_RULES:
+        if any(alias in normalized_question for alias in question_aliases):
+            return label, document_aliases
+    return None
+
+
+def _focus_results(question: str, results: list[dict]) -> list[dict]:
+    focus = _product_focus(question)
+    if not focus:
+        return results
+
+    _, aliases = focus
+    focused = []
+    for result in results:
+        haystack = " ".join(
+            (
+                str(result.get("title") or ""),
+                str(result.get("file_name") or ""),
+                str(result.get("content") or ""),
+            )
+        ).lower()
+        compact_haystack = "".join(
+            character for character in haystack if character.isalnum()
+        )
+        if any(
+            alias in haystack
+            or "".join(
+                character for character in alias if character.isalnum()
+            ) in compact_haystack
+            for alias in aliases
+        ):
+            focused.append(result)
+    return focused
+
+
 def _ollama_status() -> dict:
     try:
         response = httpx.get(
@@ -114,15 +190,23 @@ def ask_mindshare(
 
     results = search_knowledge(
         clean_question,
-        limit=8,
+        limit=12,
         library_key="mindshare",
     )
-    direct_results = [result for result in results if _result_is_direct(result)]
+    focused_results = _focus_results(clean_question, results)
+    direct_results = [
+        result for result in focused_results if _result_is_direct(result)
+    ]
     if not direct_results:
+        product_focus = _product_focus(clean_question)
+        focus_detail = (
+            f" for {product_focus[0]}" if product_focus else ""
+        )
         return {
             "answer": (
-                "I could not find a sufficiently direct answer in the indexed "
-                "Mindshare technical library.\n\n"
+                "I could not find a sufficiently direct answer"
+                f"{focus_detail} in the indexed Mindshare technical library."
+                "\n\n"
                 "I will not guess. Check that the relevant manual, application "
                 "note, release note, or Logan County system document has been "
                 "added to the library, then ask again with the product name or "
@@ -135,7 +219,7 @@ def ask_mindshare(
                     "available": False,
                 }
             ],
-            "evidence": _evidence(results),
+            "evidence": _evidence(focused_results),
             "assurance": {
                 "level": "limited",
                 "label": "Not enough documentation",
@@ -186,6 +270,8 @@ Scope and safety:
 - Be read-only. Do not claim to have changed a console, gateway, radio, or server.
 - Firmware and software advice must state the exact product and documented version.
 - Do not recommend installation when the hardware model or current version is unknown.
+- When the question names a product or model, use only passages that clearly
+  apply to that exact product or model. Do not blend similar product families.
 - Clearly distinguish vendor manuals, release notes, application notes, and
   Logan County-specific system information.
 - Cite supporting material inline as [Document title, page N].

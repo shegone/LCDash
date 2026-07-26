@@ -156,6 +156,58 @@ class MindshareServiceTests(unittest.TestCase):
         self.assertIn("will not guess", result["answer"])
         post_mock.assert_not_called()
 
+    @patch("app.services.mindshare_service.httpx.post")
+    @patch("app.services.mindshare_service.search_knowledge")
+    def test_named_product_does_not_blend_other_product_families(
+        self,
+        search_mock,
+        post_mock,
+    ):
+        search_mock.return_value = [
+            {
+                "title": "Mindshare Radio Interface Manual",
+                "file_name": "MS0102_MRI_v114.pdf",
+                "page_number": 13,
+                "content": "First-generation MRI console audio settings.",
+                "coverage": 0.8,
+                "semantic_score": 0.8,
+                "hybrid_score": 0.8,
+                "matched_terms": ["audio", "mri"],
+                "retrieval": ["keyword", "semantic"],
+            },
+            {
+                "title": "Mindshare Radio Interface 2 Manual",
+                "file_name": "MS0127_MRI2_v105.pdf",
+                "page_number": 40,
+                "content": "MRI2-specific audio troubleshooting.",
+                "coverage": 0.7,
+                "semantic_score": 0.7,
+                "hybrid_score": 0.7,
+                "matched_terms": ["audio", "mri2"],
+                "retrieval": ["keyword", "semantic"],
+            },
+        ]
+        post_mock.return_value = Mock(
+            raise_for_status=Mock(),
+            json=Mock(
+                return_value={
+                    "message": {
+                        "content": (
+                            "Use the MRI2-specific procedure "
+                            "[Mindshare Radio Interface 2 Manual, page 40]."
+                        )
+                    }
+                }
+            ),
+        )
+
+        ask_mindshare("Our MRI2 has lost console audio. What should I check?")
+
+        model_messages = post_mock.call_args.kwargs["json"]["messages"]
+        supplied_context = model_messages[-1]["content"]
+        self.assertIn("MRI2-specific audio troubleshooting", supplied_context)
+        self.assertNotIn("First-generation MRI", supplied_context)
+
     def test_indexer_accepts_technical_text_and_blocks_secrets(self):
         with TemporaryDirectory() as directory:
             files = {}
