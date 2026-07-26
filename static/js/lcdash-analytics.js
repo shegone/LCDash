@@ -139,7 +139,10 @@
 
         const chartWrap = canvas.closest(".station-chart-wrap");
         if (chartWrap) {
-            chartWrap.style.height = Math.max(420, rows.length * 34) + "px";
+            chartWrap.style.height = Math.max(
+                360,
+                Math.min(640, rows.length * 28)
+            ) + "px";
         }
 
         const options = baseOptions();
@@ -199,7 +202,18 @@
 
     function start() {
         const snapshot = readSnapshot();
-        if (!snapshot || !snapshot.available || typeof Chart === "undefined") {
+        if (!snapshot || !snapshot.available) {
+            return;
+        }
+        if (typeof Chart === "undefined") {
+            document.querySelectorAll(".chart-wrap, .station-chart-wrap")
+                .forEach((chartWrap) => {
+                    chartWrap.style.display = "none";
+                    const message = document.createElement("div");
+                    message.className = "text-secondary py-4";
+                    message.textContent = "Chart display is temporarily unavailable.";
+                    chartWrap.insertAdjacentElement("afterend", message);
+                });
             return;
         }
         Chart.defaults.font.family = '"Segoe UI", Arial, sans-serif';

@@ -166,6 +166,8 @@ class AnalyticsOverviewRouteTests(unittest.TestCase):
         self.assertIn('class="station-group-row"', response.text)
         self.assertIn("discipline-ems", response.text)
         self.assertIn("MED10", response.text)
+        self.assertIn("/static/js/chart.umd.min.js", response.text)
+        self.assertNotIn("cdn.jsdelivr.net/npm/chart.js", response.text)
         self.assertIn("/static/js/lcdash-analytics.js", response.text)
         overview_mock.assert_called_once_with(period="30d", start="", end="")
 
