@@ -26,8 +26,9 @@ from app.services.operations_service import (
 LOCAL_TIMEZONE = ZoneInfo("America/New_York")
 MAX_HISTORY_MESSAGES = 8
 MAX_MESSAGE_LENGTH = 4000
-MAX_CONTEXT_CHARACTERS = 24000
+MAX_CONTEXT_CHARACTERS = 12000
 MAE_CONTEXT_TOKENS = 8192
+MAE_MAX_RESPONSE_TOKENS = 160
 
 SYSTEM_PROMPT = """You are MAE, the Mission Assistance Engine for Logan County 911.
 You assist authorized supervisors with operational awareness and analysis.
@@ -131,6 +132,13 @@ BUSY_NOW_PATTERN = re.compile(
     r"\b(?:now|right now|currently)\b|"
     r"\b(?:now|right now|currently)\b.*"
     r"\b(?:busy|activity|happening|workload)\b)",
+    re.IGNORECASE,
+)
+CURRENT_SUMMARY_PATTERN = re.compile(
+    r"(?:\b(?:summary|summarize|overview|brief|briefing|snapshot)\b.*"
+    r"\b(?:active|current|live|now|operations?|calls?|incidents?)\b|"
+    r"\b(?:active|current|live|now|operations?|calls?|incidents?)\b.*"
+    r"\b(?:summary|summarize|overview|brief|briefing|snapshot)\b)",
     re.IGNORECASE,
 )
 LONGEST_ACTIVE_UNIT_PATTERN = re.compile(
@@ -1538,6 +1546,75 @@ def _verified_patient_name_answer(
     )
 
 
+def _verified_current_summary_answer(
+    question: str,
+    context: list[dict],
+    sources: list[dict],
+) -> dict | None:
+    if not CURRENT_SUMMARY_PATTERN.search(question):
+        return None
+
+    live_data = _context_data(context, "CentralSquare live operations")
+    stats = live_data.get("dashboard_stats") or {}
+    calls = live_data.get("calls") or []
+    if not stats:
+        return None
+
+    active_calls = int(stats.get("active_calls") or 0)
+    assigned_units = int(stats.get("assigned_units") or 0)
+    high_priority = int(stats.get("high_priority_calls") or 0)
+    generated_at = str(live_data.get("last_updated") or "").strip()
+
+    opening = (
+        f"Live CentralSquare shows {active_calls} active "
+        f"{'call' if active_calls == 1 else 'calls'}, {assigned_units} assigned "
+        f"{'unit' if assigned_units == 1 else 'units'}, and {high_priority} "
+        f"{'call' if high_priority == 1 else 'calls'} at priority 15 or more urgent."
+    )
+    if generated_at:
+        opening += f" Snapshot time: {generated_at}."
+
+    if not calls:
+        return _verified_response(opening, sources)
+
+    ranked_calls = sorted(
+        (call for call in calls if isinstance(call, dict)),
+        key=lambda call: (
+            int(call.get("priority") or 999),
+            str(call.get("call_datetime") or ""),
+        ),
+    )
+    call_lines = []
+    for call in ranked_calls[:12]:
+        cfs_number = str(call.get("cfs_number") or "Unknown CFS")
+        incident = str(
+            call.get("incident_description")
+            or call.get("incident_code")
+            or "Unspecified incident"
+        )
+        priority = str(call.get("priority") or "not returned")
+        status = str(call.get("status") or "Status not returned")
+        unit_numbers = []
+        for unit in call.get("assigned_units") or []:
+            if isinstance(unit, dict):
+                unit_number = str(unit.get("unit_number") or "").strip()
+                if unit_number and unit_number not in unit_numbers:
+                    unit_numbers.append(unit_number)
+        units_text = ", ".join(unit_numbers) if unit_numbers else "no units returned"
+        call_lines.append(
+            f"{cfs_number}: {incident}, priority {priority}, {status}, "
+            f"units {units_text}"
+        )
+
+    answer = opening + " " + "; ".join(call_lines) + "."
+    if len(ranked_calls) > len(call_lines):
+        answer += (
+            f" {len(ranked_calls) - len(call_lines)} additional active calls "
+            "are available in the live Active Calls view."
+        )
+    return _verified_response(answer, sources)
+
+
 def _verified_busy_now_answer(
     question: str,
     context: list[dict],
@@ -2283,6 +2360,11 @@ def ask_mae(
             context,
             sources,
         )
+        or _verified_current_summary_answer(
+            routing_question,
+            context,
+            sources,
+        )
         or _verified_busy_now_answer(
             routing_question,
             context,
@@ -2366,6 +2448,7 @@ def ask_mae(
         "options": {
             "temperature": 0.2,
             "num_ctx": MAE_CONTEXT_TOKENS,
+            "num_predict": MAE_MAX_RESPONSE_TOKENS,
         },
     }
 

@@ -159,6 +159,10 @@ class MAEGuardrailTests(unittest.TestCase):
             post_mock.call_args.kwargs["json"]["options"]["num_ctx"],
             8192,
         )
+        self.assertEqual(
+            post_mock.call_args.kwargs["json"]["options"]["num_predict"],
+            160,
+        )
 
     @patch("app.services.mae_service.httpx.post")
     @patch("app.services.mae_service.get_recent_cad_activity")
@@ -639,6 +643,56 @@ class MAEGuardrailTests(unittest.TestCase):
         self.assertIn("5 assigned units", result["answer"])
         self.assertIn("LOGAN", result["answer"])
         self.assertIn("2 active calls", result["answer"])
+
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service.get_live_operations_snapshot")
+    def test_current_operations_summary_skips_local_model(
+        self,
+        live_mock,
+        post_mock,
+    ):
+        live_mock.return_value = {
+            "last_updated": "2026-07-26T18:05:00+00:00",
+            "dashboard_stats": {
+                "active_calls": 2,
+                "assigned_units": 3,
+                "high_priority_calls": 1,
+            },
+            "calls": [
+                {
+                    "cfs_number": "CFS26-50001",
+                    "incident_description": "Structure Fire",
+                    "priority": "10",
+                    "status": "On Scene",
+                    "call_datetime": "2026-07-26T17:30:00+00:00",
+                    "assigned_units": [
+                        {"unit_number": "FC100"},
+                        {"unit_number": "FC200"},
+                    ],
+                },
+                {
+                    "cfs_number": "CFS26-50002",
+                    "incident_description": "Medical Call",
+                    "priority": "15",
+                    "status": "Enroute",
+                    "call_datetime": "2026-07-26T18:00:00+00:00",
+                    "assigned_units": [{"unit_number": "MED20"}],
+                },
+            ],
+            "unit_stats": {},
+            "unit_rows": [],
+        }
+
+        result = ask_mae(
+            "Give me a concise operational summary of the current calls."
+        )
+
+        post_mock.assert_not_called()
+        self.assertEqual(result["model"], "LCDash verified read tools")
+        self.assertIn("2 active calls", result["answer"])
+        self.assertIn("CFS26-50001", result["answer"])
+        self.assertIn("FC100", result["answer"])
+        self.assertIn("CFS26-50002", result["answer"])
 
     @patch("app.services.mae_service.httpx.post")
     @patch("app.services.mae_service.get_live_operations_snapshot")
