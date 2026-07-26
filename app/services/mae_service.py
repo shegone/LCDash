@@ -2,6 +2,8 @@ from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 import json
 import re
+from threading import Lock
+from time import monotonic, perf_counter
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -17,6 +19,8 @@ from app.services.analytics_reporting import get_analytics_overview
 from app.services.cad_service import get_call_detail, simplify_call
 from app.services.centralsquare import CentralSquareAPIError, CentralSquareClient
 from app.services.knowledge_service import search_knowledge
+from app.services.mae_memory_service import find_approved_memory
+from app.services.mae_tool_registry import get_mae_tool_catalog
 from app.services.operations_service import (
     get_live_operations_snapshot,
     get_live_unit_snapshot,
@@ -60,6 +64,9 @@ NON-NEGOTIABLE SAFETY AND AUTHORITY RULES:
   document passages. Cite the document title and page number in the answer.
 - If the supplied documentation does not support an answer, say so plainly
   instead of inventing steps.
+- Supervisor-approved memory is guidance, not operational evidence. It may
+  improve wording or local procedure, but it must never override current CAD,
+  historical records, documentation, or the inquiry-only safety boundary.
 - When answering from supplied data, include the relevant time range or
   generated time when it helps interpretation.
 """
@@ -83,6 +90,10 @@ ANALYTICS_PATTERN = re.compile(
 )
 RECENT_HOURS_PATTERN = re.compile(
     r"\b(?:last|past)\s+(\d{1,3})\s*(?:h|hr|hrs|hour|hours)\b",
+    re.IGNORECASE,
+)
+RECENT_SINGLE_HOUR_PATTERN = re.compile(
+    r"\b(?:last|past)\s+(?:an|one)?\s*hour\b",
     re.IGNORECASE,
 )
 LATEST_CALL_PATTERN = re.compile(
@@ -126,6 +137,11 @@ COUNT_PATTERN = re.compile(
 )
 DISCIPLINE_PATTERN = re.compile(
     r"\b(ems|fire|law|medical|police)\b",
+    re.IGNORECASE,
+)
+VAGUE_OPERATIONAL_PATTERN = re.compile(
+    r"\b(anything i need|anything to worry|how are we looking|"
+    r"give me the picture|what needs attention|what changed)\b",
     re.IGNORECASE,
 )
 BUSY_NOW_PATTERN = re.compile(
@@ -308,6 +324,28 @@ class MAEServiceError(Exception):
     """Raised when MAE cannot complete a read-only inquiry."""
 
 
+_LIVE_SNAPSHOT_CACHE: dict[str, Any] = {"stored_at": 0.0, "value": None}
+_LIVE_SNAPSHOT_LOCK = Lock()
+
+
+def _cached_live_operations_snapshot(max_age_seconds: float = 3.0) -> dict:
+    if settings.debug:
+        return get_live_operations_snapshot()
+    now = monotonic()
+    cached = _LIVE_SNAPSHOT_CACHE.get("value")
+    if cached and now - float(_LIVE_SNAPSHOT_CACHE["stored_at"]) <= max_age_seconds:
+        return cached
+    with _LIVE_SNAPSHOT_LOCK:
+        now = monotonic()
+        cached = _LIVE_SNAPSHOT_CACHE.get("value")
+        if cached and now - float(_LIVE_SNAPSHOT_CACHE["stored_at"]) <= max_age_seconds:
+            return cached
+        snapshot = _cached_live_operations_snapshot()
+        _LIVE_SNAPSHOT_CACHE["value"] = snapshot
+        _LIVE_SNAPSHOT_CACHE["stored_at"] = now
+        return snapshot
+
+
 def _period_from_question(question: str) -> str:
     lowered = question.lower()
     if "last 24" in lowered or "past 24" in lowered or "today" in lowered:
@@ -324,7 +362,7 @@ def _period_from_question(question: str) -> str:
 def _hours_from_question(question: str) -> int | None:
     match = RECENT_HOURS_PATTERN.search(question)
     if not match:
-        return None
+        return 1 if RECENT_SINGLE_HOUR_PATTERN.search(question) else None
     return min(max(int(match.group(1)), 1), 168)
 
 
@@ -700,7 +738,7 @@ def _append_live_operations_context(
     sources: list[dict],
 ) -> None:
     try:
-        snapshot = get_live_operations_snapshot()
+        snapshot = _cached_live_operations_snapshot()
         context.append(
             {
                 "source": "CentralSquare live operations",
@@ -762,30 +800,41 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
     wants_call_detail = bool(CALL_DETAIL_PATTERN.search(question))
     if wants_call_detail and not target_cfs_number:
         try:
-            call_snapshot = get_live_operations_snapshot()
-            active_calls = call_snapshot.get("calls") or []
-            target_cfs_number = _resolve_live_call_reference(
-                question,
-                active_calls,
-            )
-            call_reference_candidates = _live_call_reference_candidates(
-                question,
-                active_calls,
-            )
-            if not target_cfs_number and not call_reference_candidates:
+            if LATEST_CALL_PATTERN.search(question):
                 recent_calls = get_recent_cad_activity(
                     24,
                     returned_call_limit=100,
                 )
                 recent_call_rows = recent_calls.get("recent_calls") or []
+                if recent_call_rows:
+                    target_cfs_number = str(
+                        recent_call_rows[0].get("cfs_number") or ""
+                    )
+            else:
+                call_snapshot = _cached_live_operations_snapshot()
+                active_calls = call_snapshot.get("calls") or []
                 target_cfs_number = _resolve_live_call_reference(
                     question,
-                    recent_call_rows,
+                    active_calls,
                 )
                 call_reference_candidates = _live_call_reference_candidates(
                     question,
-                    recent_call_rows,
+                    active_calls,
                 )
+                if not target_cfs_number and not call_reference_candidates:
+                    recent_calls = get_recent_cad_activity(
+                        24,
+                        returned_call_limit=100,
+                    )
+                    recent_call_rows = recent_calls.get("recent_calls") or []
+                    target_cfs_number = _resolve_live_call_reference(
+                        question,
+                        recent_call_rows,
+                    )
+                    call_reference_candidates = _live_call_reference_candidates(
+                        question,
+                        recent_call_rows,
+                    )
         except CentralSquareAPIError:
             target_cfs_number = ""
             call_reference_candidates = []
@@ -847,7 +896,35 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
         or wants_today_yesterday
         or wants_discipline_breakdown
     )
-    looks_operational = bool(OPERATIONAL_PATTERN.search(question))
+    looks_operational = bool(
+        OPERATIONAL_PATTERN.search(question)
+        or VAGUE_OPERATIONAL_PATTERN.search(question)
+    )
+
+    approved_memory = find_approved_memory(question, limit=4)
+    if approved_memory:
+        context.append(
+            {
+                "source": "MAE supervisor-approved memory",
+                "purpose": "Approved local guidance for similar inquiries",
+                "data": {"items": approved_memory},
+            }
+        )
+        sources.append(
+            {
+                "name": "MAE approved memory",
+                "kind": "memory",
+                "detail": f"{len(approved_memory)} approved guidance item(s)",
+                "available": True,
+                "timestamp": max(
+                    (
+                        str(item.get("approved_at") or "")
+                        for item in approved_memory
+                    ),
+                    default="",
+                ),
+            }
+        )
 
     if wants_knowledge:
         passages = search_knowledge(question, limit=8)
@@ -856,9 +933,14 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
         minimum_matches = min(2, len(query_terms))
         has_direct_support = bool(
             passages
-            and float(best_passage.get("coverage", 1.0)) >= 0.5
-            and len(best_passage.get("matched_terms") or query_terms)
-            >= minimum_matches
+            and (
+                (
+                    float(best_passage.get("coverage", 1.0)) >= 0.5
+                    and len(best_passage.get("matched_terms") or query_terms)
+                    >= minimum_matches
+                )
+                or float(best_passage.get("semantic_score") or 0) >= 0.55
+            )
         )
         if has_direct_support:
             context.append(
@@ -1010,7 +1092,7 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
         try:
             recent_window_hours = 3
             recent_cad = get_recent_cad_activity(recent_window_hours)
-            live_snapshot = get_live_operations_snapshot()
+            live_snapshot = _cached_live_operations_snapshot()
             baseline_total = int(
                 ((analytics_for_comparison or {}).get("metrics") or {}).get(
                     "total_calls"
@@ -1084,7 +1166,7 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
                     "timestamp": "",
                 }
             )
-    elif recent_hours or wants_latest_call:
+    elif (recent_hours or wants_latest_call) and not target_cfs_number:
         cad_hours = recent_hours or 24
         try:
             recent_cad = get_recent_cad_activity(cad_hours)
@@ -1570,7 +1652,109 @@ def _finalize_mae_response(
     )
     response.setdefault("clarification_required", False)
     response.setdefault("choices", [])
+    response["assurance"] = _assurance_summary(response, sources)
     return response
+
+
+def _source_age_minutes(timestamp_value: str) -> int | None:
+    clean_value = str(timestamp_value or "").strip()
+    if not clean_value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(clean_value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return max(
+        int(
+            (
+                datetime.now(timezone.utc)
+                - parsed.astimezone(timezone.utc)
+            ).total_seconds()
+            / 60
+        ),
+        0,
+    )
+
+
+def _assurance_summary(response: dict, sources: list[dict]) -> dict:
+    available_sources = [
+        source for source in sources if source.get("available") is not False
+    ]
+    source_kinds = sorted(
+        {
+            str(source.get("kind") or "read-only")
+            for source in available_sources
+        }
+    )
+    unavailable_count = sum(
+        1 for source in sources if source.get("available") is False
+    )
+    live_ages = [
+        age
+        for source in available_sources
+        if source.get("kind") == "live"
+        for age in [_source_age_minutes(str(source.get("timestamp") or ""))]
+        if age is not None
+    ]
+    newest_live_age = min(live_ages) if live_ages else None
+
+    confidence = "moderate"
+    reason = "The answer used available read-only sources."
+    if not available_sources:
+        confidence = "limited"
+        reason = "No external evidence source was required or available."
+    elif unavailable_count:
+        confidence = "limited"
+        reason = "One or more requested sources were unavailable."
+    elif response.get("clarification_required"):
+        confidence = "limited"
+        reason = "The intended incident must be clarified."
+    elif response.get("model") == "LCDash verified read tools":
+        confidence = "high"
+        reason = "A verified read-only tool produced the answer directly."
+    elif len(source_kinds) >= 2:
+        confidence = "high"
+        reason = "The answer was supported by more than one source type."
+
+    freshness = "not time-sensitive"
+    if "live" in source_kinds:
+        if newest_live_age is None:
+            freshness = "live source, timestamp unavailable"
+        elif newest_live_age <= 5:
+            freshness = f"live, {newest_live_age} minute(s) old"
+        elif newest_live_age <= 15:
+            freshness = f"recent, {newest_live_age} minute(s) old"
+            if confidence == "high":
+                confidence = "moderate"
+        else:
+            freshness = f"stale warning, {newest_live_age} minute(s) old"
+            confidence = "limited"
+    elif "historical" in source_kinds:
+        freshness = "historical database snapshot"
+    elif "document" in source_kinds:
+        freshness = "indexed documentation"
+
+    authority = "read-only operational evidence"
+    if source_kinds == ["memory"]:
+        authority = "supervisor-approved local guidance"
+    elif "document" in source_kinds and not {
+        "live",
+        "historical",
+    }.intersection(source_kinds):
+        authority = "indexed vendor documentation"
+    elif not source_kinds:
+        authority = "MAE safety policy"
+
+    return {
+        "confidence": confidence,
+        "reason": reason,
+        "freshness": freshness,
+        "authority": authority,
+        "source_kinds": source_kinds,
+        "write_access": False,
+    }
 
 
 def _verified_patient_name_answer(
@@ -2378,6 +2562,7 @@ def get_mae_status() -> dict:
             ),
             "mode": "Read only through approved LCDash functions",
         },
+        "tools": get_mae_tool_catalog(),
     }
 
 
@@ -2386,6 +2571,7 @@ def ask_mae(
     history: list[dict] | None = None,
     conversation_entities: dict | None = None,
 ) -> dict:
+    request_started = perf_counter()
     clean_question = (question or "").strip()
     if not clean_question:
         raise MAEServiceError("Please enter a question for MAE.")
@@ -2398,7 +2584,7 @@ def ask_mae(
         WRITE_ACTION_PATTERN.search(clean_question)
         and not KNOWLEDGE_PATTERN.search(clean_question)
     ):
-        return {
+        response = {
             "answer": (
                 "MAE is currently inquiry-only. I can research, summarize, and "
                 "explain CAD or analytics information, but I cannot add, change, "
@@ -2413,6 +2599,13 @@ def ask_mae(
             "clarification_required": False,
             "choices": [],
         }
+        response["assurance"] = _assurance_summary(response, [])
+        response["timing"] = {
+            "total_ms": max(int((perf_counter() - request_started) * 1000), 0),
+            "retrieval_ms": 0,
+            "generation_ms": 0,
+        }
+        return response
 
     conversation_history = history or []
     routing_question = _routing_question(
@@ -2420,7 +2613,9 @@ def ask_mae(
         conversation_history,
         conversation_entities,
     )
+    retrieval_started = perf_counter()
     context, sources = _build_read_context(routing_question)
+    retrieval_ms = max(int((perf_counter() - retrieval_started) * 1000), 0)
     verified_answer = (
         _verified_ambiguous_call_answer(
             clean_question,
@@ -2502,12 +2697,18 @@ def ask_mae(
         )
     )
     if verified_answer:
-        return _finalize_mae_response(
+        final_response = _finalize_mae_response(
             verified_answer,
             routing_question,
             context,
             sources,
         )
+        final_response["timing"] = {
+            "total_ms": max(int((perf_counter() - request_started) * 1000), 0),
+            "retrieval_ms": retrieval_ms,
+            "generation_ms": 0,
+        }
+        return final_response
     payload = {
         "model": settings.mae_model,
         "messages": _ollama_messages(
@@ -2524,6 +2725,7 @@ def ask_mae(
         },
     }
 
+    generation_started = perf_counter()
     try:
         response = httpx.post(
             f"{settings.ollama_base_url.rstrip('/')}/api/chat",
@@ -2538,7 +2740,7 @@ def ask_mae(
     if not answer:
         raise MAEServiceError("The local MAE model returned an empty response.")
 
-    return _finalize_mae_response({
+    final_response = _finalize_mae_response({
         "answer": answer,
         "sources": sources,
         "model": settings.mae_model,
@@ -2546,3 +2748,12 @@ def ask_mae(
         "write_access": False,
         "research": _research_summary(sources),
     }, routing_question, context, sources)
+    final_response["timing"] = {
+        "total_ms": max(int((perf_counter() - request_started) * 1000), 0),
+        "retrieval_ms": retrieval_ms,
+        "generation_ms": max(
+            int((perf_counter() - generation_started) * 1000),
+            0,
+        ),
+    }
+    return final_response

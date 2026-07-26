@@ -3,6 +3,7 @@ import hashlib
 from pathlib import Path
 import re
 
+import httpx
 import psycopg
 from pypdf import PdfReader
 
@@ -12,6 +13,7 @@ from app.services.knowledge_service import ensure_knowledge_schema
 
 CHUNK_SIZE = 1400
 CHUNK_OVERLAP = 180
+EMBEDDING_BATCH_SIZE = 24
 
 
 def _normalize_text(value: str) -> str:
@@ -48,6 +50,49 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _embed_texts(texts: list[str]) -> list[list[float]]:
+    if not texts or not settings.mae_embedding_model:
+        return []
+    response = httpx.post(
+        f"{settings.ollama_base_url.rstrip('/')}/api/embed",
+        json={
+            "model": settings.mae_embedding_model,
+            "input": texts,
+            "truncate": True,
+        },
+        timeout=settings.mae_embedding_timeout_seconds,
+    )
+    response.raise_for_status()
+    embeddings = response.json().get("embeddings") or []
+    if len(embeddings) != len(texts):
+        return []
+    return [
+        [float(value) for value in embedding]
+        for embedding in embeddings
+    ]
+
+
+def _embed_chunk_rows(connection, chunk_rows: list[tuple[int, str]]) -> None:
+    for start in range(0, len(chunk_rows), EMBEDDING_BATCH_SIZE):
+        batch = chunk_rows[start:start + EMBEDDING_BATCH_SIZE]
+        try:
+            embeddings = _embed_texts([item[1] for item in batch])
+        except (httpx.HTTPError, ValueError, TypeError):
+            embeddings = []
+        if not embeddings:
+            break
+        for (chunk_id, _), embedding in zip(batch, embeddings):
+            connection.execute(
+                """
+                UPDATE lcdash_knowledge.chunks
+                SET embedding = %s,
+                    embedding_model = %s
+                WHERE chunk_id = %s
+                """,
+                (embedding, settings.mae_embedding_model, chunk_id),
+            )
+
+
 def _index_document(connection, source_root: Path, path: Path) -> tuple[str, int]:
     relative_path = path.relative_to(source_root).as_posix()
     content_hash = _sha256(path)
@@ -60,6 +105,23 @@ def _index_document(connection, source_root: Path, path: Path) -> tuple[str, int
         (relative_path,),
     ).fetchone()
     if existing and existing[1] == content_hash:
+        missing_embedding_rows = connection.execute(
+            """
+            SELECT chunk_id, content
+            FROM lcdash_knowledge.chunks
+            WHERE document_id = %s
+              AND (
+                    embedding IS NULL
+                    OR embedding_model <> %s
+              )
+            ORDER BY chunk_id
+            """,
+            (existing[0], settings.mae_embedding_model),
+        ).fetchall()
+        _embed_chunk_rows(
+            connection,
+            [(int(row[0]), row[1]) for row in missing_embedding_rows],
+        )
         return "unchanged", 0
 
     reader = PdfReader(str(path), strict=False)
@@ -102,13 +164,14 @@ def _index_document(connection, source_root: Path, path: Path) -> tuple[str, int
     )
 
     stored_chunks = 0
+    chunk_rows: list[tuple[int, str]] = []
     for page_number, page in enumerate(reader.pages, start=1):
         try:
             page_text = page.extract_text() or ""
         except Exception:
             page_text = ""
         for chunk_index, content in enumerate(_page_chunks(page_text)):
-            connection.execute(
+            row = connection.execute(
                 """
                 INSERT INTO lcdash_knowledge.chunks (
                     document_id,
@@ -117,10 +180,14 @@ def _index_document(connection, source_root: Path, path: Path) -> tuple[str, int
                     content
                 )
                 VALUES (%s, %s, %s, %s)
+                RETURNING chunk_id
                 """,
                 (document_id, page_number, chunk_index, content),
-            )
+            ).fetchone()
+            chunk_rows.append((int(row[0]), content))
             stored_chunks += 1
+
+    _embed_chunk_rows(connection, chunk_rows)
     return "indexed", stored_chunks
 
 

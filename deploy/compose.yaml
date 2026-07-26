@@ -16,6 +16,9 @@ x-lcdash-environment: &lcdash-environment
   OLLAMA_BASE_URL: http://ollama:11434
   MAE_MODEL: qwen3:8b
   MAE_REQUEST_TIMEOUT_SECONDS: "120"
+  MAE_EMBEDDING_MODEL: nomic-embed-text
+  MAE_EMBEDDING_TIMEOUT_SECONDS: "45"
+  KNOWLEDGE_SEMANTIC_CANDIDATES: "1500"
   KNOWLEDGE_SOURCE_DIR: /knowledge/centralsquare
   KNOWLEDGE_INDEX_INTERVAL_SECONDS: "3600"
 
@@ -109,6 +112,30 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      ollama-model-loader:
+        condition: service_completed_successfully
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      disable: true
+
+  knowledge-drive-sync:
+    image: rclone/rclone:latest
+    container_name: lcdash-knowledge-drive-sync
+    restart: unless-stopped
+    profiles: ["knowledge-drive"]
+    user: "1000:1000"
+    entrypoint: ["/bin/sh", "/opt/lcdash/sync_knowledge_drive.sh"]
+    environment:
+      KNOWLEDGE_RCLONE_REMOTE: "${KNOWLEDGE_RCLONE_REMOTE:-lcdash-drive:Central Squared CAD/pdf}"
+      KNOWLEDGE_SYNC_TARGET: /knowledge/centralsquare
+      KNOWLEDGE_SYNC_INTERVAL_SECONDS: "900"
+    volumes:
+      - ../scripts/sync_knowledge_drive.sh:/opt/lcdash/sync_knowledge_drive.sh:ro
+      - /home/ted/.config/rclone/rclone.conf:/config/rclone/rclone.conf:ro
+      - /home/ted/lcdash-platform/knowledge/centralsquare:/knowledge/centralsquare
+    networks:
+      - lcdash_private
     security_opt:
       - no-new-privileges:true
     healthcheck:
@@ -157,6 +184,25 @@ services:
       - lcdash_ollama_data:/root/.ollama
     networks:
       - lcdash_private
+    security_opt:
+      - no-new-privileges:true
+
+  ollama-model-loader:
+    image: ollama/ollama:latest
+    container_name: lcdash-ollama-model-loader
+    restart: "no"
+    entrypoint: ["/bin/sh", "-lc"]
+    command:
+      - >-
+        ollama pull qwen3:8b &&
+        ollama pull nomic-embed-text
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    networks:
+      - lcdash_private
+    depends_on:
+      ollama:
+        condition: service_started
     security_opt:
       - no-new-privileges:true
 

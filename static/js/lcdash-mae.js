@@ -140,6 +140,41 @@
         return choiceList;
     }
 
+    function buildAssurance(assurance) {
+        if (!assurance || typeof assurance !== "object") return null;
+
+        const panel = document.createElement("div");
+        const confidence = assurance.confidence || "limited";
+        panel.className = `mae-assurance mae-assurance-${confidence}`;
+
+        const heading = document.createElement("strong");
+        heading.innerHTML = '<i class="bi bi-shield-check"></i> Answer assurance';
+
+        const confidenceChip = document.createElement("span");
+        confidenceChip.className = "mae-assurance-level";
+        confidenceChip.textContent = confidence.toUpperCase();
+
+        const details = document.createElement("small");
+        details.textContent = [
+            assurance.authority,
+            assurance.freshness,
+            assurance.reason
+        ].filter(Boolean).join(" · ");
+
+        panel.append(heading, confidenceChip, details);
+        return panel;
+    }
+
+    function buildTiming(timing) {
+        if (!timing || typeof timing !== "object") return null;
+        const totalMs = Number(timing.total_ms || 0);
+        if (!totalMs) return null;
+        const line = document.createElement("div");
+        line.className = "mae-timing";
+        line.innerHTML = `<i class="bi bi-stopwatch"></i> ${(totalMs / 1000).toFixed(1)}s total · ${Number(timing.retrieval_ms || 0)}ms research · ${Number(timing.generation_ms || 0)}ms generation`;
+        return line;
+    }
+
     async function sendFeedback(interactionId, rating, controls) {
         controls.querySelectorAll("button").forEach(function (button) {
             button.disabled = true;
@@ -246,6 +281,12 @@
 
         const choices = buildChoices(responsePayload.choices);
         if (choices) bubble.appendChild(choices);
+
+        const assurance = buildAssurance(responsePayload.assurance);
+        if (assurance) bubble.appendChild(assurance);
+
+        const timing = buildTiming(responsePayload.timing);
+        if (timing) bubble.appendChild(timing);
 
         const evidence = buildEvidence(responsePayload.evidence);
         if (evidence) bubble.appendChild(evidence);

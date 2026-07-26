@@ -42,6 +42,18 @@ from app.services.mae_audit_service import (
     record_mae_feedback,
     record_mae_interaction,
 )
+from app.services.mae_evaluation_service import (
+    get_evaluation_summary,
+    list_evaluation_cases,
+    list_feedback_review,
+    run_evaluation_case,
+)
+from app.services.mae_memory_service import (
+    create_memory_candidate,
+    list_memory_items,
+    review_memory,
+)
+from app.services.mae_tool_registry import get_mae_tool_catalog
 from app.services.knowledge_service import (
     get_knowledge_status,
     list_knowledge_documents,
@@ -86,6 +98,22 @@ class MAEFeedbackRequest(BaseModel):
     interaction_id: str = Field(min_length=36, max_length=36)
     rating: str = Field(min_length=3, max_length=30)
     comment: str = Field(default="", max_length=1000)
+
+
+class MAEEvaluationRunRequest(BaseModel):
+    case_id: str = Field(min_length=4, max_length=50)
+
+
+class MAEMemoryCreateRequest(BaseModel):
+    title: str = Field(min_length=3, max_length=200)
+    trigger_text: str = Field(min_length=3, max_length=1000)
+    guidance: str = Field(min_length=3, max_length=4000)
+    source_interaction_id: str = Field(default="", max_length=36)
+
+
+class MAEMemoryReviewRequest(BaseModel):
+    memory_id: int = Field(gt=0)
+    decision: str = Field(min_length=7, max_length=20)
 
 
 def _authenticated_user_email(request: Request) -> str:
@@ -624,6 +652,22 @@ def mae_page(request: Request):
     )
 
 
+@app.get("/mae/reliability")
+def mae_reliability_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="mae_reliability.html",
+        context={
+            "evaluation_cases": list_evaluation_cases(),
+            "evaluation_summary": get_evaluation_summary(),
+            "feedback_items": list_feedback_review(),
+            "memory_items": list_memory_items(),
+            "version": "0.4.0",
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.get("/knowledge")
 def knowledge_page(request: Request):
     return templates.TemplateResponse(
@@ -650,6 +694,12 @@ def knowledge_status_api(response: Response):
 def mae_status_api(response: Response):
     response.headers["Cache-Control"] = "no-store"
     return get_mae_status()
+
+
+@app.get("/api/mae/tools")
+def mae_tools_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    return get_mae_tool_catalog()
 
 
 @app.post("/api/mae/chat")
@@ -697,5 +747,90 @@ def mae_feedback_api(
         raise HTTPException(
             status_code=503,
             detail=result.get("message") or "MAE feedback could not be saved.",
+        )
+    return result
+
+
+@app.get("/api/mae/evaluations")
+def mae_evaluations_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "cases": list_evaluation_cases(),
+        "summary": get_evaluation_summary(),
+    }
+
+
+@app.post("/api/mae/evaluations/run")
+def mae_evaluation_run_api(
+    evaluation_request: MAEEvaluationRunRequest,
+    request: Request,
+    response: Response,
+):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return run_evaluation_case(
+            evaluation_request.case_id,
+            requested_by=_authenticated_user_email(request),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/mae/feedback/review")
+def mae_feedback_review_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    return {"feedback": list_feedback_review()}
+
+
+@app.get("/api/mae/memory")
+def mae_memory_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    return {"items": list_memory_items()}
+
+
+@app.post("/api/mae/memory")
+def mae_memory_create_api(
+    memory_request: MAEMemoryCreateRequest,
+    request: Request,
+    response: Response,
+):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        result = create_memory_candidate(
+            title=memory_request.title,
+            trigger_text=memory_request.trigger_text,
+            guidance=memory_request.guidance,
+            created_by=_authenticated_user_email(request),
+            source_interaction_id=memory_request.source_interaction_id or None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not result.get("saved"):
+        raise HTTPException(
+            status_code=503,
+            detail=result.get("message") or "Memory candidate could not be saved.",
+        )
+    return result
+
+
+@app.post("/api/mae/memory/review")
+def mae_memory_review_api(
+    memory_request: MAEMemoryReviewRequest,
+    request: Request,
+    response: Response,
+):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        result = review_memory(
+            memory_id=memory_request.memory_id,
+            decision=memory_request.decision,
+            reviewed_by=_authenticated_user_email(request),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not result.get("saved"):
+        raise HTTPException(
+            status_code=404,
+            detail=result.get("message") or "Memory candidate not found.",
         )
     return result

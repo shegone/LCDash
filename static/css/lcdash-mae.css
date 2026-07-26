@@ -275,6 +275,54 @@
     overflow: hidden;
 }
 
+.mae-assurance {
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 0.35rem 0.75rem;
+    align-items: center;
+    margin-top: 0.85rem;
+    padding: 0.75rem 0.85rem;
+    border: 1px solid rgba(83, 190, 255, 0.28);
+    border-radius: 12px;
+    background: rgba(4, 18, 33, 0.55);
+}
+
+.mae-assurance strong {
+    color: #dff5ff;
+    font-size: 0.82rem;
+}
+
+.mae-assurance-level {
+    justify-self: end;
+    padding: 0.18rem 0.5rem;
+    border-radius: 999px;
+    color: #06131f;
+    background: #ffd166;
+    font-size: 0.68rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+}
+
+.mae-assurance small {
+    grid-column: 1 / -1;
+    color: #9ebbd0;
+    line-height: 1.35;
+}
+
+.mae-assurance-high .mae-assurance-level {
+    background: #62e6ad;
+}
+
+.mae-assurance-limited .mae-assurance-level {
+    background: #ff8d8d;
+}
+
+.mae-timing {
+    margin-top: 0.55rem;
+    color: #7898b1;
+    font-size: 0.72rem;
+}
+
 .mae-evidence summary {
     padding: 11px 13px;
     color: var(--mae-green);

@@ -1,0 +1,143 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}MAE Reliability Center{% endblock %}
+
+{% block content %}
+<style>
+    .reliability-hero { padding: 24px; margin-bottom: 22px; }
+    .reliability-eyebrow { color: #4cc9ff; font-weight: 900; letter-spacing: 1.4px; }
+    .reliability-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 20px 0; }
+    .reliability-kpi { padding: 18px; }
+    .reliability-kpi strong { display: block; color: white; font-size: 2rem; }
+    .reliability-kpi span { color: #8fb7d9; }
+    .reliability-panel { padding: 22px; margin-bottom: 22px; }
+    .reliability-table { color: #dceeff; margin: 0; }
+    .reliability-table th { color: #75d8ff; border-color: rgba(255,255,255,.1); }
+    .reliability-table td { border-color: rgba(255,255,255,.08); vertical-align: middle; }
+    .case-result { font-size: .78rem; color: #91abc2; }
+    .case-result.is-pass { color: #69ffb9; }
+    .case-result.is-fail { color: #ff8d8d; }
+    .memory-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .memory-form textarea, .memory-form input {
+        width: 100%; color: white; background: rgba(3,16,30,.8);
+        border: 1px solid rgba(76,201,255,.28); border-radius: 10px; padding: 10px;
+    }
+    .memory-form .wide { grid-column: 1 / -1; }
+    .status-pill { padding: 4px 9px; border-radius: 999px; font-weight: 800; font-size: .72rem; }
+    .status-pending { background: rgba(255,209,102,.18); color: #ffd166; }
+    .status-approved { background: rgba(98,230,173,.18); color: #62e6ad; }
+    .status-rejected, .status-retired { background: rgba(255,141,141,.16); color: #ff8d8d; }
+    @media (max-width: 900px) {
+        .reliability-grid { grid-template-columns: repeat(2, 1fr); }
+        .memory-form { grid-template-columns: 1fr; }
+        .memory-form .wide { grid-column: 1; }
+    }
+</style>
+
+<section class="glass reliability-hero">
+    <div class="reliability-eyebrow">MAE QUALITY, SAFETY, AND LEARNING</div>
+    <h1 class="mt-1">Reliability Center</h1>
+    <p class="text-secondary mb-0">
+        Test MAE against supervisor-style questions, review feedback, and approve local memory.
+        Evaluation never writes to CentralSquare.
+    </p>
+</section>
+
+<div class="reliability-grid">
+    <div class="glass reliability-kpi"><strong>{{ evaluation_cases|length }}</strong><span>Curated questions</span></div>
+    <div class="glass reliability-kpi"><strong>{{ evaluation_summary.total_runs }}</strong><span>Recorded runs</span></div>
+    <div class="glass reliability-kpi"><strong>{{ evaluation_summary.pass_rate }}%</strong><span>Pass rate</span></div>
+    <div class="glass reliability-kpi"><strong>{{ evaluation_summary.average_duration_ms }} ms</strong><span>Average response</span></div>
+</div>
+
+<section class="glass reliability-panel">
+    <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+        <div>
+            <h3 class="mb-1">Evaluation Laboratory</h3>
+            <div class="text-secondary">Run one bounded test at a time to avoid unnecessary CAD traffic.</div>
+        </div>
+        <a href="/mae" class="btn btn-outline-info"><i class="bi bi-stars"></i> Open MAE</a>
+    </div>
+    <div class="table-responsive">
+        <table class="table reliability-table">
+            <thead><tr><th>Case</th><th>Category</th><th>Supervisor question</th><th>Expected sources</th><th>Result</th><th></th></tr></thead>
+            <tbody>
+            {% for case in evaluation_cases %}
+                <tr data-evaluation-case="{{ case.case_id }}">
+                    <td><strong>{{ case.case_id }}</strong></td>
+                    <td>{{ case.category }}</td>
+                    <td>{{ case.question }}</td>
+                    <td>{{ case.expected_source_kinds|join(", ") or "Safety policy" }}</td>
+                    <td class="case-result">Not run</td>
+                    <td><button class="btn btn-sm btn-info fw-bold" data-run-evaluation="{{ case.case_id }}">Run</button></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="glass reliability-panel">
+    <h3>Supervisor-Approved Memory</h3>
+    <p class="text-secondary">
+        MAE never teaches herself automatically. New guidance begins as pending and affects answers only after a supervisor approves it.
+    </p>
+    <form id="memory-form" class="memory-form mb-4">
+        <input name="title" placeholder="Short title" required>
+        <input name="trigger_text" placeholder="Words or question that should recall this guidance" required>
+        <textarea class="wide" name="guidance" rows="3" placeholder="The approved guidance MAE should remember" required></textarea>
+        <button class="btn btn-info fw-bold" type="submit">Create pending memory</button>
+        <div id="memory-form-status" class="text-secondary align-self-center"></div>
+    </form>
+    <div class="table-responsive">
+        <table class="table reliability-table">
+            <thead><tr><th>Status</th><th>Title</th><th>Trigger</th><th>Guidance</th><th>Uses</th><th>Review</th></tr></thead>
+            <tbody>
+            {% for item in memory_items %}
+                <tr>
+                    <td><span class="status-pill status-{{ item.status }}">{{ item.status|upper }}</span></td>
+                    <td>{{ item.title }}</td>
+                    <td>{{ item.trigger_text }}</td>
+                    <td>{{ item.guidance }}</td>
+                    <td>{{ item.use_count }}</td>
+                    <td>
+                        {% if item.status == "pending" %}
+                        <button class="btn btn-sm btn-success" data-review-memory="{{ item.memory_id }}" data-decision="approved">Approve</button>
+                        <button class="btn btn-sm btn-outline-danger" data-review-memory="{{ item.memory_id }}" data-decision="rejected">Reject</button>
+                        {% elif item.status == "approved" %}
+                        <button class="btn btn-sm btn-outline-warning" data-review-memory="{{ item.memory_id }}" data-decision="retired">Retire</button>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% else %}
+                <tr><td colspan="6" class="text-secondary">No memory candidates yet.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="glass reliability-panel">
+    <h3>Recent Supervisor Feedback</h3>
+    <div class="table-responsive">
+        <table class="table reliability-table">
+            <thead><tr><th>Rating</th><th>Question</th><th>Answer</th><th>Comment</th><th>Time</th></tr></thead>
+            <tbody>
+            {% for item in feedback_items %}
+                <tr>
+                    <td><span class="status-pill status-{{ "approved" if item.rating == "helpful" else "rejected" }}">{{ item.rating }}</span></td>
+                    <td>{{ item.question }}</td>
+                    <td>{{ item.answer|truncate(220) }}</td>
+                    <td>{{ item.comment or "—" }}</td>
+                    <td>{{ item.created_at }}</td>
+                </tr>
+            {% else %}
+                <tr><td colspan="5" class="text-secondary">No feedback has been recorded yet.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<script src="/static/js/lcdash-mae-reliability.js?v=20260726-1"></script>
+{% endblock %}

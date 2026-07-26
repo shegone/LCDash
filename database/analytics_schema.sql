@@ -118,6 +118,45 @@ CREATE TABLE IF NOT EXISTS lcdash_analytics.mae_feedback (
     comment TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS lcdash_analytics.mae_evaluation_runs (
+    evaluation_run_id BIGSERIAL PRIMARY KEY,
+    case_id TEXT NOT NULL,
+    category TEXT NOT NULL,
+    question TEXT NOT NULL,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at TIMESTAMPTZ,
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    passed BOOLEAN NOT NULL DEFAULT FALSE,
+    source_check_passed BOOLEAN NOT NULL DEFAULT FALSE,
+    read_only_check_passed BOOLEAN NOT NULL DEFAULT FALSE,
+    answer_check_passed BOOLEAN NOT NULL DEFAULT FALSE,
+    expected_source_kinds JSONB NOT NULL DEFAULT '[]'::JSONB,
+    actual_source_kinds JSONB NOT NULL DEFAULT '[]'::JSONB,
+    answer TEXT NOT NULL DEFAULT '',
+    model TEXT NOT NULL DEFAULT '',
+    error_summary TEXT NOT NULL DEFAULT '',
+    requested_by TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS lcdash_analytics.mae_memory (
+    memory_id BIGSERIAL PRIMARY KEY,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_by TEXT NOT NULL DEFAULT '',
+    approved_at TIMESTAMPTZ,
+    approved_by TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'approved', 'rejected', 'retired')),
+    title TEXT NOT NULL,
+    trigger_text TEXT NOT NULL,
+    guidance TEXT NOT NULL,
+    source_interaction_id UUID
+        REFERENCES lcdash_analytics.mae_interactions(interaction_id)
+        ON DELETE SET NULL,
+    use_count INTEGER NOT NULL DEFAULT 0,
+    last_used_at TIMESTAMPTZ
+);
+
 CREATE INDEX IF NOT EXISTS idx_analytics_calls_received
     ON lcdash_analytics.calls(call_received_at);
 CREATE INDEX IF NOT EXISTS idx_analytics_calls_agency_received
@@ -136,6 +175,12 @@ CREATE INDEX IF NOT EXISTS idx_mae_interactions_user
     ON lcdash_analytics.mae_interactions(user_email, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_mae_feedback_interaction
     ON lcdash_analytics.mae_feedback(interaction_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_mae_evaluation_runs_case
+    ON lcdash_analytics.mae_evaluation_runs(case_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_mae_evaluation_runs_started
+    ON lcdash_analytics.mae_evaluation_runs(started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_mae_memory_status
+    ON lcdash_analytics.mae_memory(status, updated_at DESC);
 
 CREATE OR REPLACE VIEW lcdash_analytics.unit_response_metrics AS
 SELECT

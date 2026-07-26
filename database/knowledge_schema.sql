@@ -19,11 +19,18 @@ CREATE TABLE IF NOT EXISTS lcdash_knowledge.chunks (
     page_number INTEGER NOT NULL,
     chunk_index INTEGER NOT NULL,
     content TEXT NOT NULL,
+    embedding REAL[],
+    embedding_model TEXT NOT NULL DEFAULT '',
     search_vector TSVECTOR GENERATED ALWAYS AS (
         to_tsvector('english', COALESCE(content, ''))
     ) STORED,
     UNIQUE(document_id, page_number, chunk_index)
 );
+
+ALTER TABLE lcdash_knowledge.chunks
+    ADD COLUMN IF NOT EXISTS embedding REAL[];
+ALTER TABLE lcdash_knowledge.chunks
+    ADD COLUMN IF NOT EXISTS embedding_model TEXT NOT NULL DEFAULT '';
 
 CREATE INDEX IF NOT EXISTS knowledge_chunks_search_idx
     ON lcdash_knowledge.chunks USING GIN(search_vector);

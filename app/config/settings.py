@@ -64,6 +64,18 @@ class Settings:
         "KNOWLEDGE_INDEX_INTERVAL_SECONDS",
         3600,
     )
+    mae_embedding_model: str = _env(
+        "MAE_EMBEDDING_MODEL",
+        "nomic-embed-text",
+    )
+    mae_embedding_timeout_seconds: int = _env_int(
+        "MAE_EMBEDDING_TIMEOUT_SECONDS",
+        45,
+    )
+    knowledge_semantic_candidates: int = _env_int(
+        "KNOWLEDGE_SEMANTIC_CANDIDATES",
+        1500,
+    )
 
 
 settings = Settings()

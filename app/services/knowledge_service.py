@@ -1,6 +1,8 @@
 from pathlib import Path
+import math
 import re
 
+import httpx
 import psycopg
 
 from app.config.settings import settings
@@ -11,6 +13,20 @@ SCHEMA_PATH = Path(__file__).resolve().parents[2] / "database" / "knowledge_sche
 
 class KnowledgeServiceError(Exception):
     """Raised when the MAE knowledge library is unavailable."""
+
+
+def _drive_sync_status() -> dict:
+    status_path = Path(settings.knowledge_source_dir) / ".drive-sync-status"
+    try:
+        lines = status_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return {"status": "not_reported"}
+    values = {}
+    for line in lines:
+        key, separator, value = line.partition("=")
+        if separator:
+            values[key.strip()] = value.strip()
+    return values or {"status": "not_reported"}
 
 
 def knowledge_is_configured() -> bool:
@@ -43,6 +59,7 @@ def get_knowledge_status() -> dict:
             "chunks": 0,
             "index_state": {},
             "message": "The CentralSquare knowledge library is not configured.",
+            "drive_sync": _drive_sync_status(),
         }
 
     try:
@@ -79,6 +96,7 @@ def get_knowledge_status() -> dict:
             "chunks": 0,
             "index_state": {},
             "message": "The CentralSquare knowledge library is unavailable.",
+            "drive_sync": _drive_sync_status(),
         }
 
     index_state = {}
@@ -101,6 +119,7 @@ def get_knowledge_status() -> dict:
         "chunks": int(counts[1] or 0),
         "index_state": index_state,
         "message": "",
+        "drive_sync": _drive_sync_status(),
     }
 
 
@@ -176,6 +195,94 @@ def _fallback_terms(question: str) -> list[str]:
     }
     terms = re.findall(r"[A-Za-z0-9][A-Za-z0-9_-]{2,}", question.lower())
     return [term for term in terms if term not in stop_words][:8]
+
+
+def _query_embedding(question: str) -> list[float]:
+    if not settings.mae_embedding_model:
+        return []
+    try:
+        response = httpx.post(
+            f"{settings.ollama_base_url.rstrip('/')}/api/embed",
+            json={
+                "model": settings.mae_embedding_model,
+                "input": question,
+                "truncate": True,
+            },
+            timeout=settings.mae_embedding_timeout_seconds,
+        )
+        response.raise_for_status()
+        embeddings = response.json().get("embeddings") or []
+        if not embeddings:
+            return []
+        return [float(value) for value in embeddings[0]]
+    except (httpx.HTTPError, ValueError, TypeError, IndexError):
+        return []
+
+
+def _cosine_similarity(left: list[float], right: list[float]) -> float:
+    if not left or not right or len(left) != len(right):
+        return 0.0
+    numerator = sum(a * b for a, b in zip(left, right))
+    left_length = math.sqrt(sum(value * value for value in left))
+    right_length = math.sqrt(sum(value * value for value in right))
+    if not left_length or not right_length:
+        return 0.0
+    return numerator / (left_length * right_length)
+
+
+def _semantic_results(question: str, limit: int) -> list[dict]:
+    query_embedding = _query_embedding(question)
+    if not query_embedding:
+        return []
+    candidate_limit = min(
+        max(settings.knowledge_semantic_candidates, limit * 20),
+        5000,
+    )
+    try:
+        with _connect() as connection:
+            ensure_knowledge_schema(connection)
+            rows = connection.execute(
+                """
+                SELECT
+                    documents.document_id,
+                    documents.title,
+                    documents.file_name,
+                    chunks.page_number,
+                    chunks.content,
+                    documents.indexed_at,
+                    chunks.embedding
+                FROM lcdash_knowledge.chunks AS chunks
+                JOIN lcdash_knowledge.documents AS documents
+                    ON documents.document_id = chunks.document_id
+                WHERE chunks.embedding IS NOT NULL
+                  AND chunks.embedding_model = %s
+                ORDER BY chunks.chunk_id DESC
+                LIMIT %s
+                """,
+                (settings.mae_embedding_model, candidate_limit),
+            ).fetchall()
+    except (KnowledgeServiceError, psycopg.Error):
+        return []
+
+    results = []
+    for row in rows:
+        similarity = _cosine_similarity(query_embedding, list(row[6] or []))
+        if similarity <= 0:
+            continue
+        results.append(
+            {
+                "document_id": int(row[0]),
+                "title": row[1],
+                "file_name": row[2],
+                "page_number": int(row[3] or 0),
+                "content": row[4],
+                "indexed_at": row[5].isoformat() if row[5] else "",
+                "semantic_score": round(similarity, 5),
+                "retrieval": ["semantic"],
+            }
+        )
+    results.sort(key=lambda item: item["semantic_score"], reverse=True)
+    return results[: max(limit * 3, 12)]
 
 
 def search_knowledge(question: str, limit: int = 8) -> list[dict]:
@@ -276,15 +383,51 @@ def search_knowledge(question: str, limit: int = 8) -> list[dict]:
             "matched_terms": matched_terms,
             "query_terms": query_terms,
             "coverage": round(coverage, 4),
+            "semantic_score": 0.0,
+            "retrieval": ["keyword"],
         }
         )
 
-    ranked_results.sort(
+    combined: dict[tuple[int, int, str], dict] = {}
+    for result in ranked_results:
+        key = (
+            result["document_id"],
+            result["page_number"],
+            result["content"][:120],
+        )
+        combined[key] = result
+
+    for semantic in _semantic_results(clean_question, result_limit):
+        key = (
+            semantic["document_id"],
+            semantic["page_number"],
+            semantic["content"][:120],
+        )
+        existing = combined.get(key)
+        if existing:
+            existing["semantic_score"] = semantic["semantic_score"]
+            existing["retrieval"] = ["keyword", "semantic"]
+        else:
+            semantic["rank"] = 0.0
+            semantic["matched_terms"] = []
+            semantic["query_terms"] = query_terms
+            semantic["coverage"] = 0.0
+            combined[key] = semantic
+
+    final_results = list(combined.values())
+    for result in final_results:
+        result["hybrid_score"] = round(
+            (float(result.get("coverage") or 0) * 0.45)
+            + (min(float(result.get("rank") or 0), 1.0) * 0.15)
+            + (float(result.get("semantic_score") or 0) * 0.40),
+            5,
+        )
+    final_results.sort(
         key=lambda result: (
+            result["hybrid_score"],
             result["coverage"],
             len(result["matched_terms"]),
-            result["rank"],
         ),
         reverse=True,
     )
-    return ranked_results[:result_limit]
+    return final_results[:result_limit]
