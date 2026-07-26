@@ -322,18 +322,35 @@
         history.push({role: "user", content: question});
         setBusy(true);
 
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(function () {
+            controller.abort();
+        }, 30000);
+
         try {
             const response = await fetch("/api/mae/chat", {
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
                 cache: "no-store",
+                signal: controller.signal,
                 body: JSON.stringify({
                     question: question,
                     history: requestHistory,
                     entities: entities
                 })
             });
-            const payload = await response.json();
+            const responseText = await response.text();
+            let payload = {};
+
+            try {
+                payload = responseText ? JSON.parse(responseText) : {};
+            } catch (parseError) {
+                throw new Error(
+                    "MAE's secure connection returned an invalid response. " +
+                    "Please try the question again."
+                );
+            }
+
             if (!response.ok) {
                 throw new Error(
                     payload.detail || "MAE could not complete the inquiry."
@@ -343,11 +360,15 @@
             addMessage("assistant", payload.answer, payload);
             history.push({role: "assistant", content: payload.answer});
         } catch (error) {
+            const message = error.name === "AbortError"
+                ? "The live information request took too long. Please try again."
+                : (error.message || String(error));
             addMessage(
                 "assistant",
-                `I could not complete that inquiry. ${error.message || error}`
+                `I could not complete that inquiry. ${message}`
             );
         } finally {
+            window.clearTimeout(timeoutId);
             setBusy(false);
             questionInput.focus();
         }

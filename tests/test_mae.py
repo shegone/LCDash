@@ -3,9 +3,11 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+import app.services.mae_service as mae_service
 from app.main import app
 from app.services.mae_service import (
     SYSTEM_PROMPT,
+    _cached_live_operations_snapshot,
     _hours_from_question,
     ask_mae,
 )
@@ -115,6 +117,31 @@ class MAEPageTests(unittest.TestCase):
 
 
 class MAEGuardrailTests(unittest.TestCase):
+    def test_production_live_snapshot_cache_calls_operations_service_once(self):
+        snapshot = {
+            "last_updated": "2026-07-26T18:05:00+00:00",
+            "dashboard_stats": {"active_calls": 2},
+            "calls": [],
+            "unit_stats": {},
+            "unit_rows": [],
+        }
+        mae_service._LIVE_SNAPSHOT_CACHE["stored_at"] = 0.0
+        mae_service._LIVE_SNAPSHOT_CACHE["value"] = None
+
+        with (
+            patch.object(mae_service.settings, "debug", False),
+            patch(
+                "app.services.mae_service.get_live_operations_snapshot",
+                return_value=snapshot,
+            ) as live_mock,
+        ):
+            first = _cached_live_operations_snapshot()
+            second = _cached_live_operations_snapshot()
+
+        self.assertIs(first, snapshot)
+        self.assertIs(second, snapshot)
+        live_mock.assert_called_once()
+
     def test_recent_hour_phrase_is_parsed_exactly(self):
         self.assertEqual(_hours_from_question("calls in the last 3 hrs"), 3)
         self.assertEqual(_hours_from_question("past 12 hours"), 12)

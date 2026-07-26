@@ -340,7 +340,7 @@ def _cached_live_operations_snapshot(max_age_seconds: float = 3.0) -> dict:
         cached = _LIVE_SNAPSHOT_CACHE.get("value")
         if cached and now - float(_LIVE_SNAPSHOT_CACHE["stored_at"]) <= max_age_seconds:
             return cached
-        snapshot = _cached_live_operations_snapshot()
+        snapshot = get_live_operations_snapshot()
         _LIVE_SNAPSHOT_CACHE["value"] = snapshot
         _LIVE_SNAPSHOT_CACHE["stored_at"] = now
         return snapshot
