@@ -4,7 +4,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services.mae_service import ask_mae
+from app.services.mae_service import SYSTEM_PROMPT, ask_mae
 
 
 class MAEPageTests(unittest.TestCase):
@@ -56,6 +56,10 @@ class MAEPageTests(unittest.TestCase):
 
 
 class MAEGuardrailTests(unittest.TestCase):
+    def test_system_prompt_uses_logan_priority_direction(self):
+        self.assertIn("lower numeric priority values are more urgent", SYSTEM_PROMPT)
+        self.assertIn("Never describe priority 30 as high priority", SYSTEM_PROMPT)
+
     def test_write_request_is_refused_without_data_or_model_calls(self):
         with (
             patch("app.services.mae_service._build_read_context") as context_mock,
