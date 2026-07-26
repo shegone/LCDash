@@ -78,7 +78,28 @@ WRITE_ACTION_PATTERN = re.compile(
     r"enter|mark|modify|remove|send|set|update|write)\b",
     re.IGNORECASE,
 )
+WRITE_REQUEST_PATTERN = re.compile(
+    r"(?:"
+    r"^\s*(?:please\s+)?(?:add|assign|cancel|change|close|create|delete|"
+    r"dispatch|edit|enter|mark|modify|remove|send|set|update|write)\b|"
+    r"\b(?:can|could|would|will)\s+you\s+(?:please\s+)?"
+    r"(?:add|assign|cancel|change|close|create|delete|dispatch|edit|enter|"
+    r"mark|modify|remove|send|set|update|write)\b|"
+    r"\b(?:i\s+(?:want|need)\s+you\s+to)\s+"
+    r"(?:add|assign|cancel|change|close|create|delete|dispatch|edit|enter|"
+    r"mark|modify|remove|send|set|update|write)\b"
+    r")",
+    re.IGNORECASE,
+)
 CFS_PATTERN = re.compile(r"\bCFS(?:\d{2})?[- ]?\d{3,}\b", re.IGNORECASE)
+CFS_SUFFIX_REFERENCE_PATTERN = re.compile(
+    r"(?:"
+    r"\b(?:call|cfs|incident)\b.{0,30}?\b(?:ending\s+in\s+)?(\d{4,8})\b|"
+    r"\b(?:complete\s+)?summary\s+(?:of|for)\s+(\d{4,8})\b|"
+    r"\b(\d{4,8})\b.{0,20}?\b(?:call|cfs|incident)\b"
+    r")",
+    re.IGNORECASE,
+)
 LIVE_PATTERN = re.compile(
     r"\b(active|available|current|currently|in progress|live|now|ongoing|"
     r"on scene|open|enroute|transporting|unit status|right now)\b",
@@ -184,6 +205,11 @@ CALL_DETAIL_PATTERN = re.compile(
     r"caller name|reporter|hazards?|cautions?)\b",
     re.IGNORECASE,
 )
+CALL_SUMMARY_PATTERN = re.compile(
+    r"\b(?:complete\s+)?(?:summary|details?)\s+(?:of|for)\s+"
+    r"(?:CFS(?:\d{2})?[- ]?)?\d{3,}\b",
+    re.IGNORECASE,
+)
 PATIENT_NAME_PATTERN = re.compile(
     r"\b(?:pt|patient)(?:'s)?\s+name\b|"
     r"\bwho\s+is\s+the\s+(?:pt|patient)\b",
@@ -203,6 +229,16 @@ def _routing_question(
     history: list[dict],
     conversation_entities: dict | None = None,
 ) -> str:
+    # A self-contained live-operations question must be answered from a fresh
+    # snapshot even when it contains pronouns such as "them". It should never
+    # inherit a CFS number accumulated earlier in the conversation.
+    if (
+        ACTIVE_CALL_PATTERN.search(question)
+        or BUSY_NOW_PATTERN.search(question)
+        or CURRENT_SUMMARY_PATTERN.search(question)
+    ):
+        return question
+
     if not (
         FOLLOWUP_PATTERN.search(question)
         or CALL_DETAIL_PATTERN.search(question)
@@ -233,6 +269,21 @@ def _routing_question(
     else:
         parts = [part for part in (previous_user, question) if part]
     return "\nFollow-up context: ".join(parts) if parts else question
+
+
+def _is_write_request(question: str) -> bool:
+    """Return True only for an actual request to change an operational system."""
+    return bool(
+        WRITE_ACTION_PATTERN.search(question)
+        and WRITE_REQUEST_PATTERN.search(question)
+    )
+
+
+def _cfs_suffix_reference(question: str) -> str:
+    match = CFS_SUFFIX_REFERENCE_PATTERN.search(question)
+    if not match:
+        return ""
+    return next((group for group in match.groups() if group), "")
 
 
 def _call_reference_score(question: str, call: dict) -> float:
@@ -798,8 +849,36 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
         if cfs_match
         else ""
     )
+    cfs_suffix = _cfs_suffix_reference(question)
     call_reference_candidates: list[dict] = []
-    wants_call_detail = bool(CALL_DETAIL_PATTERN.search(question))
+    wants_call_detail = bool(
+        CALL_DETAIL_PATTERN.search(question)
+        or CALL_SUMMARY_PATTERN.search(question)
+        or cfs_suffix
+    )
+    if wants_call_detail and not target_cfs_number and cfs_suffix:
+        try:
+            call_snapshot = _cached_live_operations_snapshot()
+            suffix_matches = [
+                str(call.get("cfs_number") or "")
+                for call in (call_snapshot.get("calls") or [])
+                if str(call.get("cfs_number") or "").endswith(
+                    f"-{cfs_suffix}"
+                )
+            ]
+            if len(suffix_matches) == 1:
+                target_cfs_number = suffix_matches[0]
+        except CentralSquareAPIError:
+            target_cfs_number = ""
+
+        # Dispatchers commonly say only the sequence portion. If it is not in
+        # the active snapshot, use the current CAD year prefix for the direct
+        # read. CentralSquare will return a clear unavailable result if it does
+        # not exist.
+        if not target_cfs_number:
+            current_year = datetime.now(LOCAL_TIMEZONE).strftime("%y")
+            target_cfs_number = f"CFS{current_year}-{cfs_suffix}"
+
     if wants_call_detail and not target_cfs_number:
         try:
             if LATEST_CALL_PATTERN.search(question):
@@ -1212,6 +1291,7 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
         cfs_number = target_cfs_number
         try:
             call = get_call_detail(cfs_number)
+            fetched_at = datetime.now(timezone.utc).isoformat()
             context.append(
                 {
                     "source": "CentralSquare live CFS detail",
@@ -1225,7 +1305,7 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
                     "kind": "live",
                     "detail": cfs_number,
                     "available": True,
-                    "timestamp": call.get("call_datetime") or "",
+                    "timestamp": fetched_at,
                 }
             )
         except CentralSquareAPIError as exc:
@@ -1802,6 +1882,98 @@ def _verified_patient_name_answer(
         ),
         sources,
     )
+
+
+def _verified_call_summary_answer(
+    question: str,
+    context: list[dict],
+    sources: list[dict],
+) -> dict | None:
+    if not CALL_SUMMARY_PATTERN.search(question):
+        return None
+
+    call = _context_data(context, "CentralSquare live CFS detail")
+    if not call:
+        return None
+
+    cfs_number = str(call.get("cfs_number") or "Selected call")
+    description = str(
+        call.get("incident_description")
+        or call.get("incident_code")
+        or "Incident description not returned"
+    )
+    lines = [f"{cfs_number} — {description}"]
+
+    for label, value in (
+        ("Status", call.get("status")),
+        ("Priority", call.get("priority")),
+        ("Location", call.get("location")),
+        ("Agency", call.get("agency")),
+        ("Call taker", call.get("call_taker")),
+        ("Received", call.get("call_datetime")),
+    ):
+        if value not in (None, ""):
+            lines.append(f"- {label}: {value}")
+
+    units = call.get("assigned_units") or []
+    if units:
+        lines.append("- Assigned units:")
+        for unit in units:
+            if not isinstance(unit, dict):
+                continue
+            unit_number = str(unit.get("unit_number") or "Unknown unit")
+            status = str(unit.get("status") or "status not returned")
+            lines.append(f"  - {unit_number}: {status}")
+    else:
+        lines.append("- Assigned units: None returned")
+
+    reporter = call.get("reporter") or {}
+    if isinstance(reporter, dict):
+        reporter_name = str(
+            reporter.get("name")
+            or reporter.get("full_name")
+            or reporter.get("Name")
+            or ""
+        ).strip()
+        reporter_phone = str(
+            reporter.get("phone")
+            or reporter.get("phone_number")
+            or reporter.get("PhoneNumber")
+            or ""
+        ).strip()
+        if reporter_name:
+            lines.append(f"- Reporter: {reporter_name}")
+        if reporter_phone:
+            lines.append(f"- Reporter phone: {reporter_phone}")
+
+    command_logs = [
+        entry
+        for entry in (call.get("command_logs") or [])
+        if isinstance(entry, dict)
+    ]
+    if command_logs:
+        lines.append(
+            f"- Command log: {len(command_logs)} entries returned; "
+            "most recent entries:"
+        )
+        for entry in command_logs[-10:]:
+            timestamp = str(entry.get("timestamp") or "").strip()
+            text = str(
+                entry.get("text")
+                or entry.get("status")
+                or "CAD activity"
+            ).strip()
+            prefix = f"{timestamp} — " if timestamp else ""
+            lines.append(f"  - {prefix}{text}")
+    else:
+        lines.append("- Command log: No entries returned")
+
+    if call.get("rapidsos"):
+        lines.append("- RapidSOS: Data attached")
+    if call.get("proqa"):
+        lines.append("- ProQA: Data attached")
+
+    return _verified_response("\n".join(lines), sources)
 
 
 def _verified_current_summary_answer(
@@ -2589,7 +2761,7 @@ def ask_mae(
         )
 
     if (
-        WRITE_ACTION_PATTERN.search(clean_question)
+        _is_write_request(clean_question)
         and not KNOWLEDGE_PATTERN.search(clean_question)
     ):
         response = {
@@ -2631,6 +2803,11 @@ def ask_mae(
             sources,
         )
         or _verified_patient_name_answer(
+            routing_question,
+            context,
+            sources,
+        )
+        or _verified_call_summary_answer(
             routing_question,
             context,
             sources,

@@ -902,6 +902,98 @@ class MAEGuardrailTests(unittest.TestCase):
         self.assertIn("API System User", result["answer"])
         self.assertIn("Page 5", result["answer"])
 
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service.get_call_detail")
+    @patch("app.services.mae_service.get_live_operations_snapshot")
+    def test_repeated_active_call_question_does_not_inherit_prior_cfs(
+        self,
+        live_mock,
+        call_detail_mock,
+        post_mock,
+    ):
+        live_mock.return_value = {
+            "last_updated": "2026-07-26T18:05:00+00:00",
+            "dashboard_stats": {"active_calls": 2},
+            "calls": [
+                {
+                    "cfs_number": "CFS26-50001",
+                    "incident_description": "Structure Fire",
+                    "status": "On Scene",
+                },
+                {
+                    "cfs_number": "CFS26-50002",
+                    "incident_description": "Medical Call",
+                    "status": "Enroute",
+                },
+            ],
+            "unit_stats": {},
+            "unit_rows": [],
+        }
+
+        result = ask_mae(
+            "How many active calls are there? List them please.",
+            history=[
+                {
+                    "role": "assistant",
+                    "content": "Earlier we reviewed CFS26-49999.",
+                }
+            ],
+            conversation_entities={"cfs_numbers": ["CFS26-49999"]},
+        )
+
+        call_detail_mock.assert_not_called()
+        post_mock.assert_not_called()
+        self.assertIn("2 active calls", result["answer"])
+        self.assertIn("CFS26-50001", result["answer"])
+
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service.get_call_detail")
+    @patch("app.services.mae_service.get_live_operations_snapshot")
+    def test_dispatcher_cfs_suffix_resolves_to_live_call_summary(
+        self,
+        live_mock,
+        call_detail_mock,
+        post_mock,
+    ):
+        live_mock.return_value = {
+            "calls": [{"cfs_number": "CFS26-24436"}],
+        }
+        call_detail_mock.return_value = {
+            "cfs_number": "CFS26-24436",
+            "incident_description": "Structure Fire",
+            "status": "On Scene",
+            "priority": "10",
+            "location": "100 TEST STREET, LOGAN",
+            "call_datetime": "2026-07-26T12:00:00+00:00",
+            "assigned_units": [
+                {"unit_number": "FC100", "status": "On Scene"}
+            ],
+            "command_logs": [{"text": "COMMAND ESTABLISHED"}],
+            "raw": {},
+        }
+
+        result = ask_mae("Give me a complete summary of 24436.")
+
+        call_detail_mock.assert_called_once_with("CFS26-24436")
+        post_mock.assert_not_called()
+        self.assertIn("CFS26-24436", result["answer"])
+        self.assertIn("- Status: On Scene", result["answer"])
+        self.assertIn("  - FC100: On Scene", result["answer"])
+        self.assertEqual(result["assurance"]["confidence"], "high")
+        self.assertNotIn("stale warning", result["assurance"]["freshness"])
+
+    def test_explanatory_change_sentence_is_not_a_write_request(self):
+        self.assertFalse(
+            mae_service._is_write_request(
+                "The CFS26 prefix will not change until next year."
+            )
+        )
+        self.assertTrue(
+            mae_service._is_write_request(
+                "Please change the incident address."
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
