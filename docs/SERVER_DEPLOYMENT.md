@@ -151,3 +151,10 @@ lcdash_realtime.webhook_events
 Raw CentralSquare webhook payloads are not stored in that table. See
 `docs/REALTIME_EVENTS.md` for the receiver URLs, Cloudflare boundary, activation
 checklist, and subscription requirements.
+
+The production CFS and unit subscriptions are active. Their identifiers and the
+callback secret are recorded only in:
+
+```text
+/home/ted/lcdash-platform/secrets/platform-credentials.txt
+```

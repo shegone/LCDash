@@ -123,3 +123,19 @@ fetches `/api/operations/snapshot`. EventSource reconnects automatically.
 9. Create the unit subscription and record its identifier.
 10. Keep the 30-second reconciliation refresh enabled.
 
+## Logan County production activation
+
+Activated July 27, 2026:
+
+- Cloudflare Access application: `LCDash CentralSquare Webhooks`
+- Public destination:
+  `supervisor.logan911.com/api/integrations/centralsquare/webhooks/*`
+- Cloudflare policy: `CentralSquare webhook bypass`
+- CFS scope: verified dispatch agency `LCEOC`, currently active records only,
+  historical-record updates excluded
+- Unit scope: unit create/update notifications
+- CentralSquare identifiers: stored in the protected server credential record
+
+The existing `LCDash Supervisor Portal` application and supervisor email
+allowlist remain in place for all human-facing pages. The browser event stream
+also remains behind supervisor authentication.
