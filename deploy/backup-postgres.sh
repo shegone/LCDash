@@ -17,6 +17,7 @@ pg_dump \
     --no-privileges \
     | gzip -9 > "${TARGET}"
 
+chown 1000:1000 "${TARGET}"
 chmod 600 "${TARGET}"
 find "${BACKUP_DIR}" -type f -name 'lcdash-*.sql.gz' -mtime "+${RETENTION_DAYS}" -delete
 echo "Created ${TARGET}"
