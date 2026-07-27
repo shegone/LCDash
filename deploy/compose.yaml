@@ -23,6 +23,11 @@ x-lcdash-environment: &lcdash-environment
   KNOWLEDGE_INDEX_INTERVAL_SECONDS: "3600"
   MINDSHARE_KNOWLEDGE_SOURCE_DIR: /knowledge/mindshare
   MINDSHARE_KNOWLEDGE_INDEX_INTERVAL_SECONDS: "3600"
+  VOICE_BASE_URL: http://speaches:8000
+  VOICE_TTS_MODEL: speaches-ai/Kokoro-82M-v1.0-ONNX
+  VOICE_TTS_VOICE: af_heart
+  VOICE_STT_MODEL: Systran/faster-distil-whisper-small.en
+  VOICE_REQUEST_TIMEOUT_SECONDS: "180"
 
 x-lcdash-secrets: &lcdash-secrets
   - centralsquare_username
@@ -255,6 +260,23 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  speaches:
+    image: ghcr.io/speaches-ai/speaches:latest-cpu
+    container_name: lcdash-speaches
+    restart: unless-stopped
+    volumes:
+      - lcdash_speaches_models:/home/ubuntu/.cache/huggingface/hub
+    networks:
+      - lcdash_private
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
   open-webui:
     image: ghcr.io/open-webui/open-webui:v0.10.1
     container_name: lcdash-open-webui
@@ -273,6 +295,15 @@ services:
       DEFAULT_USER_ROLE: pending
       WEBUI_ADMIN_EMAIL: admin@logan911.local
       WEBUI_ADMIN_NAME: Logan 911 Administrator
+      AUDIO_STT_ENGINE: openai
+      AUDIO_STT_OPENAI_API_BASE_URL: http://speaches:8000/v1
+      AUDIO_STT_OPENAI_API_KEY: local-speech-service
+      AUDIO_STT_MODEL: Systran/faster-distil-whisper-small.en
+      AUDIO_TTS_ENGINE: openai
+      AUDIO_TTS_OPENAI_API_BASE_URL: http://speaches:8000/v1
+      AUDIO_TTS_OPENAI_API_KEY: local-speech-service
+      AUDIO_TTS_MODEL: speaches-ai/Kokoro-82M-v1.0-ONNX
+      AUDIO_TTS_VOICE: af_heart
     secrets:
       - openwebui_secret_key
       - openwebui_admin_password
@@ -284,6 +315,7 @@ services:
       - lcdash_private
     depends_on:
       - ollama
+      - speaches
     security_opt:
       - no-new-privileges:true
 
@@ -295,6 +327,7 @@ volumes:
   lcdash_postgres_data:
   lcdash_ollama_data:
   lcdash_openwebui_data:
+  lcdash_speaches_models:
 
 secrets:
   centralsquare_username:

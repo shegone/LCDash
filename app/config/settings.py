@@ -76,6 +76,23 @@ class Settings:
         "MAE_EMBEDDING_TIMEOUT_SECONDS",
         45,
     )
+    voice_base_url: str = _env(
+        "VOICE_BASE_URL",
+        "http://127.0.0.1:8001",
+    )
+    voice_tts_model: str = _env(
+        "VOICE_TTS_MODEL",
+        "speaches-ai/Kokoro-82M-v1.0-ONNX",
+    )
+    voice_tts_voice: str = _env("VOICE_TTS_VOICE", "af_heart")
+    voice_stt_model: str = _env(
+        "VOICE_STT_MODEL",
+        "Systran/faster-distil-whisper-small.en",
+    )
+    voice_request_timeout_seconds: int = _env_int(
+        "VOICE_REQUEST_TIMEOUT_SECONDS",
+        180,
+    )
     knowledge_semantic_candidates: int = _env_int(
         "KNOWLEDGE_SEMANTIC_CANDIDATES",
         5000,

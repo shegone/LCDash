@@ -1,0 +1,119 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Voice Lab | LCDash{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="/static/css/lcdash-voice.css?v=20260726">
+
+<section class="voice-shell">
+    <header class="voice-hero glass">
+        <div class="voice-identity">
+            <div class="voice-orb" aria-hidden="true">
+                <i class="bi bi-soundwave"></i>
+            </div>
+            <div>
+                <div class="voice-eyebrow">LOCAL SPEECH INTELLIGENCE</div>
+                <h1>Voice Lab</h1>
+                <p>Private speech for MAE, JACK, and future radio transcription.</p>
+            </div>
+        </div>
+        <div class="voice-status" id="voice-status">
+            <span class="voice-status-dot"></span>
+            <div>
+                <small>VOICE STACK</small>
+                <strong>Checking…</strong>
+            </div>
+        </div>
+    </header>
+
+    <div class="voice-grid">
+        <section class="voice-panel glass">
+            <div class="voice-panel-heading">
+                <div>
+                    <div class="voice-panel-kicker">TEXT TO SPEECH</div>
+                    <h2>Give MAE a voice</h2>
+                </div>
+                <i class="bi bi-volume-up-fill"></i>
+            </div>
+
+            <label for="voice-text">What should she say?</label>
+            <textarea id="voice-text" maxlength="2500">Good afternoon. This is MAE, the Mission Assistance Engine for Logan County 911. I am online and ready to assist.</textarea>
+
+            <div class="voice-controls">
+                <label>
+                    Voice
+                    <select id="voice-choice">
+                        {% for voice in voices %}
+                            <option value="{{ voice.id }}" {% if voice.id == default_voice %}selected{% endif %}>
+                                {{ voice.label }} — {{ voice.description }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>
+                    Pace
+                    <select id="voice-speed">
+                        <option value="0.9">Deliberate</option>
+                        <option value="1.0" selected>Natural</option>
+                        <option value="1.1">Prompt</option>
+                    </select>
+                </label>
+            </div>
+
+            <button class="voice-primary-button" id="voice-speak" type="button">
+                <i class="bi bi-play-fill"></i>
+                Generate and play
+            </button>
+            <audio id="voice-player" controls hidden></audio>
+            <div class="voice-message" id="voice-tts-message" aria-live="polite"></div>
+        </section>
+
+        <section class="voice-panel glass">
+            <div class="voice-panel-heading">
+                <div>
+                    <div class="voice-panel-kicker">SPEECH TO TEXT</div>
+                    <h2>Test local transcription</h2>
+                </div>
+                <i class="bi bi-mic-fill"></i>
+            </div>
+
+            <p class="voice-copy">
+                Record a short test. The browser sends it directly to the local
+                speech service; this beta test does not save the recording.
+            </p>
+
+            <button class="voice-record-button" id="voice-record" type="button">
+                <span class="voice-record-dot"></span>
+                Start recording
+            </button>
+            <div class="voice-record-time" id="voice-record-time">00:00</div>
+
+            <div class="voice-transcript">
+                <small>TRANSCRIPT</small>
+                <p id="voice-transcript">Your transcription will appear here.</p>
+            </div>
+            <div class="voice-message" id="voice-stt-message" aria-live="polite"></div>
+        </section>
+    </div>
+
+    <section class="voice-roadmap glass">
+        <div>
+            <i class="bi bi-cpu-fill"></i>
+            <strong>Ryzen beta engine</strong>
+            <span>Kokoro voice and Faster-Whisper transcription on CPU</span>
+        </div>
+        <div>
+            <i class="bi bi-gpu-card"></i>
+            <strong>RTX 3080 upgrade</strong>
+            <span>Chatterbox expressive speech and higher-accuracy radio STT</span>
+        </div>
+        <div>
+            <i class="bi bi-shield-lock-fill"></i>
+            <strong>Private by design</strong>
+            <span>Speech stays inside the LCDash server network</span>
+        </div>
+    </section>
+</section>
+
+<script src="/static/js/lcdash-voice.js?v=20260726"></script>
+{% endblock %}

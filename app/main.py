@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile
 from pydantic import BaseModel, Field
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -63,6 +63,13 @@ from app.services.mindshare_service import (
     ask_mindshare,
     get_mindshare_status,
 )
+from app.services.voice_service import (
+    VOICE_CHOICES,
+    VoiceServiceError,
+    get_voice_status,
+    synthesize_speech,
+    transcribe_audio,
+)
 from app.services.centralsquare import (
     CentralSquareClient,
     CentralSquareAPIError,
@@ -102,6 +109,13 @@ class MAEChatRequest(BaseModel):
 class MindshareChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
     history: list[MAEHistoryMessage] = Field(default_factory=list, max_length=6)
+
+
+class VoiceSpeechRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=2500)
+    voice: str = Field(default="", max_length=40)
+    speed: float = Field(default=1.0, ge=0.7, le=1.3)
+    response_format: str = Field(default="mp3", pattern="^(mp3|wav)$")
 
 
 class MAEFeedbackRequest(BaseModel):
@@ -749,6 +763,71 @@ def mindshare_radio_page(request: Request):
         context={"version": "0.4.0"},
         headers={"Cache-Control": "no-store"},
     )
+
+
+@app.get("/voice")
+def voice_lab_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="voice_lab.html",
+        context={
+            "voices": VOICE_CHOICES,
+            "default_voice": settings.voice_tts_voice,
+            "version": "0.1.0",
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/voice/status")
+def voice_status_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    return get_voice_status()
+
+
+@app.post("/api/voice/speech")
+def voice_speech_api(payload: VoiceSpeechRequest):
+    try:
+        audio, media_type = synthesize_speech(
+            payload.text.strip(),
+            voice=payload.voice,
+            speed=payload.speed,
+            response_format=payload.response_format,
+        )
+    except VoiceServiceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    return Response(
+        content=audio,
+        media_type=media_type,
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": (
+                f'inline; filename="lcdash-voice.{payload.response_format}"'
+            ),
+        },
+    )
+
+
+@app.post("/api/voice/transcribe")
+async def voice_transcribe_api(file: UploadFile = File(...)):
+    audio = await file.read()
+    if not audio:
+        raise HTTPException(status_code=400, detail="The recording is empty.")
+    if len(audio) > 20 * 1024 * 1024:
+        raise HTTPException(
+            status_code=413,
+            detail="The recording exceeds the 20 MB beta limit.",
+        )
+
+    try:
+        return transcribe_audio(
+            audio,
+            filename=file.filename or "recording.webm",
+            content_type=file.content_type or "application/octet-stream",
+        )
+    except VoiceServiceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.get("/api/knowledge/status")
