@@ -3,7 +3,12 @@
 
     const dataElement = document.getElementById("map-data");
     const mapElement = document.getElementById("operations-map");
-    if (!dataElement || !mapElement || typeof L === "undefined") {
+    if (!dataElement || !mapElement) {
+        return;
+    }
+    if (typeof L === "undefined") {
+        mapElement.setAttribute("role", "alert");
+        mapElement.textContent = "The map viewer could not be loaded. Refresh this page to try again.";
         return;
     }
 
@@ -11,6 +16,7 @@
     try {
         mapData = JSON.parse(dataElement.textContent);
     } catch (error) {
+        mapElement.setAttribute("role", "alert");
         mapElement.textContent = "Map data could not be loaded.";
         return;
     }

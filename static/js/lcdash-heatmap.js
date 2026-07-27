@@ -14,6 +14,7 @@
     try {
         heatmapData = JSON.parse(dataElement.textContent);
     } catch (error) {
+        mapElement.setAttribute("role", "alert");
         mapElement.textContent = "Recent activity data could not be loaded.";
         return;
     }

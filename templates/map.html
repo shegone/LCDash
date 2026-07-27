@@ -84,6 +84,26 @@
         font-weight: 800;
     }
 
+    .map-control-label {
+        display: block;
+        margin-bottom: 5px;
+        color: #8fb7d9;
+        font-size: .72rem;
+        font-weight: 900;
+        letter-spacing: 1.05px;
+        text-transform: uppercase;
+    }
+
+    .map-view-tab:focus-visible,
+    .map-control-panel select:focus-visible,
+    .map-control-panel button:focus-visible,
+    .map-control-panel input:focus-visible,
+    #operations-map:focus-visible {
+        outline: 3px solid #ffd66b;
+        outline-offset: 3px;
+        box-shadow: 0 0 0 5px rgba(255, 214, 107, .18);
+    }
+
     #operations-map {
         height: 68vh;
         min-height: 560px;
@@ -210,16 +230,54 @@
             min-height: 480px;
         }
     }
+
+    @media (max-width: 767px) {
+        .map-view-tabs {
+            display: flex;
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        .map-view-tab {
+            display: inline-flex;
+            min-height: 44px;
+            flex: 1 0 auto;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .map-control-panel .form-select,
+        .map-control-panel .btn {
+            min-height: 44px;
+        }
+
+        .map-control-actions {
+            display: flex;
+            width: 100%;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .map-control-actions .btn {
+            flex: 1 1 145px;
+        }
+
+        #operations-map {
+            height: 58vh;
+            min-height: 400px;
+        }
+    }
 </style>
 
-<div class="map-view-tabs mb-4">
-    <a class="map-view-tab active" href="/map">
+<nav class="map-view-tabs mb-4" aria-label="GIS map views">
+    <a class="map-view-tab active" href="/map" aria-current="page">
         <i class="bi bi-broadcast-pin"></i> Live Operations
     </a>
     <a class="map-view-tab" href="/map/heatmap?hours=8">
         <i class="bi bi-fire"></i> Recent Activity
     </a>
-</div>
+</nav>
 
 <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
     <div>
@@ -231,7 +289,11 @@
     </div>
 
     <div class="text-end">
-        <div class="map-status-pill {{ 'connected' if map_data.cad_connected else 'disconnected' }}">
+        <div
+            class="map-status-pill {{ 'connected' if map_data.cad_connected else 'disconnected' }}"
+            role="status"
+            aria-live="polite"
+        >
             <i class="bi {{ 'bi-check-circle-fill' if map_data.cad_connected else 'bi-exclamation-triangle-fill' }}"></i>
             CAD {{ cad_status|upper }}
         </div>
@@ -243,11 +305,11 @@
 </div>
 
 {% if not map_data.cad_connected %}
-    <div class="alert alert-danger">
+    <div class="alert alert-danger" role="alert">
         Live CAD map data is unavailable. The map will remain empty until the connection returns.
     </div>
 {% elif map_data.roster_warning %}
-    <div class="map-warning mb-4">
+    <div class="map-warning mb-4" role="status" aria-live="polite">
         <i class="bi bi-exclamation-triangle-fill me-2"></i>{{ map_data.roster_warning }}
     </div>
 {% endif %}
@@ -283,30 +345,34 @@
     </div>
 </div>
 
-<div class="glass map-control-panel mb-3">
+<section class="glass map-control-panel mb-3" aria-labelledby="map-filter-heading">
+    <h2 id="map-filter-heading" class="visually-hidden">Map display controls</h2>
     <div class="row g-3 align-items-center">
-        <div class="col-auto">
+        <div class="col-6 col-md-auto">
             <div class="form-check form-switch">
                 <input class="form-check-input" type="checkbox" id="show-calls" checked>
-                <label class="form-check-label" for="show-calls">Calls</label>
+                <label class="form-check-label" for="show-calls">Show calls</label>
             </div>
         </div>
-        <div class="col-auto">
+        <div class="col-6 col-md-auto">
             <div class="form-check form-switch">
                 <input class="form-check-input" type="checkbox" id="show-units" checked>
-                <label class="form-check-label" for="show-units">Units</label>
+                <label class="form-check-label" for="show-units">Show units</label>
             </div>
         </div>
-        <div class="col-md-2">
+        <div class="col-12 col-md-2">
+            <label class="map-control-label" for="map-agency-filter">Agency</label>
             <select class="form-select form-select-sm" id="map-agency-filter"></select>
         </div>
-        <div class="col-md-2">
+        <div class="col-12 col-md-2">
+            <label class="map-control-label" for="map-priority-filter">Priority</label>
             <select class="form-select form-select-sm" id="map-priority-filter"></select>
         </div>
-        <div class="col-md-2">
+        <div class="col-12 col-md-2">
+            <label class="map-control-label" for="map-status-filter">Status</label>
             <select class="form-select form-select-sm" id="map-status-filter"></select>
         </div>
-        <div class="col-auto ms-md-auto">
+        <div class="col-12 col-md-auto ms-md-auto map-control-actions">
             <button type="button" class="btn btn-outline-info btn-sm" id="fit-visible-markers">
                 <i class="bi bi-arrows-fullscreen"></i> Fit Visible
             </button>
@@ -314,27 +380,43 @@
                 Clear Filters
             </button>
         </div>
-        <div class="col-auto text-secondary small">
+        <div
+            class="col-12 col-md-auto text-secondary small"
+            id="map-filter-status"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+        >
             <strong class="text-white" id="visible-marker-count">0</strong> visible
         </div>
     </div>
-</div>
+</section>
 
-<div class="map-legend mb-3">
-    <span class="legend-item"><span class="legend-dot" style="background:#ff4c4c"></span> Priority 1–10</span>
-    <span class="legend-item"><span class="legend-dot" style="background:#ffd66b"></span> Priority 15</span>
-    <span class="legend-item"><span class="legend-dot" style="background:#4cc9ff"></span> Priority 20</span>
-    <span class="legend-item"><span class="legend-dot" style="background:#69ffb9"></span> Other calls</span>
-    <span class="legend-item"><span class="legend-unit"></span> CAD unit</span>
-</div>
+<section class="map-legend mb-3" aria-label="Map symbol legend">
+    <span class="legend-item"><span class="legend-dot" style="background:#ff4c4c" aria-hidden="true"></span> Priority 1–10</span>
+    <span class="legend-item"><span class="legend-dot" style="background:#ffd66b" aria-hidden="true"></span> Priority 15</span>
+    <span class="legend-item"><span class="legend-dot" style="background:#4cc9ff" aria-hidden="true"></span> Priority 20</span>
+    <span class="legend-item"><span class="legend-dot" style="background:#69ffb9" aria-hidden="true"></span> Other calls</span>
+    <span class="legend-item"><span class="legend-unit" aria-hidden="true"></span> CAD unit</span>
+</section>
 
 {% if map_data.cad_connected and not map_data.features %}
-    <div class="map-warning mb-3">
+    <div class="map-warning mb-3" role="status" aria-live="polite">
         No active records currently have valid, operationally fresh coordinates. The map is centered on Logan County.
     </div>
 {% endif %}
 
-<div id="operations-map" aria-label="Live operations map"></div>
+<p id="operations-map-description" class="visually-hidden">
+    Interactive map of active CAD incidents and fresh unit locations. Use the filter controls above to choose
+    which records are shown. Keyboard users can focus the map and use its zoom controls.
+</p>
+<div
+    id="operations-map"
+    role="region"
+    tabindex="0"
+    aria-label="Live operations map"
+    aria-describedby="operations-map-description map-filter-status"
+></div>
 
 <script type="application/json" id="map-data">{{ map_data|tojson }}</script>
 <script src="/static/vendor/leaflet/leaflet.js"></script>

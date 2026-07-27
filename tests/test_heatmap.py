@@ -220,6 +220,17 @@ class HeatmapPageTests(unittest.TestCase):
         self.assertNotIn("unpkg.com", response.text)
         self.assertIn("Blended Heat", response.text)
         self.assertIn("Individual Calls", response.text)
+        self.assertIn('aria-label="GIS map views"', response.text)
+        self.assertIn('aria-labelledby="heatmap-window-heading"', response.text)
+        self.assertIn('aria-labelledby="heatmap-controls-heading"', response.text)
+        self.assertIn('for="heatmap-agency-filter"', response.text)
+        self.assertIn('id="heatmap-filter-status"', response.text)
+        self.assertIn('aria-live="polite"', response.text)
+        self.assertIn('aria-pressed="true"', response.text)
+        self.assertIn('role="region"', response.text)
+        self.assertIn('tabindex="0"', response.text)
+        self.assertIn(":focus-visible", response.text)
+        self.assertIn("min-height: 44px", response.text)
         self.assertNotIn("CFS1", response.text)
         self.assertNotIn("Private exact address", response.text)
 
@@ -250,6 +261,7 @@ class HeatmapPageTests(unittest.TestCase):
 
         self.assertIn("CAD DISCONNECTED", response.text)
         self.assertIn("Historical CAD activity is unavailable", response.text)
+        self.assertIn('role="alert"', response.text)
 
     @patch("app.main.get_live_map_snapshot")
     def test_live_map_links_to_recent_activity(self, map_snapshot_mock):
