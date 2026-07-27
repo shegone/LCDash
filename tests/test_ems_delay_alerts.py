@@ -7,6 +7,7 @@ from app.services.ems_delay_alert_service import (
     build_delay_alert_message,
     classify_delayed_ems_call,
     evaluate_ems_delay_alerts,
+    send_ems_delay_unit_page,
 )
 
 
@@ -48,6 +49,7 @@ class FakeAlertRepository:
         self.initialized = False
         self.states = {}
         self.dry_runs = []
+        self.live_deliveries = []
         self.issues = []
         self.resolutions = []
         self.missing_resolutions = []
@@ -68,6 +70,9 @@ class FakeAlertRepository:
     def record_dry_run(self, candidate, **kwargs):
         self.dry_runs.append((candidate, kwargs))
 
+    def record_live_delivery(self, candidate, **kwargs):
+        self.live_deliveries.append((candidate, kwargs))
+
     def record_delivery_issue(self, candidate, **kwargs):
         self.issues.append((candidate, kwargs))
 
@@ -80,7 +85,50 @@ class FakeAlertRepository:
         return 0
 
 
+class FakeCentralSquareClient:
+    def __init__(self):
+        self.run_command_payloads = []
+
+    def run_command(self, payload):
+        self.run_command_payloads.append(payload)
+        return {"RunCommandUniqueIdentifier": 552473}
+
+
 class EMSDelayAlertTests(unittest.TestCase):
+    def test_send_unit_page_uses_approved_command_and_message_type(self):
+        client = FakeCentralSquareClient()
+
+        with (
+            patch.object(settings, "ems_delay_run_command_id", 96),
+            patch.object(settings, "ems_delay_message_type_id", 16),
+            patch.object(
+                settings,
+                "ems_delay_message_type_description",
+                "LCDash MAE EMS Delay Alert",
+            ),
+        ):
+            result = send_ems_delay_unit_page(
+                cfs_number="cfs26-24497",
+                unit_number=" eoc1 ",
+                client=client,
+            )
+
+        self.assertEqual(
+            client.run_command_payloads,
+            [
+                {
+                    "CommandUniqueIdentifier": 96,
+                    "CFSNumber": "CFS26-24497",
+                    "UnitNumber": "EOC1",
+                    "PagingMessageType": {
+                        "UniqueIdentifier": 16,
+                        "Description": "LCDash MAE EMS Delay Alert",
+                    },
+                }
+            ],
+        )
+        self.assertEqual(result["run_command_unique_identifier"], 552473)
+
     def test_transfer_becomes_due_from_call_datetime(self):
         candidate = classify_delayed_ems_call(call_record(), now=NOW)
 
@@ -106,6 +154,28 @@ class EMSDelayAlertTests(unittest.TestCase):
         self.assertIsNotNone(candidate)
         self.assertEqual(candidate["alert_type"], "scheduled")
         self.assertFalse(candidate["is_due"])
+        self.assertEqual(
+            candidate["eligible_at"].isoformat(),
+            "2026-07-27T16:15:00+00:00",
+        )
+
+    def test_prescheduled_incident_code_is_monitored_when_flag_is_false(self):
+        with patch.object(
+            settings,
+            "ems_delay_scheduled_codes",
+            ("PRESCHED",),
+        ):
+            candidate = classify_delayed_ems_call(
+                call_record(
+                    incident_code="PRESCHED",
+                    is_scheduled=False,
+                    incident_datetime="2026-07-27T15:45:00Z",
+                ),
+                now=NOW,
+            )
+
+        self.assertIsNotNone(candidate)
+        self.assertEqual(candidate["alert_type"], "scheduled")
         self.assertEqual(
             candidate["eligible_at"].isoformat(),
             "2026-07-27T16:15:00+00:00",
@@ -213,6 +283,46 @@ class EMSDelayAlertTests(unittest.TestCase):
         self.assertEqual(
             repository.missing_resolutions[0][0],
             {"CFS26-30001", "CFS26-30002", "CFS26-30003"},
+        )
+
+    @patch(
+        "app.services.ems_delay_alert_service.get_all_units",
+        return_value=[supervisor_unit()],
+    )
+    @patch(
+        "app.services.ems_delay_alert_service.get_active_calls",
+        return_value=[call_record()],
+    )
+    def test_live_mode_pages_selected_supervisor_unit_once(
+        self,
+        active_calls_mock,
+        all_units_mock,
+    ):
+        repository = FakeAlertRepository()
+        client = FakeCentralSquareClient()
+
+        with (
+            patch.object(settings, "ems_delay_alert_mode", "live"),
+            patch.object(settings, "ems_delay_run_command_id", 96),
+            patch.object(settings, "ems_delay_message_type_id", 16),
+        ):
+            result = evaluate_ems_delay_alerts(
+                now=NOW,
+                client=client,
+                repository=repository,
+            )
+
+        self.assertEqual(result["live_notifications"], 1)
+        self.assertEqual(result["live_pages"], 1)
+        self.assertEqual(len(client.run_command_payloads), 1)
+        self.assertEqual(
+            client.run_command_payloads[0]["UnitNumber"],
+            "EMS104",
+        )
+        self.assertEqual(len(repository.live_deliveries), 1)
+        self.assertEqual(
+            repository.live_deliveries[0][1]["sequence_number"],
+            1,
         )
 
     @patch(

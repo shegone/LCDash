@@ -219,6 +219,9 @@ class EMSDelayAlertRepository(AbstractContextManager):
         *,
         observed_at: datetime,
         issue: str,
+        sequence_number: int | None = None,
+        recipients: list[dict] | None = None,
+        message: str = "",
     ):
         self._execute(
             """
@@ -237,6 +240,115 @@ class EMSDelayAlertRepository(AbstractContextManager):
                 issue[:1000],
                 observed_at + timedelta(minutes=5),
                 candidate["cfs_number"],
+            ),
+        )
+        if sequence_number is not None:
+            self._execute(
+                """
+                INSERT INTO lcdash_alerting.ems_delay_attempts (
+                    cfs_number,
+                    sequence_number,
+                    attempted_at,
+                    delivery_mode,
+                    delivery_status,
+                    recipient_snapshot,
+                    message,
+                    error_summary
+                )
+                VALUES (%s, %s, %s, 'live', 'failed', %s, %s, %s)
+                """,
+                (
+                    candidate["cfs_number"],
+                    sequence_number,
+                    observed_at,
+                    Jsonb(recipients or []),
+                    message,
+                    issue[:1000],
+                ),
+            )
+        self._commit()
+
+    def record_live_delivery(
+        self,
+        candidate: dict,
+        *,
+        sequence_number: int,
+        recipients: list[dict],
+        message: str,
+        observed_at: datetime,
+        repeat_minutes: int,
+        delivery_results: list[dict],
+    ):
+        successful_results = [
+            result
+            for result in delivery_results
+            if result.get("delivery_status") == "sent"
+        ]
+        delivery_status = (
+            "sent"
+            if len(successful_results) == len(delivery_results)
+            else "partial"
+        )
+        error_summary = "; ".join(
+            result.get("error") or "Unknown paging failure"
+            for result in delivery_results
+            if result.get("delivery_status") != "sent"
+        )
+        next_notification_at = observed_at + timedelta(
+            minutes=repeat_minutes
+        )
+
+        self._execute(
+            """
+            UPDATE lcdash_alerting.ems_delay_alerts
+            SET
+                alert_count = %s,
+                status = 'live',
+                last_observed_at = %s,
+                last_notification_at = %s,
+                next_notification_at = %s,
+                last_delivery_status = %s,
+                last_error = %s,
+                updated_at = NOW()
+            WHERE cfs_number = %s
+            """,
+            (
+                sequence_number,
+                observed_at,
+                observed_at,
+                next_notification_at,
+                delivery_status,
+                error_summary[:1000],
+                candidate["cfs_number"],
+            ),
+        )
+        self._execute(
+            """
+            INSERT INTO lcdash_alerting.ems_delay_attempts (
+                cfs_number,
+                sequence_number,
+                attempted_at,
+                delivery_mode,
+                delivery_status,
+                recipient_snapshot,
+                message,
+                error_summary
+            )
+            VALUES (%s, %s, %s, 'live', %s, %s, %s, %s)
+            """,
+            (
+                candidate["cfs_number"],
+                sequence_number,
+                observed_at,
+                delivery_status,
+                Jsonb(
+                    {
+                        "recipients": recipients,
+                        "delivery_results": delivery_results,
+                    }
+                ),
+                message,
+                error_summary[:1000],
             ),
         )
         self._commit()

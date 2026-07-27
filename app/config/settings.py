@@ -100,9 +100,25 @@ class Settings:
         "EMS_DELAY_POLL_SECONDS",
         60,
     )
+    ems_delay_run_command_id: int = _env_int(
+        "EMS_DELAY_RUN_COMMAND_ID",
+        96,
+    )
+    ems_delay_message_type_id: int = _env_int(
+        "EMS_DELAY_MESSAGE_TYPE_ID",
+        16,
+    )
+    ems_delay_message_type_description: str = _env(
+        "EMS_DELAY_MESSAGE_TYPE_DESCRIPTION",
+        "LCDash MAE EMS Delay Alert",
+    )
     ems_delay_transfer_codes: tuple[str, ...] = _env_list(
         "EMS_DELAY_TRANSFER_CODES",
         "TRANSFER,911TRANS",
+    )
+    ems_delay_scheduled_codes: tuple[str, ...] = _env_list(
+        "EMS_DELAY_SCHEDULED_CODES",
+        "PRESCHED",
     )
     ems_response_agencies: tuple[str, ...] = _env_list(
         "EMS_RESPONSE_AGENCIES",

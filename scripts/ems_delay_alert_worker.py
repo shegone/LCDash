@@ -34,7 +34,9 @@ def main() -> None:
                     f"mode={result['status']} "
                     f"monitored={result['monitored_calls']} "
                     f"due={result['due_calls']} "
-                    f"would_send={result['dry_run_notifications']}",
+                    f"would_send={result['dry_run_notifications']} "
+                    f"live_notifications={result['live_notifications']} "
+                    f"live_pages={result['live_pages']}",
                     flush=True,
                 )
             except (

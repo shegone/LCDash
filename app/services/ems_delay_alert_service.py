@@ -2,7 +2,10 @@ from datetime import datetime, timedelta, timezone
 
 from app.config.settings import settings
 from app.services.cad_service import get_active_calls
-from app.services.centralsquare import CentralSquareClient
+from app.services.centralsquare import (
+    CentralSquareAPIError,
+    CentralSquareClient,
+)
 from app.services.ems_delay_alert_database import EMSDelayAlertRepository
 from app.services.unit_service import classify_unit, get_all_units
 
@@ -19,8 +22,9 @@ def select_ems_supervisor_recipients(
 
     A configured supervisor unit is eligible when it has an assigned responder
     and is not classified as off duty or otherwise unavailable. The returned
-    PersonnelUniqueIdentifier is intended for CentralSquare's native paging
-    command once that write command is enabled and tested.
+    The selected unit number is used by CentralSquare's native unit paging
+    command. Personnel identifiers are retained for recipient deduplication
+    and the delivery audit trail.
     """
 
     configured_units = {
@@ -150,7 +154,13 @@ def classify_delayed_ems_call(
     now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     incident_code = str(call.get("incident_code") or "").strip().upper()
     transfer_codes = _normalized_values(settings.ems_delay_transfer_codes)
-    is_scheduled = bool(call.get("is_scheduled"))
+    scheduled_codes = _normalized_values(
+        settings.ems_delay_scheduled_codes
+    )
+    is_scheduled = (
+        bool(call.get("is_scheduled"))
+        or incident_code in scheduled_codes
+    )
 
     if is_scheduled:
         alert_type = "scheduled"
@@ -208,6 +218,49 @@ def build_delay_alert_message(candidate: dict, sequence_number: int) -> str:
     )
 
 
+def send_ems_delay_unit_page(
+    *,
+    cfs_number: str,
+    unit_number: str,
+    client: CentralSquareClient | None = None,
+) -> dict:
+    """Send one CentralSquare page using the approved delay-alert command."""
+
+    normalized_cfs_number = str(cfs_number or "").strip().upper()
+    normalized_unit_number = _normalized_unit_number(unit_number)
+
+    if not normalized_cfs_number:
+        raise ValueError("A CFS number is required to send an EMS delay page.")
+    if not normalized_unit_number:
+        raise ValueError("A unit number is required to send an EMS delay page.")
+    if settings.ems_delay_run_command_id <= 0:
+        raise ValueError("EMS_DELAY_RUN_COMMAND_ID must be configured.")
+    if settings.ems_delay_message_type_id <= 0:
+        raise ValueError("EMS_DELAY_MESSAGE_TYPE_ID must be configured.")
+
+    client = client or CentralSquareClient()
+    payload = {
+        "CommandUniqueIdentifier": settings.ems_delay_run_command_id,
+        "CFSNumber": normalized_cfs_number,
+        "UnitNumber": normalized_unit_number,
+        "PagingMessageType": {
+            "UniqueIdentifier": settings.ems_delay_message_type_id,
+            "Description": settings.ems_delay_message_type_description,
+        },
+    }
+    response = client.run_command(payload)
+
+    return {
+        "cfs_number": normalized_cfs_number,
+        "unit_number": normalized_unit_number,
+        "command_unique_identifier": settings.ems_delay_run_command_id,
+        "message_type_unique_identifier": settings.ems_delay_message_type_id,
+        "run_command_unique_identifier": response.get(
+            "RunCommandUniqueIdentifier"
+        ),
+    }
+
+
 def evaluate_ems_delay_alerts(
     *,
     now: datetime | None = None,
@@ -243,6 +296,8 @@ def _evaluate_ems_delay_alerts(
     observed_cfs_numbers: set[str] = set()
     due_count = 0
     dry_run_count = 0
+    live_notification_count = 0
+    live_page_count = 0
     waiting_count = 0
     resolved_count = 0
 
@@ -287,26 +342,82 @@ def _evaluate_ems_delay_alerts(
         sequence_number = int(state.get("alert_count") or 0) + 1
         message = build_delay_alert_message(candidate, sequence_number)
 
-        if settings.ems_delay_alert_mode != "dry_run":
+        if settings.ems_delay_alert_mode == "dry_run":
+            repository.record_dry_run(
+                candidate,
+                sequence_number=sequence_number,
+                recipients=recipients,
+                message=message,
+                observed_at=now,
+                repeat_minutes=max(settings.ems_delay_repeat_minutes, 1),
+            )
+            dry_run_count += 1
+            continue
+
+        if settings.ems_delay_alert_mode != "live":
             repository.record_delivery_issue(
                 candidate,
                 observed_at=now,
                 issue=(
-                    "Live paging is disabled until a CentralSquare API "
-                    "run command is configured and approved."
+                    "EMS_DELAY_ALERT_MODE must be either dry_run or live."
                 ),
             )
             continue
 
-        repository.record_dry_run(
+        delivery_results = []
+        for recipient in recipients:
+            unit_number = recipient.get("unit_number") or ""
+            try:
+                delivery_results.append(
+                    {
+                        **send_ems_delay_unit_page(
+                            cfs_number=cfs_number,
+                            unit_number=unit_number,
+                            client=client,
+                        ),
+                        "delivery_status": "sent",
+                    }
+                )
+            except (CentralSquareAPIError, ValueError) as exc:
+                delivery_results.append(
+                    {
+                        "unit_number": _normalized_unit_number(unit_number),
+                        "delivery_status": "failed",
+                        "error": str(exc),
+                    }
+                )
+
+        successful_pages = [
+            result
+            for result in delivery_results
+            if result.get("delivery_status") == "sent"
+        ]
+        if not successful_pages:
+            error_summary = "; ".join(
+                result.get("error") or "Unknown paging failure"
+                for result in delivery_results
+            )
+            repository.record_delivery_issue(
+                candidate,
+                observed_at=now,
+                issue=error_summary,
+                sequence_number=sequence_number,
+                recipients=recipients,
+                message=message,
+            )
+            continue
+
+        repository.record_live_delivery(
             candidate,
             sequence_number=sequence_number,
             recipients=recipients,
             message=message,
             observed_at=now,
             repeat_minutes=max(settings.ems_delay_repeat_minutes, 1),
+            delivery_results=delivery_results,
         )
-        dry_run_count += 1
+        live_notification_count += 1
+        live_page_count += len(successful_pages)
 
     resolved_count += repository.resolve_missing_alerts(
         observed_cfs_numbers,
@@ -315,13 +426,15 @@ def _evaluate_ems_delay_alerts(
     )
 
     return {
-        "status": "dry_run",
+        "status": settings.ems_delay_alert_mode,
         "evaluated_at": now.isoformat(),
         "active_calls": len(calls),
         "monitored_calls": len(observed_cfs_numbers),
         "waiting_calls": waiting_count,
         "due_calls": due_count,
         "dry_run_notifications": dry_run_count,
+        "live_notifications": live_notification_count,
+        "live_pages": live_page_count,
         "resolved_alerts": resolved_count,
         "recipient_units": [
             recipient["unit_number"]
