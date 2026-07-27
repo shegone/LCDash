@@ -3,7 +3,12 @@
 
     const dataElement = document.getElementById("heatmap-data");
     const mapElement = document.getElementById("activity-map");
-    if (!dataElement || !mapElement || typeof L === "undefined") return;
+    if (!dataElement || !mapElement) return;
+    if (typeof L === "undefined") {
+        mapElement.setAttribute("role", "alert");
+        mapElement.textContent = "The map viewer could not be loaded. Refresh this page to try again.";
+        return;
+    }
 
     let heatmapData;
     try {
@@ -60,6 +65,14 @@
         }).addTo(map)
         : null;
     const individualLayer = L.layerGroup().addTo(map);
+
+    if (!heatLayer) {
+        displayMode = "individual";
+        if (blendedButton) {
+            blendedButton.disabled = true;
+            blendedButton.title = "Blended heat view is temporarily unavailable";
+        }
+    }
 
     function selectedCount(record) {
         const selectedAgency = agencyFilter ? agencyFilter.value : "";
@@ -187,7 +200,7 @@
     }
 
     function setDisplayMode(mode) {
-        displayMode = mode === "individual" ? "individual" : "blended";
+        displayMode = mode === "individual" || !heatLayer ? "individual" : "blended";
         applyView(true);
     }
 

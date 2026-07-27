@@ -4,7 +4,7 @@
 
 {% block content %}
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
 
 <style>
     .heatmap-view-tabs {
@@ -214,7 +214,7 @@
         <div class="text-info fw-bold">RECENT CALL ACTIVITY</div>
         <div class="heatmap-page-title">Historical Call Heat Map</div>
         <div class="text-secondary">
-            Blended CAD activity using approximate map cells; individual incident details are not displayed
+            View recent CAD activity as blended density or individual approximate call markers
         </div>
     </div>
 
@@ -333,8 +333,8 @@
 <div id="activity-map" aria-label="Historical call activity heat map"></div>
 
 <script type="application/json" id="heatmap-data">{{ heatmap_data|tojson }}</script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script src="/static/vendor/leaflet/leaflet.js"></script>
+<script src="/static/vendor/leaflet-heat/leaflet-heat.js"></script>
 <script src="/static/js/lcdash-heatmap.js"></script>
 <script>
     LCDashTime.updateCadDisplayTimes();
