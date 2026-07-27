@@ -6,8 +6,11 @@ x-lcdash-environment: &lcdash-environment
   CENTRALSQUARE_SYSTEM_BASE_URL: https://api-wv-logan-911.centralsquarecloudgov.com/api/system/v1
   CENTRALSQUARE_USERNAME_FILE: /run/secrets/centralsquare_username
   CENTRALSQUARE_PASSWORD_FILE: /run/secrets/centralsquare_password
+  CENTRALSQUARE_WEBHOOK_SECRET_FILE: /run/secrets/centralsquare_webhook_secret
   CENTRALSQUARE_FROM_HEADER: LCDash-Logan911
   DATABASE_URL_FILE: /run/secrets/database_url
+  WEBHOOK_MAX_BODY_BYTES: "1048576"
+  REALTIME_HEARTBEAT_SECONDS: "15"
   LCDASH_DEBUG: "false"
   ANALYTICS_INITIAL_LOOKBACK_HOURS: "24"
   ANALYTICS_OVERLAP_MINUTES: "120"
@@ -33,6 +36,7 @@ x-lcdash-secrets: &lcdash-secrets
   - centralsquare_username
   - centralsquare_password
   - database_url
+  - centralsquare_webhook_secret
 
 services:
   postgres:
@@ -362,6 +366,8 @@ secrets:
     file: /home/ted/lcdash-platform/secrets/centralsquare_password
   database_url:
     file: /home/ted/lcdash-platform/secrets/database_url
+  centralsquare_webhook_secret:
+    file: /home/ted/lcdash-platform/secrets/centralsquare_webhook_secret
   postgres_password:
     file: /home/ted/lcdash-platform/secrets/postgres_password
   openwebui_secret_key:

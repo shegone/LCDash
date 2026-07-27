@@ -132,3 +132,22 @@ python scripts/jack_reliability_baseline.py \
 
 The runner calls the local LCDash API sequentially and does not change
 Mindshare equipment or source documents.
+
+## Real-time CAD event receiver
+
+The production stack provides authenticated, read-only webhook receivers for
+CentralSquare CFS and unit changes. The secret is mounted from:
+
+```text
+/home/ted/lcdash-platform/secrets/centralsquare_webhook_secret
+```
+
+Delivery metadata is stored in:
+
+```text
+lcdash_realtime.webhook_events
+```
+
+Raw CentralSquare webhook payloads are not stored in that table. See
+`docs/REALTIME_EVENTS.md` for the receiver URLs, Cloudflare boundary, activation
+checklist, and subscription requirements.

@@ -34,6 +34,15 @@ class Settings:
     from_header: str = _env("CENTRALSQUARE_FROM_HEADER", "LCDash")
     debug: bool = _env("LCDASH_DEBUG", "true").lower() == "true"
     database_url: str = _env("DATABASE_URL")
+    centralsquare_webhook_secret: str = _env("CENTRALSQUARE_WEBHOOK_SECRET")
+    webhook_max_body_bytes: int = _env_int(
+        "WEBHOOK_MAX_BODY_BYTES",
+        1048576,
+    )
+    realtime_heartbeat_seconds: int = _env_int(
+        "REALTIME_HEARTBEAT_SECONDS",
+        15,
+    )
     analytics_initial_lookback_hours: int = _env_int(
         "ANALYTICS_INITIAL_LOOKBACK_HOURS",
         24,

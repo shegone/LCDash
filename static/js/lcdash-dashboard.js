@@ -9,6 +9,8 @@
     let secondsUntilRefresh = REFRESH_SECONDS;
     let refreshInProgress = false;
     let lastSuccessfulRefresh = Date.now();
+    let realtimeRefreshTimer = null;
+    let realtimeSource = null;
 
     function element(id) {
         return document.getElementById(id);
@@ -476,6 +478,33 @@
         }
     }
 
+    function scheduleRealtimeRefresh() {
+        if (realtimeRefreshTimer !== null) {
+            window.clearTimeout(realtimeRefreshTimer);
+        }
+
+        realtimeRefreshTimer = window.setTimeout(function () {
+            realtimeRefreshTimer = null;
+            if (refreshInProgress) {
+                secondsUntilRefresh = 0;
+                return;
+            }
+            refreshDashboard();
+        }, 500);
+    }
+
+    function startRealtimeEvents() {
+        if (!("EventSource" in window)) {
+            return;
+        }
+
+        realtimeSource = new EventSource("/api/operations/events");
+        realtimeSource.addEventListener(
+            "operations_changed",
+            scheduleRealtimeRefresh
+        );
+    }
+
     function timerTick() {
         LCDashTime.updateElementFromCadTime("last-updated", {timeOnly: true});
         LCDashTime.updateCallElapsedTimers();
@@ -506,6 +535,13 @@
         }
     });
 
+    window.addEventListener("pagehide", function () {
+        if (realtimeSource) {
+            realtimeSource.close();
+        }
+    });
+
+    startRealtimeEvents();
     timerTick();
     window.setInterval(timerTick, 1000);
 })();

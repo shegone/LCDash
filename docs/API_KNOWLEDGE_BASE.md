@@ -251,3 +251,22 @@ The first application milestone is:
 - Store secrets in environment variables or a local `.env` file.
 - `.env` must remain ignored by Git.
 - Use a dedicated API service account for vendor and application integrations.
+
+## CAD subscriptions verified from the v1 OpenAPI schema
+
+CentralSquare exposes:
+
+```text
+POST /cfs_core/subscription
+POST /units/subscription
+```
+
+The CFS subscription requires `CallbackURL` and `DispatchAgency`. The unit
+subscription requires `CallbackURL`. CentralSquare calls the URL when a matching
+record is created or updated and permits callback authentication information in
+the URL.
+
+LCDash receives those notifications through authenticated, read-only webhook
+routes and signals connected browsers to fetch a fresh operations snapshot.
+The existing 30-second refresh remains the reconciliation fallback. Full
+activation and security details are documented in `docs/REALTIME_EVENTS.md`.

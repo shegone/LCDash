@@ -1,6 +1,13 @@
+import asyncio
+import base64
+import binascii
+import json
+import secrets
+from typing import Literal
+
 from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile
 from pydantic import BaseModel, Field
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
@@ -84,6 +91,11 @@ from app.services.voice_service import (
 from app.services.centralsquare import (
     CentralSquareClient,
     CentralSquareAPIError,
+)
+from app.services.realtime_service import (
+    browser_event,
+    event_broker,
+    process_webhook_event,
 )
 
 app = FastAPI(
@@ -171,6 +183,47 @@ def _authenticated_user_email(request: Request) -> str:
         if value:
             return value
     return "local-session"
+
+
+def _authorize_centralsquare_webhook(request: Request) -> None:
+    configured_secret = settings.centralsquare_webhook_secret
+    if not configured_secret:
+        raise HTTPException(
+            status_code=503,
+            detail="CentralSquare webhook receiver is not configured.",
+        )
+
+    supplied_secret = str(
+        request.headers.get("x-lcdash-webhook-secret") or ""
+    ).strip()
+    authorization = str(request.headers.get("authorization") or "").strip()
+
+    if not supplied_secret and authorization.lower().startswith("basic "):
+        encoded_credentials = authorization[6:].strip()
+        try:
+            decoded_credentials = base64.b64decode(
+                encoded_credentials,
+                validate=True,
+            ).decode("utf-8")
+            username, supplied_secret = decoded_credentials.split(":", 1)
+        except (binascii.Error, UnicodeDecodeError, ValueError):
+            username = ""
+            supplied_secret = ""
+
+        if not secrets.compare_digest(username, "lcdash"):
+            supplied_secret = ""
+
+    if not supplied_secret or not secrets.compare_digest(
+        supplied_secret,
+        configured_secret,
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Webhook authentication failed.",
+            headers={
+                "WWW-Authenticate": 'Basic realm="LCDash CentralSquare Webhook"'
+            },
+        )
 
 
 @app.middleware("http")
@@ -303,6 +356,108 @@ def operations_snapshot_api(response: Response):
             "error": str(exc),
             **snapshot,
         }
+
+
+@app.post(
+    "/api/integrations/centralsquare/webhooks/{source}",
+    status_code=202,
+)
+async def receive_centralsquare_webhook(
+    source: Literal["cfs", "units"],
+    request: Request,
+):
+    _authorize_centralsquare_webhook(request)
+
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > settings.webhook_max_body_bytes:
+                raise HTTPException(
+                    status_code=413,
+                    detail="Webhook payload is too large.",
+                )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid Content-Length header.",
+            ) from exc
+
+    body = await request.body()
+    if len(body) > settings.webhook_max_body_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail="Webhook payload is too large.",
+        )
+
+    try:
+        payload = json.loads(body)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Webhook payload must be valid JSON.",
+        ) from exc
+
+    if not isinstance(payload, (dict, list)):
+        raise HTTPException(
+            status_code=422,
+            detail="Webhook payload must be a JSON object or array.",
+        )
+
+    result = await asyncio.to_thread(
+        process_webhook_event,
+        source,
+        payload,
+        len(body),
+    )
+
+    if not result["duplicate"]:
+        await event_broker.publish(browser_event(result))
+
+    return Response(
+        content=json.dumps(
+            {
+                "accepted": result["accepted"],
+                "duplicate": result["duplicate"],
+                "persisted": result["persisted"],
+            }
+        ),
+        status_code=202,
+        media_type="application/json",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/operations/events")
+async def operations_event_stream(request: Request):
+    async def stream():
+        async with event_broker.subscribe() as queue:
+            yield "retry: 3000\n"
+            yield 'event: ready\ndata: {"status":"connected"}\n\n'
+
+            while not await request.is_disconnected():
+                try:
+                    event = await asyncio.wait_for(
+                        queue.get(),
+                        timeout=max(settings.realtime_heartbeat_seconds, 5),
+                    )
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+                    continue
+
+                yield (
+                    "event: operations_changed\n"
+                    f"data: {json.dumps(event, separators=(',', ':'))}\n\n"
+                )
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-store",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/api/operations/active-calls")
