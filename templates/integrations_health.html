@@ -1,0 +1,187 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Integration Health | LCDash{% endblock %}
+
+{% block page_styles %}
+<link rel="stylesheet" href="/static/css/lcdash-integrations.css">
+{% endblock %}
+
+{% block content %}
+
+<section class="integration-hero glass">
+    <div>
+        <div class="integration-eyebrow">SYSTEM DELIVERY AND RECOVERY</div>
+        <h1>Integration Health</h1>
+        <p>
+            Confirm how CentralSquare changes reach LCDash without exposing
+            call content, credentials, or webhook payloads.
+        </p>
+    </div>
+
+    <div class="integration-overall {{ health.status }}" id="integration-overall">
+        <i class="bi bi-heart-pulse-fill" aria-hidden="true"></i>
+        <div>
+            <span>REAL-TIME LAYER</span>
+            <strong id="integration-overall-label">{{ health.status_label }}</strong>
+        </div>
+    </div>
+</section>
+
+<section class="integration-status-grid" aria-label="Integration status">
+    <article class="integration-status-card glass">
+        <div class="integration-icon"><i class="bi bi-shield-lock-fill"></i></div>
+        <div>
+            <span>WEBHOOK RECEIVER</span>
+            <strong
+                id="receiver-status"
+                class="{% if health.receiver_configured %}is-good{% else %}is-warning{% endif %}"
+            >
+                {% if health.receiver_configured %}READY{% else %}NOT CONFIGURED{% endif %}
+            </strong>
+            <small>Protected CentralSquare callback</small>
+        </div>
+    </article>
+
+    <article class="integration-status-card glass">
+        <div class="integration-icon"><i class="bi bi-broadcast-pin"></i></div>
+        <div>
+            <span>BROWSER STREAM</span>
+            <strong id="integration-stream-status" class="is-warning">CONNECTING</strong>
+            <small id="integration-stream-detail">Opening protected event stream</small>
+        </div>
+    </article>
+
+    <article class="integration-status-card glass">
+        <div class="integration-icon"><i class="bi bi-database-check"></i></div>
+        <div>
+            <span>DELIVERY METADATA</span>
+            <strong
+                id="metadata-status"
+                class="{% if health.database_available %}is-good{% else %}is-warning{% endif %}"
+            >
+                {% if health.database_available %}AVAILABLE{% else %}UNAVAILABLE{% endif %}
+            </strong>
+            <small>Counts and timestamps only</small>
+        </div>
+    </article>
+
+    <article class="integration-status-card glass">
+        <div class="integration-icon"><i class="bi bi-arrow-repeat"></i></div>
+        <div>
+            <span>RECONCILIATION</span>
+            <strong class="is-good">
+                {{ health.reconciliation_poll_seconds }}-SECOND BACKUP
+            </strong>
+            <small>Remains active if streaming is interrupted</small>
+        </div>
+    </article>
+</section>
+
+<section class="delivery-panel glass">
+    <div class="delivery-panel-heading">
+        <div>
+            <div class="integration-eyebrow">CENTRALSQUARE CALLBACKS</div>
+            <h2>Observed Deliveries</h2>
+            <p>
+                “Observed” means LCDash received an authenticated callback.
+                A quiet system is shown as awaiting—not failed.
+            </p>
+        </div>
+        <div class="health-updated">
+            Checked
+            <time id="health-generated-at" data-cad-time="{{ health.generated_at }}">
+                {{ health.generated_at }}
+            </time>
+        </div>
+    </div>
+
+    <div class="delivery-source-grid">
+        {% for source_name in ["cfs", "units"] %}
+            {% set source = health.sources[source_name] %}
+            <article
+                class="delivery-source {{ source.status }}"
+                id="{{ source_name }}-delivery-card"
+                data-source="{{ source_name }}"
+            >
+                <header>
+                    <div class="delivery-source-icon">
+                        <i class="bi {% if source_name == 'cfs' %}bi-telephone-inbound-fill{% else %}bi-truck-front-fill{% endif %}"></i>
+                    </div>
+                    <div>
+                        <span>{{ source.label }}</span>
+                        <strong id="{{ source_name }}-status-label">
+                            {{ source.status_label }}
+                        </strong>
+                    </div>
+                </header>
+
+                <div class="delivery-metrics">
+                    <div>
+                        <span>Unique events</span>
+                        <strong id="{{ source_name }}-unique-events">
+                            {{ source.unique_events }}
+                        </strong>
+                    </div>
+                    <div>
+                        <span>Duplicate retries</span>
+                        <strong id="{{ source_name }}-duplicate-deliveries">
+                            {{ source.duplicate_deliveries }}
+                        </strong>
+                    </div>
+                    <div>
+                        <span>Total deliveries</span>
+                        <strong id="{{ source_name }}-total-deliveries">
+                            {{ source.total_deliveries }}
+                        </strong>
+                    </div>
+                </div>
+
+                <div class="delivery-last-seen">
+                    <span>Last delivery</span>
+                    <strong id="{{ source_name }}-latest-delivery">
+                        {% if source.latest_delivery %}
+                            <time data-cad-time="{{ source.latest_delivery }}">
+                                {{ source.latest_delivery }}
+                            </time>
+                        {% else %}
+                            Not observed yet
+                        {% endif %}
+                    </strong>
+                </div>
+            </article>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="integration-notes">
+    <article class="glass">
+        <i class="bi bi-eye-slash-fill" aria-hidden="true"></i>
+        <div>
+            <h3>Metadata only</h3>
+            <p>
+                This page never displays caller, patient, address, command-log,
+                unit-location, token, password, or raw webhook information.
+            </p>
+        </div>
+    </article>
+
+    <article class="glass">
+        <i class="bi bi-info-circle-fill" aria-hidden="true"></i>
+        <div>
+            <h3>Production validation deferred</h3>
+            <p>
+                A controlled CAD test will be completed later. Until then,
+                delivery counts confirm receipt but do not replace that
+                end-to-end operational test.
+            </p>
+        </div>
+    </article>
+</section>
+
+<script id="integration-health-data" type="application/json">{{ health|tojson }}</script>
+
+{% endblock %}
+
+{% block page_scripts %}
+<script src="/static/js/lcdash-integrations.js"></script>
+{% endblock %}

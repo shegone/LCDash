@@ -73,6 +73,21 @@
     line-height: 1.2;
 }
 
+.realtime-health-link {
+    display: inline-block;
+    margin-top: 4px;
+    color: var(--lcdash-cyan);
+    font-size: .66rem;
+    font-weight: 800;
+    text-decoration: none;
+}
+
+.realtime-health-link:hover,
+.realtime-health-link:focus-visible {
+    color: #ffffff;
+    text-decoration: underline;
+}
+
 .ops-good {
     color: var(--lcdash-green);
 }

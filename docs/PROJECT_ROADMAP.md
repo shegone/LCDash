@@ -40,6 +40,10 @@ Build a secure web-based operations dashboard for Logan County 911 using the Cen
 - Keep email one-time PIN available as a backup login method
 - Create a managed LCDash Supervisors Google Group
 - Role-based access and redacted department views
+- CentralSquare CFS and unit webhook subscriptions - completed
+- Protected browser event stream with 30-second reconciliation - completed
+- Metadata-only integration health page - completed
+- Controlled end-to-end production CAD event test - deferred
 
 ## Phase 7 - Local AI Quality
 

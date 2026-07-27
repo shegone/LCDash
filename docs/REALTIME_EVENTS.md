@@ -139,3 +139,34 @@ Activated July 27, 2026:
 The existing `LCDash Supervisor Portal` application and supervisor email
 allowlist remain in place for all human-facing pages. The browser event stream
 also remains behind supervisor authentication.
+
+## Integration health
+
+Authenticated supervisors can review the metadata-only health page at:
+
+```text
+GET /integrations/health
+```
+
+The matching JSON endpoint is:
+
+```text
+GET /api/integrations/centralsquare/health
+```
+
+The health view separates:
+
+- the browser's protected event-stream connection;
+- CFS callback deliveries observed by LCDash;
+- unit callback deliveries observed by LCDash;
+- delivery counts and most-recent timestamps; and
+- the continuously enabled 30-second reconciliation poll.
+
+An unobserved source is labeled `Awaiting first event`, not failed. A quiet CAD
+system is not enough evidence to declare a subscription unhealthy. The page
+contains no CAD payloads, caller information, addresses, unit locations,
+credentials, webhook secrets, or event hashes.
+
+The controlled end-to-end production CAD test is intentionally deferred. Until
+that test is completed, observed metadata confirms receipt but does not replace
+formal operational validation.

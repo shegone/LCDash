@@ -88,6 +88,7 @@
         <section class="nav-section" aria-labelledby="nav-tools">
             <div class="nav-section-label" id="nav-tools">Tools & Quality</div>
             <div class="nav flex-column">
+                {{ nav_item("/integrations/health", "bi-heart-pulse-fill", "Integration Health", current_path == "/integrations/health") }}
                 {{ nav_item("/voice", "bi-mic-fill", "Voice Lab", current_path == "/voice") }}
                 {{ nav_item("/mae/reliability", "bi-shield-check", "MAE Reliability", current_path == "/mae/reliability") }}
             </div>

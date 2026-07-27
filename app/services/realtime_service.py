@@ -132,6 +132,35 @@ class RealtimeRepository:
                 "Realtime delivery metadata could not be stored."
             ) from exc
 
+    def get_delivery_summary(self) -> list[tuple]:
+        if not analytics_database_is_configured(self.database_url):
+            raise RealtimeDatabaseError("Realtime database is not configured.")
+
+        try:
+            schema_sql = SCHEMA_PATH.read_text(encoding="utf-8")
+            with psycopg.connect(
+                self.database_url,
+                connect_timeout=10,
+            ) as connection:
+                connection.execute(schema_sql)
+                return connection.execute(
+                    """
+                    SELECT
+                        source,
+                        COUNT(*) AS unique_events,
+                        COALESCE(SUM(duplicate_count), 0) AS duplicates,
+                        MAX(received_at) AS latest_unique_event,
+                        MAX(last_seen_at) AS latest_delivery
+                    FROM lcdash_realtime.webhook_events
+                    GROUP BY source
+                    ORDER BY source
+                    """
+                ).fetchall()
+        except (OSError, psycopg.Error) as exc:
+            raise RealtimeDatabaseError(
+                "Realtime delivery metadata could not be read."
+            ) from exc
+
 
 event_broker = RealtimeEventBroker()
 event_deduplicator = WebhookEventDeduplicator()
@@ -199,3 +228,95 @@ def browser_event(event: dict) -> dict:
         "received_at": event["received_at"],
     }
 
+
+def _empty_source_health(source: str, label: str) -> dict:
+    return {
+        "source": source,
+        "label": label,
+        "status": "awaiting",
+        "status_label": "Awaiting first event",
+        "delivery_observed": False,
+        "unique_events": 0,
+        "duplicate_deliveries": 0,
+        "total_deliveries": 0,
+        "latest_unique_event": "",
+        "latest_delivery": "",
+    }
+
+
+def get_realtime_health(database_url: str | None = None) -> dict:
+    receiver_configured = bool(settings.centralsquare_webhook_secret)
+    database_configured = analytics_database_is_configured(database_url)
+    sources = {
+        "cfs": _empty_source_health("cfs", "Calls for Service"),
+        "units": _empty_source_health("units", "Unit Updates"),
+    }
+
+    result = {
+        "status": "ready",
+        "status_label": "Ready",
+        "receiver_configured": receiver_configured,
+        "database_configured": database_configured,
+        "database_available": False,
+        "metadata_only": True,
+        "reconciliation_poll_seconds": 30,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "sources": sources,
+    }
+
+    if not receiver_configured or not database_configured:
+        result["status"] = "degraded"
+        result["status_label"] = "Configuration incomplete"
+
+    if not database_configured:
+        for source_health in sources.values():
+            source_health["status"] = "unavailable"
+            source_health["status_label"] = "Metadata unavailable"
+        return result
+
+    try:
+        rows = RealtimeRepository(database_url).get_delivery_summary()
+    except RealtimeDatabaseError:
+        result["status"] = "degraded"
+        result["status_label"] = "Metadata unavailable"
+        for source_health in sources.values():
+            source_health["status"] = "unavailable"
+            source_health["status_label"] = "Metadata unavailable"
+        return result
+
+    result["database_available"] = True
+    for (
+        source,
+        unique_events,
+        duplicates,
+        latest_unique_event,
+        latest_delivery,
+    ) in rows:
+        if source not in sources:
+            continue
+
+        unique_count = int(unique_events or 0)
+        duplicate_count = int(duplicates or 0)
+        source_health = sources[source]
+        source_health.update(
+            {
+                "status": "observed",
+                "status_label": "Delivery observed",
+                "delivery_observed": True,
+                "unique_events": unique_count,
+                "duplicate_deliveries": duplicate_count,
+                "total_deliveries": unique_count + duplicate_count,
+                "latest_unique_event": (
+                    latest_unique_event.isoformat()
+                    if latest_unique_event
+                    else ""
+                ),
+                "latest_delivery": (
+                    latest_delivery.isoformat()
+                    if latest_delivery
+                    else ""
+                ),
+            }
+        )
+
+    return result

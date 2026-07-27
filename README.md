@@ -13,7 +13,8 @@ supervisor tools, local AI, and controlled technical knowledge libraries.
 - `/units` - active, available, on-duty, and unavailable units
 - `/map` - live incident and unit mapping
 - `/analytics` - PostgreSQL-backed operational reporting
-- `/station-alert` - selected-station visual and audible dispatch alerting
+- `/station-alerts` - selected-station visual and audible dispatch alerting
+- `/integrations/health` - metadata-only CentralSquare delivery monitoring
 - `/mae` - read-only Mission Assistance Engine
 - `/mae/reliability` - MAE quality, feedback, and approved-memory controls
 - `/mindshare/technical` - JACK, the read-only Mindshare technical assistant

@@ -95,6 +95,7 @@ from app.services.centralsquare import (
 from app.services.realtime_service import (
     browser_event,
     event_broker,
+    get_realtime_health,
     process_webhook_event,
 )
 
@@ -458,6 +459,12 @@ async def operations_event_stream(request: Request):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@app.get("/api/integrations/centralsquare/health")
+def centralsquare_realtime_health_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    return get_realtime_health()
 
 
 @app.get("/api/operations/active-calls")
@@ -850,6 +857,19 @@ def mae_page(request: Request):
         request=request,
         name="mae.html",
         context={
+            "version": "0.3.0",
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/integrations/health")
+def integrations_health_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="integrations_health.html",
+        context={
+            "health": get_realtime_health(),
             "version": "0.3.0",
         },
         headers={"Cache-Control": "no-store"},
