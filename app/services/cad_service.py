@@ -549,6 +549,8 @@ def simplify_call(call: dict) -> dict:
             call_taker.get("CallSign") or call_taker.get("Username") or ""
         ),
         "call_datetime": _safe_text(call.get("CallDateTime")),
+        "incident_datetime": _safe_text(call.get("IncidentDateTime")),
+        "is_scheduled": bool(call.get("IsScheduledCall", False)),
         "latitude": address.get("Latitude"),
         "longitude": address.get("Longitude"),
         "assigned_units": _simplify_units(call),

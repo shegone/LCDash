@@ -24,6 +24,15 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    return _env(name, str(default)).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 def _env_list(name: str, default: str = "") -> tuple[str, ...]:
     return tuple(
         item.strip()
@@ -70,6 +79,38 @@ class Settings:
     ems_supervisor_unit_numbers: tuple[str, ...] = _env_list(
         "EMS_SUPERVISOR_UNIT_NUMBERS",
         "EMS101,EMS102,EMS103,EMS104,EMS105,EMS106,EMS107,EMS108,EMS109",
+    )
+    ems_delay_alert_enabled: bool = _env_bool(
+        "EMS_DELAY_ALERT_ENABLED",
+        False,
+    )
+    ems_delay_alert_mode: str = _env(
+        "EMS_DELAY_ALERT_MODE",
+        "dry_run",
+    ).strip().lower()
+    ems_delay_threshold_minutes: int = _env_int(
+        "EMS_DELAY_THRESHOLD_MINUTES",
+        30,
+    )
+    ems_delay_repeat_minutes: int = _env_int(
+        "EMS_DELAY_REPEAT_MINUTES",
+        30,
+    )
+    ems_delay_poll_seconds: int = _env_int(
+        "EMS_DELAY_POLL_SECONDS",
+        60,
+    )
+    ems_delay_transfer_codes: tuple[str, ...] = _env_list(
+        "EMS_DELAY_TRANSFER_CODES",
+        "TRANSFER,911TRANS",
+    )
+    ems_response_agencies: tuple[str, ...] = _env_list(
+        "EMS_RESPONSE_AGENCIES",
+        "LEASA",
+    )
+    ems_unit_prefixes: tuple[str, ...] = _env_list(
+        "EMS_UNIT_PREFIXES",
+        "MED,EMS",
     )
     ollama_base_url: str = _env("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
     mae_model: str = _env("MAE_MODEL", "qwen3:8b")
