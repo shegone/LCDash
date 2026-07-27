@@ -410,6 +410,7 @@
     }
 
     function timerTick() {
+        LCDashTime.updateElementFromCadTime("last-updated", {timeOnly: true});
         LCDashTime.updateCallElapsedTimers();
         LCDashTime.updateLocalTime("dashboard-local-time");
         markStaleIfNeeded();

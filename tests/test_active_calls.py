@@ -100,6 +100,10 @@ class ActiveCallsPageTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('"/api/operations/snapshot"', response.text)
         self.assertIn("AbortController", response.text)
+        self.assertIn(
+            'LCDashTime.updateElementFromCadTime("last-updated"',
+            response.text,
+        )
         self.assertIn("last known data", response.text)
         self.assertNotIn("window.location.reload", response.text)
 
