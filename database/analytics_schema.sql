@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS lcdash_analytics.calls (
     cfs_number TEXT PRIMARY KEY,
     dispatch_agency TEXT NOT NULL DEFAULT '',
     response_agency TEXT NOT NULL DEFAULT '',
+    call_taker TEXT NOT NULL DEFAULT '',
     incident_code TEXT NOT NULL DEFAULT '',
     incident_description TEXT NOT NULL DEFAULT '',
     priority TEXT NOT NULL DEFAULT '',
@@ -22,6 +23,9 @@ CREATE TABLE IF NOT EXISTS lcdash_analytics.calls (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE lcdash_analytics.calls
+    ADD COLUMN IF NOT EXISTS call_taker TEXT NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS lcdash_analytics.units (
     unit_number TEXT PRIMARY KEY,
@@ -207,6 +211,8 @@ CREATE INDEX IF NOT EXISTS idx_analytics_calls_received
     ON lcdash_analytics.calls(call_received_at);
 CREATE INDEX IF NOT EXISTS idx_analytics_calls_agency_received
     ON lcdash_analytics.calls(response_agency, call_received_at);
+CREATE INDEX IF NOT EXISTS idx_analytics_calls_taker_received
+    ON lcdash_analytics.calls(call_taker, call_received_at);
 CREATE INDEX IF NOT EXISTS idx_analytics_calls_incident_received
     ON lcdash_analytics.calls(incident_code, call_received_at);
 CREATE INDEX IF NOT EXISTS idx_analytics_calls_zone_received

@@ -200,6 +200,48 @@
         });
     }
 
+    function renderDispatchers(snapshot) {
+        const canvas = document.getElementById("dispatcher-workload-chart");
+        const rows = snapshot.dispatchers || [];
+        if (!canvas || !rows.length) {
+            return;
+        }
+
+        const options = baseOptions();
+        options.indexAxis = "y";
+        options.plugins.legend.display = false;
+        options.plugins.tooltip.callbacks = {
+            label(context) {
+                const value = context.parsed.x || 0;
+                return `${value} ${value === 1 ? "call" : "calls"} entered`;
+            }
+        };
+        options.scales.x.title = {
+            display: true,
+            text: "Completed calls",
+            color: "#8fb7d9"
+        };
+        options.scales.y.ticks = {
+            color: "#dbeeff",
+            autoSkip: false
+        };
+
+        new Chart(canvas, {
+            type: "bar",
+            data: {
+                labels: rows.map((row) => row.call_taker),
+                datasets: [{
+                    data: rows.map((row) => row.calls_entered),
+                    backgroundColor: "rgba(167, 139, 250, .68)",
+                    borderColor: "#a78bfa",
+                    borderWidth: 1,
+                    borderRadius: 5
+                }]
+            },
+            options
+        });
+    }
+
     function printAnalyticsTable(snapshot, sectionId, reportTitle) {
         const section = document.getElementById(sectionId);
         const table = section ? section.querySelector("table") : null;
@@ -285,6 +327,7 @@
         renderDaily(snapshot);
         renderHourly(snapshot);
         renderAgencies(snapshot);
+        renderDispatchers(snapshot);
         renderStationDiscipline(snapshot);
     }
 

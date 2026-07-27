@@ -158,6 +158,7 @@ class AnalyticsRepository(AbstractContextManager):
                 cfs_number,
                 dispatch_agency,
                 response_agency,
+                call_taker,
                 incident_code,
                 incident_description,
                 priority,
@@ -178,6 +179,7 @@ class AnalyticsRepository(AbstractContextManager):
                 %(cfs_number)s,
                 %(dispatch_agency)s,
                 %(response_agency)s,
+                %(call_taker)s,
                 %(incident_code)s,
                 %(incident_description)s,
                 %(priority)s,
@@ -197,6 +199,7 @@ class AnalyticsRepository(AbstractContextManager):
             ON CONFLICT (cfs_number) DO UPDATE SET
                 dispatch_agency = EXCLUDED.dispatch_agency,
                 response_agency = EXCLUDED.response_agency,
+                call_taker = EXCLUDED.call_taker,
                 incident_code = EXCLUDED.incident_code,
                 incident_description = EXCLUDED.incident_description,
                 priority = EXCLUDED.priority,

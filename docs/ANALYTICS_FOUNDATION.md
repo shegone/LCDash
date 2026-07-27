@@ -28,6 +28,26 @@ and raw API payloads.
 
 Coordinates are rounded to four decimal places for operational demand analysis.
 
+The calls table also stores the CentralSquare call-taker identifier (call sign or
+username) so supervisors can review CAD-entry workload without storing caller or
+patient information.
+
+## Dispatcher and CAD-entry metrics
+
+The Analytics page includes a Dispatcher / CAD Entry section for:
+
+- Calls entered by call taker
+- Share of attributed calls
+- Average and median CAD processing time
+- Percentage dispatched within 90 seconds
+- Calls taking longer than three minutes to reach first dispatch
+- Call-taker data coverage for the selected reporting window
+
+CAD processing is measured from the CFS `CallDateTime` to the earliest valid
+agency dispatch timestamp. It is not 911 phone-answer time. NGA911 integration
+can later add answer time, call duration, abandoned-call, transfer, queue-delay,
+and callback metrics.
+
 ## Tables
 
 - `lcdash_analytics.calls`

@@ -22,6 +22,10 @@ def completed_call(cfs_number="CFS26-40001"):
         "CFSNumber": cfs_number,
         "DispatchAgency": {"Abbreviation": "LOGAN911"},
         "PrimaryResponseAgency": {"Abbreviation": "LEASA"},
+        "CallTaker": {
+            "CallSign": "EOC 6",
+            "Username": "dispatcher6",
+        },
         "IncidentDateTime": "2026-07-23T14:59:30Z",
         "CallDateTime": "2026-07-23T15:00:00Z",
         "IncidentCode": [
@@ -173,6 +177,7 @@ class AnalyticsModelTests(unittest.TestCase):
         )
 
         self.assertEqual(bundle["call"]["cfs_number"], "CFS26-40001")
+        self.assertEqual(bundle["call"]["call_taker"], "EOC 6")
         self.assertEqual(bundle["call"]["latitude"], 37.8488)
         self.assertEqual(bundle["call"]["longitude"], -81.9935)
         self.assertEqual(bundle["call"]["closed_at"].hour, 15)
@@ -290,6 +295,7 @@ class AnalyticsCollectorTests(unittest.TestCase):
         self.assertIn("primary key (cfs_number, unit_number)", schema)
         self.assertIn("unit_response_metrics", schema)
         self.assertIn("call_response_metrics", schema)
+        self.assertIn("call_taker text not null default ''", schema)
         self.assertNotIn("caller_name", schema)
         self.assertNotIn("phone_number", schema)
         self.assertNotIn("street_address", schema)

@@ -61,6 +61,8 @@ class AnalyticsWindowTests(unittest.TestCase):
         self.assertEqual(result["metrics"]["total_calls"], 0)
         self.assertEqual(result["station_discipline"], [])
         self.assertEqual(result["station_discipline_groups"], [])
+        self.assertEqual(result["dispatcher_metrics"]["calls_with_call_taker"], 0)
+        self.assertEqual(result["dispatchers"], [])
         self.assertEqual(
             result["station_discipline_quality"]["coverage_percent"],
             0,
@@ -97,6 +99,29 @@ class AnalyticsOverviewRouteTests(unittest.TestCase):
                 "response_coverage_percent": 91,
                 "scheduled_calls": 2,
             },
+            "dispatcher_metrics": {
+                "calls_with_call_taker": 40,
+                "coverage_percent": 95,
+                "busiest_call_taker": "EOC 6",
+                "busiest_call_count": 18,
+                "average_processing": "1:28",
+                "median_processing": "1:12",
+                "processing_samples": 38,
+                "within_90_percent": 68,
+                "over_180_count": 3,
+            },
+            "dispatchers": [
+                {
+                    "call_taker": "EOC 6",
+                    "calls_entered": 18,
+                    "share_percent": 45.0,
+                    "average_processing": "1:20",
+                    "median_processing": "1:08",
+                    "processing_samples": 17,
+                    "within_90_percent": 71,
+                    "over_180_count": 1,
+                }
+            ],
             "daily_volume": [{"date": "2026-07-26", "label": "Jul 26", "count": 42}],
             "hourly_volume": [{"hour": 0, "label": "12 AM", "count": 2}],
             "agency_mix": [{"label": "LEASA", "count": 42, "percent": 100.0}],
@@ -160,6 +185,10 @@ class AnalyticsOverviewRouteTests(unittest.TestCase):
         self.assertIn("Calls by Day", response.text)
         self.assertIn("Top Incident Types", response.text)
         self.assertIn("Busiest Units", response.text)
+        self.assertIn("DISPATCHER / CAD ENTRY METRICS", response.text)
+        self.assertIn("Calls Entered by Call Taker", response.text)
+        self.assertIn("dispatcher-workload-chart", response.text)
+        self.assertIn("EOC 6", response.text)
         self.assertIn("Calls by Station: Law, EMS, and Fire", response.text)
         self.assertIn("station-discipline-chart", response.text)
         self.assertIn("100% discipline coverage", response.text)
@@ -167,7 +196,8 @@ class AnalyticsOverviewRouteTests(unittest.TestCase):
         self.assertIn("discipline-ems", response.text)
         self.assertIn('data-print-analytics="busiest-units-table"', response.text)
         self.assertIn('data-print-analytics="station-discipline-table"', response.text)
-        self.assertEqual(response.text.count("Print / PDF"), 2)
+        self.assertIn('data-print-analytics="dispatcher-metrics-table"', response.text)
+        self.assertEqual(response.text.count("Print / PDF"), 3)
         self.assertIn("MED10", response.text)
         self.assertIn("/static/js/chart.umd.min.js", response.text)
         self.assertNotIn("cdn.jsdelivr.net/npm/chart.js", response.text)

@@ -133,6 +133,18 @@ def _empty_overview(window: AnalyticsWindow, message: str) -> dict:
             "response_coverage_percent": 0,
             "scheduled_calls": 0,
         },
+        "dispatcher_metrics": {
+            "calls_with_call_taker": 0,
+            "coverage_percent": 0,
+            "busiest_call_taker": "—",
+            "busiest_call_count": 0,
+            "average_processing": "—",
+            "median_processing": "—",
+            "processing_samples": 0,
+            "within_90_percent": 0,
+            "over_180_count": 0,
+        },
+        "dispatchers": [],
         "daily_volume": [],
         "hourly_volume": [],
         "agency_mix": [],
@@ -213,6 +225,145 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
     response_coverage = (
         round((response_samples / total_calls) * 100) if total_calls else 0
     )
+
+    dispatcher_summary_row = repository.fetchone(
+        """
+        WITH selected_calls AS (
+            SELECT cfs_number, call_taker, call_received_at
+            FROM lcdash_analytics.calls
+            WHERE call_received_at >= %(window_start)s
+              AND call_received_at < %(window_end)s
+              AND BTRIM(call_taker) <> ''
+        ),
+        call_processing AS (
+            SELECT
+                selected_calls.cfs_number,
+                selected_calls.call_taker,
+                selected_calls.call_received_at,
+                MIN(agency_times.dispatched_at) FILTER (
+                    WHERE agency_times.dispatched_at >= selected_calls.call_received_at
+                ) AS first_dispatched_at
+            FROM selected_calls
+            LEFT JOIN lcdash_analytics.call_agency_times AS agency_times
+                ON agency_times.cfs_number = selected_calls.cfs_number
+            GROUP BY
+                selected_calls.cfs_number,
+                selected_calls.call_taker,
+                selected_calls.call_received_at
+        )
+        SELECT
+            COUNT(*) AS calls_with_call_taker,
+            COUNT(*) FILTER (WHERE first_dispatched_at IS NOT NULL)
+                AS processing_samples,
+            AVG(EXTRACT(EPOCH FROM first_dispatched_at - call_received_at))
+                FILTER (WHERE first_dispatched_at IS NOT NULL)
+                AS average_processing_seconds,
+            PERCENTILE_CONT(0.5) WITHIN GROUP (
+                ORDER BY EXTRACT(EPOCH FROM first_dispatched_at - call_received_at)
+            ) FILTER (WHERE first_dispatched_at IS NOT NULL)
+                AS median_processing_seconds,
+            COUNT(*) FILTER (
+                WHERE EXTRACT(EPOCH FROM first_dispatched_at - call_received_at) <= 90
+            ) AS within_90_seconds,
+            COUNT(*) FILTER (
+                WHERE EXTRACT(EPOCH FROM first_dispatched_at - call_received_at) > 180
+            ) AS over_180_seconds
+        FROM call_processing
+        """,
+        params,
+    ) or (0, 0, None, None, 0, 0)
+
+    dispatcher_rows = repository.fetchall(
+        """
+        WITH selected_calls AS (
+            SELECT cfs_number, call_taker, call_received_at
+            FROM lcdash_analytics.calls
+            WHERE call_received_at >= %(window_start)s
+              AND call_received_at < %(window_end)s
+              AND BTRIM(call_taker) <> ''
+        ),
+        call_processing AS (
+            SELECT
+                selected_calls.cfs_number,
+                selected_calls.call_taker,
+                selected_calls.call_received_at,
+                MIN(agency_times.dispatched_at) FILTER (
+                    WHERE agency_times.dispatched_at >= selected_calls.call_received_at
+                ) AS first_dispatched_at
+            FROM selected_calls
+            LEFT JOIN lcdash_analytics.call_agency_times AS agency_times
+                ON agency_times.cfs_number = selected_calls.cfs_number
+            GROUP BY
+                selected_calls.cfs_number,
+                selected_calls.call_taker,
+                selected_calls.call_received_at
+        )
+        SELECT
+            call_taker,
+            COUNT(*) AS calls_entered,
+            COUNT(*) FILTER (WHERE first_dispatched_at IS NOT NULL)
+                AS processing_samples,
+            AVG(EXTRACT(EPOCH FROM first_dispatched_at - call_received_at))
+                FILTER (WHERE first_dispatched_at IS NOT NULL)
+                AS average_processing_seconds,
+            PERCENTILE_CONT(0.5) WITHIN GROUP (
+                ORDER BY EXTRACT(EPOCH FROM first_dispatched_at - call_received_at)
+            ) FILTER (WHERE first_dispatched_at IS NOT NULL)
+                AS median_processing_seconds,
+            COUNT(*) FILTER (
+                WHERE EXTRACT(EPOCH FROM first_dispatched_at - call_received_at) <= 90
+            ) AS within_90_seconds,
+            COUNT(*) FILTER (
+                WHERE EXTRACT(EPOCH FROM first_dispatched_at - call_received_at) > 180
+            ) AS over_180_seconds
+        FROM call_processing
+        GROUP BY call_taker
+        ORDER BY calls_entered DESC, call_taker
+        LIMIT 30
+        """,
+        params,
+    )
+    calls_with_call_taker = int(dispatcher_summary_row[0] or 0)
+    dispatcher_processing_samples = int(dispatcher_summary_row[1] or 0)
+    dispatchers = []
+    for row in dispatcher_rows:
+        calls_entered = int(row[1] or 0)
+        processing_samples = int(row[2] or 0)
+        within_90 = int(row[5] or 0)
+        over_180 = int(row[6] or 0)
+        dispatchers.append(
+            {
+                "call_taker": row[0],
+                "calls_entered": calls_entered,
+                "share_percent": round(
+                    (calls_entered / calls_with_call_taker) * 100,
+                    1,
+                ) if calls_with_call_taker else 0,
+                "average_processing": _format_duration(row[3]),
+                "median_processing": _format_duration(row[4]),
+                "processing_samples": processing_samples,
+                "within_90_percent": round(
+                    (within_90 / processing_samples) * 100
+                ) if processing_samples else 0,
+                "over_180_count": over_180,
+            }
+        )
+
+    dispatcher_metrics = {
+        "calls_with_call_taker": calls_with_call_taker,
+        "coverage_percent": round(
+            (calls_with_call_taker / total_calls) * 100
+        ) if total_calls else 0,
+        "busiest_call_taker": dispatchers[0]["call_taker"] if dispatchers else "—",
+        "busiest_call_count": dispatchers[0]["calls_entered"] if dispatchers else 0,
+        "average_processing": _format_duration(dispatcher_summary_row[2]),
+        "median_processing": _format_duration(dispatcher_summary_row[3]),
+        "processing_samples": dispatcher_processing_samples,
+        "within_90_percent": round(
+            (int(dispatcher_summary_row[4] or 0) / dispatcher_processing_samples) * 100
+        ) if dispatcher_processing_samples else 0,
+        "over_180_count": int(dispatcher_summary_row[5] or 0),
+    }
 
     daily_rows = repository.fetchall(
         """
@@ -590,6 +741,8 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
             "response_coverage_percent": response_coverage,
             "scheduled_calls": int(metrics_row[7] or 0),
         },
+        "dispatcher_metrics": dispatcher_metrics,
+        "dispatchers": dispatchers,
         "daily_volume": daily_volume,
         "hourly_volume": hourly_volume,
         "agency_mix": agency_mix,

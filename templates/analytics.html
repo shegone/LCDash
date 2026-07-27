@@ -148,6 +148,36 @@
         height: auto;
     }
 
+    .dispatcher-section {
+        padding: 24px;
+        border-color: rgba(167, 139, 250, .38);
+        box-shadow: 0 0 28px rgba(167, 139, 250, .08);
+    }
+
+    .dispatcher-kpi {
+        min-height: 132px;
+        background: rgba(11, 26, 45, .72);
+    }
+
+    .dispatcher-chart-wrap {
+        position: relative;
+        height: 320px;
+        margin-top: 16px;
+    }
+
+    .coverage-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 7px 11px;
+        border-radius: 999px;
+        color: #d8c8ff;
+        background: rgba(167, 139, 250, .11);
+        border: 1px solid rgba(167, 139, 250, .28);
+        font-size: .78rem;
+        font-weight: 800;
+    }
+
     .discipline-law {
         color: #4cc9ff !important;
     }
@@ -503,6 +533,135 @@
                     <h4 class="mb-0">Calls by Agency</h4>
                     <div class="chart-wrap"><canvas id="agency-mix-chart"></canvas></div>
                 </div>
+            </div>
+        </div>
+
+        {% set dispatcher_metrics = analytics_snapshot.dispatcher_metrics %}
+        <div class="glass dispatcher-section mb-4">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                <div>
+                    <div class="analytics-eyebrow">DISPATCHER / CAD ENTRY METRICS</div>
+                    <h4 class="mb-1">Call-Taker Workload and CAD Processing</h4>
+                    <div class="data-note">
+                        Calls entered are attributed from CentralSquare's CallTaker field.
+                        CAD processing runs from call received to the first agency dispatch.
+                    </div>
+                </div>
+                <span class="coverage-chip">
+                    <i class="bi bi-person-check-fill"></i>
+                    {{ dispatcher_metrics.coverage_percent }}% call-taker coverage
+                </span>
+            </div>
+
+            <div class="row g-3 mt-2">
+                <div class="col-6 col-xl">
+                    <div class="analytics-kpi dispatcher-kpi">
+                        <div class="analytics-eyebrow">CALLS ATTRIBUTED</div>
+                        <div class="analytics-value">{{ dispatcher_metrics.calls_with_call_taker }}</div>
+                        <div class="analytics-subvalue">Completed calls with a CallTaker</div>
+                    </div>
+                </div>
+                <div class="col-6 col-xl">
+                    <div class="analytics-kpi dispatcher-kpi">
+                        <div class="analytics-eyebrow">BUSIEST CALL TAKER</div>
+                        <div class="analytics-value fs-3">{{ dispatcher_metrics.busiest_call_taker }}</div>
+                        <div class="analytics-subvalue">
+                            {{ dispatcher_metrics.busiest_call_count }} calls entered
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-xl">
+                    <div class="analytics-kpi dispatcher-kpi">
+                        <div class="analytics-eyebrow">AVG CAD PROCESSING</div>
+                        <div class="analytics-value">{{ dispatcher_metrics.average_processing }}</div>
+                        <div class="analytics-subvalue">Received to first dispatch</div>
+                    </div>
+                </div>
+                <div class="col-6 col-xl">
+                    <div class="analytics-kpi dispatcher-kpi">
+                        <div class="analytics-eyebrow">MEDIAN PROCESSING</div>
+                        <div class="analytics-value">{{ dispatcher_metrics.median_processing }}</div>
+                        <div class="analytics-subvalue">
+                            {{ dispatcher_metrics.processing_samples }} timed calls
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-xl">
+                    <div class="analytics-kpi dispatcher-kpi">
+                        <div class="analytics-eyebrow">WITHIN 90 SECONDS</div>
+                        <div class="analytics-value">{{ dispatcher_metrics.within_90_percent }}%</div>
+                        <div class="analytics-subvalue">
+                            {{ dispatcher_metrics.over_180_count }} calls exceeded 3 minutes
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {% if analytics_snapshot.dispatchers %}
+                <div class="row g-4 mt-1">
+                    <div class="col-xl-5">
+                        <div class="analytics-eyebrow">CALL ENTRY WORKLOAD</div>
+                        <h5 class="mb-0">Calls Entered by Call Taker</h5>
+                        <div class="dispatcher-chart-wrap">
+                            <canvas id="dispatcher-workload-chart"></canvas>
+                        </div>
+                    </div>
+                    <div class="col-xl-7">
+                        <div class="d-flex justify-content-between align-items-start gap-3">
+                            <div>
+                                <div class="analytics-eyebrow">CALL-TAKER DETAIL</div>
+                                <h5 class="mb-0">Dispatcher Metrics</h5>
+                            </div>
+                            <button
+                                class="analytics-print-button"
+                                type="button"
+                                data-print-analytics="dispatcher-metrics-table"
+                                data-print-title="Dispatcher and CAD Entry Metrics"
+                            >
+                                <i class="bi bi-printer-fill"></i> Print / PDF
+                            </button>
+                        </div>
+                        <div class="table-responsive mt-3" id="dispatcher-metrics-table">
+                            <table class="table analytics-table align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>Call Taker</th>
+                                        <th class="text-end">Calls</th>
+                                        <th class="text-end">Share</th>
+                                        <th class="text-end">Average</th>
+                                        <th class="text-end">Median</th>
+                                        <th class="text-end">≤ 90 Sec</th>
+                                        <th class="text-end">&gt; 3 Min</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for dispatcher in analytics_snapshot.dispatchers %}
+                                        <tr>
+                                            <td class="fw-bold text-white">{{ dispatcher.call_taker }}</td>
+                                            <td class="text-end text-warning fw-bold">{{ dispatcher.calls_entered }}</td>
+                                            <td class="text-end">{{ dispatcher.share_percent }}%</td>
+                                            <td class="text-end">{{ dispatcher.average_processing }}</td>
+                                            <td class="text-end">{{ dispatcher.median_processing }}</td>
+                                            <td class="text-end text-success">{{ dispatcher.within_90_percent }}%</td>
+                                            <td class="text-end">{{ dispatcher.over_180_count }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            {% else %}
+                <div class="text-secondary py-4">
+                    Dispatcher history will appear as newly synchronized calls populate
+                    the CentralSquare CallTaker field in the analytics database.
+                </div>
+            {% endif %}
+
+            <div class="data-note mt-3">
+                <i class="bi bi-info-circle text-info"></i>
+                NGA911 integration will later add phone-answer time, call duration,
+                abandoned calls, transfers, queue delay, and callback metrics.
             </div>
         </div>
 
