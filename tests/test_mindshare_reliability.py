@@ -112,7 +112,8 @@ class MindshareReliabilityPageTests(unittest.TestCase):
             "recent_runs": [],
         },
     )
-    def test_reliability_page_loads(self, summary_mock):
+    @patch("app.main.list_jack_feedback", return_value=[])
+    def test_reliability_page_loads(self, feedback_mock, summary_mock):
         response = self.client.get("/mindshare/reliability")
         self.assertEqual(response.status_code, 200)
         self.assertIn("JACK Reliability Center", response.text)
@@ -152,6 +153,30 @@ class MindshareReliabilityPageTests(unittest.TestCase):
         run_mock.assert_called_once_with(
             "jack-console-01",
             requested_by="boss@example.com",
+        )
+
+    @patch("app.main.record_jack_feedback")
+    def test_feedback_endpoint_records_authenticated_user(self, feedback_mock):
+        feedback_mock.return_value = {
+            "saved": True,
+            "interaction_id": "11111111-1111-1111-1111-111111111111",
+            "rating": "helpful",
+        }
+        response = self.client.post(
+            "/api/mindshare/feedback",
+            json={
+                "interaction_id": "11111111-1111-1111-1111-111111111111",
+                "rating": "helpful",
+                "comment": "",
+            },
+            headers={"cf-access-authenticated-user-email": "boss@example.com"},
+        )
+        self.assertEqual(response.status_code, 200)
+        feedback_mock.assert_called_once_with(
+            interaction_id="11111111-1111-1111-1111-111111111111",
+            user_email="boss@example.com",
+            rating="helpful",
+            comment="",
         )
 
 

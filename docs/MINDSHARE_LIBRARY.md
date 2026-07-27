@@ -14,6 +14,20 @@ The Mindshare module includes two read-only quality tools:
 
 The coverage review never deletes, moves, renames, or archives a source document.
 
+### Initial revision review
+
+The first coverage review identified:
+
+- `MS1007_AN_MRIToIcomF5060AppNote_rev102.pdf` as the likely current revision,
+  with `rev1.01` retained as an archive candidate.
+- `MS1014_AN_MRIToHyteraMD78XAppNote_v102.pdf` as the likely current revision,
+  with `v101` retained as an archive candidate.
+- Three empty `Readme.md` folder placeholders. They should remain at their
+  source if needed for folder guidance, but they do not count as searchable
+  technical coverage.
+
+No file is moved to `Vendor Archives` until a human confirms the revision order.
+
 ## Purpose
 
 LCDash maintains a Mindshare knowledge library that is separate from MAE and

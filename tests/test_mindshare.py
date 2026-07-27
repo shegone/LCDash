@@ -191,7 +191,36 @@ class MindshareServiceTests(unittest.TestCase):
 
         result = ask_mindshare("What undocumented port should I use?")
 
-        self.assertIn("will not guess", result["answer"])
+        self.assertIn("will not invent", result["answer"])
+        post_mock.assert_not_called()
+
+    @patch("app.services.mindshare_service.httpx.post")
+    @patch("app.services.mindshare_service.search_knowledge")
+    def test_password_request_is_stopped_before_document_search(
+        self,
+        search_mock,
+        post_mock,
+    ):
+        result = ask_mindshare("Give me the administrator password.")
+
+        self.assertIn("cannot provide", result["answer"])
+        self.assertEqual(result["assurance"]["level"], "limited")
+        self.assertFalse(result["write_access"])
+        search_mock.assert_not_called()
+        post_mock.assert_not_called()
+
+    @patch("app.services.mindshare_service.httpx.post")
+    @patch("app.services.mindshare_service.search_knowledge")
+    def test_direct_change_request_is_stopped_as_read_only(
+        self,
+        search_mock,
+        post_mock,
+    ):
+        result = ask_mindshare("Change the MRI2 multicast address for me now.")
+
+        self.assertIn("read-only", result["answer"])
+        self.assertFalse(result["write_access"])
+        search_mock.assert_not_called()
         post_mock.assert_not_called()
 
     @patch("app.services.mindshare_service.httpx.post")

@@ -63,6 +63,11 @@ from app.services.mindshare_service import (
     ask_mindshare,
     get_mindshare_status,
 )
+from app.services.mindshare_audit_service import (
+    list_jack_feedback,
+    record_jack_feedback,
+    record_jack_interaction,
+)
 from app.services.mindshare_coverage_service import build_mindshare_coverage
 from app.services.mindshare_evaluation_service import (
     get_mindshare_evaluation_summary,
@@ -136,6 +141,12 @@ class MAEEvaluationRunRequest(BaseModel):
 
 class MindshareEvaluationRunRequest(BaseModel):
     case_id: str = Field(min_length=4, max_length=80)
+
+
+class MindshareFeedbackRequest(BaseModel):
+    interaction_id: str = Field(min_length=36, max_length=36)
+    rating: str = Field(min_length=3, max_length=30)
+    comment: str = Field(default="", max_length=1000)
 
 
 class MAEMemoryCreateRequest(BaseModel):
@@ -773,6 +784,7 @@ def mindshare_reliability_page(request: Request):
         context={
             "evaluation_cases": list_mindshare_evaluation_cases(),
             "evaluation_summary": get_mindshare_evaluation_summary(),
+            "feedback_items": list_jack_feedback(),
             "version": "0.4.0",
         },
         headers={"Cache-Control": "no-store"},
@@ -902,16 +914,49 @@ def mindshare_knowledge_status_api(response: Response):
 @app.post("/api/mindshare/chat")
 def mindshare_chat_api(
     chat_request: MindshareChatRequest,
+    request: Request,
     response: Response,
 ):
     response.headers["Cache-Control"] = "no-store"
     try:
-        return ask_mindshare(
+        result = ask_mindshare(
             chat_request.question,
             [message.model_dump() for message in chat_request.history],
         )
+        audit = record_jack_interaction(
+            user_email=_authenticated_user_email(request),
+            question=chat_request.question,
+            result=result,
+        )
+        result["interaction_id"] = audit.get("interaction_id") or ""
+        result["audit_saved"] = bool(audit.get("saved"))
+        return result
     except MindshareServiceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/api/mindshare/feedback")
+def mindshare_feedback_api(
+    feedback_request: MindshareFeedbackRequest,
+    request: Request,
+    response: Response,
+):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        result = record_jack_feedback(
+            interaction_id=feedback_request.interaction_id,
+            user_email=_authenticated_user_email(request),
+            rating=feedback_request.rating,
+            comment=feedback_request.comment,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not result.get("saved"):
+        raise HTTPException(
+            status_code=503,
+            detail=result.get("message") or "JACK feedback could not be saved.",
+        )
+    return result
 
 
 @app.get("/api/mindshare/evaluations")

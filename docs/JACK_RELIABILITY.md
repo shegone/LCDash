@@ -77,3 +77,21 @@ python scripts/jack_reliability_baseline.py
 
 It writes a timestamped JSON baseline report without changing Mindshare source
 documents or equipment.
+
+## Supervisor feedback
+
+Each normal JACK answer provides:
+
+- Helpful
+- Incorrect
+- Incomplete
+- Wrong source
+
+The interaction and rating are stored in the separate `jack_interactions` and
+`jack_feedback` tables. Feedback is visible in the Reliability Center. It does
+not automatically alter JACK, its prompt, or source documents; a supervisor or
+developer reviews it before making a controlled correction.
+
+Credential requests and direct equipment-changing commands are stopped before
+document retrieval. Even a factory-default password printed in a vendor manual
+must not be repeated by JACK.

@@ -118,6 +118,32 @@ CREATE TABLE IF NOT EXISTS lcdash_analytics.mae_feedback (
     comment TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS lcdash_analytics.jack_interactions (
+    interaction_id UUID PRIMARY KEY,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    user_email TEXT NOT NULL DEFAULT '',
+    question TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    model TEXT NOT NULL DEFAULT '',
+    source_metadata JSONB NOT NULL DEFAULT '[]'::JSONB,
+    evidence_metadata JSONB NOT NULL DEFAULT '[]'::JSONB,
+    assurance_metadata JSONB NOT NULL DEFAULT '{}'::JSONB,
+    write_access BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+CREATE TABLE IF NOT EXISTS lcdash_analytics.jack_feedback (
+    feedback_id BIGSERIAL PRIMARY KEY,
+    interaction_id UUID NOT NULL
+        REFERENCES lcdash_analytics.jack_interactions(interaction_id)
+        ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    user_email TEXT NOT NULL DEFAULT '',
+    rating TEXT NOT NULL CHECK (
+        rating IN ('helpful', 'incorrect', 'incomplete', 'wrong_source')
+    ),
+    comment TEXT NOT NULL DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS lcdash_analytics.mae_evaluation_runs (
     evaluation_run_id BIGSERIAL PRIMARY KEY,
     case_id TEXT NOT NULL,
@@ -195,6 +221,12 @@ CREATE INDEX IF NOT EXISTS idx_mae_interactions_user
     ON lcdash_analytics.mae_interactions(user_email, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_mae_feedback_interaction
     ON lcdash_analytics.mae_feedback(interaction_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_jack_interactions_created
+    ON lcdash_analytics.jack_interactions(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_jack_interactions_user
+    ON lcdash_analytics.jack_interactions(user_email, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_jack_feedback_interaction
+    ON lcdash_analytics.jack_feedback(interaction_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_mae_evaluation_runs_case
     ON lcdash_analytics.mae_evaluation_runs(case_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_mae_evaluation_runs_started

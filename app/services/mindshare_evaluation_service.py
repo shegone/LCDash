@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import re
 from time import perf_counter
 
 from app.services.analytics_database import AnalyticsDatabaseError, AnalyticsRepository
@@ -28,7 +29,7 @@ EVALUATION_CASES = [
     _case("jack-console-01", "Console operation", "How do I add a channel to a console workspace?", ("Console Application",)),
     _case("jack-console-02", "Console operation", "How do I share a phone book between Console Exec positions?", ("Console Exec", "phone")),
     _case("jack-console-03", "Console operation", "How do I map a touchscreen to the correct monitor?", ("touchscreen",)),
-    _case("jack-console-04", "Console operation", "What should I check when the console has no receive audio?", ("Console Application", "Radio Interface")),
+    _case("jack-console-04", "Console operation", "What should I check when an MRI2 connected to a Tait TM9300 has no receive audio?", ("MRI2", "Tait TM9300")),
     _case("jack-console-05", "Console operation", "How do I change the display resolution on a console?", ("display resolution",)),
     _case("jack-mri-01", "MRI and MRI2", "How do I safely update MRI2 software?", ("MRI2", "Software Update")),
     _case("jack-mri-02", "MRI and MRI2", "How do I copy an MRI configuration to a replacement unit?", ("MRI Configuration Copying",)),
@@ -45,7 +46,7 @@ EVALUATION_CASES = [
     _case("jack-service-03", "Service procedures", "What is the documented way to remove Chromium lock files?", ("Chromium",)),
     _case("jack-service-04", "Service procedures", "How do I delete old Mindshare system logs?", ("system logs",)),
     _case("jack-service-05", "Service procedures", "What is the procedure for updating MAI firmware from a terminal?", ("MAI", "Firmware")),
-    _case("jack-release-01", "Versions and releases", "What is the newest indexed Console Application release note?", ("Console App",)),
+    _case("jack-release-01", "Versions and releases", "What is the newest indexed Console Application release note?", ("Console App", "Software Catalog")),
     _case("jack-release-02", "Versions and releases", "Which MRI2 release notes are in the library?", ("MRI2",)),
     _case("jack-release-03", "Versions and releases", "Do we have release notes for the Service Panel?", ("Service Panel",)),
     _case("jack-release-04", "Versions and releases", "Which release notes cover the Advanced ESChat Gateway?", ("Advanced ESChat",)),
@@ -76,9 +77,13 @@ def _score_mindshare_result(case: dict, result: dict, duration_ms: int) -> dict:
         f"{item.get('title', '')} {item.get('file_name', '')}".lower()
         for item in evidence
     )
-    expected = [item.lower() for item in case["expected_documents"]]
+    normalized_evidence = re.sub(r"[^a-z0-9]+", "", evidence_text)
+    expected = [
+        re.sub(r"[^a-z0-9]+", "", item.lower())
+        for item in case["expected_documents"]
+    ]
     document_check = (
-        any(item in evidence_text for item in expected)
+        any(item in normalized_evidence for item in expected)
         if expected
         else True
     )

@@ -428,6 +428,64 @@
         bubble.appendChild(details);
     }
 
+    async function sendFeedback(interactionId, rating, controls) {
+        controls.querySelectorAll("button").forEach(function (button) {
+            button.disabled = true;
+        });
+        const status = controls.querySelector(".mae-feedback-status");
+        if (status) status.textContent = "Saving…";
+        try {
+            const response = await fetch("/api/mindshare/feedback", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                cache: "no-store",
+                body: JSON.stringify({
+                    interaction_id: interactionId,
+                    rating: rating,
+                    comment: ""
+                })
+            });
+            const payload = await response.json();
+            if (!response.ok) {
+                throw new Error(payload.detail || "Feedback could not be saved.");
+            }
+            controls.classList.add("is-saved");
+            if (status) status.textContent = "Feedback recorded";
+        } catch (error) {
+            controls.querySelectorAll("button").forEach(function (button) {
+                button.disabled = false;
+            });
+            if (status) status.textContent = error.message || "Unable to save";
+        }
+    }
+
+    function buildFeedback(interactionId) {
+        if (!interactionId) return null;
+        const controls = document.createElement("div");
+        controls.className = "mae-feedback";
+        const label = document.createElement("span");
+        label.textContent = "Was this answer useful?";
+        controls.appendChild(label);
+        [
+            ["helpful", "Helpful", "bi-hand-thumbs-up"],
+            ["incorrect", "Incorrect", "bi-x-octagon"],
+            ["incomplete", "Incomplete", "bi-exclamation-circle"],
+            ["wrong_source", "Wrong source", "bi-signpost-split"]
+        ].forEach(function (option) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.innerHTML = `<i class="bi ${option[2]}"></i> ${option[1]}`;
+            button.addEventListener("click", function () {
+                sendFeedback(interactionId, option[0], controls);
+            });
+            controls.appendChild(button);
+        });
+        const status = document.createElement("small");
+        status.className = "mae-feedback-status";
+        controls.appendChild(status);
+        return controls;
+    }
+
     function addMessage(role, content, payload) {
         const article = document.createElement("article");
         article.className = `mae-message mae-message-${role}`;
@@ -459,6 +517,9 @@
         addEvidence(bubble, payload && payload.evidence);
 
         if (role === "assistant") {
+            const feedback = buildFeedback(payload && payload.interaction_id);
+            if (feedback) bubble.appendChild(feedback);
+
             const readButton = document.createElement("button");
             readButton.type = "button";
             readButton.className = "mae-read-aloud";

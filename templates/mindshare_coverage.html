@@ -96,16 +96,17 @@
             <p class="text-secondary">The first file is the likely newest revision. Review before moving anything to an archive.</p>
             <div class="table-responsive">
                 <table class="table coverage-table">
-                    <thead><tr><th>Family</th><th>Likely current</th><th>Review candidates</th></tr></thead>
+                    <thead><tr><th>Family</th><th>Likely current</th><th>Review candidates</th><th>Recommendation</th></tr></thead>
                     <tbody>
                     {% for group in coverage.duplicate_groups %}
                         <tr>
                             <td>{{ group.family }}</td>
                             <td><strong>{{ group.preferred }}</strong></td>
                             <td>{{ group.review|join(", ") }}</td>
+                            <td>{{ group.recommendation }}</td>
                         </tr>
                     {% else %}
-                        <tr><td colspan="3" class="text-secondary">No revision groups detected.</td></tr>
+                        <tr><td colspan="4" class="text-secondary">No revision groups detected.</td></tr>
                     {% endfor %}
                     </tbody>
                 </table>

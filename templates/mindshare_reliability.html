@@ -99,6 +99,29 @@
 </section>
 {% endif %}
 
+<section class="glass jack-lab-panel mt-4">
+    <h3>Recent supervisor feedback</h3>
+    <p class="text-secondary">Feedback from JACK answers is stored separately from MAE and never changes manuals automatically.</p>
+    <div class="table-responsive">
+        <table class="table jack-lab-table">
+            <thead><tr><th>Time</th><th>Rating</th><th>Question</th><th>Answer</th><th>User</th></tr></thead>
+            <tbody>
+            {% for item in feedback_items %}
+                <tr>
+                    <td class="cad-time" data-cad-time="{{ item.created_at }}">{{ item.created_at }}</td>
+                    <td class="{{ 'text-success' if item.rating == 'helpful' else 'text-warning' }}">{{ item.rating|replace("_", " ")|title }}</td>
+                    <td>{{ item.question }}</td>
+                    <td>{{ item.answer|truncate(220) }}</td>
+                    <td>{{ item.user_email }}</td>
+                </tr>
+            {% else %}
+                <tr><td colspan="5" class="text-secondary">No JACK feedback has been recorded yet.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
 <script src="/static/js/lcdash-mindshare-reliability.js?v=20260727"></script>
 <script>LCDashTime.updateCadDisplayTimes();</script>
 {% endblock %}

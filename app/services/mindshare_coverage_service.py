@@ -157,6 +157,20 @@ def build_mindshare_coverage(
         if len(family_documents) < 2:
             continue
         ordered = sorted(family_documents, key=_version_key, reverse=True)
+        file_names = [
+            str(item.get("file_name") or item.get("title") or "")
+            for item in ordered
+        ]
+        if all(name.lower() == "readme.md" for name in file_names):
+            recommendation = (
+                "Folder placeholders contain no searchable text. Retain at "
+                "the source but exclude them from assistant coverage totals."
+            )
+        else:
+            recommendation = (
+                "Treat the highest revision as current. Keep older revisions "
+                "only in Vendor Archives after a human confirms the revision order."
+            )
         duplicate_groups.append(
             {
                 "family": identify_product(ordered[0]),
@@ -165,6 +179,7 @@ def build_mindshare_coverage(
                     item.get("file_name") or item.get("title")
                     for item in ordered[1:]
                 ],
+                "recommendation": recommendation,
             }
         )
     duplicate_groups.sort(key=lambda item: (item["family"], item["preferred"]))

@@ -15,6 +15,11 @@ class MindshareServiceError(Exception):
 
 _PRODUCT_FOCUS_RULES = (
     (
+        "Console Application",
+        ("console workspace", "console application", "console exec"),
+        ("consoleapplication", "console application", "consoleexec"),
+    ),
+    (
         "MRI2",
         ("mri2", "radio interface 2", "mindshare radio interface 2"),
         ("mri2", "radiointerface2", "radio interface 2"),
@@ -35,9 +40,24 @@ _PRODUCT_FOCUS_RULES = (
         ("roipplus", "roip plus", "roip+gateway"),
     ),
     (
-        "NXIP Gateway",
-        ("nxip", "nxip gateway"),
-        ("nxip",),
+        "NXIP Conventional Gateway",
+        ("nxip conventional", "nxip conventional gateway"),
+        ("nxipconventional", "nxip conventional"),
+    ),
+    (
+        "NXIP Trunking Gateway",
+        ("nxip trunking", "nxip trunking gateway"),
+        ("nxiptrunking", "nxip trunking"),
+    ),
+    (
+        "RTP Gateway",
+        ("rtp gateway",),
+        ("rtpgateway", "rtp gateway"),
+    ),
+    (
+        "CAD Alerting Gateway",
+        ("cad alerting gateway",),
+        ("cadalertinggateway", "cad alerting gateway"),
     ),
     (
         "DMR HDAP Gateway",
@@ -50,6 +70,117 @@ _PRODUCT_FOCUS_RULES = (
         ("8linetelco", "8 line telco", "8ltp"),
     ),
 )
+
+_QUERY_REWRITES = (
+    (("phone book", "phonebook"), "Console Exec Enable Phone Book Sharing"),
+    (("display resolution",), "Add Display Resolution"),
+    (
+        ("copy an mri configuration", "mri configuration to a replacement"),
+        "MRI Configuration Copying For Replacement",
+    ),
+    (
+        ("chromium lock", "chromium singleton"),
+        "Remove Chromium Singleton Lock Files",
+    ),
+    (
+        ("delete old mindshare system logs", "delete system log"),
+        "Delete System Log Files via Terminal",
+    ),
+    (
+        ("mai firmware",),
+        "MAI Firmware Update Via Terminal",
+    ),
+)
+
+
+def _retrieval_question(question: str) -> str:
+    normalized = " ".join((question or "").lower().split())
+    for aliases, rewrite in _QUERY_REWRITES:
+        if any(alias in normalized for alias in aliases):
+            return rewrite
+    return question
+
+
+def _boundary_response(question: str, started: float) -> dict | None:
+    normalized = " ".join((question or "").lower().split())
+    credential_terms = (
+        "password",
+        "passcode",
+        "private key",
+        "secret key",
+        "api key",
+        "access token",
+        "license key",
+        "credential",
+    )
+    unsupported_override_terms = (
+        "even if it is not in the manual",
+        "even if it's not in the manual",
+        "undocumented",
+        "invent ",
+        "make up ",
+        "bypass security",
+        "disable console security",
+    )
+    action_request = (
+        any(
+            normalized.startswith(prefix)
+            for prefix in (
+                "change ",
+                "set ",
+                "delete ",
+                "disable ",
+                "enable ",
+                "install ",
+                "update ",
+                "reconfigure ",
+                "restart ",
+            )
+        )
+        and any(marker in normalized for marker in (" for me", " now", " yourself"))
+    )
+
+    if any(term in normalized for term in credential_terms):
+        message = (
+            "I cannot provide, repeat, or help retrieve passwords, keys, tokens, "
+            "license secrets, or other credentials—even when a value appears in "
+            "a technical manual. Use the protected credential record or an "
+            "authorized reset procedure."
+        )
+    elif any(term in normalized for term in unsupported_override_terms):
+        message = (
+            "I will not invent undocumented instructions or help bypass or "
+            "disable security. I can explain an approved, documented procedure "
+            "when the exact Mindshare product and authorized objective are provided."
+        )
+    elif action_request:
+        message = (
+            "I am read-only and cannot make that change. I can explain the "
+            "documented procedure, prerequisites, and rollback considerations "
+            "for an authorized technician, but I will not claim to operate the equipment."
+        )
+    else:
+        return None
+
+    return {
+        "answer": message,
+        "sources": [
+            {
+                "name": "JACK read-only safety policy",
+                "detail": "The request was stopped before document retrieval.",
+                "available": True,
+            }
+        ],
+        "evidence": [],
+        "assurance": {
+            "level": "limited",
+            "label": "Protected safety boundary",
+            "detail": "No credential or equipment-changing instruction was returned.",
+        },
+        "timing": {"total_ms": round((perf_counter() - started) * 1000)},
+        "model": "policy",
+        "write_access": False,
+    }
 
 
 def _product_focus(question: str) -> tuple[str, tuple[str, ...]] | None:
@@ -207,8 +338,12 @@ def ask_mindshare(
     if not clean_question:
         raise MindshareServiceError("Enter a Mindshare technical question.")
 
+    boundary = _boundary_response(clean_question, started)
+    if boundary:
+        return boundary
+
     results = search_knowledge(
-        clean_question,
+        _retrieval_question(clean_question),
         limit=6,
         library_key="mindshare",
     )
@@ -247,6 +382,8 @@ def ask_mindshare(
             "timing": {
                 "total_ms": round((perf_counter() - started) * 1000),
             },
+            "model": settings.mae_model,
+            "write_access": False,
         }
 
     context = _build_context(direct_results)
@@ -374,4 +511,6 @@ Scope and safety:
         "timing": {
             "total_ms": round((perf_counter() - started) * 1000),
         },
+        "model": settings.mae_model,
+        "write_access": False,
     }
