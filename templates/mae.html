@@ -17,11 +17,20 @@
                 <p>Mission Assistance Engine</p>
             </div>
         </div>
-        <div class="mae-guardrail">
-            <i class="bi bi-shield-lock-fill"></i>
-            <div>
-                <strong>Inquiry-only mode</strong>
-                <span>MAE cannot add, change, dispatch, or delete CAD information.</span>
+        <div class="mae-hero-actions">
+            <button class="mae-voice-launch" id="mae-voice-toggle" type="button">
+                <i class="bi bi-mic-fill"></i>
+                <span>
+                    <strong>Start voice mode</strong>
+                    <small>Talk naturally with MAE</small>
+                </span>
+            </button>
+            <div class="mae-guardrail">
+                <i class="bi bi-shield-lock-fill"></i>
+                <div>
+                    <strong>Inquiry-only mode</strong>
+                    <span>MAE cannot add, change, dispatch, or delete CAD information.</span>
+                </div>
             </div>
         </div>
     </header>
@@ -94,6 +103,22 @@
                 MAE is reviewing authorized read-only sources…
             </div>
 
+            <section class="mae-voice-session" id="mae-voice-session" hidden aria-live="polite">
+                <div class="mae-voice-pulse" id="mae-voice-pulse" aria-hidden="true">
+                    <i class="bi bi-mic-fill"></i>
+                </div>
+                <div class="mae-voice-state">
+                    <small>MAE VOICE MODE</small>
+                    <strong id="mae-voice-state">Preparing microphone…</strong>
+                    <span id="mae-voice-detail">Your audio stays on the local voice stack.</span>
+                </div>
+                <button id="mae-voice-stop" type="button">
+                    <i class="bi bi-stop-fill"></i>
+                    End voice mode
+                </button>
+            </section>
+            <audio id="mae-voice-player" hidden></audio>
+
             <form class="mae-composer" id="mae-form">
                 <label class="visually-hidden" for="mae-question">Ask MAE a question</label>
                 <textarea
@@ -115,5 +140,5 @@
     </div>
 </section>
 
-<script src="/static/js/lcdash-mae.js?v=20260726-mae-live-cache-fix"></script>
+<script src="/static/js/lcdash-mae.js?v=20260727-mae-voice-mode"></script>
 {% endblock %}

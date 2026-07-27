@@ -87,6 +87,66 @@
     font-size: .82rem;
 }
 
+.mae-hero-actions {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+}
+
+.mae-voice-launch {
+    min-width: 185px;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 12px 15px;
+    border: 1px solid rgba(82, 215, 255, .36);
+    border-radius: 15px;
+    background:
+        radial-gradient(circle at 15% 50%, rgba(82, 215, 255, .2), transparent 42%),
+        rgba(82, 215, 255, .08);
+    color: #dff7ff;
+    text-align: left;
+}
+
+.mae-voice-launch:hover {
+    border-color: rgba(82, 215, 255, .7);
+    box-shadow: 0 0 24px rgba(82, 215, 255, .13);
+}
+
+.mae-voice-launch:disabled {
+    opacity: .55;
+    cursor: not-allowed;
+}
+
+.mae-voice-launch > i {
+    color: var(--mae-cyan);
+    font-size: 1.45rem;
+}
+
+.mae-voice-launch strong,
+.mae-voice-launch small {
+    display: block;
+}
+
+.mae-voice-launch strong {
+    font-size: .84rem;
+}
+
+.mae-voice-launch small {
+    margin-top: 2px;
+    color: #8eabc0;
+    font-size: .7rem;
+}
+
+.mae-voice-launch.is-active {
+    border-color: rgba(99, 245, 178, .5);
+    background: rgba(99, 245, 178, .1);
+}
+
+.mae-voice-launch.is-active > i {
+    color: var(--mae-green);
+}
+
 .mae-status-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -428,6 +488,29 @@
     display: none;
 }
 
+.mae-read-aloud {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding: 6px 10px;
+    border: 1px solid rgba(82, 215, 255, .24);
+    border-radius: 999px;
+    background: rgba(82, 215, 255, .08);
+    color: #aee9ff;
+    font-size: .7rem;
+    font-weight: 800;
+}
+
+.mae-read-aloud:hover {
+    border-color: rgba(82, 215, 255, .58);
+    background: rgba(82, 215, 255, .14);
+}
+
+.mae-read-aloud:disabled {
+    opacity: .6;
+}
+
 .mae-message-user .mae-bubble {
     border-color: rgba(99, 245, 178, .2);
     border-radius: 17px 5px 17px 17px;
@@ -493,6 +576,96 @@
     40% { opacity: 1; transform: translateY(-3px); }
 }
 
+.mae-voice-session {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 15px;
+    margin: 0 8px 14px;
+    padding: 13px 15px;
+    border: 1px solid rgba(82, 215, 255, .27);
+    border-radius: 17px;
+    background:
+        radial-gradient(circle at 8% 50%, rgba(82, 215, 255, .12), transparent 32%),
+        rgba(4, 18, 31, .88);
+    box-shadow: 0 0 28px rgba(0, 148, 255, .08);
+}
+
+.mae-voice-session[hidden] {
+    display: none;
+}
+
+.mae-voice-pulse {
+    width: 48px;
+    height: 48px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(82, 215, 255, .42);
+    border-radius: 50%;
+    background: rgba(82, 215, 255, .12);
+    color: var(--mae-cyan);
+    font-size: 1.25rem;
+}
+
+.mae-voice-session.is-listening .mae-voice-pulse,
+.mae-voice-session.is-hearing .mae-voice-pulse {
+    animation: mae-voice-ring 1.6s infinite ease-out;
+}
+
+.mae-voice-session.is-hearing .mae-voice-pulse {
+    color: #06131f;
+    background: var(--mae-green);
+}
+
+.mae-voice-session.is-speaking .mae-voice-pulse {
+    color: #06131f;
+    background: var(--mae-cyan);
+    animation: mae-voice-speak .7s infinite alternate ease-in-out;
+}
+
+@keyframes mae-voice-ring {
+    0% { box-shadow: 0 0 0 0 rgba(82, 215, 255, .35); }
+    70%, 100% { box-shadow: 0 0 0 13px rgba(82, 215, 255, 0); }
+}
+
+@keyframes mae-voice-speak {
+    from { transform: scale(.92); }
+    to { transform: scale(1.08); }
+}
+
+.mae-voice-state small,
+.mae-voice-state strong,
+.mae-voice-state span {
+    display: block;
+}
+
+.mae-voice-state small {
+    color: var(--mae-cyan);
+    font-size: .68rem;
+    font-weight: 900;
+    letter-spacing: 1px;
+}
+
+.mae-voice-state strong {
+    margin: 2px 0;
+    color: white;
+}
+
+.mae-voice-state span {
+    color: #89a8bd;
+    font-size: .75rem;
+}
+
+.mae-voice-session > button {
+    padding: 9px 12px;
+    border: 1px solid rgba(255, 123, 131, .35);
+    border-radius: 11px;
+    background: rgba(255, 123, 131, .08);
+    color: #ffadb3;
+    font-size: .76rem;
+    font-weight: 800;
+}
+
 .mae-composer {
     display: flex;
     align-items: flex-end;
@@ -552,6 +725,25 @@
 
     .mae-hero {
         flex-direction: column;
+    }
+
+    .mae-hero-actions {
+        width: 100%;
+        flex-direction: column;
+    }
+
+    .mae-voice-launch,
+    .mae-guardrail {
+        max-width: none;
+        width: 100%;
+    }
+
+    .mae-voice-session {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .mae-voice-session > button {
+        grid-column: 1 / -1;
     }
 
     .mae-status-grid {

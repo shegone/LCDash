@@ -23,6 +23,9 @@ class MAEPageTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Mission Assistance Engine", response.text)
         self.assertIn("Inquiry-only mode", response.text)
+        self.assertIn("Start voice mode", response.text)
+        self.assertIn('id="mae-voice-session"', response.text)
+        self.assertIn('id="mae-voice-player"', response.text)
         self.assertIn("/static/css/lcdash-mae.css", response.text)
         self.assertIn("/static/js/lcdash-mae.js", response.text)
 

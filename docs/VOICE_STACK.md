@@ -28,6 +28,25 @@ The browser never connects directly to the speech container.
 The Speaches image is pinned by digest so a future upstream `latest` update
 cannot silently change the tested production runtime.
 
+## MAE conversational voice mode
+
+The MAE page includes an optional **Start voice mode** control. Voice mode:
+
+1. Requests microphone permission from the user's browser.
+2. Listens locally until it detects a natural pause.
+3. Sends the temporary recording to LCDash for local transcription.
+4. Submits the transcript through MAE's existing audited, inquiry-only chat
+   workflow.
+5. Generates MAE's spoken answer locally and resumes listening.
+
+The user can end the session at any time. Microphone capture is paused while
+MAE speaks to prevent feedback, and the beta transcription endpoint does not
+store the recording. Individual written answers also include a **Listen**
+button.
+
+Browser microphone access requires either HTTPS or a localhost connection.
+Remote supervisor access must therefore use the secured HTTPS dashboard URL.
+
 ## Pronunciation dictionary
 
 LCDash applies speech-only pronunciation rules before text reaches the voice
