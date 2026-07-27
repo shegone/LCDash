@@ -501,7 +501,7 @@
         if (!question) return;
         const settings = options || {};
         let answerToSpeak = "";
-        const requestHistory = history.slice(-4);
+        const requestHistory = history.slice(-2);
         addMessage("user", question);
         history.push({role: "user", content: question});
         setBusy(true);

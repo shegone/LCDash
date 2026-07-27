@@ -149,10 +149,10 @@ def _result_is_direct(result: dict) -> bool:
 
 def _build_context(results: list[dict]) -> str:
     blocks = []
-    for index, result in enumerate(results[:4], start=1):
+    for index, result in enumerate(results[:3], start=1):
         page_number = int(result.get("page_number") or 0)
         page_label = f"page {page_number}" if page_number else "page unknown"
-        content = str(result.get("content") or "").strip()[:1200]
+        content = str(result.get("content") or "").strip()[:900]
         blocks.append(
             "\n".join(
                 (
@@ -175,7 +175,7 @@ def _evidence(results: list[dict]) -> list[dict]:
             "content": str(result.get("content") or "")[:900],
             "retrieval": result.get("retrieval") or [],
         }
-        for result in results[:4]
+        for result in results[:3]
     ]
 
 
@@ -190,7 +190,7 @@ def ask_mindshare(
 
     results = search_knowledge(
         clean_question,
-        limit=8,
+        limit=6,
         library_key="mindshare",
     )
     focused_results = _focus_results(clean_question, results)
@@ -232,12 +232,12 @@ def ask_mindshare(
 
     context = _build_context(direct_results)
     recent_history = []
-    for message in (history or [])[-4:]:
+    for message in (history or [])[-2:]:
         role = str(message.get("role") or "").strip().lower()
         content = str(message.get("content") or "").strip()
         if role in {"user", "assistant"} and content:
             recent_history.append(
-                {"role": role, "content": content[:1500]}
+                {"role": role, "content": content[:1000]}
             )
 
     system_prompt = """
@@ -277,8 +277,8 @@ Scope and safety:
 - Cite supporting material inline as [Document title, page N].
 - If the passages are insufficient or conflict, say so plainly.
 - Use short paragraphs and put lists on separate lines for easy reading.
-- Be concise. Aim for about 120 words unless the documented procedure genuinely
-  requires more detail. Lead with the answer and include only actionable steps.
+- Be concise. Aim for 80 words and never exceed 100 words. Lead with the answer,
+  include only documented actionable steps, and finish with a complete sentence.
 """.strip()
 
     messages = [{"role": "system", "content": system_prompt}]
@@ -304,7 +304,7 @@ Scope and safety:
                 "options": {
                     "temperature": 0.1,
                     "num_ctx": 4096,
-                    "num_predict": 220,
+                    "num_predict": 160,
                 },
             },
             timeout=settings.mae_request_timeout_seconds,
@@ -334,8 +334,8 @@ Scope and safety:
             {
                 "name": "Mindshare technical library",
                 "detail": (
-                    f"{len(direct_results[:4])} supporting passage"
-                    f"{'' if len(direct_results[:4]) == 1 else 's'}"
+                    f"{len(direct_results[:3])} supporting passage"
+                    f"{'' if len(direct_results[:3]) == 1 else 's'}"
                 ),
                 "available": True,
             }
