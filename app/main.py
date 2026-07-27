@@ -429,7 +429,7 @@ def dashboard(request: Request):
             "cad_status": cad_status,
             "active_calls": stats["active_calls"],
             "assigned_units": stats["assigned_units"],
-            "on_scene_units": stats.get("on_scene_units", 0),
+            "on_scene_calls": stats.get("on_scene_calls", 0),
             "high_priority_calls": stats["high_priority_calls"],
             "oldest_call_datetime": stats.get("oldest_call_datetime", ""),
             "agency_summary": stats["agency_summary"],

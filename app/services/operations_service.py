@@ -45,9 +45,9 @@ def sort_dashboard_calls(calls: list) -> list:
 
 def build_dashboard_stats(calls: list) -> dict:
     unique_units = set()
-    on_scene_units = set()
     agency_counts = {}
     high_priority_calls = 0
+    on_scene_calls = 0
     oldest_call_datetime = ""
 
     for call in calls:
@@ -56,6 +56,9 @@ def build_dashboard_stats(calls: list) -> dict:
         if 1 <= priority <= 15:
             high_priority_calls += 1
 
+        if normalize_unit_status(call.get("status") or "") == "On Scene":
+            on_scene_calls += 1
+
         agency = call.get("agency") or "Unknown"
         agency_counts[agency] = agency_counts.get(agency, 0) + 1
 
@@ -63,8 +66,6 @@ def build_dashboard_stats(calls: list) -> dict:
             unit_number = unit.get("unit_number")
             if unit_number:
                 unique_units.add(unit_number)
-                if normalize_unit_status(unit.get("status") or "") == "On Scene":
-                    on_scene_units.add(unit_number)
 
         call_datetime = call.get("call_datetime") or ""
         if call_datetime and (
@@ -86,7 +87,7 @@ def build_dashboard_stats(calls: list) -> dict:
     return {
         "active_calls": len(calls),
         "assigned_units": len(unique_units),
-        "on_scene_units": len(on_scene_units),
+        "on_scene_calls": on_scene_calls,
         "high_priority_calls": high_priority_calls,
         "oldest_call_datetime": oldest_call_datetime,
         "agency_summary": agency_summary,
