@@ -628,6 +628,7 @@
                                         <th>Call Taker</th>
                                         <th class="text-end">Calls</th>
                                         <th class="text-end">Share</th>
+                                        <th class="text-end">Timed</th>
                                         <th class="text-end">Average</th>
                                         <th class="text-end">Median</th>
                                         <th class="text-end">≤ 90 Sec</th>
@@ -640,6 +641,7 @@
                                             <td class="fw-bold text-white">{{ dispatcher.call_taker }}</td>
                                             <td class="text-end text-warning fw-bold">{{ dispatcher.calls_entered }}</td>
                                             <td class="text-end">{{ dispatcher.share_percent }}%</td>
+                                            <td class="text-end">{{ dispatcher.processing_samples }}</td>
                                             <td class="text-end">{{ dispatcher.average_processing }}</td>
                                             <td class="text-end">{{ dispatcher.median_processing }}</td>
                                             <td class="text-end text-success">{{ dispatcher.within_90_percent }}%</td>
@@ -660,6 +662,9 @@
 
             <div class="data-note mt-3">
                 <i class="bi bi-info-circle text-info"></i>
+                CAD-processing calculations exclude scheduled calls and atypical
+                intervals longer than one hour.
+                <br>
                 NGA911 integration will later add phone-answer time, call duration,
                 abandoned calls, transfers, queue delay, and callback metrics.
             </div>

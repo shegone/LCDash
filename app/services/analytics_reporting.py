@@ -229,7 +229,7 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
     dispatcher_summary_row = repository.fetchone(
         """
         WITH selected_calls AS (
-            SELECT cfs_number, call_taker, call_received_at
+            SELECT cfs_number, call_taker, call_received_at, is_scheduled
             FROM lcdash_analytics.calls
             WHERE call_received_at >= %(window_start)s
               AND call_received_at < %(window_end)s
@@ -240,6 +240,7 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
                 selected_calls.cfs_number,
                 selected_calls.call_taker,
                 selected_calls.call_received_at,
+                selected_calls.is_scheduled,
                 MIN(agency_times.dispatched_at) FILTER (
                     WHERE agency_times.dispatched_at >= selected_calls.call_received_at
                 ) AS first_dispatched_at
@@ -249,24 +250,40 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
             GROUP BY
                 selected_calls.cfs_number,
                 selected_calls.call_taker,
-                selected_calls.call_received_at
+                selected_calls.call_received_at,
+                selected_calls.is_scheduled
         )
         SELECT
             COUNT(*) AS calls_with_call_taker,
-            COUNT(*) FILTER (WHERE first_dispatched_at IS NOT NULL)
+            COUNT(*) FILTER (
+                WHERE first_dispatched_at IS NOT NULL
+                  AND NOT is_scheduled
+                  AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
+            )
                 AS processing_samples,
             AVG(EXTRACT(EPOCH FROM first_dispatched_at - call_received_at))
-                FILTER (WHERE first_dispatched_at IS NOT NULL)
+                FILTER (
+                    WHERE first_dispatched_at IS NOT NULL
+                      AND NOT is_scheduled
+                      AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
+                )
                 AS average_processing_seconds,
             PERCENTILE_CONT(0.5) WITHIN GROUP (
                 ORDER BY EXTRACT(EPOCH FROM first_dispatched_at - call_received_at)
-            ) FILTER (WHERE first_dispatched_at IS NOT NULL)
+            ) FILTER (
+                WHERE first_dispatched_at IS NOT NULL
+                  AND NOT is_scheduled
+                  AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
+            )
                 AS median_processing_seconds,
             COUNT(*) FILTER (
                 WHERE EXTRACT(EPOCH FROM first_dispatched_at - call_received_at) <= 90
+                  AND NOT is_scheduled
             ) AS within_90_seconds,
             COUNT(*) FILTER (
                 WHERE EXTRACT(EPOCH FROM first_dispatched_at - call_received_at) > 180
+                  AND NOT is_scheduled
+                  AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
             ) AS over_180_seconds
         FROM call_processing
         """,
@@ -276,7 +293,7 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
     dispatcher_rows = repository.fetchall(
         """
         WITH selected_calls AS (
-            SELECT cfs_number, call_taker, call_received_at
+            SELECT cfs_number, call_taker, call_received_at, is_scheduled
             FROM lcdash_analytics.calls
             WHERE call_received_at >= %(window_start)s
               AND call_received_at < %(window_end)s
@@ -287,6 +304,7 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
                 selected_calls.cfs_number,
                 selected_calls.call_taker,
                 selected_calls.call_received_at,
+                selected_calls.is_scheduled,
                 MIN(agency_times.dispatched_at) FILTER (
                     WHERE agency_times.dispatched_at >= selected_calls.call_received_at
                 ) AS first_dispatched_at
@@ -296,25 +314,41 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
             GROUP BY
                 selected_calls.cfs_number,
                 selected_calls.call_taker,
-                selected_calls.call_received_at
+                selected_calls.call_received_at,
+                selected_calls.is_scheduled
         )
         SELECT
             call_taker,
             COUNT(*) AS calls_entered,
-            COUNT(*) FILTER (WHERE first_dispatched_at IS NOT NULL)
+            COUNT(*) FILTER (
+                WHERE first_dispatched_at IS NOT NULL
+                  AND NOT is_scheduled
+                  AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
+            )
                 AS processing_samples,
             AVG(EXTRACT(EPOCH FROM first_dispatched_at - call_received_at))
-                FILTER (WHERE first_dispatched_at IS NOT NULL)
+                FILTER (
+                    WHERE first_dispatched_at IS NOT NULL
+                      AND NOT is_scheduled
+                      AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
+                )
                 AS average_processing_seconds,
             PERCENTILE_CONT(0.5) WITHIN GROUP (
                 ORDER BY EXTRACT(EPOCH FROM first_dispatched_at - call_received_at)
-            ) FILTER (WHERE first_dispatched_at IS NOT NULL)
+            ) FILTER (
+                WHERE first_dispatched_at IS NOT NULL
+                  AND NOT is_scheduled
+                  AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
+            )
                 AS median_processing_seconds,
             COUNT(*) FILTER (
                 WHERE EXTRACT(EPOCH FROM first_dispatched_at - call_received_at) <= 90
+                  AND NOT is_scheduled
             ) AS within_90_seconds,
             COUNT(*) FILTER (
                 WHERE EXTRACT(EPOCH FROM first_dispatched_at - call_received_at) > 180
+                  AND NOT is_scheduled
+                  AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
             ) AS over_180_seconds
         FROM call_processing
         GROUP BY call_taker

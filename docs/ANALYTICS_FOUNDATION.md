@@ -44,9 +44,11 @@ The Analytics page includes a Dispatcher / CAD Entry section for:
 - Call-taker data coverage for the selected reporting window
 
 CAD processing is measured from the CFS `CallDateTime` to the earliest valid
-agency dispatch timestamp. It is not 911 phone-answer time. NGA911 integration
-can later add answer time, call duration, abandoned-call, transfer, queue-delay,
-and callback metrics.
+agency dispatch timestamp. Scheduled calls and atypical intervals longer than
+one hour are excluded from processing-time calculations. The table reports the
+number of timed samples so small samples are visible. CAD processing is not 911
+phone-answer time. NGA911 integration can later add answer time, call duration,
+abandoned-call, transfer, queue-delay, and callback metrics.
 
 ## Tables
 
