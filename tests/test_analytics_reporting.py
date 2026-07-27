@@ -186,7 +186,7 @@ class AnalyticsOverviewRouteTests(unittest.TestCase):
         self.assertIn("Top Incident Types", response.text)
         self.assertIn("Busiest Units", response.text)
         self.assertIn("DISPATCHER / CAD ENTRY METRICS", response.text)
-        self.assertIn("Calls Entered by Call Taker", response.text)
+        self.assertIn("Calls Entered by Dispatcher", response.text)
         self.assertIn("dispatcher-workload-chart", response.text)
         self.assertIn("EOC 6", response.text)
         self.assertIn("Calls by Station: Law, EMS, and Fire", response.text)

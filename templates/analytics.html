@@ -563,7 +563,7 @@
                 </div>
                 <div class="col-6 col-xl">
                     <div class="analytics-kpi dispatcher-kpi">
-                        <div class="analytics-eyebrow">BUSIEST CALL TAKER</div>
+                        <div class="analytics-eyebrow">BUSIEST DISPATCHER</div>
                         <div class="analytics-value fs-3">{{ dispatcher_metrics.busiest_call_taker }}</div>
                         <div class="analytics-subvalue">
                             {{ dispatcher_metrics.busiest_call_count }} calls entered
@@ -601,7 +601,7 @@
                 <div class="row g-4 mt-1">
                     <div class="col-xl-5">
                         <div class="analytics-eyebrow">CALL ENTRY WORKLOAD</div>
-                        <h5 class="mb-0">Calls Entered by Call Taker</h5>
+                        <h5 class="mb-0">Calls Entered by Dispatcher</h5>
                         <div class="dispatcher-chart-wrap">
                             <canvas id="dispatcher-workload-chart"></canvas>
                         </div>
@@ -609,7 +609,7 @@
                     <div class="col-xl-7">
                         <div class="d-flex justify-content-between align-items-start gap-3">
                             <div>
-                                <div class="analytics-eyebrow">CALL-TAKER DETAIL</div>
+                                <div class="analytics-eyebrow">DISPATCHER DETAIL</div>
                                 <h5 class="mb-0">Dispatcher Metrics</h5>
                             </div>
                             <button
@@ -625,7 +625,7 @@
                             <table class="table analytics-table align-middle">
                                 <thead>
                                     <tr>
-                                        <th>Call Taker</th>
+                                        <th>Dispatcher</th>
                                         <th class="text-end">Calls</th>
                                         <th class="text-end">Share</th>
                                         <th class="text-end">Timed</th>

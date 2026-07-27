@@ -229,7 +229,12 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
     dispatcher_summary_row = repository.fetchone(
         """
         WITH selected_calls AS (
-            SELECT cfs_number, call_taker, call_received_at, is_scheduled
+            SELECT
+                cfs_number,
+                call_taker,
+                call_taker_unique_identifier,
+                call_received_at,
+                is_scheduled
             FROM lcdash_analytics.calls
             WHERE call_received_at >= %(window_start)s
               AND call_received_at < %(window_end)s
@@ -239,6 +244,10 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
             SELECT
                 selected_calls.cfs_number,
                 selected_calls.call_taker,
+                COALESCE(
+                    NULLIF(selected_calls.call_taker_unique_identifier, ''),
+                    'legacy:' || UPPER(selected_calls.call_taker)
+                ) AS dispatcher_key,
                 selected_calls.call_received_at,
                 selected_calls.is_scheduled,
                 MIN(agency_times.dispatched_at) FILTER (
@@ -250,6 +259,7 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
             GROUP BY
                 selected_calls.cfs_number,
                 selected_calls.call_taker,
+                selected_calls.call_taker_unique_identifier,
                 selected_calls.call_received_at,
                 selected_calls.is_scheduled
         )
@@ -293,7 +303,12 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
     dispatcher_rows = repository.fetchall(
         """
         WITH selected_calls AS (
-            SELECT cfs_number, call_taker, call_received_at, is_scheduled
+            SELECT
+                cfs_number,
+                call_taker,
+                call_taker_unique_identifier,
+                call_received_at,
+                is_scheduled
             FROM lcdash_analytics.calls
             WHERE call_received_at >= %(window_start)s
               AND call_received_at < %(window_end)s
@@ -303,6 +318,10 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
             SELECT
                 selected_calls.cfs_number,
                 selected_calls.call_taker,
+                COALESCE(
+                    NULLIF(selected_calls.call_taker_unique_identifier, ''),
+                    'legacy:' || UPPER(selected_calls.call_taker)
+                ) AS dispatcher_key,
                 selected_calls.call_received_at,
                 selected_calls.is_scheduled,
                 MIN(agency_times.dispatched_at) FILTER (
@@ -314,11 +333,12 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
             GROUP BY
                 selected_calls.cfs_number,
                 selected_calls.call_taker,
+                selected_calls.call_taker_unique_identifier,
                 selected_calls.call_received_at,
                 selected_calls.is_scheduled
         )
         SELECT
-            call_taker,
+            MAX(call_taker) AS call_taker,
             COUNT(*) AS calls_entered,
             COUNT(*) FILTER (
                 WHERE first_dispatched_at IS NOT NULL
@@ -351,8 +371,8 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
                   AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
             ) AS over_180_seconds
         FROM call_processing
-        GROUP BY call_taker
-        ORDER BY calls_entered DESC, call_taker
+        GROUP BY dispatcher_key
+        ORDER BY calls_entered DESC, MAX(call_taker)
         LIMIT 30
         """,
         params,

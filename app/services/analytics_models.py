@@ -64,6 +64,31 @@ def _dropdown_text(value, *preferred_fields) -> str:
     return ""
 
 
+def normalize_personnel_identity(value) -> tuple[str, str]:
+    if not isinstance(value, dict):
+        return "", _safe_text(value)
+
+    unique_identifier = _safe_text(value.get("UniqueIdentifier"))
+    first_name = _safe_text(value.get("FirstName"))
+    last_name = _safe_text(value.get("LastName"))
+    suffix = _safe_text(value.get("Suffix"))
+    display_name = " ".join(
+        part for part in (first_name, last_name, suffix) if part
+    )
+
+    if not display_name:
+        display_name = _dropdown_text(
+            value,
+            "Username",
+            "CallSign",
+            "EmployeeCode",
+            "FullDescription",
+            "Description",
+        )
+
+    return unique_identifier, display_name
+
+
 def _primary_incident(raw_call: dict) -> tuple[str, str]:
     incident_rows = raw_call.get("IncidentCode") or []
     if not isinstance(incident_rows, list):
@@ -149,6 +174,9 @@ def normalize_analytics_bundle(
 
     incident_code, incident_description = _primary_incident(raw_call)
     disposition_code, disposition_description = _disposition(raw_call)
+    call_taker_unique_identifier, call_taker_name = (
+        normalize_personnel_identity(raw_call.get("CallTaker"))
+    )
     address = raw_call.get("Address") or {}
     address = address if isinstance(address, dict) else {}
     latitude, longitude = _coordinates(address)
@@ -217,14 +245,8 @@ def normalize_analytics_bundle(
             "Name",
             "Description",
         ),
-        "call_taker": _dropdown_text(
-            raw_call.get("CallTaker"),
-            "CallSign",
-            "Username",
-            "EmployeeCode",
-            "Name",
-            "Description",
-        ),
+        "call_taker": call_taker_name,
+        "call_taker_unique_identifier": call_taker_unique_identifier,
         "incident_code": incident_code,
         "incident_description": incident_description,
         "priority": _dropdown_text(raw_call.get("Priority"), "Level", "Description", "Code"),

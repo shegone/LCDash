@@ -159,6 +159,7 @@ class AnalyticsRepository(AbstractContextManager):
                 dispatch_agency,
                 response_agency,
                 call_taker,
+                call_taker_unique_identifier,
                 incident_code,
                 incident_description,
                 priority,
@@ -180,6 +181,7 @@ class AnalyticsRepository(AbstractContextManager):
                 %(dispatch_agency)s,
                 %(response_agency)s,
                 %(call_taker)s,
+                %(call_taker_unique_identifier)s,
                 %(incident_code)s,
                 %(incident_description)s,
                 %(priority)s,
@@ -200,6 +202,8 @@ class AnalyticsRepository(AbstractContextManager):
                 dispatch_agency = EXCLUDED.dispatch_agency,
                 response_agency = EXCLUDED.response_agency,
                 call_taker = EXCLUDED.call_taker,
+                call_taker_unique_identifier =
+                    EXCLUDED.call_taker_unique_identifier,
                 incident_code = EXCLUDED.incident_code,
                 incident_description = EXCLUDED.incident_description,
                 priority = EXCLUDED.priority,
@@ -350,6 +354,57 @@ class AnalyticsRepository(AbstractContextManager):
             )
 
         self._commit()
+
+    def get_call_taker_backfill_candidates(
+        self,
+        limit: int = 250,
+    ) -> list[str]:
+        rows = self._execute(
+            """
+            SELECT cfs_number
+            FROM lcdash_analytics.calls
+            WHERE BTRIM(call_taker_unique_identifier) = ''
+            ORDER BY call_received_at DESC NULLS LAST, cfs_number
+            LIMIT %s
+            """,
+            (max(int(limit), 1),),
+        ).fetchall()
+        return [str(row[0]) for row in rows]
+
+    def update_call_taker_identity(
+        self,
+        cfs_number: str,
+        *,
+        unique_identifier: str,
+        display_name: str,
+    ) -> bool:
+        result = self._execute(
+            """
+            UPDATE lcdash_analytics.calls
+            SET
+                call_taker = %s,
+                call_taker_unique_identifier = %s,
+                updated_at = NOW()
+            WHERE cfs_number = %s
+            """,
+            (
+                display_name.strip(),
+                unique_identifier.strip(),
+                cfs_number,
+            ),
+        )
+        self._commit()
+        return result.rowcount > 0
+
+    def count_call_taker_backfill_candidates(self) -> int:
+        row = self._execute(
+            """
+            SELECT COUNT(*)
+            FROM lcdash_analytics.calls
+            WHERE BTRIM(call_taker_unique_identifier) = ''
+            """
+        ).fetchone()
+        return int(row[0] or 0)
 
     def status(self) -> dict:
         calls = self._execute(
