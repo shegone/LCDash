@@ -40,6 +40,8 @@ class MindsharePageTests(unittest.TestCase):
         self.assertIn("John Joseph", response.text)
         self.assertIn("1947", response.text)
         self.assertIn("2025", response.text)
+        self.assertIn("/static/img/jack-hines.jpg", response.text)
+        self.assertIn("family obituary", response.text)
         self.assertIn("Why the technical assistant carries his name", response.text)
         self.assertIn("/mindshare/technical", response.text)
 

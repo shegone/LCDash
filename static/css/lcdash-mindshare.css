@@ -209,20 +209,40 @@
         linear-gradient(130deg, rgba(11, 27, 49, .98), rgba(31, 25, 56, .96));
 }
 
-.jack-monogram {
-    width: 126px;
-    height: 126px;
-    display: grid;
-    place-items: center;
+.jack-portrait {
+    width: 190px;
+    margin: 0;
+}
+
+.jack-portrait img {
+    display: block;
+    width: 190px;
+    height: 230px;
+    object-fit: cover;
+    object-position: center 24%;
     border: 1px solid rgba(255, 214, 107, .5);
-    border-radius: 50%;
-    background:
-        radial-gradient(circle, rgba(255, 214, 107, .2), rgba(9, 23, 41, .95));
-    box-shadow: 0 0 35px rgba(255, 214, 107, .13);
-    color: #ffd66b;
-    font-size: 2.5rem;
-    font-weight: 950;
-    letter-spacing: 2px;
+    border-radius: 22px;
+    box-shadow:
+        0 0 35px rgba(255, 214, 107, .13),
+        0 18px 45px rgba(0, 0, 0, .28);
+    filter: contrast(1.04);
+}
+
+.jack-portrait figcaption {
+    margin-top: 9px;
+    color: #7f9db5;
+    font-size: .72rem;
+    line-height: 1.35;
+    text-align: center;
+}
+
+.jack-portrait figcaption a {
+    color: #9fdfff;
+    text-decoration: none;
+}
+
+.jack-portrait figcaption a:hover {
+    text-decoration: underline;
 }
 
 .jack-tribute-kicker {
@@ -390,10 +410,13 @@
         padding: 23px;
     }
 
-    .jack-monogram {
-        width: 96px;
-        height: 96px;
-        font-size: 1.9rem;
+    .jack-portrait,
+    .jack-portrait img {
+        width: 150px;
+    }
+
+    .jack-portrait img {
+        height: 182px;
     }
 
     .jack-values {
