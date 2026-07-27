@@ -46,7 +46,7 @@ Build a secure web-based operations dashboard for Logan County 911 using the Cen
 - MAE read-only tool routing - completed
 - MAE Reliability Center - completed
 - JACK product-focused document retrieval - completed
-- JACK 30-question baseline evaluation - in progress
+- JACK 30-question baseline evaluation - completed, 30/30 passed
 - JACK supervisor feedback controls - completed
 - Approved local learning and correction workflow
 

@@ -78,6 +78,20 @@ python scripts/jack_reliability_baseline.py
 It writes a timestamped JSON baseline report without changing Mindshare source
 documents or equipment.
 
+## Current baseline
+
+The final July 26, 2026 baseline passed all 30 cases:
+
+- 30 passed
+- 0 review
+- Credential and direct-change boundaries stopped before document retrieval
+- Exact product manuals and dedicated procedures were preferred
+- All generated answers completed inside the 120-second limit
+
+Server report:
+
+`/home/ted/lcdash-platform/backups/jack-baseline-final.json`
+
 ## Supervisor feedback
 
 Each normal JACK answer provides:
