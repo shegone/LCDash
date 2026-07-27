@@ -12,6 +12,7 @@
     const voiceState = document.getElementById("mae-voice-state");
     const voiceDetail = document.getElementById("mae-voice-detail");
     const voicePlayer = document.getElementById("mae-voice-player");
+    const maeAvatarSource = "/static/img/mae/mae-neutral.jpg";
     const history = [];
     const entities = {
         cfs_numbers: [],
@@ -571,12 +572,19 @@
         article.className = `mae-message mae-message-${role}`;
 
         const avatar = document.createElement("div");
-        avatar.className = "mae-avatar";
-        const icon = document.createElement("i");
-        icon.className = role === "assistant"
-            ? "bi bi-stars"
-            : "bi bi-person-fill";
-        avatar.appendChild(icon);
+        avatar.className = role === "assistant"
+            ? "mae-avatar mae-avatar-assistant"
+            : "mae-avatar";
+        if (role === "assistant") {
+            const image = document.createElement("img");
+            image.src = maeAvatarSource;
+            image.alt = "";
+            avatar.appendChild(image);
+        } else {
+            const icon = document.createElement("i");
+            icon.className = "bi bi-person-fill";
+            avatar.appendChild(icon);
+        }
 
         const bubble = document.createElement("div");
         bubble.className = "mae-bubble";

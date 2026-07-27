@@ -3,13 +3,15 @@
 {% block title %}MAE | LCDash{% endblock %}
 
 {% block content %}
-<link rel="stylesheet" href="/static/css/lcdash-mae.css?v=20260726-mae-reliability">
+<link rel="stylesheet" href="/static/css/lcdash-mae.css?v=20260727-mae-avatar">
 
 <section class="mae-shell" aria-labelledby="mae-title">
     <header class="mae-hero glass">
         <div class="mae-identity">
-            <div class="mae-orb" aria-hidden="true">
-                <i class="bi bi-stars"></i>
+            <div class="mae-portrait">
+                <img src="/static/img/mae/mae-neutral.jpg"
+                     alt="MAE virtual assistant">
+                <span class="mae-portrait-status" aria-hidden="true"></span>
             </div>
             <div>
                 <div class="mae-eyebrow">LOGAN COUNTY 911 INTELLIGENCE</div>
@@ -85,7 +87,9 @@
         <div class="mae-chat">
             <div class="mae-messages" id="mae-messages" aria-live="polite">
                 <article class="mae-message mae-message-assistant">
-                    <div class="mae-avatar"><i class="bi bi-stars"></i></div>
+                    <div class="mae-avatar mae-avatar-assistant">
+                        <img src="/static/img/mae/mae-neutral.jpg" alt="">
+                    </div>
                     <div class="mae-bubble">
                         <div class="mae-message-name">MAE</div>
                         <p>
@@ -140,5 +144,5 @@
     </div>
 </section>
 
-<script src="/static/js/lcdash-mae.js?v=20260727-mae-voice-mode"></script>
+<script src="/static/js/lcdash-mae.js?v=20260727-mae-avatar"></script>
 {% endblock %}

@@ -28,11 +28,19 @@ class MAEPageTests(unittest.TestCase):
         self.assertIn('id="mae-voice-player"', response.text)
         self.assertIn("/static/css/lcdash-mae.css", response.text)
         self.assertIn("/static/js/lcdash-mae.js", response.text)
+        self.assertIn("/static/img/mae/mae-neutral.jpg", response.text)
+        self.assertIn('alt="MAE virtual assistant"', response.text)
 
         stylesheet = self.client.get("/static/css/lcdash-mae.css")
         self.assertEqual(stylesheet.status_code, 200)
         self.assertIn("position: sticky", stylesheet.text)
         self.assertIn("calc(100vh - 560px)", stylesheet.text)
+        self.assertIn(".mae-portrait", stylesheet.text)
+        self.assertIn(".mae-avatar-assistant", stylesheet.text)
+
+        avatar = self.client.get("/static/img/mae/mae-neutral.jpg")
+        self.assertEqual(avatar.status_code, 200)
+        self.assertEqual(avatar.headers["content-type"], "image/jpeg")
 
     def test_mae_write_refusal_includes_assurance_and_timing(self):
         result = ask_mae("Dispatch MED10 and close the call.")
