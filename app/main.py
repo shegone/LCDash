@@ -5,7 +5,7 @@ import json
 import secrets
 from typing import Literal
 
-from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from pydantic import BaseModel, Field
 from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
@@ -563,7 +563,10 @@ def heatmap_api(response: Response, hours: int = 8):
 
 
 @app.get("/api/operations/station-alerts")
-def station_alerts_api(response: Response, station: str = ""):
+def station_alerts_api(
+    response: Response,
+    station: list[str] = Query(default=[]),
+):
     response.headers["Cache-Control"] = "no-store"
 
     try:
@@ -771,7 +774,10 @@ def heatmap_page(request: Request, hours: int = 8):
 
 
 @app.get("/station-alerts")
-def station_alerts_page(request: Request, station: str = ""):
+def station_alerts_page(
+    request: Request,
+    station: list[str] = Query(default=[]),
+):
     try:
         alert_data = get_live_station_alert_snapshot(station)
     except CentralSquareAPIError as exc:
@@ -782,7 +788,7 @@ def station_alerts_page(request: Request, station: str = ""):
         name="station_alerts.html",
         context={
             "alert_data": alert_data,
-            "selected_station": station,
+            "selected_stations": alert_data.get("selected_stations", station),
             "cad_status": "Connected" if alert_data["connected"] else "Disconnected",
             "system_status": "Connected" if alert_data["connected"] else "Unknown",
             "last_updated": alert_data["generated_at"],

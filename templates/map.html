@@ -4,7 +4,7 @@
 
 {% block content %}
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
 
 <style>
     .map-page-title {
@@ -337,7 +337,7 @@
 <div id="operations-map" aria-label="Live operations map"></div>
 
 <script type="application/json" id="map-data">{{ map_data|tojson }}</script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/static/vendor/leaflet/leaflet.js"></script>
 <script src="/static/js/lcdash-map.js"></script>
 <script>
     LCDashTime.updateCadDisplayTimes();

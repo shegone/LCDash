@@ -122,6 +122,28 @@
         margin-top: 7px;
     }
 
+    .response-coverage-notice {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 14px 16px;
+        border-radius: 14px;
+        color: #bfeeff;
+        background: rgba(76, 201, 255, .08);
+        border: 1px solid rgba(76, 201, 255, .24);
+    }
+
+    .response-coverage-notice.low {
+        color: #ffe8a3;
+        background: rgba(255, 214, 107, .09);
+        border-color: rgba(255, 214, 107, .34);
+    }
+
+    .response-coverage-notice i {
+        font-size: 1.25rem;
+        line-height: 1.2;
+    }
+
     .chart-card,
     .list-card {
         padding: 21px;
@@ -514,6 +536,19 @@
                 <div class="analytics-subvalue">
                     {{ metrics.response_coverage_percent }}% of calls have on-scene timing
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="response-coverage-notice{% if metrics.response_coverage_percent < 50 %} low{% endif %} mb-4">
+        <i class="bi bi-activity" aria-hidden="true"></i>
+        <div>
+            <strong>Response-time data coverage: {{ metrics.response_coverage_percent }}%</strong>
+            <div class="small mt-1">
+                Average and median response times include only completed calls with a valid on-scene timestamp.
+                {% if metrics.response_coverage_percent < 50 %}
+                    Coverage is currently limited, so interpret these response-time figures as preliminary.
+                {% endif %}
             </div>
         </div>
     </div>

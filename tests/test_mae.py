@@ -29,6 +29,11 @@ class MAEPageTests(unittest.TestCase):
         self.assertIn("/static/css/lcdash-mae.css", response.text)
         self.assertIn("/static/js/lcdash-mae.js", response.text)
 
+        stylesheet = self.client.get("/static/css/lcdash-mae.css")
+        self.assertEqual(stylesheet.status_code, 200)
+        self.assertIn("position: sticky", stylesheet.text)
+        self.assertIn("calc(100vh - 560px)", stylesheet.text)
+
     def test_mae_write_refusal_includes_assurance_and_timing(self):
         result = ask_mae("Dispatch MED10 and close the call.")
         self.assertFalse(result["write_access"])

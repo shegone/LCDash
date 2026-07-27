@@ -71,7 +71,7 @@
                 {{ nav_item("/active-calls", "bi-telephone-fill", "Active Calls", current_path == "/active-calls" or current_path.startswith("/calls/")) }}
                 {{ nav_item("/units", "bi-truck", "Units", current_path == "/units") }}
                 {{ nav_item("/station-alerts", "bi-bell-fill", "Station Alerts", current_path == "/station-alerts") }}
-                {{ nav_item("/map", "bi-map", "GIS Map", current_path == "/map" or current_path == "/heatmap") }}
+                {{ nav_item("/map", "bi-map", "GIS Map", current_path == "/map" or current_path.startswith("/map/")) }}
             </div>
         </section>
 

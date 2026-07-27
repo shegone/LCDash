@@ -186,6 +186,9 @@ class MapPageTests(unittest.TestCase):
         self.assertIn("operations-map", response.text)
         self.assertIn("show-calls", response.text)
         self.assertIn("lcdash-map.js", response.text)
+        self.assertIn("/static/vendor/leaflet/leaflet.css", response.text)
+        self.assertIn("/static/vendor/leaflet/leaflet.js", response.text)
+        self.assertNotIn("unpkg.com", response.text)
         self.assertEqual(response.headers["cache-control"], "no-store")
 
     @patch("app.main.get_live_map_snapshot")
@@ -241,6 +244,9 @@ class MapPageTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("</script><script>alert(1)</script>", response.text)
         self.assertIn("incident-map-data", response.text)
+        self.assertIn("/static/vendor/leaflet/leaflet.css", response.text)
+        self.assertIn("/static/vendor/leaflet/leaflet.js", response.text)
+        self.assertNotIn("unpkg.com", response.text)
 
 
 if __name__ == "__main__":

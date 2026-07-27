@@ -199,6 +199,11 @@ class AnalyticsOverviewRouteTests(unittest.TestCase):
         self.assertIn('data-print-analytics="dispatcher-metrics-table"', response.text)
         self.assertEqual(response.text.count("Print / PDF"), 3)
         self.assertIn("MED10", response.text)
+        self.assertIn("Response-time data coverage: 91%", response.text)
+        self.assertIn(
+            "completed calls with a valid on-scene timestamp",
+            response.text,
+        )
         self.assertIn("/static/js/chart.umd.min.js", response.text)
         self.assertNotIn("cdn.jsdelivr.net/npm/chart.js", response.text)
         self.assertIn("/static/js/lcdash-analytics.js", response.text)

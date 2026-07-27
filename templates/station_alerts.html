@@ -3,7 +3,7 @@
 {% block title %}Station Alerts | LCDash{% endblock %}
 
 {% block content %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
 
 <style>
     .station-alert-shell {
@@ -61,6 +61,88 @@
     .station-control option {
         background: #0c1c30;
         color: white;
+    }
+
+    .station-picker {
+        position: relative;
+    }
+
+    .station-picker > summary {
+        min-height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 11px 15px;
+        cursor: pointer;
+        list-style: none;
+    }
+
+    .station-picker > summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .station-picker > summary::after {
+        content: "▾";
+        color: var(--alert-blue);
+        font-size: 1.15rem;
+        transition: transform .15s ease;
+    }
+
+    .station-picker[open] > summary::after {
+        transform: rotate(180deg);
+    }
+
+    .station-picker-menu {
+        position: absolute;
+        z-index: 40;
+        left: 0;
+        right: 0;
+        top: calc(100% + 8px);
+        max-height: min(420px, 58vh);
+        overflow-y: auto;
+        padding: 12px;
+        border: 1px solid rgba(76, 201, 255, .35);
+        border-radius: 16px;
+        background: #0a192b;
+        box-shadow: 0 24px 55px rgba(0, 0, 0, .55);
+    }
+
+    .station-picker-actions {
+        position: sticky;
+        top: -12px;
+        z-index: 2;
+        display: flex;
+        gap: 8px;
+        padding: 10px 0 12px;
+        background: #0a192b;
+    }
+
+    .station-choice {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: center;
+        padding: 10px 9px;
+        border-radius: 11px;
+        color: #dcefff;
+        cursor: pointer;
+    }
+
+    .station-choice:hover {
+        background: rgba(76, 201, 255, .09);
+    }
+
+    .station-choice input {
+        width: 18px;
+        height: 18px;
+        accent-color: #4cc9ff;
+    }
+
+    .station-choice-count {
+        color: #8fb7d9;
+        font-size: .78rem;
+        white-space: nowrap;
     }
 
     .alert-action {
@@ -165,7 +247,9 @@
 
     .dispatch-overlay.visible {
         display: block;
-        animation: alert-in .22s ease-out;
+        animation:
+            alert-in .22s ease-out,
+            alert-screen-flash 1s linear infinite;
     }
 
     .dispatch-alert-card {
@@ -187,6 +271,7 @@
         letter-spacing: 2px;
         text-align: center;
         font-size: clamp(1.2rem, 2.5vw, 2rem);
+        animation: alert-banner-flash 1s linear infinite;
     }
 
     .dispatch-content {
@@ -266,6 +351,34 @@
         to { box-shadow: 0 0 75px rgba(255, 82, 82, .6); }
     }
 
+    @keyframes alert-screen-flash {
+        0%, 100% {
+            background-color: rgba(2, 7, 14, .97);
+        }
+        50% {
+            background-color: rgba(115, 0, 0, .94);
+        }
+    }
+
+    @keyframes alert-banner-flash {
+        0%, 100% {
+            background: #ff3f3f;
+            color: #ffffff;
+        }
+        50% {
+            background: #ffffff;
+            color: #8b0000;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .dispatch-overlay.visible,
+        .dispatch-banner,
+        .dispatch-alert-card {
+            animation-duration: 2s;
+        }
+    }
+
     @media (max-width: 750px) {
         .station-unit-row,
         .station-call-row {
@@ -290,7 +403,8 @@
                 <div class="eyebrow">LCDASH STATION NOTIFICATION</div>
                 <div class="station-title">Fire & EMS Station Alerts</div>
                 <div class="text-secondary mt-2">
-                    Select a CAD station, enable sound, and keep this display open.
+                    Select every CAD station this display should monitor, enable sound,
+                    and keep the page open.
                 </div>
             </div>
 
@@ -308,17 +422,40 @@
         </div>
 
         <div class="row g-3 mt-3 align-items-end">
-            <div class="col-lg-5">
-                <label class="eyebrow mb-2" for="station-selector">STATION TO MONITOR</label>
-                <select id="station-selector" class="form-select station-control">
-                    <option value="">Choose a CAD station...</option>
-                    {% for station in alert_data.stations %}
-                        <option value="{{ station.name }}"
-                                {% if station.name|lower == selected_station|lower %}selected{% endif %}>
-                            {{ station.name }} — {{ station.unit_count }} unit{% if station.unit_count != 1 %}s{% endif %}
-                        </option>
-                    {% endfor %}
-                </select>
+            <div class="col-lg-6">
+                <div class="eyebrow mb-2" id="station-selector-label">STATIONS TO MONITOR</div>
+                <details id="station-selector" class="station-picker">
+                    <summary id="station-selector-summary" class="station-control"
+                             aria-labelledby="station-selector-label">
+                        Choose one or more CAD stations...
+                    </summary>
+                    <div class="station-picker-menu">
+                        <div class="station-picker-actions">
+                            <button id="station-select-all" type="button"
+                                    class="btn btn-outline-info btn-sm">
+                                Select All
+                            </button>
+                            <button id="station-clear-all" type="button"
+                                    class="btn btn-outline-secondary btn-sm">
+                                Clear
+                            </button>
+                        </div>
+                        {% for station in alert_data.stations %}
+                            <label class="station-choice">
+                                <input type="checkbox" class="station-selector-option"
+                                       value="{{ station.name }}">
+                                <span>{{ station.name }}</span>
+                                <span class="station-choice-count">
+                                    {{ station.unit_count }} unit{% if station.unit_count != 1 %}s{% endif %}
+                                </span>
+                            </label>
+                        {% endfor %}
+                    </div>
+                </details>
+                <div class="text-secondary small mt-2">
+                    Alerts are combined when the same incident dispatches units from
+                    more than one selected station.
+                </div>
             </div>
 
             <div class="col-lg-auto">
@@ -329,7 +466,7 @@
 
             <div class="col-lg-auto">
                 <button id="test-station-alert" type="button" class="btn btn-outline-warning alert-action px-4">
-                    <i class="bi bi-bell-fill"></i> Test Two-Tone Alert
+                    <i class="bi bi-bell-fill"></i> Test Full Alert
                 </button>
             </div>
 
@@ -342,16 +479,17 @@
         </div>
 
         <div id="station-alert-message" class="sound-warning mt-3">
-            “Test Two-Tone Alert” will enable browser audio and play the complete paging sequence.
+            “Test Full Alert” will enable browser audio and play the two-tone page,
+            attention beeps, and siren sequence.
         </div>
     </div>
 
     <div class="row g-4 mb-4">
         <div class="col-md-4">
             <div class="glass station-stat">
-                <div class="eyebrow">MONITORED STATION</div>
+                <div class="eyebrow">MONITORED STATIONS</div>
                 <div id="station-name" class="station-stat-value">
-                    {{ alert_data.selected_station or "None selected" }}
+                    {{ selected_stations|join(", ") if selected_stations else "None selected" }}
                 </div>
             </div>
         </div>
@@ -488,6 +626,6 @@
 </div>
 
 <script id="station-alert-data" type="application/json">{{ alert_data|tojson }}</script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="/static/js/lcdash-station-alerts.js?v=0.3.1"></script>
+<script src="/static/vendor/leaflet/leaflet.js"></script>
+<script src="/static/js/lcdash-station-alerts.js?v=0.4.0"></script>
 {% endblock %}

@@ -2,9 +2,14 @@
     "use strict";
 
     const POLL_SECONDS = 5;
-    const STORAGE_STATION = "lcdash.stationAlerts.station";
+    const STORAGE_STATIONS = "lcdash.stationAlerts.stations";
+    const LEGACY_STORAGE_STATION = "lcdash.stationAlerts.station";
 
     const selector = document.getElementById("station-selector");
+    const selectorSummary = document.getElementById("station-selector-summary");
+    const stationOptions = Array.from(document.querySelectorAll(".station-selector-option"));
+    const selectAllButton = document.getElementById("station-select-all");
+    const clearAllButton = document.getElementById("station-clear-all");
     const armButton = document.getElementById("arm-station-alerts");
     const testButton = document.getElementById("test-station-alert");
     const armStatus = document.getElementById("station-alert-arm-status");
@@ -13,7 +18,7 @@
     const acknowledgeButton = document.getElementById("acknowledge-station-alert");
     const initialDataElement = document.getElementById("station-alert-data");
 
-    let selectedStation = "";
+    let selectedStations = [];
     let soundArmed = false;
     let dispatchAudio = null;
     let confirmationAudio = null;
@@ -23,6 +28,7 @@
     let pollTimer = null;
     let firstSnapshotForStation = true;
     let seenEventIds = new Set();
+    let pendingAlerts = [];
 
     function text(id, value) {
         const element = document.getElementById(id);
@@ -57,6 +63,47 @@
         }
     }
 
+    function normalizeStations(values) {
+        const normalized = [];
+        const seen = new Set();
+        (Array.isArray(values) ? values : [values]).forEach(function (value) {
+            const station = String(value || "").trim();
+            const key = station.toLowerCase();
+            if (!station || seen.has(key)) {
+                return;
+            }
+            seen.add(key);
+            normalized.push(station);
+        });
+        return normalized;
+    }
+
+    function monitoredStationLabel(values) {
+        const stations = normalizeStations(values);
+        if (!stations.length) {
+            return "None selected";
+        }
+        if (stations.length <= 3) {
+            return stations.join(", ");
+        }
+        return stations.slice(0, 2).join(", ") + " +" + (stations.length - 2) + " more";
+    }
+
+    function updateStationSelector() {
+        const selectedKeys = new Set(selectedStations.map(function (station) {
+            return station.toLowerCase();
+        }));
+        stationOptions.forEach(function (option) {
+            option.checked = selectedKeys.has(option.value.toLowerCase());
+        });
+
+        if (selectorSummary) {
+            selectorSummary.textContent = selectedStations.length
+                ? monitoredStationLabel(selectedStations)
+                : "Choose one or more CAD stations...";
+        }
+    }
+
     function formatCadTime(value) {
         if (window.LCDashTime && typeof window.LCDashTime.formatCadDisplayTime === "function") {
             return window.LCDashTime.formatCadDisplayTime(value);
@@ -82,7 +129,9 @@
         container.replaceChildren();
         if (!units || !units.length) {
             container.appendChild(createEmpty(
-                selectedStation ? "No units are assigned to this CAD station." : "Choose a station to view its units."
+                selectedStations.length
+                    ? "No units are assigned to the selected CAD stations."
+                    : "Choose one or more stations to view their units."
             ));
             return;
         }
@@ -94,6 +143,12 @@
             const number = document.createElement("div");
             number.className = "unit-number-strong";
             number.textContent = unit.unit_number || "Unknown unit";
+            if (unit.station) {
+                const station = document.createElement("div");
+                station.className = "text-info small";
+                station.textContent = unit.station;
+                number.appendChild(station);
+            }
 
             const statusWrap = document.createElement("div");
             const status = document.createElement("span");
@@ -119,7 +174,9 @@
         container.replaceChildren();
         if (!alerts || !alerts.length) {
             container.appendChild(createEmpty(
-                selectedStation ? "No active CAD assignments for this station." : "Choose a station to begin monitoring."
+                selectedStations.length
+                    ? "No active CAD assignments for the selected stations."
+                    : "Choose one or more stations to begin monitoring."
             ));
             return;
         }
@@ -136,6 +193,12 @@
             code.className = "text-info small";
             code.textContent = [alert.incident_code, alert.cfs_number].filter(Boolean).join(" • ");
             incident.append(title, code);
+            if ((alert.station_names || []).length) {
+                const stations = document.createElement("div");
+                stations.className = "text-secondary small";
+                stations.textContent = alert.station_names.join(", ");
+                incident.appendChild(stations);
+            }
 
             const units = document.createElement("div");
             units.className = "fw-bold text-warning";
@@ -158,7 +221,8 @@
             connection.className = "fw-bold " + (connected ? "text-success" : "text-danger");
         }
 
-        text("station-name", data.selected_station || "None selected");
+        const snapshotStations = normalizeStations(data.selected_stations || data.selected_station || []);
+        text("station-name", monitoredStationLabel(snapshotStations));
         text("station-unit-count", String((data.station_units || []).length));
         text("station-active-count", String((data.alerts || []).length));
 
@@ -174,8 +238,8 @@
             message.textContent = data.roster_warning;
         } else {
             message.textContent = soundArmed
-                ? "Traditional two-tone paging audio is enabled. Keep this page open and the computer volume turned up."
-                : "“Test Two-Tone Alert” will enable browser audio and play the complete paging sequence.";
+                ? "Two-tone paging, attention beeps, and siren audio are enabled. Keep this page open and the computer volume turned up."
+                : "“Test Full Alert” will enable browser audio and play the complete paging sequence.";
         }
     }
 
@@ -218,21 +282,35 @@
         view.setUint32(40, sampleCount * 2, true);
 
         let outputSample = 0;
+        let phase = 0;
         segments.forEach(function (segment) {
             const segmentSamples = Math.round(segment.duration * sampleRate);
             const fadeSamples = Math.min(Math.round(0.012 * sampleRate), Math.floor(segmentSamples / 4));
+            const startFrequency = Number(segment.frequency || 0);
+            const endFrequency = Number(
+                segment.endFrequency === undefined
+                    ? startFrequency
+                    : segment.endFrequency
+            );
 
             for (let localSample = 0; localSample < segmentSamples; localSample += 1) {
                 let sampleValue = 0;
-                if (segment.frequency > 0) {
+                if (startFrequency > 0) {
                     const fadeIn = fadeSamples ? Math.min(1, localSample / fadeSamples) : 1;
                     const fadeOut = fadeSamples
                         ? Math.min(1, (segmentSamples - localSample - 1) / fadeSamples)
                         : 1;
                     const envelope = Math.max(0, Math.min(fadeIn, fadeOut));
-                    sampleValue = Math.sin(
-                        2 * Math.PI * segment.frequency * localSample / sampleRate
-                    ) * (segment.amplitude || 0.75) * envelope;
+                    const progress = segmentSamples > 1
+                        ? localSample / (segmentSamples - 1)
+                        : 0;
+                    const frequency = startFrequency +
+                        (endFrequency - startFrequency) * progress;
+                    phase += 2 * Math.PI * frequency / sampleRate;
+                    sampleValue = Math.sin(phase) *
+                        (segment.amplitude || 0.75) * envelope;
+                } else {
+                    phase = 0;
                 }
 
                 view.setInt16(44 + outputSample * 2, sampleValue * 32767, true);
@@ -248,7 +326,20 @@
             dispatchAudioUrl = URL.createObjectURL(createToneWave([
                 { frequency: 600, duration: 1.0, amplitude: 0.82 },
                 { frequency: 0, duration: 0.12, amplitude: 0 },
-                { frequency: 900, duration: 3.0, amplitude: 0.82 }
+                { frequency: 900, duration: 3.0, amplitude: 0.82 },
+                { frequency: 0, duration: 0.16, amplitude: 0 },
+                { frequency: 1450, duration: 0.2, amplitude: 0.9 },
+                { frequency: 0, duration: 0.12, amplitude: 0 },
+                { frequency: 1450, duration: 0.2, amplitude: 0.9 },
+                { frequency: 0, duration: 0.12, amplitude: 0 },
+                { frequency: 1450, duration: 0.2, amplitude: 0.9 },
+                { frequency: 0, duration: 0.15, amplitude: 0 },
+                { frequency: 650, endFrequency: 1350, duration: 0.55, amplitude: 0.86 },
+                { frequency: 1350, endFrequency: 650, duration: 0.55, amplitude: 0.86 },
+                { frequency: 650, endFrequency: 1350, duration: 0.55, amplitude: 0.86 },
+                { frequency: 1350, endFrequency: 650, duration: 0.55, amplitude: 0.86 },
+                { frequency: 650, endFrequency: 1350, duration: 0.55, amplitude: 0.86 },
+                { frequency: 1350, endFrequency: 650, duration: 0.55, amplitude: 0.86 }
             ]));
             dispatchAudio = new Audio(dispatchAudioUrl);
             dispatchAudio.id = "station-alert-audio";
@@ -312,7 +403,7 @@
         soundArmed = true;
         updateArmedDisplay();
         message.textContent = soundArmed
-            ? "Traditional two-tone paging audio is enabled. Keep this page open and the computer volume turned up."
+            ? "Two-tone paging, attention beeps, and siren audio are enabled. Keep this page open and the computer volume turned up."
             : "Audio could not be enabled. Click the button again.";
 
         if (soundArmed && settings.confirm !== false) {
@@ -333,7 +424,7 @@
         stopTone();
         playAudio(
             dispatchAudio,
-            "The browser blocked the two-tone page. Check the tab sound permission."
+            "The browser blocked the station alert audio. Check the tab sound permission."
         );
     }
 
@@ -401,7 +492,10 @@
     }
 
     function showAlert(alert, isTest) {
-        text("alert-station-name", selectedStation || "Selected Station");
+        text(
+            "alert-station-name",
+            monitoredStationLabel(alert.station_names || selectedStations) || "Selected Stations"
+        );
         text("alert-incident-code", alert.incident_code || "CAD DISPATCH");
         text("alert-incident-title", alert.incident_description || "CAD Dispatch");
         text("alert-priority", alert.priority ? ("PRI " + alert.priority) : "PRI —");
@@ -416,7 +510,7 @@
 
         const soundNotice = document.getElementById("alert-sound-notice");
         soundNotice.textContent = soundArmed
-            ? (isTest ? "TEST MODE — loud alert tone enabled." : "")
+            ? (isTest ? "TEST MODE — two-tone, attention beeps, and siren enabled." : "")
             : "VISUAL ALERT ONLY — click Enable Loud Alerts for audio.";
 
         overlay.classList.add("visible");
@@ -432,6 +526,12 @@
         if (alertMap) {
             alertMap.remove();
             alertMap = null;
+        }
+        if (pendingAlerts.length) {
+            const nextAlert = pendingAlerts.shift();
+            window.setTimeout(function () {
+                showAlert(nextAlert, false);
+            }, 250);
         }
     }
 
@@ -455,6 +555,7 @@
             response_plan: "TEST RESPONSE: Establish command, complete a primary search, secure a water supply, and position the ladder on the address side.",
             safety_notes: "TEST INFORMATION: Possible occupants inside. Use caution around parked vehicles and the rear service area.",
             unit_numbers: ["TEST ENG 1", "TEST LAD 1", "TEST RESCUE 1", "TEST MEDIC 1", "TEST CHIEF 1"],
+            station_names: selectedStations.length ? selectedStations : ["TEST STATION"],
             cfs_number: "TEST-CFS-STRUCTURE-FIRE",
             dispatch_datetime: new Date().toISOString(),
             latitude: 37.8507803,
@@ -489,15 +590,21 @@
         });
 
         if (newAlerts.length) {
-            showAlert(newAlerts[0], false);
+            if (overlay.classList.contains("visible")) {
+                pendingAlerts.push.apply(pendingAlerts, newAlerts);
+            } else {
+                showAlert(newAlerts[0], false);
+                pendingAlerts.push.apply(pendingAlerts, newAlerts.slice(1));
+            }
         }
     }
 
     async function loadSnapshot() {
-        if (!selectedStation) {
+        if (!selectedStations.length) {
             renderSnapshot({
                 connected: true,
                 selected_station: "",
+                selected_stations: [],
                 generated_at: new Date().toISOString(),
                 station_units: [],
                 alerts: []
@@ -506,8 +613,12 @@
         }
 
         try {
+            const query = new URLSearchParams();
+            selectedStations.forEach(function (station) {
+                query.append("station", station);
+            });
             const response = await fetch(
-                "/api/operations/station-alerts?station=" + encodeURIComponent(selectedStation),
+                "/api/operations/station-alerts?" + query.toString(),
                 { cache: "no-store", headers: { "Accept": "application/json" } }
             );
             if (!response.ok) {
@@ -525,19 +636,21 @@
         }
     }
 
-    function chooseStation(station) {
-        selectedStation = station || "";
-        localStorage.setItem(STORAGE_STATION, selectedStation);
+    function chooseStations(stations) {
+        selectedStations = normalizeStations(stations);
+        localStorage.setItem(STORAGE_STATIONS, JSON.stringify(selectedStations));
+        localStorage.removeItem(LEGACY_STORAGE_STATION);
+        updateStationSelector();
         seenEventIds = new Set();
+        pendingAlerts = [];
         firstSnapshotForStation = true;
         hideAlert();
 
         const url = new URL(window.location.href);
-        if (selectedStation) {
-            url.searchParams.set("station", selectedStation);
-        } else {
-            url.searchParams.delete("station");
-        }
+        url.searchParams.delete("station");
+        selectedStations.forEach(function (station) {
+            url.searchParams.append("station", station);
+        });
         window.history.replaceState({}, "", url);
         loadSnapshot();
     }
@@ -550,24 +663,53 @@
     }
 
     const initialData = parseInitialData();
-    const storedStation = localStorage.getItem(STORAGE_STATION) || "";
-    selectedStation = initialData.selected_station || storedStation;
-
-    if (selectedStation && selector) {
-        const matchingOption = Array.from(selector.options).find(function (option) {
-            return option.value.toLowerCase() === selectedStation.toLowerCase();
-        });
-        if (matchingOption) {
-            selector.value = matchingOption.value;
-            selectedStation = matchingOption.value;
-        } else {
-            selectedStation = "";
-        }
+    let storedStations = [];
+    try {
+        storedStations = JSON.parse(localStorage.getItem(STORAGE_STATIONS) || "[]");
+    } catch (_error) {
+        storedStations = [];
+    }
+    if (!storedStations.length) {
+        const legacyStation = localStorage.getItem(LEGACY_STORAGE_STATION) || "";
+        storedStations = legacyStation ? [legacyStation] : [];
     }
 
-    selector.addEventListener("change", function () {
-        chooseStation(selector.value);
+    const initialSelections = normalizeStations(
+        (initialData.selected_stations || []).length
+            ? initialData.selected_stations
+            : (initialData.selected_station ? [initialData.selected_station] : storedStations)
+    );
+    const optionNames = new Map(stationOptions.map(function (option) {
+        return [option.value.toLowerCase(), option.value];
+    }));
+    selectedStations = initialSelections
+        .map(function (station) {
+            return optionNames.get(station.toLowerCase());
+        })
+        .filter(Boolean);
+    updateStationSelector();
+
+    stationOptions.forEach(function (option) {
+        option.addEventListener("change", function () {
+            chooseStations(stationOptions.filter(function (candidate) {
+                return candidate.checked;
+            }).map(function (candidate) {
+                return candidate.value;
+            }));
+        });
     });
+    if (selectAllButton) {
+        selectAllButton.addEventListener("click", function () {
+            chooseStations(stationOptions.map(function (option) {
+                return option.value;
+            }));
+        });
+    }
+    if (clearAllButton) {
+        clearAllButton.addEventListener("click", function () {
+            chooseStations([]);
+        });
+    }
     armButton.addEventListener("click", armSound);
     testButton.addEventListener("click", testAlert);
     acknowledgeButton.addEventListener("click", hideAlert);
@@ -578,12 +720,20 @@
     });
 
     renderSnapshot(initialData);
-    if (
-        selectedStation &&
-        initialData.selected_station &&
-        selectedStation.toLowerCase() === initialData.selected_station.toLowerCase()
-    ) {
+    const snapshotSelection = normalizeStations(
+        initialData.selected_stations || initialData.selected_station || []
+    );
+    const selectionMatchesSnapshot =
+        selectedStations.length === snapshotSelection.length &&
+        selectedStations.every(function (station, index) {
+            return station.toLowerCase() === String(snapshotSelection[index] || "").toLowerCase();
+        });
+    if (selectedStations.length && selectionMatchesSnapshot) {
         baselineOrAlert(initialData.alerts || []);
+    } else if (selectedStations.length) {
+        loadSnapshot();
+    } else {
+        text("station-name", "None selected");
     }
     startPolling();
 })();

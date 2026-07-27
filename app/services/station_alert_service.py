@@ -37,6 +37,24 @@ def _station_key(value) -> str:
     return _safe_text(value).casefold()
 
 
+def _selected_station_names(value) -> list[str]:
+    if isinstance(value, (list, tuple, set)):
+        candidates = value
+    else:
+        candidates = [value]
+
+    selected = []
+    seen = set()
+    for candidate in candidates:
+        station_name = _safe_text(candidate)
+        station_key = _station_key(station_name)
+        if not station_key or station_key in seen:
+            continue
+        seen.add(station_key)
+        selected.append(station_name)
+    return selected
+
+
 def _parse_datetime(value: str) -> datetime:
     if not value:
         return datetime.min.replace(tzinfo=timezone.utc)
@@ -89,18 +107,24 @@ def build_station_catalog(units: list) -> list:
     )
 
 
-def _station_units(all_units: list, selected_station: str) -> list:
-    selected_key = _station_key(selected_station)
-    if not selected_key:
+def _station_units(all_units: list, selected_stations) -> list:
+    selected_keys = {
+        _station_key(station)
+        for station in _selected_station_names(selected_stations)
+    }
+    if not selected_keys:
         return []
 
     return sorted(
         [
             unit
             for unit in all_units
-            if _station_key(unit.get("station")) == selected_key
+            if _station_key(unit.get("station")) in selected_keys
         ],
-        key=lambda unit: _safe_text(unit.get("unit_number")),
+        key=lambda unit: (
+            _station_key(unit.get("station")),
+            _safe_text(unit.get("unit_number")).casefold(),
+        ),
     )
 
 
@@ -166,11 +190,11 @@ def _alert_event_time(assignments: list, station_units: list, call: dict) -> str
     return max(valid, key=_parse_datetime)
 
 
-def build_station_alert_snapshot(unit_snapshot: dict, selected_station: str = "") -> dict:
+def build_station_alert_snapshot(unit_snapshot: dict, selected_stations=None) -> dict:
     all_units = unit_snapshot.get("all_units") or []
     calls = unit_snapshot.get("calls") or []
-    selected_station = _safe_text(selected_station)
-    station_units = _station_units(all_units, selected_station)
+    selected_station_names = _selected_station_names(selected_stations)
+    station_units = _station_units(all_units, selected_station_names)
     station_unit_numbers = {
         _safe_text(unit.get("unit_number")).upper()
         for unit in station_units
@@ -208,10 +232,19 @@ def build_station_alert_snapshot(unit_snapshot: dict, selected_station: str = ""
             for unit in station_units
             if _safe_text(unit.get("unit_number")).upper() in assigned_number_keys
         ]
+        alert_station_names = sorted(
+            _selected_station_names(
+                [
+                    unit.get("station")
+                    for unit in related_station_units
+                ]
+            ),
+            key=str.casefold,
+        )
         event_time = _alert_event_time(assignments, related_station_units, call)
         event_id = "|".join(
             [
-                _station_key(selected_station),
+                ",".join(_station_key(station) for station in alert_station_names),
                 cfs_number,
                 ",".join(assigned_numbers),
                 event_time,
@@ -230,6 +263,7 @@ def build_station_alert_snapshot(unit_snapshot: dict, selected_station: str = ""
                 "dispatch_datetime": event_time,
                 "status": _safe_text(call.get("status") or assignments[0].get("call_status")) or "Open",
                 "unit_numbers": assigned_numbers,
+                "station_names": alert_station_names,
                 "latitude": call.get("latitude"),
                 "longitude": call.get("longitude"),
             }
@@ -246,6 +280,7 @@ def build_station_alert_snapshot(unit_snapshot: dict, selected_station: str = ""
             "unit_number": _safe_text(unit.get("unit_number")),
             "agency": _safe_text(unit.get("agency")),
             "unit_type": _safe_text(unit.get("unit_type")),
+            "station": _safe_text(unit.get("station")),
             "status": _safe_text(unit.get("roster_status") or unit.get("status")) or "Unknown",
             "cfs_number": _safe_text(unit.get("cfs_number")),
         }
@@ -258,21 +293,24 @@ def build_station_alert_snapshot(unit_snapshot: dict, selected_station: str = ""
         "roster_connected": bool(unit_snapshot.get("roster_connected", True)),
         "roster_warning": _safe_text(unit_snapshot.get("roster_warning")),
         "generated_at": _safe_text(unit_snapshot.get("last_updated")) or datetime.now(timezone.utc).isoformat(),
-        "selected_station": selected_station,
+        "selected_station": selected_station_names[0] if selected_station_names else "",
+        "selected_stations": selected_station_names,
         "stations": build_station_catalog(all_units),
         "station_units": sanitized_station_units,
         "alerts": alerts,
     }
 
 
-def build_empty_station_alert_snapshot(selected_station: str = "", error: str = "") -> dict:
+def build_empty_station_alert_snapshot(selected_stations=None, error: str = "") -> dict:
+    selected_station_names = _selected_station_names(selected_stations)
     return {
         "connected": False,
         "roster_connected": False,
         "roster_warning": "Station roster unavailable.",
         "error": _safe_text(error),
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "selected_station": _safe_text(selected_station),
+        "selected_station": selected_station_names[0] if selected_station_names else "",
+        "selected_stations": selected_station_names,
         "stations": [],
         "station_units": [],
         "alerts": [],
@@ -334,7 +372,7 @@ def _cached_client(now: datetime) -> CentralSquareClient:
         return client
 
 
-def get_live_station_alert_snapshot(selected_station: str = "") -> dict:
+def get_live_station_alert_snapshot(selected_stations=None) -> dict:
     now = datetime.now(timezone.utc)
     client = _cached_client(now)
     calls = sort_dashboard_calls(get_active_calls(client=client))
@@ -348,4 +386,4 @@ def get_live_station_alert_snapshot(selected_station: str = "") -> dict:
         "roster_warning": roster_warning,
         **groups,
     }
-    return build_station_alert_snapshot(unit_snapshot, selected_station)
+    return build_station_alert_snapshot(unit_snapshot, selected_stations)

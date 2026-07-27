@@ -147,6 +147,24 @@ class StationAlertServiceTests(unittest.TestCase):
         self.assertEqual(alert["dispatch_datetime"], "2026-07-22T15:57:10Z")
         self.assertNotIn("MED1", str(result))
 
+    def test_multiple_selected_stations_merge_units_and_alerts(self):
+        result = build_station_alert_snapshot(
+            station_snapshot(),
+            ["STA 100", "STA 200"],
+        )
+
+        self.assertEqual(result["selected_stations"], ["STA 100", "STA 200"])
+        self.assertEqual(len(result["station_units"]), 4)
+        self.assertEqual(
+            {alert["cfs_number"] for alert in result["alerts"]},
+            {"CFS26-30001", "CFS26-30002"},
+        )
+        fire_alert = next(
+            alert for alert in result["alerts"]
+            if alert["cfs_number"] == "CFS26-30001"
+        )
+        self.assertEqual(fire_alert["station_names"], ["STA 100"])
+
     def test_station_alert_payload_excludes_private_call_fields(self):
         result = build_station_alert_snapshot(station_snapshot(), "STA 100")
         serialized = str(result).lower()
@@ -178,16 +196,23 @@ class StationAlertPageTests(unittest.TestCase):
 
     @patch("app.main.get_live_station_alert_snapshot")
     def test_page_has_selector_sound_test_overlay_and_no_store(self, snapshot_mock):
-        snapshot_mock.return_value = self.alert_data
+        snapshot_mock.side_effect = lambda stations: build_station_alert_snapshot(
+            station_snapshot(),
+            stations,
+        )
 
-        response = self.client.get("/station-alerts?station=STA%20100")
+        response = self.client.get(
+            "/station-alerts?station=STA%20100&station=STA%20200"
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["cache-control"], "no-store")
         self.assertIn("Fire & EMS Station Alerts", response.text)
-        self.assertIn("station-selector", response.text)
+        self.assertIn("station-selector-option", response.text)
+        self.assertIn("station-select-all", response.text)
+        self.assertIn("STATIONS TO MONITOR", response.text)
         self.assertIn("Enable Loud Alerts", response.text)
-        self.assertIn("Test Two-Tone Alert", response.text)
+        self.assertIn("Test Full Alert", response.text)
         self.assertIn("dispatch-alert-overlay", response.text)
         self.assertIn("alert-caller-report", response.text)
         self.assertIn("alert-response-plan", response.text)
@@ -196,6 +221,11 @@ class StationAlertPageTests(unittest.TestCase):
         self.assertIn("alert-street-view", response.text)
         self.assertIn("lcdash-station-alerts.js", response.text)
         self.assertIn("STA 100", response.text)
+        self.assertIn("STA 200", response.text)
+        self.assertIn("/static/vendor/leaflet/leaflet.js", response.text)
+        self.assertNotIn("unpkg.com", response.text)
+        self.assertIn("alert-screen-flash", response.text)
+        snapshot_mock.assert_called_once_with(["STA 100", "STA 200"])
 
         script_response = self.client.get("/static/js/lcdash-station-alerts.js")
         self.assertEqual(script_response.status_code, 200)
@@ -208,18 +238,31 @@ class StationAlertPageTests(unittest.TestCase):
         self.assertIn("28 1/2 Main Avenue", script_response.text)
         self.assertIn("37.8507803", script_response.text)
         self.assertIn("map_action=pano", script_response.text)
+        self.assertIn("endFrequency: 1350", script_response.text)
+        self.assertIn("frequency: 1450", script_response.text)
+        self.assertIn("lcdash.stationAlerts.stations", script_response.text)
 
     @patch("app.main.get_live_station_alert_snapshot")
     def test_api_returns_sanitized_station_snapshot_and_no_store(self, snapshot_mock):
-        snapshot_mock.return_value = self.alert_data
+        snapshot_mock.side_effect = lambda stations: build_station_alert_snapshot(
+            station_snapshot(),
+            stations,
+        )
 
-        response = self.client.get("/api/operations/station-alerts?station=STA%20100")
+        response = self.client.get(
+            "/api/operations/station-alerts?station=STA%20100&station=STA%20200"
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["cache-control"], "no-store")
         self.assertEqual(response.json()["selected_station"], "STA 100")
+        self.assertEqual(
+            response.json()["selected_stations"],
+            ["STA 100", "STA 200"],
+        )
         self.assertNotIn("Private Caller", response.text)
         self.assertNotIn("3045551212", response.text)
+        snapshot_mock.assert_called_once_with(["STA 100", "STA 200"])
 
     @patch("app.main.get_live_station_alert_snapshot")
     def test_disconnected_page_remains_available(self, snapshot_mock):
