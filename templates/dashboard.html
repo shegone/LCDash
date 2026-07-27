@@ -36,15 +36,10 @@
         <div class="operations-heading">
             <div class="page-eyebrow">Logan County 911 Operations</div>
 
-            {% if cad_status == "Connected" and high_priority_calls == 0 %}
+            {% if cad_status == "Connected" %}
                 <h3 class="ops-good" id="operations-status-heading">
                     <i class="bi bi-check-circle-fill me-2" aria-hidden="true"></i>
                     Operations Normal
-                </h3>
-            {% elif cad_status == "Connected" and high_priority_calls > 0 %}
-                <h3 class="ops-warning" id="operations-status-heading">
-                    <i class="bi bi-exclamation-triangle-fill me-2" aria-hidden="true"></i>
-                    Attention Required
                 </h3>
             {% else %}
                 <h3 class="ops-danger" id="operations-status-heading">

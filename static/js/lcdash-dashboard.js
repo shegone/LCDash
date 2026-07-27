@@ -103,26 +103,17 @@
         freshness.textContent = text;
     }
 
-    function markConnected(highPriorityCalls) {
+    function markConnected() {
         const statusBar = element("dashboard-status-bar");
         statusBar?.classList.remove("is-stale", "is-disconnected");
 
         updateCadStatus("CONNECTED", "ops-good", "bi-circle-fill");
         setFreshness("Live Supervisor View", "is-live");
-
-        if (highPriorityCalls > 0) {
-            replaceStatusHeading(
-                "Attention Required",
-                "ops-warning",
-                "bi-exclamation-triangle-fill"
-            );
-        } else {
-            replaceStatusHeading(
-                "Operations Normal",
-                "ops-good",
-                "bi-check-circle-fill"
-            );
-        }
+        replaceStatusHeading(
+            "Operations Normal",
+            "ops-good",
+            "bi-check-circle-fill"
+        );
     }
 
     function markDisconnected() {
@@ -428,7 +419,7 @@
         }
 
         LCDashTime.updateCallElapsedTimers();
-        markConnected(highPriorityCalls);
+        markConnected();
         lastSuccessfulRefresh = Date.now();
     }
 
