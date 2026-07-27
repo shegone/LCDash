@@ -198,6 +198,29 @@
     min-height: 300px;
 }
 
+.incident-card.is-updated {
+    animation: incident-card-update 1.05s ease-out;
+}
+
+@keyframes incident-card-update {
+    0% {
+        transform: translateY(-3px);
+        box-shadow:
+            0 0 0 1px rgba(85, 212, 255, .48),
+            0 0 34px rgba(0, 180, 255, .30);
+    }
+
+    100% {
+        transform: translateY(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .incident-card.is-updated {
+        animation: none;
+    }
+}
+
 .ops-status-bar.is-disconnected {
     border-color: rgba(255, 111, 125, .48);
     box-shadow: 0 0 28px rgba(255, 76, 91, .11);

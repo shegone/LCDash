@@ -210,7 +210,10 @@
         {% if calls %}
         <div class="row g-4" id="incident-card-grid">
             {% for call in calls %}
-                <div class="col-xl-4 col-lg-6">
+                <div
+                    class="col-xl-4 col-lg-6"
+                    data-cfs-number="{{ call.cfs_number }}"
+                >
                     {% include "components/incident_card.html" %}
                 </div>
             {% endfor %}

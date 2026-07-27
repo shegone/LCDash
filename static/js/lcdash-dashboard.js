@@ -49,6 +49,25 @@
         return Number.isFinite(parsed) && parsed > 0 ? parsed : 999;
     }
 
+    function callKey(call, index) {
+        return safeText(call?.cfs_number, "unknown-call-" + index);
+    }
+
+    function callFingerprint(call) {
+        return JSON.stringify({
+            cfs_number: safeText(call?.cfs_number),
+            incident_code: safeText(call?.incident_code),
+            incident_description: safeText(call?.incident_description),
+            location: safeText(call?.location),
+            priority: safeText(call?.priority),
+            agency: safeText(call?.agency),
+            units: safeText(call?.units),
+            status: safeText(call?.status),
+            call_taker: safeText(call?.call_taker),
+            call_datetime: safeText(call?.call_datetime)
+        });
+    }
+
     function replaceStatusHeading(text, stateClass, iconClass) {
         const heading = element("operations-status-heading");
 
@@ -217,16 +236,19 @@
         return row;
     }
 
-    function createIncidentCard(call) {
+    function createIncidentCard(call, index, animateUpdate) {
         const priority = safePriority(call.priority);
         const column = createElement("div", "col-xl-4 col-lg-6");
         const link = createElement("a", "incident-card-link");
         const cardPriority = [5, 10, 15, 20, 30].includes(priority) ? " priority-" + priority : "";
-        const card = createElement("div", "incident-card" + cardPriority);
+        const updateClass = animateUpdate ? " is-updated" : "";
+        const card = createElement("div", "incident-card" + cardPriority + updateClass);
         const header = createElement("div", "d-flex justify-content-between align-items-start mb-2");
         const headerText = createElement("div");
         const code = createElement("div", "incident-code", safeText(call.incident_code, "UNKNOWN"));
 
+        column.dataset.cfsNumber = callKey(call, index);
+        column.dataset.callFingerprint = callFingerprint(call);
         link.href = "/calls/" + encodeURIComponent(safeText(call.cfs_number));
         link.target = "_blank";
         link.rel = "noopener";
@@ -327,12 +349,57 @@
             return;
         }
 
-        const grid = createElement("div", "row g-4");
-        grid.id = "incident-card-grid";
-        safeCalls.forEach(function (call) {
-            grid.append(createIncidentCard(call || {}));
+        let grid = container.querySelector("#incident-card-grid");
+
+        if (!grid) {
+            grid = createElement("div", "row g-4");
+            grid.id = "incident-card-grid";
+            container.replaceChildren(grid);
+        }
+
+        const existingByKey = new Map();
+        Array.from(grid.children).forEach(function (column) {
+            const key = safeText(column.dataset.cfsNumber);
+            if (key) {
+                existingByKey.set(key, column);
+            }
         });
-        container.replaceChildren(grid);
+
+        const desiredColumns = safeCalls.map(function (rawCall, index) {
+            const call = rawCall || {};
+            const key = callKey(call, index);
+            const fingerprint = callFingerprint(call);
+            const existing = existingByKey.get(key);
+
+            if (existing?.dataset.callFingerprint === fingerprint) {
+                return existing;
+            }
+
+            const wasPreviouslyHydrated = Boolean(existing?.dataset.callFingerprint);
+            const isNewCall = !existing;
+            return createIncidentCard(
+                call,
+                index,
+                wasPreviouslyHydrated || isNewCall
+            );
+        });
+
+        let cursor = grid.firstElementChild;
+        desiredColumns.forEach(function (column) {
+            if (column === cursor) {
+                cursor = cursor.nextElementSibling;
+                return;
+            }
+
+            grid.insertBefore(column, cursor);
+        });
+
+        const desiredSet = new Set(desiredColumns);
+        Array.from(grid.children).forEach(function (column) {
+            if (!desiredSet.has(column)) {
+                column.remove();
+            }
+        });
     }
 
     function applySnapshot(data) {

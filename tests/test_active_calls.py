@@ -82,6 +82,8 @@ class ActiveCallsPageTests(unittest.TestCase):
         self.assertIn('id="dashboard-freshness"', response.text)
         self.assertIn('id="active-calls-value"', response.text)
         self.assertIn('id="incident-feed-content"', response.text)
+        self.assertIn('data-cfs-number="CFS26-10001"', response.text)
+        self.assertIn('rel="noopener"', response.text)
         self.assertNotIn("window.location.reload()", response.text)
 
     @patch("app.main.get_live_operations_snapshot")
@@ -104,6 +106,9 @@ class ActiveCallsPageTests(unittest.TestCase):
             'LCDashTime.updateElementFromCadTime("last-updated"',
             response.text,
         )
+        self.assertIn("function callFingerprint(call)", response.text)
+        self.assertIn("existing?.dataset.callFingerprint === fingerprint", response.text)
+        self.assertIn("grid.insertBefore(column, cursor)", response.text)
         self.assertIn("last known data", response.text)
         self.assertNotIn("window.location.reload", response.text)
 

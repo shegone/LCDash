@@ -1,6 +1,11 @@
 {% set priority_value = call.priority|int if call.priority else 999 %}
 
-<a href="/calls/{{ call.cfs_number }}" target="_blank" class="incident-card-link">
+<a
+    href="/calls/{{ call.cfs_number }}"
+    target="_blank"
+    rel="noopener"
+    class="incident-card-link"
+>
 
     <div class="incident-card priority-{{ call.priority|default('30') }}">
 
