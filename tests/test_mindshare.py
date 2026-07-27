@@ -158,6 +158,9 @@ class MindshareServiceTests(unittest.TestCase):
             "mindshare",
         )
         self.assertNotIn("CentralSquare", post_mock.call_args.kwargs["json"])
+        options = post_mock.call_args.kwargs["json"]["options"]
+        self.assertEqual(options["num_ctx"], 4096)
+        self.assertEqual(options["num_predict"], 220)
 
     @patch("app.services.mindshare_service.httpx.post")
     @patch("app.services.mindshare_service.search_knowledge")

@@ -58,6 +58,11 @@ JACK uses the `am_michael` Kokoro voice as the current mature American male
 voice. This is a standard synthesized voice and is not a clone or imitation of
 Jack Hines. Individual JACK answers also include a **Listen** button.
 
+JACK uses a compact, product-focused retrieval context and concise response
+budget so the CPU-based local model can answer promptly. The browser allows a
+longer safety window than the normal response time and shows continued progress
+instead of abandoning an answer that is still being generated.
+
 ## Pronunciation dictionary
 
 LCDash applies speech-only pronunciation rules before text reaches the voice

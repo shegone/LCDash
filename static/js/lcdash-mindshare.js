@@ -501,7 +501,7 @@
         if (!question) return;
         const settings = options || {};
         let answerToSpeak = "";
-        const requestHistory = history.slice(-6);
+        const requestHistory = history.slice(-4);
         addMessage("user", question);
         history.push({role: "user", content: question});
         setBusy(true);
@@ -517,7 +517,16 @@
         const controller = new AbortController();
         const timeoutId = window.setTimeout(function () {
             controller.abort();
-        }, 30000);
+        }, 120000);
+        const progressId = window.setTimeout(function () {
+            if (settings.speakResponse && voiceModeActive && jackBusy) {
+                setVoiceState(
+                    "processing",
+                    "JACK is preparing the answer",
+                    "The relevant manuals are loaded. Local AI is composing a concise response."
+                );
+            }
+        }, 15000);
 
         try {
             const response = await fetch("/api/mindshare/chat", {
@@ -556,6 +565,7 @@
             addMessage("assistant", answerToSpeak);
         } finally {
             window.clearTimeout(timeoutId);
+            window.clearTimeout(progressId);
             setBusy(false);
         }
 
