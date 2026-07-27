@@ -113,3 +113,22 @@ Installed baseline models:
 
 Open WebUI provides the general-purpose browser interface. A dedicated API key is
 stored in the protected credential record for future authorized integrations.
+
+## JACK reliability records
+
+JACK evaluation results are stored in:
+
+```text
+lcdash_analytics.jack_evaluation_runs
+```
+
+The complete manual-grounded baseline can be run from the server with:
+
+```bash
+cd /home/ted/lcdash
+python scripts/jack_reliability_baseline.py \
+    --output /home/ted/lcdash-platform/backups/jack-baseline.json
+```
+
+The runner calls the local LCDash API sequentially and does not change
+Mindshare equipment or source documents.

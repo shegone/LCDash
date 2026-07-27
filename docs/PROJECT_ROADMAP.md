@@ -26,7 +26,11 @@ Build a secure web-based operations dashboard for Logan County 911 using the Cen
 - GovWorx
 - RapidSOS
 - NGA911
-- Mindshare
+- Mindshare technical library - completed
+- JACK technical assistant - completed
+- JACK Reliability Center - completed
+- Mindshare document coverage review - completed
+- Mindshare multicast radio transcription - awaiting isolated radio-network connection
 
 ## Phase 6 - Secure Remote Access
 - Cloudflare Tunnel for the supervisor portal
@@ -36,3 +40,22 @@ Build a secure web-based operations dashboard for Logan County 911 using the Cen
 - Keep email one-time PIN available as a backup login method
 - Create a managed LCDash Supervisors Google Group
 - Role-based access and redacted department views
+
+## Phase 7 - Local AI Quality
+
+- MAE read-only tool routing - completed
+- MAE Reliability Center - completed
+- JACK product-focused document retrieval - completed
+- JACK 30-question baseline evaluation - in progress
+- JACK supervisor feedback controls - in progress
+- Approved local learning and correction workflow
+
+## Phase 8 - Mindshare Radio Intelligence
+
+- Confirm dedicated host and radio-network interface
+- Inventory multicast addresses, UDP ports, channel names, and codecs
+- Prove listen-only packet capture without transmitting
+- Decode one approved test channel
+- Add private speech-to-text transcription
+- Define access, retention, audit, and recording rules
+- Keep technical assistant and radio intelligence permissions separate
