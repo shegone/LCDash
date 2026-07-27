@@ -16,6 +16,7 @@ It does not currently connect to or record the Mindshare radio network.
 - API server: Speaches, private to the Docker network
 - Text to speech: Kokoro 82M ONNX
 - Speech to text: Faster-Whisper distilled small English
+- Model loader: automatically restores both models into a persistent cache
 - User interface: `/voice`
 - LCDash proxy endpoints:
   - `GET /api/voice/status`
@@ -23,6 +24,9 @@ It does not currently connect to or record the Mindshare radio network.
   - `POST /api/voice/transcribe`
 
 The browser never connects directly to the speech container.
+
+The Speaches image is pinned by digest so a future upstream `latest` update
+cannot silently change the tested production runtime.
 
 ## GPU upgrade
 

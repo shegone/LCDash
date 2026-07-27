@@ -261,7 +261,7 @@ services:
       - no-new-privileges:true
 
   speaches:
-    image: ghcr.io/speaches-ai/speaches:latest-cpu
+    image: ghcr.io/speaches-ai/speaches@sha256:21e3df06d842fb7802ab470dd77c25f0e8c0d22950e8d8c6ae886e851af53ef8
     container_name: lcdash-speaches
     restart: unless-stopped
     volumes:
@@ -276,6 +276,30 @@ services:
       timeout: 10s
       retries: 5
       start_period: 20s
+
+  voice-model-loader:
+    image: ghcr.io/speaches-ai/speaches@sha256:21e3df06d842fb7802ab470dd77c25f0e8c0d22950e8d8c6ae886e851af53ef8
+    container_name: lcdash-voice-model-loader
+    restart: "no"
+    entrypoint: ["/bin/sh", "-lc"]
+    command:
+      - >-
+        curl --fail --silent --show-error
+        --request POST
+        http://speaches:8000/v1/models/speaches-ai/Kokoro-82M-v1.0-ONNX
+        &&
+        curl --fail --silent --show-error
+        --request POST
+        http://speaches:8000/v1/models/Systran/faster-distil-whisper-small.en
+    volumes:
+      - lcdash_speaches_models:/home/ubuntu/.cache/huggingface/hub
+    networks:
+      - lcdash_private
+    depends_on:
+      speaches:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
 
   open-webui:
     image: ghcr.io/open-webui/open-webui:v0.10.1
@@ -314,8 +338,10 @@ services:
     networks:
       - lcdash_private
     depends_on:
-      - ollama
-      - speaches
+      ollama:
+        condition: service_started
+      voice-model-loader:
+        condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
 
