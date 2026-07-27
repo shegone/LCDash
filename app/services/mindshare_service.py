@@ -4,6 +4,7 @@ import httpx
 
 from app.config.settings import settings
 from app.services.knowledge_service import (
+    get_document_passages,
     get_knowledge_status,
     search_knowledge,
 )
@@ -378,6 +379,30 @@ def ask_mindshare(
         limit=12,
         library_key="mindshare",
     )
+    if retrieval_question != clean_question:
+        exact_results = get_document_passages(
+            retrieval_question,
+            limit=6,
+            library_key="mindshare",
+        )
+        seen = {
+            (
+                int(item.get("document_id") or 0),
+                int(item.get("page_number") or 0),
+                str(item.get("content") or "")[:120],
+            )
+            for item in exact_results
+        }
+        results = exact_results + [
+            item
+            for item in results
+            if (
+                int(item.get("document_id") or 0),
+                int(item.get("page_number") or 0),
+                str(item.get("content") or "")[:120],
+            )
+            not in seen
+        ]
     results = _prioritize_rewritten_title(
         retrieval_question,
         clean_question,

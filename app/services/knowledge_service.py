@@ -190,6 +190,68 @@ def list_knowledge_documents(
     ]
 
 
+def get_document_passages(
+    document_name: str,
+    *,
+    limit: int = 6,
+    library_key: str = "centralsquare",
+) -> list[dict]:
+    normalized = re.sub(r"[^a-z0-9]+", "", str(document_name or "").lower())
+    if not normalized:
+        return []
+    try:
+        with _connect() as connection:
+            ensure_knowledge_schema(connection)
+            rows = connection.execute(
+                """
+                SELECT
+                    documents.document_id,
+                    documents.title,
+                    documents.file_name,
+                    chunks.page_number,
+                    chunks.content,
+                    documents.indexed_at
+                FROM lcdash_knowledge.documents AS documents
+                JOIN lcdash_knowledge.chunks AS chunks
+                    ON chunks.document_id = documents.document_id
+                WHERE documents.library_key = %s
+                  AND regexp_replace(
+                        lower(documents.title || ' ' || documents.file_name),
+                        '[^a-z0-9]',
+                        '',
+                        'g'
+                      ) LIKE %s
+                ORDER BY chunks.page_number, chunks.chunk_index
+                LIMIT %s
+                """,
+                (
+                    library_key,
+                    f"%{normalized}%",
+                    min(max(limit, 1), 30),
+                ),
+            ).fetchall()
+    except (KnowledgeServiceError, psycopg.Error):
+        return []
+    return [
+        {
+            "document_id": int(row[0]),
+            "title": row[1],
+            "file_name": row[2],
+            "page_number": int(row[3] or 0),
+            "content": row[4],
+            "indexed_at": row[5].isoformat() if row[5] else "",
+            "rank": 1.0,
+            "matched_terms": [normalized],
+            "query_terms": [normalized],
+            "coverage": 1.0,
+            "semantic_score": 0.0,
+            "retrieval": ["exact-document"],
+            "hybrid_score": 1.0,
+        }
+        for row in rows
+    ]
+
+
 def _fallback_terms(question: str) -> list[str]:
     stop_words = {
         "about",
