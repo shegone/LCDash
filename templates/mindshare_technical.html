@@ -18,14 +18,23 @@
                 <p>Mindshare Technical Assistant</p>
             </div>
         </div>
-        <a class="mae-guardrail mindshare-about-link" href="/mindshare/jack-hines">
-            <i class="bi bi-person-heart"></i>
-            <div>
-                <strong>About the real Jack Hines</strong>
-                <span>The respected radio leader behind JACK’s name</span>
-            </div>
-            <i class="bi bi-arrow-right"></i>
-        </a>
+        <div class="mae-hero-actions">
+            <button class="mae-voice-launch" id="jack-voice-toggle" type="button" disabled>
+                <i class="bi bi-mic-fill"></i>
+                <span>
+                    <strong>Start voice mode</strong>
+                    <small>Talk naturally with JACK</small>
+                </span>
+            </button>
+            <a class="mae-guardrail mindshare-about-link" href="/mindshare/jack-hines">
+                <i class="bi bi-person-heart"></i>
+                <div>
+                    <strong>About the real Jack Hines</strong>
+                    <span>The respected radio leader behind JACK’s name</span>
+                </div>
+                <i class="bi bi-arrow-right"></i>
+            </a>
+        </div>
     </header>
 
     <div class="mae-status-grid" aria-label="Mindshare service status">
@@ -89,6 +98,22 @@
                 Checking the Mindshare library...
             </div>
 
+            <section class="mae-voice-session" id="jack-voice-session" hidden aria-live="polite">
+                <div class="mae-voice-pulse" aria-hidden="true">
+                    <i class="bi bi-mic-fill"></i>
+                </div>
+                <div class="mae-voice-state">
+                    <small>JACK VOICE MODE</small>
+                    <strong id="jack-voice-state">Preparing microphone…</strong>
+                    <span id="jack-voice-detail">Your audio stays on the local voice stack.</span>
+                </div>
+                <button id="jack-voice-stop" type="button">
+                    <i class="bi bi-stop-fill"></i>
+                    End voice mode
+                </button>
+            </section>
+            <audio id="jack-voice-player" hidden></audio>
+
             <form class="mae-composer" id="mindshare-form">
                 <textarea
                     id="mindshare-question"
@@ -109,5 +134,5 @@
     </div>
 </section>
 
-<script src="/static/js/lcdash-mindshare.js?v=20260726"></script>
+<script src="/static/js/lcdash-mindshare.js?v=20260727-jack-voice-mode"></script>
 {% endblock %}

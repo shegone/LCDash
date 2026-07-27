@@ -47,6 +47,17 @@ button.
 Browser microphone access requires either HTTPS or a localhost connection.
 Remote supervisor access must therefore use the secured HTTPS dashboard URL.
 
+## JACK conversational voice mode
+
+The JACK technical-assistant page uses the same private conversational loop as
+MAE. It listens for a question, transcribes it locally, submits it through
+JACK's existing read-only Mindshare documentation workflow, speaks the answer,
+and resumes listening.
+
+JACK uses the `am_michael` Kokoro voice as the current mature American male
+voice. This is a standard synthesized voice and is not a clone or imitation of
+Jack Hines. Individual JACK answers also include a **Listen** button.
+
 ## Pronunciation dictionary
 
 LCDash applies speech-only pronunciation rules before text reaches the voice

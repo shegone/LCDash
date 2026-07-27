@@ -31,6 +31,9 @@ class MindsharePageTests(unittest.TestCase):
         self.assertIn("/mindshare/jack-hines", response.text)
         self.assertNotIn("memorial voice", response.text)
         self.assertNotIn("named in memory of", response.text)
+        self.assertIn("Start voice mode", response.text)
+        self.assertIn('id="jack-voice-session"', response.text)
+        self.assertIn('id="jack-voice-player"', response.text)
         self.assertIn("/static/js/lcdash-mindshare.js", response.text)
 
     def test_jack_hines_tribute_page_is_separate_from_assistant(self):
