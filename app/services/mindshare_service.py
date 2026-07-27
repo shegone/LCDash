@@ -66,27 +66,46 @@ def _focus_results(question: str, results: list[dict]) -> list[dict]:
         return results
 
     _, aliases = focus
-    focused = []
+    title_matches = []
+    passage_matches = []
     for result in results:
-        haystack = " ".join(
+        title_haystack = " ".join(
             (
                 str(result.get("title") or ""),
                 str(result.get("file_name") or ""),
+            )
+        ).lower()
+        passage_haystack = " ".join(
+            (
+                title_haystack,
                 str(result.get("content") or ""),
             )
         ).lower()
-        compact_haystack = "".join(
-            character for character in haystack if character.isalnum()
+        compact_title = "".join(
+            character for character in title_haystack if character.isalnum()
         )
-        if any(
-            alias in haystack
+        compact_passage = "".join(
+            character for character in passage_haystack if character.isalnum()
+        )
+        title_match = any(
+            alias in title_haystack
             or "".join(
                 character for character in alias if character.isalnum()
-            ) in compact_haystack
+            ) in compact_title
             for alias in aliases
-        ):
-            focused.append(result)
-    return focused
+        )
+        passage_match = any(
+            alias in passage_haystack
+            or "".join(
+                character for character in alias if character.isalnum()
+            ) in compact_passage
+            for alias in aliases
+        )
+        if title_match:
+            title_matches.append(result)
+        elif passage_match:
+            passage_matches.append(result)
+    return title_matches + passage_matches
 
 
 def _ollama_status() -> dict:

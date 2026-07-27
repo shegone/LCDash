@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services.mindshare_service import ask_mindshare
+from app.services.mindshare_service import _focus_results, ask_mindshare
 from scripts.index_knowledge import _is_supported_document
 
 
@@ -116,6 +116,24 @@ class MindsharePageTests(unittest.TestCase):
 
 
 class MindshareServiceTests(unittest.TestCase):
+    def test_named_product_prioritizes_title_match_over_incidental_mention(self):
+        results = [
+            {
+                "title": "CAD Alerting Gateway Manual",
+                "file_name": "cag.pdf",
+                "content": "The gateway can connect to an MRI2.",
+            },
+            {
+                "title": "Mindshare Radio Interface 2 Manual",
+                "file_name": "mri2.pdf",
+                "content": "MRI2 configuration and service information.",
+            },
+        ]
+
+        focused = _focus_results("How do I update MRI2?", results)
+
+        self.assertEqual(focused[0]["file_name"], "mri2.pdf")
+
     @patch("app.services.mindshare_service.httpx.post")
     @patch("app.services.mindshare_service.search_knowledge")
     def test_supported_answer_uses_only_mindshare_library(
