@@ -225,6 +225,8 @@ class StationAlertPageTests(unittest.TestCase):
         self.assertIn("/static/vendor/leaflet/leaflet.js", response.text)
         self.assertNotIn("unpkg.com", response.text)
         self.assertIn("alert-screen-flash", response.text)
+        self.assertIn("overflow: visible", response.text)
+        self.assertIn("z-index: 1000", response.text)
         snapshot_mock.assert_called_once_with(["STA 100", "STA 200"])
 
         script_response = self.client.get("/static/js/lcdash-station-alerts.js")

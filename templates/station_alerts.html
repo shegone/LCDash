@@ -15,8 +15,9 @@
 
     .station-hero {
         padding: 26px;
-        overflow: hidden;
+        overflow: visible;
         position: relative;
+        z-index: 60;
     }
 
     .station-hero::after {
@@ -65,6 +66,7 @@
 
     .station-picker {
         position: relative;
+        z-index: 70;
     }
 
     .station-picker > summary {
@@ -95,7 +97,7 @@
 
     .station-picker-menu {
         position: absolute;
-        z-index: 40;
+        z-index: 1000;
         left: 0;
         right: 0;
         top: calc(100% + 8px);
