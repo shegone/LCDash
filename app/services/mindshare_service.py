@@ -101,6 +101,36 @@ def _retrieval_question(question: str) -> str:
     return question
 
 
+def _prioritize_rewritten_title(
+    retrieval_question: str,
+    original_question: str,
+    results: list[dict],
+) -> list[dict]:
+    if retrieval_question == original_question:
+        return results
+    compact_query = "".join(
+        character for character in retrieval_question.lower()
+        if character.isalnum()
+    )
+    title_matches = []
+    other_results = []
+    for result in results:
+        title = " ".join(
+            (
+                str(result.get("title") or ""),
+                str(result.get("file_name") or ""),
+            )
+        ).lower()
+        compact_title = "".join(
+            character for character in title if character.isalnum()
+        )
+        if compact_query and compact_query in compact_title:
+            title_matches.append(result)
+        else:
+            other_results.append(result)
+    return title_matches + other_results
+
+
 def _boundary_response(question: str, started: float) -> dict | None:
     normalized = " ".join((question or "").lower().split())
     credential_terms = (
@@ -342,10 +372,16 @@ def ask_mindshare(
     if boundary:
         return boundary
 
+    retrieval_question = _retrieval_question(clean_question)
     results = search_knowledge(
-        _retrieval_question(clean_question),
-        limit=6,
+        retrieval_question,
+        limit=12,
         library_key="mindshare",
+    )
+    results = _prioritize_rewritten_title(
+        retrieval_question,
+        clean_question,
+        results,
     )
     focused_results = _focus_results(clean_question, results)
     direct_results = [

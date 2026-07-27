@@ -27,13 +27,13 @@ def _case(
 
 EVALUATION_CASES = [
     _case("jack-console-01", "Console operation", "How do I add a channel to a console workspace?", ("Console Application",)),
-    _case("jack-console-02", "Console operation", "How do I share a phone book between Console Exec positions?", ("Console Exec", "phone")),
+    _case("jack-console-02", "Console operation", "How do I share a phone book between Console Exec positions?", ("Console Exec", "Console Application", "phone")),
     _case("jack-console-03", "Console operation", "How do I map a touchscreen to the correct monitor?", ("touchscreen",)),
     _case("jack-console-04", "Console operation", "What should I check when an MRI2 connected to a Tait TM9300 has no receive audio?", ("MRI2", "Tait TM9300")),
     _case("jack-console-05", "Console operation", "How do I change the display resolution on a console?", ("display resolution",)),
     _case("jack-mri-01", "MRI and MRI2", "How do I safely update MRI2 software?", ("MRI2", "Software Update")),
     _case("jack-mri-02", "MRI and MRI2", "How do I copy an MRI configuration to a replacement unit?", ("MRI Configuration Copying",)),
-    _case("jack-mri-03", "MRI and MRI2", "What does the MRI2 manual say about network configuration?", ("MRI2",)),
+    _case("jack-mri-03", "MRI and MRI2", "What does the MRI2 manual say about network configuration?", ("MRI2", "Radio Interface 2")),
     _case("jack-mri-04", "MRI and MRI2", "Which application note covers a Motorola XPR radio connected to an MRI?", ("Motorola", "XPR")),
     _case("jack-mri-05", "MRI and MRI2", "Is there an application note for a Tait TM9300 on the MRI?", ("Tait", "TM9300")),
     _case("jack-gateway-01", "Gateways", "How is the NXIP Conventional Gateway configured?", ("NXIP Conventional",)),
