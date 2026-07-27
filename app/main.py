@@ -712,6 +712,16 @@ def mindshare_technical_page(request: Request):
     )
 
 
+@app.get("/mindshare/jack-hines")
+def mindshare_jack_hines_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="mindshare_jack_hines.html",
+        context={"version": "0.4.0"},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.get("/mindshare/library")
 def mindshare_library_page(request: Request):
     return templates.TemplateResponse(

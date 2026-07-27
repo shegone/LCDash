@@ -27,9 +27,21 @@ class MindsharePageTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("JACK", response.text)
-        self.assertIn("memorial voice, not an impersonation", response.text)
-        self.assertIn("named in memory of", response.text)
+        self.assertIn("About the real Jack Hines", response.text)
+        self.assertIn("/mindshare/jack-hines", response.text)
+        self.assertNotIn("memorial voice", response.text)
+        self.assertNotIn("named in memory of", response.text)
         self.assertIn("/static/js/lcdash-mindshare.js", response.text)
+
+    def test_jack_hines_tribute_page_is_separate_from_assistant(self):
+        response = self.client.get("/mindshare/jack-hines")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("John Joseph", response.text)
+        self.assertIn("1947", response.text)
+        self.assertIn("2025", response.text)
+        self.assertIn("Why the technical assistant carries his name", response.text)
+        self.assertIn("/mindshare/technical", response.text)
 
     @patch("app.main.list_knowledge_documents")
     @patch("app.main.get_knowledge_status")
