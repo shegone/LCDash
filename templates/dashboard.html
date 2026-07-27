@@ -17,12 +17,21 @@
         </div>
     </div>
 
-    <div class="view-mode-badge" aria-label="Live supervisor and wallboard view">
+    <div
+        class="view-mode-badge"
+        id="dashboard-freshness"
+        aria-live="polite"
+        aria-label="Live supervisor and wallboard view"
+    >
         Live Supervisor View
     </div>
 </div>
 
-<section class="ops-status-bar mb-4" aria-labelledby="operations-status-heading">
+<section
+    class="ops-status-bar mb-4"
+    id="dashboard-status-bar"
+    aria-labelledby="operations-status-heading"
+>
     <div class="ops-status-layout">
         <div class="operations-heading">
             <div class="page-eyebrow">Logan County 911 Operations</div>
@@ -49,12 +58,12 @@
             <div class="ops-status-item">
                 <div class="ops-label">CAD STATUS</div>
                 {% if cad_status == "Connected" %}
-                    <div class="ops-value ops-good">
+                    <div class="ops-value ops-good" id="cad-status-value">
                         <i class="bi bi-circle-fill me-1" aria-hidden="true"></i>
                         CONNECTED
                     </div>
                 {% else %}
-                    <div class="ops-value ops-danger">
+                    <div class="ops-value ops-danger" id="cad-status-value">
                         <i class="bi bi-x-circle-fill me-1" aria-hidden="true"></i>
                         DISCONNECTED
                     </div>
@@ -64,9 +73,9 @@
             <div class="ops-status-item">
                 <div class="ops-label">HIGH PRIORITY</div>
                 {% if high_priority_calls > 0 %}
-                    <div class="ops-value ops-warning">{{ high_priority_calls }} ACTIVE</div>
+                    <div class="ops-value ops-warning" id="high-priority-status">{{ high_priority_calls }} ACTIVE</div>
                 {% else %}
-                    <div class="ops-value ops-good">NONE</div>
+                    <div class="ops-value ops-good" id="high-priority-status">NONE</div>
                 {% endif %}
             </div>
 
@@ -104,7 +113,7 @@
                 <div class="kpi-label">ACTIVE CALLS</div>
                 <div class="kpi-icon"><i class="bi bi-telephone-fill" aria-hidden="true"></i></div>
             </div>
-            <div class="kpi-number">{{ active_calls }}</div>
+            <div class="kpi-number" id="active-calls-value">{{ active_calls }}</div>
             <div class="kpi-subtitle">Live CAD incidents</div>
         </div>
     </div>
@@ -115,7 +124,7 @@
                 <div class="kpi-label">ASSIGNED UNITS</div>
                 <div class="kpi-icon"><i class="bi bi-truck-front-fill" aria-hidden="true"></i></div>
             </div>
-            <div class="kpi-number">{{ assigned_units }}</div>
+            <div class="kpi-number" id="assigned-units-value">{{ assigned_units }}</div>
             <div class="kpi-subtitle">Unique units committed</div>
         </div>
     </div>
@@ -126,13 +135,16 @@
                 <div class="kpi-label">CALLS ON SCENE</div>
                 <div class="kpi-icon"><i class="bi bi-geo-alt-fill" aria-hidden="true"></i></div>
             </div>
-            <div class="kpi-number text-success">{{ on_scene_calls }}</div>
+            <div class="kpi-number text-success" id="on-scene-calls-value">{{ on_scene_calls }}</div>
             <div class="kpi-subtitle">Incidents with an on-scene status</div>
         </div>
     </div>
 
     <div class="col-6 col-xl-3">
-        <div class="glass dashboard-kpi {% if oldest_call_datetime %}alert-kpi{% endif %}">
+        <div
+            class="glass dashboard-kpi {% if oldest_call_datetime %}alert-kpi{% endif %}"
+            id="oldest-call-kpi"
+        >
             <div class="kpi-topline">
                 <div class="kpi-label">OLDEST CALL</div>
                 <div class="kpi-icon"><i class="bi bi-stopwatch-fill" aria-hidden="true"></i></div>
@@ -140,14 +152,15 @@
             {% if oldest_call_datetime %}
                 <div
                     class="kpi-number kpi-time call-elapsed"
+                    id="oldest-call-value"
                     data-call-time="{{ oldest_call_datetime }}"
                 >
                     --:--:--
                 </div>
-                <div class="kpi-subtitle">Age of longest active incident</div>
+                <div class="kpi-subtitle" id="oldest-call-subtitle">Age of longest active incident</div>
             {% else %}
-                <div class="kpi-number kpi-time ops-good">CLEAR</div>
-                <div class="kpi-subtitle">No active calls</div>
+                <div class="kpi-number kpi-time ops-good" id="oldest-call-value">CLEAR</div>
+                <div class="kpi-subtitle" id="oldest-call-subtitle">No active calls</div>
             {% endif %}
         </div>
     </div>
@@ -161,7 +174,7 @@
             <div class="text-secondary">Active calls grouped by primary response agency</div>
         </div>
 
-        <div aria-label="Active calls by agency">
+        <div id="agency-summary-list" aria-label="Active calls by agency">
             {% if agency_summary %}
                 {% for item in agency_summary %}
                     <span class="agency-chip">
@@ -189,35 +202,30 @@
                 <i class="bi bi-broadcast-pin me-1" aria-hidden="true"></i>
                 LIVE CAD DATA
             </span>
-            <span class="badge text-bg-secondary wallboard-badge">{{ active_calls }} ACTIVE</span>
+            <span class="badge text-bg-secondary wallboard-badge" id="incident-feed-count">{{ active_calls }} ACTIVE</span>
         </div>
     </div>
 
-    {% if calls %}
-        <div class="row g-4">
+    <div id="incident-feed-content">
+        {% if calls %}
+        <div class="row g-4" id="incident-card-grid">
             {% for call in calls %}
                 <div class="col-xl-4 col-lg-6">
                     {% include "components/incident_card.html" %}
                 </div>
             {% endfor %}
         </div>
-    {% else %}
+        {% else %}
         <div class="text-center text-secondary py-5">
             No active calls returned from CAD.
         </div>
-    {% endif %}
+        {% endif %}
+    </div>
 
 </section>
 
 {% endblock %}
 
 {% block page_scripts %}
-<script>
-    LCDashTime.startDashboardTimers({
-        refreshSeconds: 30,
-        refreshElementId: "refresh-countdown",
-        lastUpdatedElementId: "last-updated",
-        localTimeElementId: "dashboard-local-time"
-    });
-</script>
+<script src="/static/js/lcdash-dashboard.js"></script>
 {% endblock %}

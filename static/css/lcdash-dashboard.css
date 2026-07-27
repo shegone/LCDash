@@ -198,6 +198,36 @@
     min-height: 300px;
 }
 
+.ops-status-bar.is-disconnected {
+    border-color: rgba(255, 111, 125, .48);
+    box-shadow: 0 0 28px rgba(255, 76, 91, .11);
+}
+
+.ops-status-bar.is-stale {
+    border-color: rgba(255, 76, 91, .72);
+    box-shadow: 0 0 34px rgba(255, 76, 91, .18);
+}
+
+.view-mode-badge.is-reconnecting {
+    border-color: rgba(255, 214, 107, .48);
+    color: var(--lcdash-yellow);
+}
+
+.view-mode-badge.is-reconnecting::before {
+    background: var(--lcdash-yellow);
+    box-shadow: 0 0 10px rgba(255, 214, 107, .8);
+}
+
+.view-mode-badge.is-stale {
+    border-color: rgba(255, 111, 125, .55);
+    color: #ff9ba6;
+}
+
+.view-mode-badge.is-stale::before {
+    background: #ff6f7d;
+    box-shadow: 0 0 10px rgba(255, 76, 91, .85);
+}
+
 @media (max-width: 1199.98px) {
     .ops-status-layout {
         grid-template-columns: 1fr;

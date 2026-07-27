@@ -43,6 +43,7 @@ class MobileFoundationTests(unittest.TestCase):
         self.assertNotIn("/dashboard", response.text)
         self.assertIn("/static/vendor/bootstrap/bootstrap.min.css", response.text)
         self.assertIn("/static/css/lcdash-core.css", response.text)
+        self.assertIn("/static/js/lcdash-dashboard.js", response.text)
 
 
 if __name__ == "__main__":

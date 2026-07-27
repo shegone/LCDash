@@ -72,6 +72,38 @@ class ActiveCallsPageTests(unittest.TestCase):
         self.assertIn('href="/active-calls"', response.text)
 
     @patch("app.main.get_live_operations_snapshot")
+    def test_dashboard_uses_background_snapshot_refresh(self, snapshot_mock):
+        snapshot_mock.return_value = self.snapshot
+
+        response = self.client.get("/dashboard")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('/static/js/lcdash-dashboard.js', response.text)
+        self.assertIn('id="dashboard-freshness"', response.text)
+        self.assertIn('id="active-calls-value"', response.text)
+        self.assertIn('id="incident-feed-content"', response.text)
+        self.assertNotIn("window.location.reload()", response.text)
+
+    @patch("app.main.get_live_operations_snapshot")
+    def test_operations_snapshot_is_no_store(self, snapshot_mock):
+        snapshot_mock.return_value = self.snapshot
+
+        response = self.client.get("/api/operations/snapshot")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        self.assertTrue(response.json()["connected"])
+
+    def test_dashboard_refresh_script_keeps_last_known_data(self):
+        response = self.client.get("/static/js/lcdash-dashboard.js")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('"/api/operations/snapshot"', response.text)
+        self.assertIn("AbortController", response.text)
+        self.assertIn("last known data", response.text)
+        self.assertNotIn("window.location.reload", response.text)
+
+    @patch("app.main.get_live_operations_snapshot")
     def test_active_calls_page_distinguishes_connected_empty_state(self, snapshot_mock):
         empty_snapshot = {
             **self.snapshot,

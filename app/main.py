@@ -280,7 +280,9 @@ def active_calls_test():
 
 
 @app.get("/api/operations/snapshot")
-def operations_snapshot_api():
+def operations_snapshot_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+
     try:
         snapshot = get_live_operations_snapshot()
 
