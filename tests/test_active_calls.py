@@ -80,6 +80,8 @@ class ActiveCallsPageTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('/static/js/lcdash-dashboard.js', response.text)
         self.assertIn('id="dashboard-freshness"', response.text)
+        self.assertIn('id="realtime-status-value"', response.text)
+        self.assertIn('id="realtime-last-event"', response.text)
         self.assertIn('id="active-calls-value"', response.text)
         self.assertIn('id="incident-feed-content"', response.text)
         self.assertIn('data-cfs-number="CFS26-10001"', response.text)
@@ -110,6 +112,9 @@ class ActiveCallsPageTests(unittest.TestCase):
         self.assertIn("existing?.dataset.callFingerprint === fingerprint", response.text)
         self.assertIn("grid.insertBefore(column, cursor)", response.text)
         self.assertIn("last known data", response.text)
+        self.assertIn('"STREAMING"', response.text)
+        self.assertIn('"30S BACKUP"', response.text)
+        self.assertIn("handleRealtimeEvent", response.text)
         self.assertNotIn("window.location.reload", response.text)
 
     @patch("app.main.get_live_operations_snapshot")

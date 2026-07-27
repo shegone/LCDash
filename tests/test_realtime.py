@@ -200,6 +200,9 @@ class RealtimeEndpointTests(unittest.TestCase):
         self.assertEqual(script.status_code, 200)
         self.assertIn('new EventSource("/api/operations/events")', script.text)
         self.assertIn('"operations_changed"', script.text)
+        self.assertIn('"STREAMING"', script.text)
+        self.assertIn('"30S BACKUP"', script.text)
+        self.assertIn("Last event ", script.text)
         self.assertIn("const REFRESH_SECONDS = 30", script.text)
 
 

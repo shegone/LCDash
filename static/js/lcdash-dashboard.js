@@ -493,16 +493,77 @@
         }, 500);
     }
 
+    function setRealtimeStatus(text, stateClass, iconClass, detail) {
+        const status = element("realtime-status-value");
+        const lastEvent = element("realtime-last-event");
+
+        if (status) {
+            status.className = "ops-value " + stateClass;
+            status.replaceChildren(
+                createIcon(iconClass, "me-1"),
+                document.createTextNode(text)
+            );
+        }
+
+        if (lastEvent) {
+            lastEvent.textContent = detail;
+        }
+    }
+
+    function handleRealtimeEvent(event) {
+        let receivedAt = new Date();
+
+        try {
+            const payload = JSON.parse(event.data || "{}");
+            const parsed = new Date(payload.received_at || "");
+            if (!Number.isNaN(parsed.getTime())) {
+                receivedAt = parsed;
+            }
+        } catch (error) {
+            receivedAt = new Date();
+        }
+
+        setRealtimeStatus(
+            "STREAMING",
+            "ops-good",
+            "bi-broadcast-pin",
+            "Last event " + receivedAt.toLocaleTimeString()
+        );
+        scheduleRealtimeRefresh();
+    }
+
     function startRealtimeEvents() {
         if (!("EventSource" in window)) {
+            setRealtimeStatus(
+                "30S BACKUP",
+                "ops-warning",
+                "bi-clock-history",
+                "Live stream unavailable"
+            );
             return;
         }
 
         realtimeSource = new EventSource("/api/operations/events");
+        realtimeSource.addEventListener("open", function () {
+            setRealtimeStatus(
+                "STREAMING",
+                "ops-good",
+                "bi-broadcast-pin",
+                "Waiting for CAD event"
+            );
+        });
         realtimeSource.addEventListener(
             "operations_changed",
-            scheduleRealtimeRefresh
+            handleRealtimeEvent
         );
+        realtimeSource.addEventListener("error", function () {
+            setRealtimeStatus(
+                "30S BACKUP",
+                "ops-warning",
+                "bi-arrow-repeat",
+                "Stream reconnecting"
+            );
+        });
     }
 
     function timerTick() {

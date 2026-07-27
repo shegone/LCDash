@@ -44,7 +44,7 @@ class MobileFoundationTests(unittest.TestCase):
         self.assertIn("/static/vendor/bootstrap/bootstrap.min.css", response.text)
         self.assertIn("/static/css/lcdash-core.css", response.text)
         self.assertIn("/static/js/lcdash-dashboard.js", response.text)
-        self.assertIn('const STATIC_CACHE = "lcdash-static-v5"', response.text)
+        self.assertIn('const STATIC_CACHE = "lcdash-static-v6"', response.text)
 
 
 if __name__ == "__main__":

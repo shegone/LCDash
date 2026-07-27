@@ -70,6 +70,17 @@
                 {% endif %}
             </div>
 
+            <div class="ops-status-item" aria-live="polite">
+                <div class="ops-label">LIVE EVENTS</div>
+                <div class="ops-value ops-warning" id="realtime-status-value">
+                    <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>
+                    CONNECTING
+                </div>
+                <div class="realtime-detail" id="realtime-last-event">
+                    30-second backup active
+                </div>
+            </div>
+
             <div class="ops-status-item">
                 <div class="ops-label">HIGH PRIORITY</div>
                 {% if high_priority_calls > 0 %}
