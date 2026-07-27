@@ -141,6 +141,34 @@ class ActiveCallsPageTests(unittest.TestCase):
 
         self.assertEqual(stats["high_priority_calls"], 1)
 
+    def test_dashboard_stats_include_on_scene_units_and_oldest_call(self):
+        stats = build_dashboard_stats(
+            [
+                {
+                    "call_datetime": "2026-07-21T14:30:00Z",
+                    "priority": "20",
+                    "assigned_units": [
+                        {"unit_number": "MED10", "status": "On Scene"},
+                        {"unit_number": "MED20", "status": "Enroute"},
+                    ],
+                },
+                {
+                    "call_datetime": "2026-07-21T13:00:00Z",
+                    "priority": "30",
+                    "assigned_units": [
+                        {"unit_number": "MED10", "status": "On Scene"},
+                    ],
+                },
+            ]
+        )
+
+        self.assertEqual(stats["assigned_units"], 2)
+        self.assertEqual(stats["on_scene_units"], 1)
+        self.assertEqual(
+            stats["oldest_call_datetime"],
+            "2026-07-21T13:00:00Z",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

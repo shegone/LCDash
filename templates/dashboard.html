@@ -2,191 +2,62 @@
 
 {% block title %}LCDash Dashboard{% endblock %}
 
+{% block page_styles %}
+<link href="/static/css/lcdash-dashboard.css" rel="stylesheet">
+{% endblock %}
+
 {% block content %}
 
-<style>
-    .wallboard-title-row {
-        margin-bottom: 20px;
-    }
-
-    .wallboard-title {
-        font-size: 2rem;
-        font-weight: 900;
-        letter-spacing: 1px;
-        color: #ffffff;
-        margin-bottom: 4px;
-    }
-
-    .wallboard-subtitle {
-        color: #8fb7d9;
-        font-size: 1rem;
-    }
-
-    .ops-status-bar {
-        padding: 18px 22px;
-        border-radius: 20px;
-        background:
-            linear-gradient(90deg, rgba(8, 24, 43, 0.95), rgba(17, 43, 70, 0.95));
-        border: 1px solid rgba(76, 201, 255, .30);
-        box-shadow: 0 0 28px rgba(0, 148, 255, .12);
-    }
-
-    .ops-status-item {
-        padding: 10px 14px;
-        border-radius: 16px;
-        background: rgba(0, 0, 0, .18);
-        border: 1px solid rgba(255, 255, 255, .07);
-        min-width: 145px;
-    }
-
-    .ops-label {
-        color: #8fb7d9;
-        font-size: .72rem;
-        font-weight: 900;
-        letter-spacing: 1.3px;
-    }
-
-    .ops-value {
-        color: #ffffff;
-        font-size: 1rem;
-        font-weight: 900;
-        margin-top: 3px;
-    }
-
-    .ops-good {
-        color: #69ffb9;
-    }
-
-    .ops-warning {
-        color: #ffd66b;
-    }
-
-    .ops-danger {
-        color: #ff6b6b;
-    }
-
-    .dashboard-kpi {
-        min-height: 165px;
-        position: relative;
-        overflow: hidden;
-    }
-
-    .dashboard-kpi::after {
-        content: "";
-        position: absolute;
-        top: -50px;
-        right: -50px;
-        width: 150px;
-        height: 150px;
-        background: radial-gradient(circle, rgba(76, 201, 255, .18), transparent 70%);
-        pointer-events: none;
-    }
-
-    .dashboard-kpi.alert-kpi {
-        border-color: rgba(255, 214, 107, .55);
-        box-shadow: 0 0 30px rgba(255, 214, 107, .14);
-    }
-
-    .dashboard-kpi.danger-kpi {
-        border-color: rgba(255, 76, 76, .65);
-        box-shadow: 0 0 34px rgba(255, 76, 76, .18);
-    }
-
-    .kpi-label {
-        color: #4cc9ff;
-        font-weight: 900;
-        letter-spacing: 1.2px;
-        font-size: .86rem;
-    }
-
-    .kpi-number {
-        color: #ffffff;
-        font-size: 3rem;
-        font-weight: 950;
-        line-height: 1;
-        margin-top: 12px;
-    }
-
-    .kpi-subtitle {
-        color: #8fb7d9;
-        margin-top: 10px;
-        font-size: .95rem;
-    }
-
-    .agency-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 9px 13px;
-        border-radius: 999px;
-        background: rgba(76, 201, 255, .12);
-        border: 1px solid rgba(76, 201, 255, .22);
-        color: #dbeeff;
-        font-weight: 800;
-        margin: 4px;
-    }
-
-    .agency-chip-count {
-        color: #ffd66b;
-        font-weight: 950;
-    }
-
-    .feed-header {
-        border-bottom: 1px solid rgba(255,255,255,.08);
-        padding-bottom: 18px;
-        margin-bottom: 24px;
-    }
-
-    .wallboard-badge {
-        font-size: .9rem;
-        letter-spacing: .6px;
-        font-weight: 900;
-        padding: 10px 14px;
-    }
-
-    .incident-feed-wrap {
-        min-height: 300px;
-    }
-</style>
-
-<div class="wallboard-title-row d-flex justify-content-between align-items-start flex-wrap gap-3">
+<div class="wallboard-title-row d-flex justify-content-between align-items-start gap-3">
     <div>
-        <div class="wallboard-title">LCDash Operations Dashboard</div>
+        <div class="page-eyebrow">Supervisor Operations</div>
+        <h1 class="wallboard-title">LCDash Operations Dashboard</h1>
         <div class="wallboard-subtitle">
             Logan County 911 live operational picture from CentralSquare CAD
         </div>
     </div>
 
-    <div class="text-end">
-        <div class="text-info fw-bold">DISPLAY MODE</div>
-        <div class="text-secondary">Supervisor / Wallboard View</div>
+    <div class="view-mode-badge" aria-label="Live supervisor and wallboard view">
+        Live Supervisor View
     </div>
 </div>
 
-<div class="ops-status-bar mb-4">
-
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-
-        <div>
-            <div class="text-info fw-bold">LOGAN COUNTY 911 OPERATIONS</div>
+<section class="ops-status-bar mb-4" aria-labelledby="operations-status-heading">
+    <div class="ops-status-layout">
+        <div class="operations-heading">
+            <div class="page-eyebrow">Logan County 911 Operations</div>
 
             {% if cad_status == "Connected" and high_priority_calls == 0 %}
-                <h3 class="mb-0 ops-good">Operations Normal</h3>
+                <h3 class="ops-good" id="operations-status-heading">
+                    <i class="bi bi-check-circle-fill me-2" aria-hidden="true"></i>
+                    Operations Normal
+                </h3>
             {% elif cad_status == "Connected" and high_priority_calls > 0 %}
-                <h3 class="mb-0 ops-warning">Attention Required</h3>
+                <h3 class="ops-warning" id="operations-status-heading">
+                    <i class="bi bi-exclamation-triangle-fill me-2" aria-hidden="true"></i>
+                    Attention Required
+                </h3>
             {% else %}
-                <h3 class="mb-0 ops-danger">CAD Connection Issue</h3>
+                <h3 class="ops-danger" id="operations-status-heading">
+                    <i class="bi bi-cloud-slash-fill me-2" aria-hidden="true"></i>
+                    CAD Connection Issue
+                </h3>
             {% endif %}
         </div>
 
-        <div class="d-flex align-items-center gap-3 flex-wrap justify-content-end">
-
+        <div class="ops-status-grid">
             <div class="ops-status-item">
                 <div class="ops-label">CAD STATUS</div>
                 {% if cad_status == "Connected" %}
-                    <div class="ops-value ops-good">CONNECTED</div>
+                    <div class="ops-value ops-good">
+                        <i class="bi bi-circle-fill me-1" aria-hidden="true"></i>
+                        CONNECTED
+                    </div>
                 {% else %}
-                    <div class="ops-value ops-danger">DISCONNECTED</div>
+                    <div class="ops-value ops-danger">
+                        <i class="bi bi-x-circle-fill me-1" aria-hidden="true"></i>
+                        DISCONNECTED
+                    </div>
                 {% endif %}
             </div>
 
@@ -211,72 +82,86 @@
             </div>
 
             <div class="ops-status-item">
-                <div class="ops-label">AUTO REFRESH</div>
+                <div class="ops-label">NEXT REFRESH</div>
                 <div class="ops-value">
                     <span id="refresh-countdown">30s</span>
                 </div>
             </div>
 
-            <div class="ops-status-item">
+            <div class="ops-status-item d-md-none">
                 <div class="ops-label">LOCAL TIME</div>
                 <div class="ops-value" id="dashboard-local-time">--:--:--</div>
             </div>
-
         </div>
-
     </div>
+</section>
 
-</div>
+<section class="row g-3 mb-4" aria-label="Current operations metrics">
 
-<div class="row g-4 mb-4">
-
-    <div class="col-md-3">
-        <div class="glass p-4 dashboard-kpi">
-            <div class="kpi-label">ACTIVE CALLS</div>
+    <div class="col-6 col-xl-3">
+        <div class="glass dashboard-kpi accent-kpi">
+            <div class="kpi-topline">
+                <div class="kpi-label">ACTIVE CALLS</div>
+                <div class="kpi-icon"><i class="bi bi-telephone-fill" aria-hidden="true"></i></div>
+            </div>
             <div class="kpi-number">{{ active_calls }}</div>
             <div class="kpi-subtitle">Live CAD incidents</div>
         </div>
     </div>
 
-    <div class="col-md-3">
-        <div class="glass p-4 dashboard-kpi">
-            <div class="kpi-label">ASSIGNED UNITS</div>
+    <div class="col-6 col-xl-3">
+        <div class="glass dashboard-kpi">
+            <div class="kpi-topline">
+                <div class="kpi-label">ASSIGNED UNITS</div>
+                <div class="kpi-icon"><i class="bi bi-truck-front-fill" aria-hidden="true"></i></div>
+            </div>
             <div class="kpi-number">{{ assigned_units }}</div>
-            <div class="kpi-subtitle">Unique units on active calls</div>
+            <div class="kpi-subtitle">Unique units committed</div>
         </div>
     </div>
 
-    <div class="col-md-3">
-        <div class="glass p-4 dashboard-kpi {% if high_priority_calls > 0 %}danger-kpi{% endif %}">
-            <div class="kpi-label">HIGH PRIORITY</div>
-            <div class="kpi-number text-warning">{{ high_priority_calls }}</div>
-            <div class="kpi-subtitle">Priority 15 or higher urgency</div>
+    <div class="col-6 col-xl-3">
+        <div class="glass dashboard-kpi">
+            <div class="kpi-topline">
+                <div class="kpi-label">ON SCENE</div>
+                <div class="kpi-icon"><i class="bi bi-geo-alt-fill" aria-hidden="true"></i></div>
+            </div>
+            <div class="kpi-number text-success">{{ on_scene_units }}</div>
+            <div class="kpi-subtitle">Units currently at scenes</div>
         </div>
     </div>
 
-    <div class="col-md-3">
-        <div class="glass p-4 dashboard-kpi {% if cad_status != 'Connected' %}danger-kpi{% endif %}">
-            <div class="kpi-label">CAD API</div>
-            {% if cad_status == "Connected" %}
-                <div class="kpi-number text-success">LIVE</div>
+    <div class="col-6 col-xl-3">
+        <div class="glass dashboard-kpi {% if oldest_call_datetime %}alert-kpi{% endif %}">
+            <div class="kpi-topline">
+                <div class="kpi-label">OLDEST CALL</div>
+                <div class="kpi-icon"><i class="bi bi-stopwatch-fill" aria-hidden="true"></i></div>
+            </div>
+            {% if oldest_call_datetime %}
+                <div
+                    class="kpi-number kpi-time call-elapsed"
+                    data-call-time="{{ oldest_call_datetime }}"
+                >
+                    --:--:--
+                </div>
+                <div class="kpi-subtitle">Age of longest active incident</div>
             {% else %}
-                <div class="kpi-number text-danger">OFF</div>
+                <div class="kpi-number kpi-time ops-good">CLEAR</div>
+                <div class="kpi-subtitle">No active calls</div>
             {% endif %}
-            <div class="kpi-subtitle">{{ cad_status }} / {{ system_status }}</div>
         </div>
     </div>
 
-</div>
+</section>
 
-<div class="glass p-4 mb-4">
-
+<section class="glass agency-summary mb-4" aria-labelledby="agency-summary-heading">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
         <div>
-            <h4 class="text-warning mb-0">AGENCY SUMMARY</h4>
-            <div class="text-secondary">Active calls grouped by CAD primary response agency</div>
+            <h2 class="h5 text-warning mb-0" id="agency-summary-heading">Agency Summary</h2>
+            <div class="text-secondary">Active calls grouped by primary response agency</div>
         </div>
 
-        <div>
+        <div aria-label="Active calls by agency">
             {% if agency_summary %}
                 {% for item in agency_summary %}
                     <span class="agency-chip">
@@ -289,19 +174,21 @@
             {% endif %}
         </div>
     </div>
+</section>
 
-</div>
-
-<div class="glass p-4 incident-feed-wrap">
+<section class="glass p-4 incident-feed-wrap" aria-labelledby="active-incident-heading">
 
     <div class="feed-header d-flex justify-content-between align-items-center flex-wrap gap-3">
         <div>
-            <h4 class="text-warning mb-0">ACTIVE INCIDENT FEED</h4>
+            <h2 class="h5 text-warning mb-0" id="active-incident-heading">Active Incident Feed</h2>
             <div class="text-secondary">Sorted by CAD priority and call age</div>
         </div>
 
-        <div class="d-flex gap-2 flex-wrap">
-            <span class="badge text-bg-success wallboard-badge">LIVE CAD DATA</span>
+        <div class="d-flex gap-2 flex-wrap" aria-label="Incident feed status">
+            <span class="badge text-bg-success wallboard-badge">
+                <i class="bi bi-broadcast-pin me-1" aria-hidden="true"></i>
+                LIVE CAD DATA
+            </span>
             <span class="badge text-bg-secondary wallboard-badge">{{ active_calls }} ACTIVE</span>
         </div>
     </div>
@@ -320,8 +207,11 @@
         </div>
     {% endif %}
 
-</div>
+</section>
 
+{% endblock %}
+
+{% block page_scripts %}
 <script>
     LCDashTime.startDashboardTimers({
         refreshSeconds: 30,

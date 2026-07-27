@@ -1,5 +1,10 @@
-const STATIC_CACHE = "lcdash-static-v1";
+const STATIC_CACHE = "lcdash-static-v2";
 const STATIC_ASSETS = [
+    "/static/vendor/bootstrap/bootstrap.min.css",
+    "/static/vendor/bootstrap-icons/bootstrap-icons.css",
+    "/static/vendor/bootstrap-icons/fonts/bootstrap-icons.woff2",
+    "/static/css/lcdash-core.css",
+    "/static/css/lcdash-dashboard.css",
     "/static/css/lcdash-mobile.css",
     "/static/js/lcdash-mobile.js",
     "/static/js/lcdash-time.js",

@@ -69,19 +69,25 @@
 
     .sidebar .logo {
         width: 108px;
-        margin-top: 18px;
         margin-bottom: 8px;
     }
 
-    .sidebar h4 {
-        margin-bottom: 16px;
+    .sidebar-brand {
+        position: relative;
+        padding-top: 18px;
+        padding-bottom: 12px;
+    }
+
+    .sidebar-navigation {
+        padding-bottom: 26px;
+    }
+
+    .nav-section + .nav-section {
+        margin-top: 13px;
     }
 
     .sidebar .nav-link {
         min-height: 48px;
-        display: flex;
-        align-items: center;
-        gap: 10px;
         padding: 12px 18px;
     }
 
@@ -249,6 +255,10 @@
     .main .badge {
         white-space: normal;
         text-align: center;
+    }
+
+    .dashboard-kpi .kpi-subtitle {
+        font-size: .78rem;
     }
 }
 

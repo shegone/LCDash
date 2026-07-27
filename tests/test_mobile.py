@@ -16,6 +16,10 @@ class MobileFoundationTests(unittest.TestCase):
         self.assertIn('id="mobile-menu-button"', response.text)
         self.assertIn('id="lcdash-sidebar"', response.text)
         self.assertIn('/static/css/lcdash-mobile.css', response.text)
+        self.assertIn('/static/css/lcdash-core.css', response.text)
+        self.assertIn('/static/vendor/bootstrap/bootstrap.min.css', response.text)
+        self.assertIn('/static/vendor/bootstrap-icons/bootstrap-icons.css', response.text)
+        self.assertNotIn('cdn.jsdelivr.net', response.text)
         self.assertIn('/static/js/lcdash-mobile.js', response.text)
         self.assertIn('/static/manifest.webmanifest', response.text)
         self.assertIn('rel="icon" type="image/png" href="/static/img/logan911-logo.png"', response.text)
@@ -37,6 +41,8 @@ class MobileFoundationTests(unittest.TestCase):
         self.assertEqual(response.headers["service-worker-allowed"], "/")
         self.assertNotIn("/api/", response.text)
         self.assertNotIn("/dashboard", response.text)
+        self.assertIn("/static/vendor/bootstrap/bootstrap.min.css", response.text)
+        self.assertIn("/static/css/lcdash-core.css", response.text)
 
 
 if __name__ == "__main__":

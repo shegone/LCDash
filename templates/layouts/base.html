@@ -1,3 +1,16 @@
+{% macro nav_item(href, icon, label, is_active=false) -%}
+<a
+    class="nav-link{% if is_active %} active{% endif %}"
+    href="{{ href }}"
+    {% if is_active %}aria-current="page"{% endif %}
+>
+    <i class="bi {{ icon }}" aria-hidden="true"></i>
+    <span>{{ label }}</span>
+</a>
+{%- endmacro %}
+
+{% set current_path = request.url.path %}
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,201 +28,18 @@
     <link rel="icon" type="image/png" href="/static/img/logan911-logo.png">
     <link rel="apple-touch-icon" href="/static/img/logan911-logo.png">
 
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="/static/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+    <link href="/static/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
+    <link href="/static/css/lcdash-core.css" rel="stylesheet">
+    <link href="/static/css/lcdash-mobile.css" rel="stylesheet">
+    {% block page_styles %}{% endblock %}
 
     <script src="/static/js/lcdash-time.js"></script>
-
-    <style>
-        body {
-            margin: 0;
-            background: #07111f;
-            color: white;
-            overflow: hidden;
-            font-family: "Segoe UI", Arial, sans-serif;
-        }
-
-        .sidebar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 270px;
-            height: 100vh;
-            background: #091729;
-            border-right: 1px solid #19304d;
-            overflow: auto;
-        }
-
-        .logo {
-            width: 150px;
-            display: block;
-            margin: 20px auto 15px auto;
-            filter: drop-shadow(0 0 18px rgba(0, 195, 255, 0.25));
-        }
-
-        .sidebar h4 {
-            text-align: center;
-            font-weight: 700;
-            margin-bottom: 30px;
-            color: #4cc9ff;
-        }
-
-        .nav-link {
-            color: #c7d7e7;
-            padding: 14px 24px;
-            border-radius: 10px;
-            margin: 6px 10px;
-        }
-
-        .nav-link:hover {
-            background: #16395e;
-            color: white;
-        }
-
-        .main {
-            margin-left: 270px;
-            padding: 25px;
-            height: 100vh;
-            overflow: auto;
-        }
-
-        .topbar {
-            min-height: 75px;
-            margin-bottom: 25px;
-            padding: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .glass {
-            background: rgba(18, 33, 56, .85);
-            border: 1px solid #23466f;
-            border-radius: 20px;
-            box-shadow: 0 0 25px rgba(0, 140, 255, .10);
-        }
-
-        .clock {
-            color: #67d7ff;
-            font-size: 1.2rem;
-            font-weight: bold;
-        }
-
-        .incident-card-link {
-            display: block;
-            height: 100%;
-            color: inherit;
-            text-decoration: none;
-        }
-
-        .incident-card-link:hover {
-            color: inherit;
-            text-decoration: none;
-        }
-
-        .incident-card {
-            height: 100%;
-            padding: 22px;
-            border-radius: 22px;
-            background:
-                linear-gradient(180deg, rgba(19, 38, 64, 0.96), rgba(8, 18, 33, 0.96));
-            border: 1px solid rgba(95, 178, 255, 0.35);
-            box-shadow:
-                0 0 22px rgba(0, 148, 255, 0.12),
-                inset 0 0 18px rgba(255, 255, 255, 0.025);
-            transition: transform 0.15s ease, box-shadow 0.15s ease;
-        }
-
-        .incident-card:hover {
-            transform: translateY(-3px);
-            box-shadow:
-                0 0 32px rgba(0, 180, 255, 0.28),
-                inset 0 0 18px rgba(255, 255, 255, 0.04);
-        }
-
-        .incident-code {
-            color: #ffd66b;
-            font-size: 0.95rem;
-            font-weight: 800;
-            letter-spacing: 1.5px;
-        }
-
-        .incident-title {
-            font-size: 1.25rem;
-            font-weight: 800;
-            color: #ffffff;
-            margin-top: 3px;
-        }
-
-        .priority-badge {
-            padding: 8px 12px;
-            border-radius: 999px;
-            font-size: 0.85rem;
-            font-weight: 800;
-            color: #03101e;
-            background: #ffd66b;
-            white-space: nowrap;
-        }
-
-        .incident-location,
-        .incident-units {
-            color: #dbeeff;
-            font-size: 0.95rem;
-        }
-
-        .incident-location i,
-        .incident-units i {
-            color: #4cc9ff;
-            margin-right: 6px;
-        }
-
-        .label {
-            color: #82a9ca;
-            font-size: 0.72rem;
-            letter-spacing: 1.2px;
-            font-weight: 700;
-        }
-
-        .value {
-            color: #ffffff;
-            font-weight: 700;
-        }
-
-        .status-text {
-            color: #69ffb9;
-        }
-
-        .incident-footer {
-            border-top: 1px solid rgba(255, 255, 255, 0.08);
-            padding-top: 12px;
-            color: #8fb7d9;
-            font-weight: 700;
-            letter-spacing: 1px;
-        }
-
-        .priority-5,
-        .priority-10 {
-            border-color: rgba(255, 76, 76, 0.65);
-            box-shadow: 0 0 26px rgba(255, 76, 76, 0.18);
-        }
-
-        .priority-15 {
-            border-color: rgba(255, 214, 107, 0.65);
-            box-shadow: 0 0 26px rgba(255, 214, 107, 0.14);
-        }
-
-        .priority-20 {
-            border-color: rgba(76, 201, 255, 0.65);
-        }
-
-        .priority-30 {
-            border-color: rgba(105, 255, 185, 0.4);
-        }
-    </style>
-    <link href="/static/css/lcdash-mobile.css" rel="stylesheet">
 </head>
 
 <body>
+
+<a class="skip-link" href="#main-content">Skip to dashboard content</a>
 
 <div class="mobile-nav-overlay" id="mobile-nav-overlay" aria-hidden="true"></div>
 
@@ -220,31 +50,54 @@
         type="button"
         aria-label="Close navigation"
     >
-        <i class="bi bi-x-lg"></i>
+        <i class="bi bi-x-lg" aria-hidden="true"></i>
     </button>
 
-    <img src="/static/img/logan911-logo.png" class="logo">
-    <h4>LCDash</h4>
-
-    <div class="nav flex-column">
-        <a class="nav-link" href="/dashboard"><i class="bi bi-speedometer2"></i> Dashboard</a>
-        <a class="nav-link" href="/active-calls"><i class="bi bi-telephone-fill"></i> Active Calls</a>
-        <a class="nav-link" href="/units"><i class="bi bi-truck"></i> Units</a>
-        <a class="nav-link" href="/station-alerts"><i class="bi bi-bell-fill"></i> Station Alerts</a>
-        <a class="nav-link" href="/map"><i class="bi bi-map"></i> GIS Map</a>
-        <a class="nav-link" href="/mindshare"><i class="bi bi-broadcast"></i> Mindshare</a>
-        <a class="nav-link" href="/voice"><i class="bi bi-mic-fill"></i> Voice Lab</a>
-        <a class="nav-link" href="/analytics"><i class="bi bi-graph-up-arrow"></i> Analytics</a>
-        <a class="nav-link" href="/mae"><i class="bi bi-robot"></i> MAE Assistant</a>
-        <a class="nav-link" href="/mae/reliability"><i class="bi bi-shield-check"></i> MAE Reliability</a>
-        <a class="nav-link" href="/knowledge"><i class="bi bi-journal-text"></i> Knowledge Library</a>
-        <a class="nav-link" href="#"><i class="bi bi-gear-fill"></i> Settings</a>
+    <div class="sidebar-brand">
+        <img
+            src="/static/img/logan911-logo.png"
+            class="logo"
+            alt="Logan County 911"
+        >
+        <h4>LCDash</h4>
+        <div class="sidebar-brand-subtitle">Operations Platform</div>
     </div>
+
+    <nav class="sidebar-navigation" aria-label="Primary navigation">
+        <section class="nav-section" aria-labelledby="nav-operations">
+            <div class="nav-section-label" id="nav-operations">Operations</div>
+            <div class="nav flex-column">
+                {{ nav_item("/dashboard", "bi-speedometer2", "Dashboard", current_path == "/dashboard") }}
+                {{ nav_item("/active-calls", "bi-telephone-fill", "Active Calls", current_path == "/active-calls" or current_path.startswith("/calls/")) }}
+                {{ nav_item("/units", "bi-truck", "Units", current_path == "/units") }}
+                {{ nav_item("/station-alerts", "bi-bell-fill", "Station Alerts", current_path == "/station-alerts") }}
+                {{ nav_item("/map", "bi-map", "GIS Map", current_path == "/map" or current_path == "/heatmap") }}
+            </div>
+        </section>
+
+        <section class="nav-section" aria-labelledby="nav-intelligence">
+            <div class="nav-section-label" id="nav-intelligence">Intelligence</div>
+            <div class="nav flex-column">
+                {{ nav_item("/analytics", "bi-graph-up-arrow", "Analytics", current_path.startswith("/analytics")) }}
+                {{ nav_item("/mae", "bi-robot", "MAE Assistant", current_path == "/mae") }}
+                {{ nav_item("/mindshare", "bi-broadcast", "Mindshare / JACK", current_path.startswith("/mindshare")) }}
+                {{ nav_item("/knowledge", "bi-journal-text", "Knowledge Library", current_path == "/knowledge") }}
+            </div>
+        </section>
+
+        <section class="nav-section" aria-labelledby="nav-tools">
+            <div class="nav-section-label" id="nav-tools">Tools & Quality</div>
+            <div class="nav flex-column">
+                {{ nav_item("/voice", "bi-mic-fill", "Voice Lab", current_path == "/voice") }}
+                {{ nav_item("/mae/reliability", "bi-shield-check", "MAE Reliability", current_path == "/mae/reliability") }}
+            </div>
+        </section>
+    </nav>
 </aside>
 
-<div class="main">
+<main class="main" id="main-content" tabindex="-1">
 
-    <div class="topbar glass">
+    <header class="topbar glass">
         <button
             class="mobile-menu-button"
             id="mobile-menu-button"
@@ -253,7 +106,7 @@
             aria-controls="lcdash-sidebar"
             aria-expanded="false"
         >
-            <i class="bi bi-list"></i>
+            <i class="bi bi-list" aria-hidden="true"></i>
         </button>
 
         <div class="topbar-brand">
@@ -261,18 +114,19 @@
             <div class="topbar-subtitle">WV's First NG911 Center</div>
         </div>
 
-        <div class="clock" id="clock"></div>
-    </div>
+        <time class="clock" id="clock" aria-label="Local date and time"></time>
+    </header>
 
     {% block content %}
     {% endblock %}
 
-</div>
+</main>
 
 <script>
     LCDashTime.startClock("clock");
 </script>
 <script src="/static/js/lcdash-mobile.js"></script>
+{% block page_scripts %}{% endblock %}
 
 </body>
 </html>
