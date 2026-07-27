@@ -7,7 +7,7 @@ from typing import Literal
 
 from fastapi import FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from pydantic import BaseModel, Field
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
@@ -62,6 +62,7 @@ from app.services.mae_memory_service import (
 )
 from app.services.mae_tool_registry import get_mae_tool_catalog
 from app.services.knowledge_service import (
+    get_knowledge_document_file,
     get_knowledge_status,
     list_knowledge_documents,
 )
@@ -909,6 +910,26 @@ def knowledge_page(request: Request):
             "version": "0.3.0",
         },
         headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/knowledge/documents/{library_key}/{document_id}")
+def knowledge_document_pdf(
+    library_key: Literal["centralsquare", "mindshare"],
+    document_id: int,
+):
+    document = get_knowledge_document_file(document_id, library_key)
+    if not document:
+        raise HTTPException(status_code=404, detail="PDF document not found.")
+    return FileResponse(
+        path=document["path"],
+        media_type="application/pdf",
+        filename=document["file_name"],
+        content_disposition_type="inline",
+        headers={
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 

@@ -1,4 +1,6 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 
 from fastapi.testclient import TestClient
@@ -28,11 +30,13 @@ class KnowledgePageTests(unittest.TestCase):
         }
         documents_mock.return_value = [
             {
+                "document_id": 7,
                 "title": "CAD Administration Guide",
                 "file_name": "cad-admin.pdf",
                 "page_count": 50,
                 "chunk_count": 120,
                 "indexed_at": "2026-07-26T12:00:00-04:00",
+                "is_pdf": True,
             }
         ]
 
@@ -41,7 +45,34 @@ class KnowledgePageTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("CentralSquare Knowledge Library", response.text)
         self.assertIn("CAD Administration Guide", response.text)
+        self.assertIn("/knowledge/documents/centralsquare/7", response.text)
         self.assertEqual(response.headers["cache-control"], "no-store")
+
+    @patch("app.main.get_knowledge_document_file")
+    def test_indexed_pdf_opens_inline(self, document_mock):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "cad-admin.pdf"
+            path.write_bytes(b"%PDF-1.4\n%%EOF")
+            document_mock.return_value = {
+                "path": path,
+                "file_name": "cad-admin.pdf",
+                "title": "CAD Administration Guide",
+            }
+
+            response = self.client.get(
+                "/knowledge/documents/centralsquare/7"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-type"], "application/pdf")
+        self.assertIn("inline", response.headers["content-disposition"])
+        self.assertEqual(response.headers["cache-control"], "private, no-store")
+
+    @patch("app.main.get_knowledge_document_file", return_value=None)
+    def test_missing_or_unapproved_pdf_returns_not_found(self, _document_mock):
+        response = self.client.get("/knowledge/documents/mindshare/999")
+
+        self.assertEqual(response.status_code, 404)
 
     @patch("app.main.list_knowledge_documents")
     @patch("app.main.get_knowledge_status")

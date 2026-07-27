@@ -65,11 +65,13 @@ class MindsharePageTests(unittest.TestCase):
         }
         documents_mock.return_value = [
             {
+                "document_id": 11,
                 "title": "MRI2 Manual",
                 "file_name": "mri2.pdf",
                 "page_count": 50,
                 "chunk_count": 100,
                 "indexed_at": "2026-07-26T12:00:00Z",
+                "is_pdf": True,
             }
         ]
 
@@ -78,6 +80,7 @@ class MindsharePageTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Mindshare Technical Library", response.text)
         self.assertIn("MRI2 Manual", response.text)
+        self.assertIn("/knowledge/documents/mindshare/11", response.text)
         self.assertEqual(
             status_mock.call_args.kwargs["library_key"],
             "mindshare",

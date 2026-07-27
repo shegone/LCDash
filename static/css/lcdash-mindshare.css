@@ -168,6 +168,17 @@
     overflow-wrap: anywhere;
 }
 
+.mindshare-document-link {
+    color: #f4efff;
+    text-decoration: none;
+}
+
+.mindshare-document-link:hover,
+.mindshare-document-link:focus-visible {
+    color: #b993ff;
+    text-decoration: underline;
+}
+
 .mindshare-assistant {
     --mae-cyan: #b993ff;
 }

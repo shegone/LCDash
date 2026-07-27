@@ -1,4 +1,4 @@
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import math
 import re
 
@@ -185,9 +185,60 @@ def list_knowledge_documents(
             "modified_at": row[5].isoformat() if row[5] else "",
             "indexed_at": row[6].isoformat() if row[6] else "",
             "chunk_count": int(row[7] or 0),
+            "is_pdf": str(row[1] or "").lower().endswith(".pdf"),
         }
         for row in rows
     ]
+
+
+def get_knowledge_document_file(
+    document_id: int,
+    library_key: str,
+) -> dict | None:
+    if library_key not in {"centralsquare", "mindshare"}:
+        return None
+    try:
+        with _connect() as connection:
+            ensure_knowledge_schema(connection)
+            row = connection.execute(
+                """
+                SELECT source_path, file_name, title
+                FROM lcdash_knowledge.documents
+                WHERE document_id = %s
+                  AND library_key = %s
+                """,
+                (document_id, library_key),
+            ).fetchone()
+    except (KnowledgeServiceError, psycopg.Error):
+        return None
+
+    if not row or not str(row[1] or "").lower().endswith(".pdf"):
+        return None
+
+    source_parts = PurePosixPath(str(row[0])).parts
+    if library_key == "mindshare" and source_parts[:1] == ("mindshare",):
+        source_parts = source_parts[1:]
+    if not source_parts:
+        return None
+
+    source_root = Path(
+        settings.mindshare_knowledge_source_dir
+        if library_key == "mindshare"
+        else settings.knowledge_source_dir
+    ).resolve()
+    document_path = source_root.joinpath(*source_parts).resolve()
+    if (
+        not document_path.is_relative_to(source_root)
+        or document_path.suffix.lower() != ".pdf"
+        or not document_path.is_file()
+    ):
+        return None
+
+    return {
+        "path": document_path,
+        "file_name": str(row[1]),
+        "title": str(row[2] or row[1]),
+    }
 
 
 def get_document_passages(

@@ -75,6 +75,17 @@
         font-weight: 800;
     }
 
+    .knowledge-document-link {
+        color: #e7f4ff;
+        text-decoration: none;
+    }
+
+    .knowledge-document-link:hover,
+    .knowledge-document-link:focus-visible {
+        color: #4cc9ff;
+        text-decoration: underline;
+    }
+
     .knowledge-file-name {
         color: #83a8c7;
         font-size: .82rem;
@@ -181,7 +192,22 @@
                     {% for document in documents %}
                         <tr>
                             <td>
-                                <div class="knowledge-document-title">{{ document.title }}</div>
+                                <div class="knowledge-document-title">
+                                    {% if document.is_pdf %}
+                                        <a
+                                            class="knowledge-document-link"
+                                            href="/knowledge/documents/centralsquare/{{ document.document_id }}"
+                                            target="_blank"
+                                            rel="noopener"
+                                            aria-label="Open {{ document.title }} PDF"
+                                        >
+                                            <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>
+                                            {{ document.title }}
+                                        </a>
+                                    {% else %}
+                                        {{ document.title }}
+                                    {% endif %}
+                                </div>
                                 <div class="knowledge-file-name">{{ document.file_name }}</div>
                             </td>
                             <td>{{ document.page_count }}</td>
