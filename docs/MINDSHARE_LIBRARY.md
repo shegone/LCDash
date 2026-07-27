@@ -1,5 +1,19 @@
 # Mindshare Technical Library
 
+## Reliability and coverage
+
+The Mindshare module includes two read-only quality tools:
+
+- `/mindshare/reliability` provides 30 realistic JACK questions grounded in
+  the indexed Console, MRI/MRI2, gateway, service, release-note, and safety
+  documentation. Tests score the selected evidence, supported/refusal behavior,
+  and response time.
+- `/mindshare/coverage` summarizes product and document-type coverage, identifies
+  documents with no searchable passages, and lists possible duplicate or older
+  revisions for human review.
+
+The coverage review never deletes, moves, renames, or archives a source document.
+
 ## Purpose
 
 LCDash maintains a Mindshare knowledge library that is separate from MAE and

@@ -63,6 +63,12 @@ from app.services.mindshare_service import (
     ask_mindshare,
     get_mindshare_status,
 )
+from app.services.mindshare_coverage_service import build_mindshare_coverage
+from app.services.mindshare_evaluation_service import (
+    get_mindshare_evaluation_summary,
+    list_mindshare_evaluation_cases,
+    run_mindshare_evaluation_case,
+)
 from app.services.voice_service import (
     VOICE_CHOICES,
     VoiceServiceError,
@@ -126,6 +132,10 @@ class MAEFeedbackRequest(BaseModel):
 
 class MAEEvaluationRunRequest(BaseModel):
     case_id: str = Field(min_length=4, max_length=50)
+
+
+class MindshareEvaluationRunRequest(BaseModel):
+    case_id: str = Field(min_length=4, max_length=80)
 
 
 class MAEMemoryCreateRequest(BaseModel):
@@ -755,6 +765,38 @@ def mindshare_library_page(request: Request):
     )
 
 
+@app.get("/mindshare/reliability")
+def mindshare_reliability_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="mindshare_reliability.html",
+        context={
+            "evaluation_cases": list_mindshare_evaluation_cases(),
+            "evaluation_summary": get_mindshare_evaluation_summary(),
+            "version": "0.4.0",
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/mindshare/coverage")
+def mindshare_coverage_page(request: Request):
+    status = get_knowledge_status(
+        library_key="mindshare",
+        source_dir=settings.mindshare_knowledge_source_dir,
+    )
+    documents = list_knowledge_documents(library_key="mindshare")
+    return templates.TemplateResponse(
+        request=request,
+        name="mindshare_coverage.html",
+        context={
+            "coverage": build_mindshare_coverage(documents, status),
+            "version": "0.4.0",
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.get("/mindshare/radio")
 def mindshare_radio_page(request: Request):
     return templates.TemplateResponse(
@@ -870,6 +912,42 @@ def mindshare_chat_api(
         )
     except MindshareServiceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/api/mindshare/evaluations")
+def mindshare_evaluations_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "cases": list_mindshare_evaluation_cases(),
+        "summary": get_mindshare_evaluation_summary(),
+    }
+
+
+@app.post("/api/mindshare/evaluations/run")
+def mindshare_evaluation_run_api(
+    evaluation_request: MindshareEvaluationRunRequest,
+    request: Request,
+    response: Response,
+):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return run_mindshare_evaluation_case(
+            evaluation_request.case_id,
+            requested_by=_authenticated_user_email(request),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/mindshare/coverage")
+def mindshare_coverage_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    status = get_knowledge_status(
+        library_key="mindshare",
+        source_dir=settings.mindshare_knowledge_source_dir,
+    )
+    documents = list_knowledge_documents(library_key="mindshare")
+    return build_mindshare_coverage(documents, status)
 
 
 @app.get("/api/mae/status")

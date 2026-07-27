@@ -1,0 +1,127 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Mindshare Library Coverage | LCDash{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="/static/css/lcdash-mindshare.css?v=20260727">
+<style>
+    .coverage-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin:20px 0; }
+    .coverage-kpi { padding:18px; }
+    .coverage-kpi strong { display:block; color:#fff; font-size:1.8rem; }
+    .coverage-kpi span { color:#91aec5; }
+    .coverage-panel { padding:24px; margin-bottom:20px; }
+    .coverage-table { color:#dceeff; margin:0; }
+    .coverage-table th { color:#c6a5ff; border-color:rgba(255,255,255,.1); }
+    .coverage-table td { border-color:rgba(255,255,255,.08); vertical-align:middle; }
+    .coverage-pill { display:inline-block; padding:5px 9px; border-radius:999px; font-size:.75rem; font-weight:900; }
+    .coverage-strong { color:#69ffb9; background:rgba(105,255,185,.12); }
+    .coverage-operational { color:#7ddcff; background:rgba(125,220,255,.12); }
+    .coverage-partial,.coverage-review { color:#ffd66b; background:rgba(255,214,107,.12); }
+    .coverage-reference { color:#c6a5ff; background:rgba(198,165,255,.12); }
+    .coverage-issue { padding:14px; border-left:3px solid #ffd66b; background:rgba(255,214,107,.06); border-radius:10px; }
+    .coverage-issue + .coverage-issue { margin-top:10px; }
+    @media(max-width:1100px){.coverage-grid{grid-template-columns:repeat(2,1fr)}}
+</style>
+
+<section class="mindshare-hero glass">
+    <div>
+        <div class="mindshare-eyebrow">DOCUMENT QUALITY AND PRODUCT COVERAGE</div>
+        <h1>Mindshare Library Coverage</h1>
+        <p>
+            A read-only health review of manuals, release notes, procedures,
+            application notes, possible duplicate revisions, and missing searchable text.
+            Nothing on this page deletes or archives a document.
+        </p>
+    </div>
+    <div class="d-flex flex-column gap-2">
+        <a class="btn btn-info fw-bold" href="/mindshare/library"><i class="bi bi-journals"></i> Full library</a>
+        <a class="btn btn-outline-light" href="/mindshare/reliability"><i class="bi bi-shield-check"></i> Test JACK</a>
+    </div>
+</section>
+
+<div class="coverage-grid">
+    <div class="glass coverage-kpi"><strong>{{ coverage.summary.documents }}</strong><span>Total documents</span></div>
+    <div class="glass coverage-kpi"><strong>{{ coverage.summary.searchable_documents }}</strong><span>Searchable documents</span></div>
+    <div class="glass coverage-kpi"><strong>{{ coverage.summary.chunks }}</strong><span>Searchable passages</span></div>
+    <div class="glass coverage-kpi"><strong>{{ coverage.summary.product_families }}</strong><span>Product families</span></div>
+    <div class="glass coverage-kpi"><strong>{{ coverage.summary.review_groups }}</strong><span>Revision groups to review</span></div>
+</div>
+
+<section class="glass coverage-panel">
+    <h3>Product coverage matrix</h3>
+    <p class="text-secondary">Strong means both a recognized user manual and release notes are indexed. Operational means a manual is present.</p>
+    <div class="table-responsive">
+        <table class="table coverage-table">
+            <thead><tr><th>Product</th><th>Manuals</th><th>Release notes</th><th>Procedures</th><th>Application notes</th><th>Passages</th><th>Coverage</th></tr></thead>
+            <tbody>
+            {% for product in coverage.products %}
+                <tr>
+                    <td><strong>{{ product.product }}</strong></td>
+                    <td>{{ product.manuals }}</td>
+                    <td>{{ product.release_notes }}</td>
+                    <td>{{ product.procedures }}</td>
+                    <td>{{ product.application_notes }}</td>
+                    <td>{{ product.chunks }}</td>
+                    <td><span class="coverage-pill coverage-{{ product.coverage|lower }}">{{ product.coverage }}</span></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<div class="row g-4">
+    <div class="col-lg-5">
+        <section class="glass coverage-panel h-100">
+            <h3>Document types</h3>
+            {% for item in coverage.document_types %}
+                <div class="d-flex justify-content-between border-bottom border-secondary-subtle py-2">
+                    <span>{{ item.type }}</span><strong>{{ item.count }}</strong>
+                </div>
+            {% endfor %}
+            <h3 class="mt-4">Quality notices</h3>
+            {% for issue in coverage.issues %}
+                <div class="coverage-issue">
+                    <strong>{{ issue.title }}</strong>
+                    <div class="text-secondary">{{ issue.detail }}</div>
+                </div>
+            {% else %}
+                <div class="text-success">No quality notices detected.</div>
+            {% endfor %}
+        </section>
+    </div>
+    <div class="col-lg-7">
+        <section class="glass coverage-panel h-100">
+            <h3>Possible duplicate or older revisions</h3>
+            <p class="text-secondary">The first file is the likely newest revision. Review before moving anything to an archive.</p>
+            <div class="table-responsive">
+                <table class="table coverage-table">
+                    <thead><tr><th>Family</th><th>Likely current</th><th>Review candidates</th></tr></thead>
+                    <tbody>
+                    {% for group in coverage.duplicate_groups %}
+                        <tr>
+                            <td>{{ group.family }}</td>
+                            <td><strong>{{ group.preferred }}</strong></td>
+                            <td>{{ group.review|join(", ") }}</td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="3" class="text-secondary">No revision groups detected.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</div>
+
+{% if coverage.zero_content %}
+<section class="glass coverage-panel mt-4">
+    <h3>Items with no searchable passages</h3>
+    <ul class="mb-0">
+    {% for document in coverage.zero_content %}
+        <li>{{ document.file_name }}</li>
+    {% endfor %}
+    </ul>
+</section>
+{% endif %}
+{% endblock %}

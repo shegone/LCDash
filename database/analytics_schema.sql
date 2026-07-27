@@ -138,6 +138,26 @@ CREATE TABLE IF NOT EXISTS lcdash_analytics.mae_evaluation_runs (
     requested_by TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS lcdash_analytics.jack_evaluation_runs (
+    evaluation_run_id BIGSERIAL PRIMARY KEY,
+    case_id TEXT NOT NULL,
+    category TEXT NOT NULL,
+    question TEXT NOT NULL,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at TIMESTAMPTZ,
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    passed BOOLEAN NOT NULL DEFAULT FALSE,
+    document_check_passed BOOLEAN NOT NULL DEFAULT FALSE,
+    support_check_passed BOOLEAN NOT NULL DEFAULT FALSE,
+    speed_check_passed BOOLEAN NOT NULL DEFAULT FALSE,
+    expected_documents JSONB NOT NULL DEFAULT '[]'::JSONB,
+    actual_documents JSONB NOT NULL DEFAULT '[]'::JSONB,
+    answer TEXT NOT NULL DEFAULT '',
+    model TEXT NOT NULL DEFAULT '',
+    error_summary TEXT NOT NULL DEFAULT '',
+    requested_by TEXT NOT NULL DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS lcdash_analytics.mae_memory (
     memory_id BIGSERIAL PRIMARY KEY,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -179,6 +199,10 @@ CREATE INDEX IF NOT EXISTS idx_mae_evaluation_runs_case
     ON lcdash_analytics.mae_evaluation_runs(case_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_mae_evaluation_runs_started
     ON lcdash_analytics.mae_evaluation_runs(started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_jack_evaluation_runs_case
+    ON lcdash_analytics.jack_evaluation_runs(case_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_jack_evaluation_runs_started
+    ON lcdash_analytics.jack_evaluation_runs(started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_mae_memory_status
     ON lcdash_analytics.mae_memory(status, updated_at DESC);
 

@@ -1,0 +1,104 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}JACK Reliability Center | LCDash{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="/static/css/lcdash-mindshare.css?v=20260727">
+<style>
+    .jack-lab-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin:20px 0; }
+    .jack-lab-kpi { padding:20px; }
+    .jack-lab-kpi strong { display:block; color:#fff; font-size:2rem; }
+    .jack-lab-kpi span { color:#91aec5; }
+    .jack-lab-panel { padding:24px; }
+    .jack-lab-table { color:#dceeff; margin:0; }
+    .jack-lab-table th { color:#c6a5ff; border-color:rgba(255,255,255,.1); }
+    .jack-lab-table td { border-color:rgba(255,255,255,.08); vertical-align:middle; }
+    .jack-case-result { color:#91aec5; font-size:.8rem; min-width:160px; }
+    .jack-case-result.is-pass { color:#69ffb9; }
+    .jack-case-result.is-fail { color:#ff8d8d; }
+    .jack-category-row td { color:#ffd66b; font-weight:900; background:rgba(167,121,255,.08); }
+    @media(max-width:900px){.jack-lab-grid{grid-template-columns:repeat(2,1fr)}}
+</style>
+
+<section class="mindshare-hero glass">
+    <div>
+        <div class="mindshare-eyebrow">MANUAL-GROUNDED QUALITY TESTING</div>
+        <h1>JACK Reliability Center</h1>
+        <p>
+            Thirty realistic questions drawn from the actual Mindshare library.
+            Each test checks the selected manual, answer support, safety behavior,
+            and response time. Tests never change a console, gateway, radio, or server.
+        </p>
+    </div>
+    <div class="d-flex flex-column gap-2">
+        <a class="btn btn-info fw-bold" href="/mindshare/technical"><i class="bi bi-chat-dots"></i> Ask JACK</a>
+        <a class="btn btn-outline-light" href="/mindshare/coverage"><i class="bi bi-journals"></i> Library coverage</a>
+    </div>
+</section>
+
+<div class="jack-lab-grid">
+    <div class="glass jack-lab-kpi"><strong>{{ evaluation_cases|length }}</strong><span>Curated questions</span></div>
+    <div class="glass jack-lab-kpi"><strong>{{ evaluation_summary.total_runs }}</strong><span>Recorded tests</span></div>
+    <div class="glass jack-lab-kpi"><strong>{{ evaluation_summary.pass_rate }}%</strong><span>Pass rate</span></div>
+    <div class="glass jack-lab-kpi"><strong>{{ (evaluation_summary.average_duration_ms / 1000)|round(1) }}s</strong><span>Average answer time</span></div>
+</div>
+
+<section class="glass jack-lab-panel">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3">
+        <div>
+            <h3 class="mb-1">Real-world question laboratory</h3>
+            <div class="text-secondary">Run one question at a time. A normal local-model response may take 15–30 seconds.</div>
+        </div>
+        <button id="run-visible-jack-tests" class="btn btn-outline-info"><i class="bi bi-play-circle"></i> Run all 30</button>
+    </div>
+    <div class="table-responsive">
+        <table class="table jack-lab-table">
+            <thead>
+                <tr><th>Case</th><th>Category</th><th>Realistic question</th><th>Expected manual</th><th>Result</th><th></th></tr>
+            </thead>
+            <tbody>
+            {% set category = namespace(value="") %}
+            {% for case in evaluation_cases %}
+                {% if case.category != category.value %}
+                    {% set category.value = case.category %}
+                    <tr class="jack-category-row"><td colspan="6">{{ case.category }}</td></tr>
+                {% endif %}
+                <tr data-jack-case="{{ case.case_id }}">
+                    <td><strong>{{ case.case_id }}</strong></td>
+                    <td>{{ case.category }}</td>
+                    <td>{{ case.question }}</td>
+                    <td>{{ case.expected_documents|join(" or ") if case.expected_documents else "Refusal / safety boundary" }}</td>
+                    <td class="jack-case-result">Not run</td>
+                    <td><button class="btn btn-sm btn-info fw-bold" data-run-jack="{{ case.case_id }}">Run</button></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+{% if evaluation_summary.recent_runs %}
+<section class="glass jack-lab-panel mt-4">
+    <h3>Recent results</h3>
+    <div class="table-responsive">
+        <table class="table jack-lab-table">
+            <thead><tr><th>Time</th><th>Case</th><th>Question</th><th>Duration</th><th>Result</th></tr></thead>
+            <tbody>
+            {% for run in evaluation_summary.recent_runs[:20] %}
+                <tr>
+                    <td class="cad-time" data-cad-time="{{ run.started_at }}">{{ run.started_at }}</td>
+                    <td>{{ run.case_id }}</td>
+                    <td>{{ run.question }}</td>
+                    <td>{{ (run.duration_ms / 1000)|round(1) }}s</td>
+                    <td class="{{ 'text-success' if run.passed else 'text-danger' }}">{{ "PASS" if run.passed else "REVIEW" }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+
+<script src="/static/js/lcdash-mindshare-reliability.js?v=20260727"></script>
+<script>LCDashTime.updateCadDisplayTimes();</script>
+{% endblock %}
