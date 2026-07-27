@@ -28,6 +28,14 @@ The browser never connects directly to the speech container.
 The Speaches image is pinned by digest so a future upstream `latest` update
 cannot silently change the tested production runtime.
 
+## Pronunciation dictionary
+
+LCDash applies speech-only pronunciation rules before text reaches the voice
+engine. Displayed and stored text is not changed.
+
+- `MAE` is spoken as `May`.
+- `911`, `9-1-1`, and `9 1 1` are spoken as `nine one one`.
+
 ## GPU upgrade
 
 When the RTX 3080 computer is prepared, deploy the CUDA Speaches image and

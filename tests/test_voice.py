@@ -4,6 +4,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.services.voice_service import prepare_text_for_speech
 
 
 class VoicePageTests(unittest.TestCase):
@@ -43,6 +44,14 @@ class VoicePageTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b"audio")
         self.assertEqual(response.headers["content-type"], "audio/mpeg")
+
+    def test_lcdash_pronunciation_rules(self):
+        self.assertEqual(
+            prepare_text_for_speech(
+                "MAE supports Logan County 911 and a transferred 9-1-1 call."
+            ),
+            "May supports Logan County nine one one and a transferred nine one one call.",
+        )
 
 
 if __name__ == "__main__":

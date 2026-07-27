@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import httpx
@@ -21,6 +22,13 @@ VOICE_CHOICES = (
 
 def _base_url() -> str:
     return settings.voice_base_url.rstrip("/")
+
+
+def prepare_text_for_speech(text: str) -> str:
+    """Apply LCDash pronunciation rules without changing displayed text."""
+    prepared = re.sub(r"\bMAE\b", "May", text, flags=re.IGNORECASE)
+    prepared = re.sub(r"\b9[\s-]*1[\s-]*1\b", "nine one one", prepared)
+    return prepared
 
 
 def get_voice_status() -> dict[str, Any]:
@@ -85,7 +93,7 @@ def synthesize_speech(
                 json={
                     "model": settings.voice_tts_model,
                     "voice": selected_voice,
-                    "input": text,
+                    "input": prepare_text_for_speech(text),
                     "response_format": response_format,
                     "speed": speed,
                 },
