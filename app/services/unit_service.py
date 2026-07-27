@@ -200,6 +200,12 @@ def normalize_unit(unit: dict) -> dict:
             "CallSign",
             "Username",
         ),
+        "responder_unique_identifier": _safe_text(
+            responder.get("PersonnelUniqueIdentifier")
+            or responder.get("UniqueIdentifier")
+        ),
+        "responder_username": _safe_text(responder.get("Username")),
+        "responder_call_sign": _safe_text(responder.get("CallSign")),
         "status": _dropdown_text(status, "Description", "Abbreviation") or "Unknown",
         "status_abbreviation": _dropdown_text(status, "Abbreviation"),
         "last_status_time": _safe_text(unit.get("LastStatusTime")),

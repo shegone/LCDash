@@ -24,6 +24,14 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_list(name: str, default: str = "") -> tuple[str, ...]:
+    return tuple(
+        item.strip()
+        for item in _env(name, default).split(",")
+        if item.strip()
+    )
+
+
 @dataclass
 class Settings:
     token_url: str = _env("CENTRALSQUARE_TOKEN_URL")
@@ -58,6 +66,10 @@ class Settings:
     analytics_request_delay_ms: int = _env_int(
         "ANALYTICS_REQUEST_DELAY_MS",
         100,
+    )
+    ems_supervisor_unit_numbers: tuple[str, ...] = _env_list(
+        "EMS_SUPERVISOR_UNIT_NUMBERS",
+        "EMS101,EMS102,EMS103,EMS104,EMS105,EMS106,EMS107,EMS108,EMS109",
     )
     ollama_base_url: str = _env("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
     mae_model: str = _env("MAE_MODEL", "qwen3:8b")

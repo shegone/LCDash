@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services.centralsquare import CentralSquareAPIError
+from app.services.ems_delay_alert_service import select_ems_supervisor_recipients
 from app.services.operations_service import (
     build_full_unit_roster,
     get_live_unit_snapshot,
@@ -21,7 +22,12 @@ def raw_unit(unit_number: str, status: str, agency: str = "LEASA", **overrides):
         "UnitNumber": unit_number,
         "UnitType": {"Description": "Ambulance"},
         "Agency": {"Abbreviation": agency},
-        "Responder": {"FullDescription": "Test Responder"},
+        "Responder": {
+            "PersonnelUniqueIdentifier": 7001,
+            "FullDescription": "Test Responder",
+            "Username": "test.responder",
+            "CallSign": "SUP1",
+        },
         "Status": {
             "Description": status,
             "Abbreviation": status[:3].upper(),
@@ -83,6 +89,9 @@ class UnitServiceTests(unittest.TestCase):
         self.assertEqual(unit["agency"], "LEASA")
         self.assertEqual(unit["cfs_number"], "CFS26-10001")
         self.assertEqual(unit["incident_code"], "MED")
+        self.assertEqual(unit["responder_unique_identifier"], "7001")
+        self.assertEqual(unit["responder_username"], "test.responder")
+        self.assertEqual(unit["responder_call_sign"], "SUP1")
 
     def test_status_groups_are_conservative(self):
         available = normalize_unit(raw_unit("MED10", "Available"))
@@ -100,6 +109,62 @@ class UnitServiceTests(unittest.TestCase):
         self.assertEqual(classify_unit(unavailable), "unavailable")
         self.assertEqual(classify_unit(active), "active")
         self.assertEqual(classify_unit(unknown), "unknown")
+
+    def test_supervisor_recipients_use_units_and_exclude_off_duty(self):
+        units = [
+            normalize_unit(raw_unit("EMS104", "Available")),
+            normalize_unit(
+                raw_unit(
+                    "EMS105",
+                    "Off Duty",
+                    Responder={
+                        "PersonnelUniqueIdentifier": 7002,
+                        "FullDescription": "Off Duty Responder",
+                    },
+                )
+            ),
+            normalize_unit(
+                raw_unit(
+                    "EMS107",
+                    "On Scene",
+                    Responder={
+                        "PersonnelUniqueIdentifier": 7003,
+                        "FullDescription": "Working Supervisor",
+                    },
+                    IncidentInformation={"CFSNumber": "CFS26-10001"},
+                )
+            ),
+            normalize_unit(raw_unit("MED10", "Available")),
+        ]
+
+        recipients = select_ems_supervisor_recipients(
+            units,
+            configured_unit_numbers=("EMS104", "EMS105", "EMS107"),
+        )
+
+        self.assertEqual(
+            [
+                recipient["personnel_unique_identifier"]
+                for recipient in recipients
+            ],
+            ["7001", "7003"],
+        )
+        self.assertEqual(
+            [recipient["unit_number"] for recipient in recipients],
+            ["EMS104", "EMS107"],
+        )
+
+    def test_supervisor_recipients_deduplicate_same_responder(self):
+        first = normalize_unit(raw_unit("EMS104", "Available"))
+        second = normalize_unit(raw_unit("EMS107", "Available"))
+
+        recipients = select_ems_supervisor_recipients(
+            [first, second],
+            configured_unit_numbers=("EMS104", "EMS107"),
+        )
+
+        self.assertEqual(len(recipients), 1)
+        self.assertEqual(recipients[0]["personnel_unique_identifier"], "7001")
 
     def test_active_assignment_overrides_off_duty_roster_group(self):
         roster = [normalize_unit(raw_unit("MED10", "Off Duty"))]
