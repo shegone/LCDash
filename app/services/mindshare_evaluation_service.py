@@ -44,7 +44,7 @@ EVALUATION_CASES = [
     _case("jack-service-01", "Service procedures", "How do I make a Clonezilla backup image of a console?", ("Clonezilla",)),
     _case("jack-service-02", "Service procedures", "How do I update packages on a console that is offline?", ("offline", "package")),
     _case("jack-service-03", "Service procedures", "What is the documented way to remove Chromium lock files?", ("Chromium",)),
-    _case("jack-service-04", "Service procedures", "How do I delete old Mindshare system logs?", ("system logs",)),
+    _case("jack-service-04", "Service procedures", "How do I delete old Mindshare system logs?", ("Delete System Log Files",)),
     _case("jack-service-05", "Service procedures", "What is the procedure for updating MAI firmware from a terminal?", ("MAI", "Firmware")),
     _case("jack-release-01", "Versions and releases", "What is the newest indexed Console Application release note?", ("Console App", "Software Catalog")),
     _case("jack-release-02", "Versions and releases", "Which MRI2 release notes are in the library?", ("MRI2",)),
