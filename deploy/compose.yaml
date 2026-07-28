@@ -192,16 +192,15 @@ services:
     image: rclone/rclone:latest
     container_name: lcdash-knowledge-drive-sync
     restart: unless-stopped
-    profiles: ["knowledge-drive"]
     user: "1000:1000"
     entrypoint: ["/bin/sh", "/opt/lcdash/sync_knowledge_drive.sh"]
     environment:
-      KNOWLEDGE_RCLONE_REMOTE: "${KNOWLEDGE_RCLONE_REMOTE:-lcdash-drive:Central Squared CAD/pdf}"
+      KNOWLEDGE_RCLONE_REMOTE: "${KNOWLEDGE_RCLONE_REMOTE:-lcdash-knowledge:Central Squared CAD/pdf}"
       KNOWLEDGE_SYNC_TARGET: /knowledge/centralsquare
       KNOWLEDGE_SYNC_INTERVAL_SECONDS: "900"
     volumes:
       - ../scripts/sync_knowledge_drive.sh:/opt/lcdash/sync_knowledge_drive.sh:ro
-      - /home/ted/.config/rclone/rclone.conf:/config/rclone/rclone.conf:ro
+      - /home/ted/.config/rclone/knowledge.conf:/config/rclone/rclone.conf
       - /home/ted/lcdash-platform/knowledge/centralsquare:/knowledge/centralsquare
     networks:
       - lcdash_private
@@ -214,16 +213,15 @@ services:
     image: rclone/rclone:latest
     container_name: lcdash-mindshare-drive-sync
     restart: unless-stopped
-    profiles: ["mindshare-drive"]
     user: "1000:1000"
     entrypoint: ["/bin/sh", "/opt/lcdash/sync_mindshare_drive.sh"]
     environment:
-      MINDSHARE_KNOWLEDGE_RCLONE_REMOTE: "${MINDSHARE_KNOWLEDGE_RCLONE_REMOTE:-lcdash-drive:Mindshare Documents}"
+      MINDSHARE_KNOWLEDGE_RCLONE_REMOTE: "${MINDSHARE_KNOWLEDGE_RCLONE_REMOTE:-lcdash-knowledge:Mindshare Documents}"
       MINDSHARE_KNOWLEDGE_SYNC_TARGET: /knowledge/mindshare
       MINDSHARE_KNOWLEDGE_SYNC_INTERVAL_SECONDS: "900"
     volumes:
       - ../scripts/sync_mindshare_drive.sh:/opt/lcdash/sync_mindshare_drive.sh:ro
-      - /home/ted/.config/rclone/rclone.conf:/config/rclone/rclone.conf:ro
+      - /home/ted/.config/rclone/knowledge.conf:/config/rclone/rclone.conf
       - /home/ted/lcdash-platform/knowledge/mindshare:/knowledge/mindshare
     networks:
       - lcdash_private
