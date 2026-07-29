@@ -10,6 +10,7 @@ LCDash runs as a private Docker Compose platform on the Logan County server.
 - `lcdash-postgres-backup` - daily compressed database backup
 - `lcdash-ollama` - private local AI API with NVIDIA GPU acceleration
 - `lcdash-open-webui` - authenticated browser interface for local AI
+- `lcdash-cloudflared` - authenticated Cloudflare Tunnel connector for public access
 
 ## Security model
 
@@ -17,6 +18,8 @@ LCDash runs as a private Docker Compose platform on the Logan County server.
 - Open WebUI is published only on server loopback port `3000`.
 - PostgreSQL and Ollama are not published to the host network.
 - CentralSquare, database, and Open WebUI secrets are mounted as owner-only files.
+- The Cloudflare tunnel token is mounted from the owner-only
+  `/srv/lcdash-platform/secrets/cloudflare_tunnel_token` file.
 - Live public-safety data remains inaccessible from the LAN until LCDash has login,
   role-based permissions, redaction, and audited HTTPS access.
 
@@ -158,10 +161,12 @@ Raw CentralSquare webhook payloads are not stored in that table. See
 `docs/REALTIME_EVENTS.md` for the receiver URLs, Cloudflare boundary, activation
 checklist, and subscription requirements.
 
-The existing production CFS and unit subscriptions remain active on the
-`.177` server during migration. Do not activate `.227` subscriptions until
-the controlled cutover. Their identifiers and the callback secret are
-recorded only in:
+The controlled cutover to `.227` was completed on July 29, 2026. The
+`lcdash-supervisor` Cloudflare tunnel now terminates on `.227`, and the old
+`.177` tunnel connector is stopped but preserved for rollback. Existing
+CentralSquare subscriptions continue to use the same public callback URLs, so
+no subscription endpoint change was required. Their identifiers and callback
+secret are recorded only in:
 
 ```text
 /srv/lcdash-platform/secrets/platform-credentials.txt
