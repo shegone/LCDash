@@ -103,32 +103,106 @@ def register_subscriptions(
     }
 
 
+def inspect_subscriptions(
+    client: CentralSquareClient,
+    public_base_url: str,
+    secret: str,
+) -> dict:
+    if not secret:
+        raise RuntimeError("The CentralSquare webhook secret is not configured.")
+
+    return {
+        "cfs_subscription_id": _existing_subscription(
+            client,
+            _callback_url(public_base_url, "cfs", secret),
+        ),
+        "unit_subscription_id": _existing_subscription(
+            client,
+            _callback_url(public_base_url, "units", secret),
+        ),
+    }
+
+
+def register_unit_subscription(
+    client: CentralSquareClient,
+    public_base_url: str,
+    secret: str,
+) -> dict:
+    if not secret:
+        raise RuntimeError("The CentralSquare webhook secret is not configured.")
+
+    unit_callback = _callback_url(public_base_url, "units", secret)
+    unit_id = _existing_subscription(client, unit_callback)
+    unit_created = unit_id is None
+    if unit_created:
+        unit_id = _create_subscription(
+            client,
+            "/units/subscription",
+            {"CallbackURL": unit_callback},
+        )
+
+    return {
+        "unit_subscription_id": unit_id,
+        "unit_created": unit_created,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--public-base-url",
         default=DEFAULT_PUBLIC_BASE_URL,
     )
-    parser.add_argument("--agency-id", type=int, required=True)
-    parser.add_argument("--agency-abbreviation", required=True)
-    parser.add_argument("--agency-name", required=True)
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--inspect-only", action="store_true")
+    mode.add_argument("--unit-only", action="store_true")
+    parser.add_argument("--agency-id", type=int)
+    parser.add_argument("--agency-abbreviation")
+    parser.add_argument("--agency-name")
     parser.add_argument("--agency-ori", default="")
     args = parser.parse_args()
 
-    result = register_subscriptions(
-        client=CentralSquareClient(),
-        public_base_url=args.public_base_url,
-        secret=settings.centralsquare_webhook_secret,
-        dispatch_agency={
-            "UniqueIdentifier": args.agency_id,
-            "Abbreviation": args.agency_abbreviation,
-            "Name": args.agency_name,
-            "ORI": args.agency_ori or None,
-            "RunsDispatch": True,
-            "DispatchedBy": "Dispatch",
-            "PrimaryResponderType": "Dispatch Supervisor",
-        },
-    )
+    client = CentralSquareClient()
+    if args.inspect_only:
+        result = inspect_subscriptions(
+            client,
+            args.public_base_url,
+            settings.centralsquare_webhook_secret,
+        )
+    elif args.unit_only:
+        result = register_unit_subscription(
+            client,
+            args.public_base_url,
+            settings.centralsquare_webhook_secret,
+        )
+    else:
+        missing = [
+            name
+            for name, value in (
+                ("--agency-id", args.agency_id),
+                ("--agency-abbreviation", args.agency_abbreviation),
+                ("--agency-name", args.agency_name),
+            )
+            if value in (None, "")
+        ]
+        if missing:
+            parser.error(
+                "full registration requires " + ", ".join(missing)
+            )
+        result = register_subscriptions(
+            client=client,
+            public_base_url=args.public_base_url,
+            secret=settings.centralsquare_webhook_secret,
+            dispatch_agency={
+                "UniqueIdentifier": args.agency_id,
+                "Abbreviation": args.agency_abbreviation,
+                "Name": args.agency_name,
+                "ORI": args.agency_ori or None,
+                "RunsDispatch": True,
+                "DispatchedBy": "Dispatch",
+                "PrimaryResponderType": "Dispatch Supervisor",
+            },
+        )
     print(json.dumps(result, indent=2))
 
 
