@@ -148,6 +148,7 @@ def register_unit_subscription(
     client: CentralSquareClient,
     public_base_url: str,
     secret: str,
+    refresh_existing: bool = False,
 ) -> dict:
     if not secret:
         raise RuntimeError("The CentralSquare webhook secret is not configured.")
@@ -161,10 +162,19 @@ def register_unit_subscription(
             "/units/subscription",
             {"CallbackURL": unit_callback},
         )
+    elif refresh_existing:
+        client.put(
+            (
+                f"{settings.cad_base_url}/units/subscription/"
+                f"{unit_id}"
+            ),
+            json={"CallbackURL": unit_callback},
+        )
 
     return {
         "unit_subscription_id": unit_id,
         "unit_created": unit_created,
+        "unit_refreshed": bool(refresh_existing and not unit_created),
     }
 
 
@@ -177,6 +187,7 @@ def main() -> None:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--inspect-only", action="store_true")
     mode.add_argument("--unit-only", action="store_true")
+    parser.add_argument("--refresh-existing", action="store_true")
     parser.add_argument("--agency-id", type=int)
     parser.add_argument("--agency-abbreviation")
     parser.add_argument("--agency-name")
@@ -195,6 +206,7 @@ def main() -> None:
             client,
             args.public_base_url,
             settings.centralsquare_webhook_secret,
+            refresh_existing=args.refresh_existing,
         )
     else:
         missing = [

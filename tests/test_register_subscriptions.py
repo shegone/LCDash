@@ -35,6 +35,10 @@ class FakeSubscriptionClient:
         self.next_id += 1
         return {"SubscriptionUniqueIdentifier": self.next_id}
 
+    def put(self, url, json=None, params=None):
+        self.calls.append((url, json, params))
+        return {}
+
 
 class RegisterSubscriptionTests(unittest.TestCase):
     def setUp(self):
@@ -157,6 +161,7 @@ class RegisterSubscriptionTests(unittest.TestCase):
         )
 
         self.assertTrue(result["unit_created"])
+        self.assertFalse(result["unit_refreshed"])
         create_calls = [
             call for call in client.calls if not call[0].endswith("/search")
         ]
@@ -170,6 +175,46 @@ class RegisterSubscriptionTests(unittest.TestCase):
                     "/api/integrations/centralsquare/webhooks/units"
                 )
             },
+        )
+
+    @patch(
+        "scripts.register_centralsquare_subscriptions.settings.system_base_url",
+        "https://system.example/api",
+    )
+    @patch(
+        "scripts.register_centralsquare_subscriptions.settings.cad_base_url",
+        "https://cad.example/api",
+    )
+    def test_unit_only_refresh_updates_existing_subscription_in_place(self):
+        unit_callback = (
+            "https://lcdash:secret@supervisor.logan911.com"
+            "/api/integrations/centralsquare/webhooks/units"
+        )
+        client = FakeSubscriptionClient({unit_callback: 12})
+
+        result = register_unit_subscription(
+            client,
+            "https://supervisor.logan911.com",
+            "secret",
+            refresh_existing=True,
+        )
+
+        self.assertFalse(result["unit_created"])
+        self.assertTrue(result["unit_refreshed"])
+        self.assertEqual(result["unit_subscription_id"], 12)
+        update_calls = [
+            call for call in client.calls
+            if "/units/subscription/" in call[0]
+        ]
+        self.assertEqual(
+            update_calls,
+            [
+                (
+                    "https://cad.example/api/units/subscription/12",
+                    {"CallbackURL": unit_callback},
+                    None,
+                )
+            ],
         )
 
 
