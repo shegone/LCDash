@@ -38,6 +38,11 @@ class MAEPageTests(unittest.TestCase):
         self.assertIn(".mae-portrait", stylesheet.text)
         self.assertIn(".mae-avatar-assistant", stylesheet.text)
 
+        script = self.client.get("/static/js/lcdash-mae.js")
+        self.assertEqual(script.status_code, 200)
+        self.assertIn("const maeRequestTimeoutMs = 130000;", script.text)
+        self.assertIn("}, maeRequestTimeoutMs);", script.text)
+
         avatar = self.client.get("/static/img/mae/mae-neutral.jpg")
         self.assertEqual(avatar.status_code, 200)
         self.assertEqual(avatar.headers["content-type"], "image/jpeg")

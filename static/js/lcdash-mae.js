@@ -13,6 +13,7 @@
     const voiceDetail = document.getElementById("mae-voice-detail");
     const voicePlayer = document.getElementById("mae-voice-player");
     const maeAvatarSource = "/static/img/mae/mae-neutral.jpg";
+    const maeRequestTimeoutMs = 130000;
     const history = [];
     const entities = {
         cfs_numbers: [],
@@ -689,7 +690,7 @@
         const controller = new AbortController();
         const timeoutId = window.setTimeout(function () {
             controller.abort();
-        }, 30000);
+        }, maeRequestTimeoutMs);
 
         try {
             const response = await fetch("/api/mae/chat", {
