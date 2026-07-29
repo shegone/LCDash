@@ -4,7 +4,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services.voice_service import prepare_text_for_speech
+from app.services.voice_service import VOICE_CHOICES, prepare_text_for_speech
 
 
 class VoicePageTests(unittest.TestCase):
@@ -16,7 +16,27 @@ class VoicePageTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Voice Lab", response.text)
         self.assertIn("Give MAE a voice", response.text)
+        self.assertIn("RTX 3090 local engine", response.text)
+        self.assertIn("Nicole", response.text)
+        self.assertIn("Fenrir", response.text)
         self.assertIn("/static/js/lcdash-voice.js", response.text)
+
+    def test_local_voice_catalog(self):
+        voice_ids = {voice["id"] for voice in VOICE_CHOICES}
+        self.assertEqual(
+            voice_ids,
+            {
+                "af_heart",
+                "af_bella",
+                "af_nicole",
+                "af_sarah",
+                "af_kore",
+                "am_adam",
+                "am_fenrir",
+                "am_michael",
+                "am_puck",
+            },
+        )
 
     @patch("app.main.get_voice_status")
     def test_voice_status_endpoint(self, get_status):

@@ -15,8 +15,13 @@ class VoiceServiceError(Exception):
 VOICE_CHOICES = (
     {"id": "af_heart", "label": "Heart", "description": "Warm American female"},
     {"id": "af_bella", "label": "Bella", "description": "Clear American female"},
+    {"id": "af_nicole", "label": "Nicole", "description": "Natural American female"},
+    {"id": "af_sarah", "label": "Sarah", "description": "Calm American female"},
+    {"id": "af_kore", "label": "Kore", "description": "Confident American female"},
     {"id": "am_adam", "label": "Adam", "description": "Steady American male"},
+    {"id": "am_fenrir", "label": "Fenrir", "description": "Expressive American male"},
     {"id": "am_michael", "label": "Michael", "description": "Direct American male"},
+    {"id": "am_puck", "label": "Puck", "description": "Conversational American male"},
 )
 
 
