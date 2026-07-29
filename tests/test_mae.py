@@ -27,7 +27,10 @@ class MAEPageTests(unittest.TestCase):
         self.assertIn('id="mae-voice-session"', response.text)
         self.assertIn('id="mae-voice-player"', response.text)
         self.assertIn("/static/css/lcdash-mae.css", response.text)
-        self.assertIn("/static/js/lcdash-mae.js", response.text)
+        self.assertIn(
+            "/static/js/lcdash-mae.js?v=20260729-request-timeout",
+            response.text,
+        )
         self.assertIn("/static/img/mae/mae-neutral.jpg", response.text)
         self.assertIn('alt="MAE virtual assistant"', response.text)
 
