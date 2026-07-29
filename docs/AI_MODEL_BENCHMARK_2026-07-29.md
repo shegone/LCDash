@@ -39,19 +39,39 @@ The synthetic 8.619-second dispatch sentence was:
 The 69-second Whisper Large-v3 Turbo result includes its first CUDA model
 initialization. Warm requests completed in 0.217 seconds.
 
+## Authorized telephone-audio validation
+
+Three authorized local recordings were normalized to 16 kHz mono PCM and
+processed locally. No audio or transcript was sent to an external service.
+
+| Sample | Duration | Small Whisper words | Large-v3 Turbo words | Parakeet words |
+| --- | ---: | ---: | ---: | ---: |
+| A | 25.96 s | 46 | 45 | 39 |
+| B | 26.12 s | 14 | 13 | 14 |
+| C | 135.16 s | 64 | 292 | 203 |
+
+Large-v3 Turbo recognized radio terminology and formatted unit traffic more
+accurately. On the long, degraded call, it recovered substantially more speech
+than the small model. Parakeet was fast and coherent but omitted or distorted
+more radio-specific content.
+
+Large-v3 Turbo repeated a short acknowledgment during low-quality trailing
+audio. Enabling VAD reduced that repetition but also removed valid low-volume
+telephone speech, so VAD is not enabled by default. Long-form transcription
+should later preserve segment timestamps and confidence metadata for review.
+
 ## Current selection
 
 - MAE default: `qwen3.5:27b`
 - General fast model: `qwen3.5:9b`
 - Compatibility fallback: `qwen3:8b`
-- Live STT default: `Systran/faster-distil-whisper-small.en`
-- Installed STT comparison: `deepdml/faster-whisper-large-v3-turbo-ct2`
+- Live STT default: `deepdml/faster-whisper-large-v3-turbo-ct2`
+- Fast STT fallback: `Systran/faster-distil-whisper-small.en`
 - On-demand NVIDIA comparison: `nvidia/parakeet-tdt-0.6b-v3`
 - TTS: `speaches-ai/Kokoro-82M-v1.0-ONNX`
 
 ## Required follow-up
 
-Do not select a final operational STT model from this synthetic test alone.
-Compare the three speech models using authorized local samples containing
-radio noise, unit identifiers, Logan County street names, overlapping speech,
-and different microphones. Keep all evaluation audio local.
+Continue expanding the local evaluation set with different radio channels,
+microphones, accents, street names, overlapping speech, and background noise.
+Never treat an automated transcript as the authoritative recording.

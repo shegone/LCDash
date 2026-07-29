@@ -103,15 +103,19 @@ The default retention period is 30 days.
 
 ## Local AI
 
-Open WebUI connects to Ollama only over the private Docker network. Ollama uses the
-server's Radeon integrated GPU through Vulkan when supported.
+Open WebUI connects to Ollama only over the private Docker network. Ollama and
+Speaches use the server's NVIDIA RTX 3090 through the NVIDIA Container Toolkit.
 
 Installed baseline models:
 
 - `qwen3.5:27b` - primary higher-quality MAE model
 - `qwen3.5:9b` - faster general chat and fallback model
 - `qwen3:8b` - retained compatibility fallback
-- `gpt-oss:20b` - higher-quality reasoning and tool-oriented workflows
+- `nomic-embed-text` - local knowledge embeddings
+- `deepdml/faster-whisper-large-v3-turbo-ct2` - primary local speech recognition
+- `Systran/faster-distil-whisper-small.en` - fast speech-recognition fallback
+- `speaches-ai/Kokoro-82M-v1.0-ONNX` - local speech generation
+- `nvidia/parakeet-tdt-0.6b-v3` - on-demand speech benchmark
 
 Open WebUI provides the general-purpose browser interface. A dedicated API key is
 stored in the protected credential record for future authorized integrations.

@@ -165,7 +165,7 @@ class Settings:
     voice_tts_voice: str = _env("VOICE_TTS_VOICE", "af_heart")
     voice_stt_model: str = _env(
         "VOICE_STT_MODEL",
-        "Systran/faster-distil-whisper-small.en",
+        "deepdml/faster-whisper-large-v3-turbo-ct2",
     )
     voice_request_timeout_seconds: int = _env_int(
         "VOICE_REQUEST_TIMEOUT_SECONDS",
