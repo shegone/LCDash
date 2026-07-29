@@ -293,7 +293,7 @@ services:
       - no-new-privileges:true
 
   speaches:
-    image: ghcr.io/speaches-ai/speaches@sha256:21e3df06d842fb7802ab470dd77c25f0e8c0d22950e8d8c6ae886e851af53ef8
+    image: ghcr.io/speaches-ai/speaches@sha256:6ec12ebf890a17e0d4b242a8ba9e0eb1fb836e60e8a3c857aea9838d541579ac
     container_name: lcdash-speaches
     restart: unless-stopped
     gpus: all
@@ -311,7 +311,7 @@ services:
       start_period: 20s
 
   voice-model-loader:
-    image: ghcr.io/speaches-ai/speaches@sha256:21e3df06d842fb7802ab470dd77c25f0e8c0d22950e8d8c6ae886e851af53ef8
+    image: ghcr.io/speaches-ai/speaches@sha256:6ec12ebf890a17e0d4b242a8ba9e0eb1fb836e60e8a3c857aea9838d541579ac
     container_name: lcdash-voice-model-loader
     restart: "no"
     entrypoint: ["/bin/sh", "-lc"]
