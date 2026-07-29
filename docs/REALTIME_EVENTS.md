@@ -99,7 +99,8 @@ fetches `/api/operations/snapshot`. EventSource reconnects automatically.
 
 - A unique random webhook secret is supplied through a Docker secret.
 - Receiver bodies are limited to 1 MiB by default.
-- Only JSON objects and arrays are accepted.
+- All valid JSON event shapes are accepted because CentralSquare callback
+  variants may deliver an object, array, or scalar notification.
 - Duplicate payloads are identified with a SHA-256 digest.
 - Raw webhook payloads are not stored in the real-time metadata table.
 - Raw payloads are not sent over the browser event stream.

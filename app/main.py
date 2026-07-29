@@ -399,12 +399,6 @@ async def receive_centralsquare_webhook(
             detail="Webhook payload must be valid JSON.",
         ) from exc
 
-    if not isinstance(payload, (dict, list)):
-        raise HTTPException(
-            status_code=422,
-            detail="Webhook payload must be a JSON object or array.",
-        )
-
     result = await asyncio.to_thread(
         process_webhook_event,
         source,
