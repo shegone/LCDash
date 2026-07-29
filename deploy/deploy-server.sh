@@ -2,8 +2,8 @@
 set -eu
 
 ARCHIVE="${1:-}"
-CURRENT_DIR=/home/ted/lcdash
-PLATFORM_DIR=/home/ted/lcdash-platform
+CURRENT_DIR=/srv/lcdash-platform/current
+PLATFORM_DIR=/srv/lcdash-platform
 COMPOSE_FILE=deploy/compose.yaml
 
 if [ -z "${ARCHIVE}" ] || [ ! -f "${ARCHIVE}" ]; then
@@ -11,8 +11,9 @@ if [ -z "${ARCHIVE}" ] || [ ! -f "${ARCHIVE}" ]; then
     exit 1
 fi
 
-STAGING_DIR="$(mktemp -d /home/ted/lcdash-release.XXXXXX)"
-PREVIOUS_DIR="/home/ted/lcdash-previous"
+mkdir -p "${PLATFORM_DIR}/releases"
+STAGING_DIR="$(mktemp -d "${PLATFORM_DIR}/releases/lcdash-release.XXXXXX")"
+PREVIOUS_DIR="${PLATFORM_DIR}/previous"
 
 cleanup_staging() {
     if [ -d "${STAGING_DIR}" ]; then
@@ -31,14 +32,17 @@ test -f "${STAGING_DIR}/app/main.py"
 cd "${STAGING_DIR}"
 docker compose -f "${COMPOSE_FILE}" config --quiet
 
-if [ -e "${PREVIOUS_DIR}" ]; then
-    rm -rf "${PREVIOUS_DIR}"
+had_previous_release=0
+if [ -d "${CURRENT_DIR}" ]; then
+    had_previous_release=1
+    if [ -e "${PREVIOUS_DIR}" ]; then
+        rm -rf "${PREVIOUS_DIR}"
+    fi
+    cd "${CURRENT_DIR}"
+    docker compose -f "${COMPOSE_FILE}" down
+    mv "${CURRENT_DIR}" "${PREVIOUS_DIR}"
 fi
 
-cd "${CURRENT_DIR}"
-docker compose -f "${COMPOSE_FILE}" down
-
-mv "${CURRENT_DIR}" "${PREVIOUS_DIR}"
 mv "${STAGING_DIR}" "${CURRENT_DIR}"
 STAGING_DIR=
 
@@ -71,17 +75,24 @@ if [ "${deployment_failed}" -eq 0 ]; then
 fi
 
 if [ "${deployment_failed}" -ne 0 ]; then
-    echo "Deployment health check failed. Restoring the previous release."
+    echo "Deployment health check failed."
     docker compose -f "${COMPOSE_FILE}" down || true
     rm -rf "${CURRENT_DIR}"
-    mv "${PREVIOUS_DIR}" "${CURRENT_DIR}"
-    cd "${CURRENT_DIR}"
-    docker compose -f "${COMPOSE_FILE}" up -d --build
+    if [ "${had_previous_release}" -eq 1 ] && [ -d "${PREVIOUS_DIR}" ]; then
+        echo "Restoring the previous release."
+        mv "${PREVIOUS_DIR}" "${CURRENT_DIR}"
+        cd "${CURRENT_DIR}"
+        docker compose -f "${COMPOSE_FILE}" up -d --build
+    else
+        echo "No previous release exists; the failed first deployment was removed."
+    fi
     rm -f "${ARCHIVE}"
     exit 1
 fi
 
-rm -rf "${PREVIOUS_DIR}"
+if [ -e "${PREVIOUS_DIR}" ]; then
+    rm -rf "${PREVIOUS_DIR}"
+fi
 rm -f "${ARCHIVE}"
 
 echo "LCDash deployment completed successfully."

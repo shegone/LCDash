@@ -1,10 +1,10 @@
 $ErrorActionPreference = "Stop"
 
 $ProjectPath = "E:\Projects\LCDash"
-$Server = "ted@14.1.1.177"
+$Server = "administrator@14.1.1.227"
 $SshKey = Join-Path $env:USERPROFILE ".ssh\lcdash_server_ed25519"
-$RemoteArchive = "/home/ted/lcdash-platform/incoming-lcdash.tar.gz"
-$RemoteDeployScript = "/home/ted/lcdash-platform/bin/deploy-lcdash.sh"
+$RemoteArchive = "/srv/lcdash-platform/incoming/incoming-lcdash.tar.gz"
+$RemoteDeployScript = "/srv/lcdash-platform/bin/deploy-lcdash.sh"
 $LocalArchive = Join-Path $env:TEMP "lcdash-deploy.tar.gz"
 
 Set-Location $ProjectPath
@@ -14,8 +14,8 @@ if (-not (Test-Path -LiteralPath $SshKey)) {
 }
 
 $branch = (git branch --show-current).Trim()
-if ($branch -ne "feature/authentication") {
-    throw "Expected feature/authentication, but the current branch is $branch."
+if ($branch -ne "deployment/ubuntu-nvidia-227") {
+    throw "Expected deployment/ubuntu-nvidia-227, but the current branch is $branch."
 }
 
 $workingChanges = git status --porcelain

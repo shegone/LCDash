@@ -86,8 +86,8 @@ services:
     ports:
       - "127.0.0.1:8010:8000"
     volumes:
-      - /home/ted/lcdash-platform/knowledge/centralsquare:/knowledge/centralsquare:ro
-      - /home/ted/lcdash-platform/knowledge/mindshare:/knowledge/mindshare:ro
+      - /srv/lcdash-data/documents/centralsquare:/knowledge/centralsquare:ro
+      - /srv/lcdash-data/documents/mindshare:/knowledge/mindshare:ro
     networks:
       - lcdash_private
     depends_on:
@@ -151,7 +151,7 @@ services:
     environment: *lcdash-environment
     secrets: *lcdash-secrets
     volumes:
-      - /home/ted/lcdash-platform/knowledge/centralsquare:/knowledge/centralsquare:ro
+      - /srv/lcdash-data/documents/centralsquare:/knowledge/centralsquare:ro
     networks:
       - lcdash_private
     depends_on:
@@ -175,7 +175,7 @@ services:
     environment: *lcdash-environment
     secrets: *lcdash-secrets
     volumes:
-      - /home/ted/lcdash-platform/knowledge/mindshare:/knowledge/mindshare:ro
+      - /srv/lcdash-data/documents/mindshare:/knowledge/mindshare:ro
     networks:
       - lcdash_private
     depends_on:
@@ -200,8 +200,8 @@ services:
       KNOWLEDGE_SYNC_INTERVAL_SECONDS: "900"
     volumes:
       - ../scripts/sync_knowledge_drive.sh:/opt/lcdash/sync_knowledge_drive.sh:ro
-      - /home/ted/.config/rclone/knowledge.conf:/config/rclone/rclone.conf
-      - /home/ted/lcdash-platform/knowledge/centralsquare:/knowledge/centralsquare
+      - /srv/lcdash-platform/secrets/rclone.conf:/config/rclone/rclone.conf:ro
+      - /srv/lcdash-data/documents/centralsquare:/knowledge/centralsquare
     networks:
       - lcdash_private
     security_opt:
@@ -221,8 +221,8 @@ services:
       MINDSHARE_KNOWLEDGE_SYNC_INTERVAL_SECONDS: "900"
     volumes:
       - ../scripts/sync_mindshare_drive.sh:/opt/lcdash/sync_mindshare_drive.sh:ro
-      - /home/ted/.config/rclone/knowledge.conf:/config/rclone/rclone.conf
-      - /home/ted/lcdash-platform/knowledge/mindshare:/knowledge/mindshare
+      - /srv/lcdash-platform/secrets/rclone.conf:/config/rclone/rclone.conf:ro
+      - /srv/lcdash-data/documents/mindshare:/knowledge/mindshare
     networks:
       - lcdash_private
     security_opt:
@@ -249,7 +249,7 @@ services:
       - postgres_password
     volumes:
       - ./backup-postgres.sh:/opt/lcdash/backup-postgres.sh:ro
-      - /home/ted/lcdash-platform/backups:/backups
+      - /srv/lcdash-data/backups:/backups
     networks:
       - lcdash_private
     depends_on:
@@ -262,13 +262,9 @@ services:
     image: ollama/ollama:latest
     container_name: lcdash-ollama
     restart: unless-stopped
+    gpus: all
     environment:
-      OLLAMA_VULKAN: "1"
-      OLLAMA_IGPU_ENABLE: "1"
       OLLAMA_KEEP_ALIVE: "10m"
-    devices:
-      - /dev/kfd:/dev/kfd
-      - /dev/dri:/dev/dri
     volumes:
       - lcdash_ollama_data:/root/.ollama
     networks:
@@ -299,6 +295,7 @@ services:
     image: ghcr.io/speaches-ai/speaches@sha256:21e3df06d842fb7802ab470dd77c25f0e8c0d22950e8d8c6ae886e851af53ef8
     container_name: lcdash-speaches
     restart: unless-stopped
+    gpus: all
     volumes:
       - lcdash_speaches_models:/home/ubuntu/.cache/huggingface/hub
     networks:
@@ -392,16 +389,16 @@ volumes:
 
 secrets:
   centralsquare_username:
-    file: /home/ted/lcdash-platform/secrets/centralsquare_username
+    file: /srv/lcdash-platform/secrets/centralsquare_username
   centralsquare_password:
-    file: /home/ted/lcdash-platform/secrets/centralsquare_password
+    file: /srv/lcdash-platform/secrets/centralsquare_password
   database_url:
-    file: /home/ted/lcdash-platform/secrets/database_url
+    file: /srv/lcdash-platform/secrets/database_url
   centralsquare_webhook_secret:
-    file: /home/ted/lcdash-platform/secrets/centralsquare_webhook_secret
+    file: /srv/lcdash-platform/secrets/centralsquare_webhook_secret
   postgres_password:
-    file: /home/ted/lcdash-platform/secrets/postgres_password
+    file: /srv/lcdash-platform/secrets/postgres_password
   openwebui_secret_key:
-    file: /home/ted/lcdash-platform/secrets/openwebui_secret_key
+    file: /srv/lcdash-platform/secrets/openwebui_secret_key
   openwebui_admin_password:
-    file: /home/ted/lcdash-platform/secrets/openwebui_admin_password
+    file: /srv/lcdash-platform/secrets/openwebui_admin_password
