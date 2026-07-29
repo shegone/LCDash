@@ -18,7 +18,8 @@ x-lcdash-environment: &lcdash-environment
   ANALYTICS_REQUEST_DELAY_MS: "100"
   EMS_SUPERVISOR_UNIT_NUMBERS: EMS101,EMS102,EMS103,EMS104,EMS105,EMS106,EMS107,EMS108,EMS109
   EMS_DELAY_ALERT_ENABLED: "true"
-  EMS_DELAY_ALERT_MODE: live
+  # Keep migration/staging deployments non-delivering until the final cutover.
+  EMS_DELAY_ALERT_MODE: dry_run
   EMS_DELAY_THRESHOLD_MINUTES: "30"
   EMS_DELAY_REPEAT_MINUTES: "30"
   EMS_DELAY_POLL_SECONDS: "60"
