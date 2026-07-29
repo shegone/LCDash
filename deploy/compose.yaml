@@ -31,7 +31,7 @@ x-lcdash-environment: &lcdash-environment
   EMS_RESPONSE_AGENCIES: LEASA
   EMS_UNIT_PREFIXES: MED,EMS
   OLLAMA_BASE_URL: http://ollama:11434
-  MAE_MODEL: qwen3:8b
+  MAE_MODEL: qwen3.5:27b
   MAE_REQUEST_TIMEOUT_SECONDS: "120"
   MAE_EMBEDDING_MODEL: nomic-embed-text
   MAE_EMBEDDING_TIMEOUT_SECONDS: "45"
@@ -281,6 +281,8 @@ services:
     command:
       - >-
         ollama pull qwen3:8b &&
+        ollama pull qwen3.5:9b &&
+        ollama pull qwen3.5:27b &&
         ollama pull nomic-embed-text
     environment:
       OLLAMA_HOST: http://ollama:11434
@@ -324,6 +326,10 @@ services:
         curl --fail --silent --show-error
         --request POST
         http://speaches:8000/v1/models/Systran/faster-distil-whisper-small.en
+        &&
+        curl --fail --silent --show-error
+        --request POST
+        http://speaches:8000/v1/models/deepdml/faster-whisper-large-v3-turbo-ct2
     volumes:
       - lcdash_speaches_models:/home/ubuntu/.cache/huggingface/hub
     networks:
@@ -331,6 +337,18 @@ services:
     depends_on:
       speaches:
         condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+
+  parakeet-benchmark:
+    profiles: ["benchmark"]
+    build:
+      context: ./parakeet-benchmark
+      dockerfile: Dockerfile
+    gpus: all
+    volumes:
+      - lcdash_parakeet_models:/root/.cache/huggingface/hub
+      - /srv/lcdash-data/recordings/benchmarks:/audio:ro
     security_opt:
       - no-new-privileges:true
 
@@ -387,6 +405,7 @@ volumes:
   lcdash_ollama_data:
   lcdash_openwebui_data:
   lcdash_speaches_models:
+  lcdash_parakeet_models:
 
 secrets:
   centralsquare_username:

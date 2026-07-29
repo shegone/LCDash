@@ -108,7 +108,9 @@ server's Radeon integrated GPU through Vulkan when supported.
 
 Installed baseline models:
 
-- `qwen3:8b` - fast general questions and future dashboard assistance
+- `qwen3.5:27b` - primary higher-quality MAE model
+- `qwen3.5:9b` - faster general chat and fallback model
+- `qwen3:8b` - retained compatibility fallback
 - `gpt-oss:20b` - higher-quality reasoning and tool-oriented workflows
 
 Open WebUI provides the general-purpose browser interface. A dedicated API key is
