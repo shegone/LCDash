@@ -5,6 +5,7 @@ ARCHIVE="${1:-}"
 CURRENT_DIR=/srv/lcdash-platform/current
 PLATFORM_DIR=/srv/lcdash-platform
 COMPOSE_FILE=deploy/compose.yaml
+HEALTH_ATTEMPTS="${DEPLOY_HEALTH_ATTEMPTS:-900}"
 
 if [ -z "${ARCHIVE}" ] || [ ! -f "${ARCHIVE}" ]; then
     echo "Deployment archive was not found."
@@ -55,7 +56,7 @@ fi
 
 if [ "${deployment_failed}" -eq 0 ]; then
     attempt=0
-    while [ "${attempt}" -lt 30 ]; do
+    while [ "${attempt}" -lt "${HEALTH_ATTEMPTS}" ]; do
         lcdash_status="$(curl -sS -o /dev/null -w '%{http_code}' \
             http://127.0.0.1:8010/dashboard 2>/dev/null || true)"
         webui_status="$(curl -sS -o /dev/null -w '%{http_code}' \
