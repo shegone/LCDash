@@ -400,6 +400,7 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: lcdash-cloudflared
     restart: unless-stopped
+    user: "1000:1000"
     network_mode: host
     command:
       - tunnel
