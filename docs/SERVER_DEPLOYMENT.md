@@ -8,7 +8,7 @@ LCDash runs as a private Docker Compose platform on the Logan County server.
 - `lcdash-postgres` - dedicated PostgreSQL analytics database
 - `lcdash-analytics-worker` - recurring CentralSquare completed-call collector
 - `lcdash-postgres-backup` - daily compressed database backup
-- `lcdash-ollama` - private local AI API with Vulkan acceleration
+- `lcdash-ollama` - private local AI API with NVIDIA GPU acceleration
 - `lcdash-open-webui` - authenticated browser interface for local AI
 
 ## Security model
@@ -23,16 +23,16 @@ LCDash runs as a private Docker Compose platform on the Logan County server.
 ## Server paths
 
 ```text
-/home/ted/lcdash
-/home/ted/lcdash-platform/secrets
-/home/ted/lcdash-platform/backups
-/home/ted/lcdash-platform/legacy-reference
+/srv/lcdash-platform/current
+/srv/lcdash-platform/secrets
+/srv/lcdash-data/backups
+/srv/lcdash-data/documents
 ```
 
 The exact credential record is:
 
 ```text
-/home/ted/lcdash-platform/secrets/platform-credentials.txt
+/srv/lcdash-platform/secrets/platform-credentials.txt
 ```
 
 It must remain mode `600` and must never be committed to GitHub.
@@ -40,7 +40,7 @@ It must remain mode `600` and must never be committed to GitHub.
 ## Start or update
 
 ```bash
-cd /home/ted/lcdash
+cd /srv/lcdash-platform/current
 docker compose -f deploy/compose.yaml up -d --build
 ```
 
@@ -54,7 +54,7 @@ E:\Projects\LCDash\scripts\deploy_server.ps1
 
 The deployment tool:
 
-1. Requires the `feature/authentication` branch.
+1. Requires the `deployment/ubuntu-nvidia-227` branch during migration.
 2. Refuses to deploy uncommitted files.
 3. Confirms Windows and GitHub point to the same commit.
 4. Packages only Git-tracked files.
@@ -66,7 +66,7 @@ The deployment tool:
 ## Check status
 
 ```bash
-cd /home/ted/lcdash
+cd /srv/lcdash-platform/current
 docker compose -f deploy/compose.yaml ps
 ```
 
@@ -78,7 +78,7 @@ Create an SSH tunnel from the Windows workstation:
 ssh -i "$env:USERPROFILE\.ssh\lcdash_server_ed25519" `
     -L 8010:127.0.0.1:8010 `
     -L 3000:127.0.0.1:3000 `
-    ted@14.1.1.177
+    administrator@14.1.1.227
 ```
 
 Then open:
@@ -96,7 +96,7 @@ overlaps the previous collection window, and upserts records to avoid duplicates
 Database backups are created daily under:
 
 ```text
-/home/ted/lcdash-platform/backups/postgresql
+/srv/lcdash-data/backups/postgresql
 ```
 
 The default retention period is 30 days.
@@ -131,9 +131,9 @@ lcdash_analytics.jack_evaluation_runs
 The complete manual-grounded baseline can be run from the server with:
 
 ```bash
-cd /home/ted/lcdash
+cd /srv/lcdash-platform/current
 python scripts/jack_reliability_baseline.py \
-    --output /home/ted/lcdash-platform/backups/jack-baseline.json
+    --output /srv/lcdash-data/backups/jack-baseline.json
 ```
 
 The runner calls the local LCDash API sequentially and does not change
@@ -145,7 +145,7 @@ The production stack provides authenticated, read-only webhook receivers for
 CentralSquare CFS and unit changes. The secret is mounted from:
 
 ```text
-/home/ted/lcdash-platform/secrets/centralsquare_webhook_secret
+/srv/lcdash-platform/secrets/centralsquare_webhook_secret
 ```
 
 Delivery metadata is stored in:
@@ -158,9 +158,11 @@ Raw CentralSquare webhook payloads are not stored in that table. See
 `docs/REALTIME_EVENTS.md` for the receiver URLs, Cloudflare boundary, activation
 checklist, and subscription requirements.
 
-The production CFS and unit subscriptions are active. Their identifiers and the
-callback secret are recorded only in:
+The existing production CFS and unit subscriptions remain active on the
+`.177` server during migration. Do not activate `.227` subscriptions until
+the controlled cutover. Their identifiers and the callback secret are
+recorded only in:
 
 ```text
-/home/ted/lcdash-platform/secrets/platform-credentials.txt
+/srv/lcdash-platform/secrets/platform-credentials.txt
 ```
