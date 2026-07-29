@@ -60,7 +60,7 @@ audio. Enabling VAD reduced that repetition but also removed valid low-volume
 telephone speech, so VAD is not enabled by default. Long-form transcription
 should later preserve segment timestamps and confidence metadata for review.
 
-## Current recorder validation
+## Deferred research: current recorder validation
 
 Six authorized recordings from the current recorder were tested locally:
 three telephone calls, two law-radio clips, and one EMS-radio clip. They use
@@ -70,9 +70,10 @@ the repository.
 
 The telephone recordings contain materially different content in the left and
 right channels. Mixing them to mono before recognition caused overlapping
-speech and increased repetition errors. The production recording pipeline
-should therefore preserve and transcribe the two channels separately, then
-merge timestamped results for display.
+speech and increased repetition errors. A future recording pipeline would
+need to preserve and transcribe the two channels separately, then merge
+timestamped results for display. This work is not part of the current server
+migration and is not enabled.
 
 | Phone sample | Duration | Parakeet left/right words | Large-v3 Turbo left/right words |
 | --- | ---: | ---: | ---: |
@@ -87,7 +88,8 @@ better at some dispatch codes and formatting. The radio samples had matching
 content in both channels, so duplicate-channel detection should prevent
 transcribing them twice.
 
-The intended recording workflow is:
+If recording intelligence is authorized as a future project, its proposed
+workflow is:
 
 1. Detect mono, true stereo, or duplicated stereo.
 2. Preserve true stereo and transcribe each side independently.
@@ -103,11 +105,12 @@ The intended recording workflow is:
 - Compatibility fallback: `qwen3:8b`
 - Live STT default: `deepdml/faster-whisper-large-v3-turbo-ct2`
 - Fast STT fallback: `Systran/faster-distil-whisper-small.en`
-- Planned long-recording STT: `nvidia/parakeet-tdt-0.6b-v3`
+- Deferred long-recording research: `nvidia/parakeet-tdt-0.6b-v3`
 - TTS: `speaches-ai/Kokoro-82M-v1.0-ONNX`
 
 ## Required follow-up
 
-Continue expanding the local evaluation set with different radio channels,
-microphones, accents, street names, overlapping speech, and background noise.
-Never treat an automated transcript as the authoritative recording.
+For the current migration, validate interactive WebUI voice input only.
+Additional recorder evaluation is deferred until recording intelligence is
+separately authorized. Never treat an automated transcript as the
+authoritative recording.
