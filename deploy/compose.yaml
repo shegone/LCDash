@@ -396,6 +396,25 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: lcdash-cloudflared
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - tunnel
+      - --no-autoupdate
+      - run
+      - --token-file
+      - /run/secrets/cloudflare_tunnel_token
+    secrets:
+      - cloudflare_tunnel_token
+    depends_on:
+      lcdash:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+
 networks:
   lcdash_private:
     name: lcdash_private
@@ -422,3 +441,5 @@ secrets:
     file: /srv/lcdash-platform/secrets/openwebui_secret_key
   openwebui_admin_password:
     file: /srv/lcdash-platform/secrets/openwebui_admin_password
+  cloudflare_tunnel_token:
+    file: /srv/lcdash-platform/secrets/cloudflare_tunnel_token
