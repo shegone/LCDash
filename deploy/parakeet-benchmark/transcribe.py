@@ -52,6 +52,7 @@ def main() -> None:
     with torch.inference_mode():
         output = model.generate(
             **inputs,
+            max_new_tokens=2048,
             return_dict_in_generate=True,
         )
     torch.cuda.synchronize()
