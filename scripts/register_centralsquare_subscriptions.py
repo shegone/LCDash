@@ -22,10 +22,10 @@ def _callback_url(public_base_url: str, source: str, secret: str) -> str:
     )
 
 
-def _existing_subscription(
+def _existing_subscription_record(
     client: CentralSquareClient,
     callback_url: str,
-) -> int | None:
+) -> dict | None:
     result = client.post(
         f"{settings.system_base_url}/subscriptions/search",
         json={"CallbackURL": callback_url},
@@ -37,10 +37,29 @@ def _existing_subscription(
             isinstance(subscription, dict)
             and subscription.get("CallbackURL") == callback_url
         ):
-            value = subscription.get("WebhookUniqueIdentifier")
-            if isinstance(value, int):
-                return value
+            return subscription
     return None
+
+
+def _existing_subscription(
+    client: CentralSquareClient,
+    callback_url: str,
+) -> int | None:
+    subscription = _existing_subscription_record(client, callback_url)
+    if not subscription:
+        return None
+    value = subscription.get("WebhookUniqueIdentifier")
+    return value if isinstance(value, int) else None
+
+
+def _safe_subscription_summary(subscription: dict | None) -> dict | None:
+    if not subscription:
+        return None
+    return {
+        key: value
+        for key, value in subscription.items()
+        if key != "CallbackURL"
+    }
 
 
 def _create_subscription(
@@ -111,15 +130,17 @@ def inspect_subscriptions(
     if not secret:
         raise RuntimeError("The CentralSquare webhook secret is not configured.")
 
+    cfs_record = _existing_subscription_record(
+        client,
+        _callback_url(public_base_url, "cfs", secret),
+    )
+    unit_record = _existing_subscription_record(
+        client,
+        _callback_url(public_base_url, "units", secret),
+    )
     return {
-        "cfs_subscription_id": _existing_subscription(
-            client,
-            _callback_url(public_base_url, "cfs", secret),
-        ),
-        "unit_subscription_id": _existing_subscription(
-            client,
-            _callback_url(public_base_url, "units", secret),
-        ),
+        "cfs_subscription": _safe_subscription_summary(cfs_record),
+        "unit_subscription": _safe_subscription_summary(unit_record),
     }
 
 

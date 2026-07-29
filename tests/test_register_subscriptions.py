@@ -129,8 +129,11 @@ class RegisterSubscriptionTests(unittest.TestCase):
             "secret",
         )
 
-        self.assertEqual(result["cfs_subscription_id"], 10)
-        self.assertIsNone(result["unit_subscription_id"])
+        self.assertEqual(
+            result["cfs_subscription"],
+            {"WebhookUniqueIdentifier": 10},
+        )
+        self.assertIsNone(result["unit_subscription"])
         self.assertEqual(
             [call for call in client.calls if not call[0].endswith("/search")],
             [],
