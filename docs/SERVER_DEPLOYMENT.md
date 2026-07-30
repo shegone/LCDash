@@ -8,6 +8,7 @@ LCDash runs as a private Docker Compose platform on the Logan County server.
 - `lcdash-postgres` - dedicated PostgreSQL analytics database
 - `lcdash-analytics-worker` - recurring CentralSquare completed-call collector
 - `lcdash-postgres-backup` - daily compressed database backup
+- `lcdash-offsite-backup-sync` - encrypted Google Drive backup copy
 - `lcdash-ollama` - private local AI API with NVIDIA GPU acceleration
 - `lcdash-open-webui` - authenticated browser interface for local AI
 - `lcdash-cloudflared` - authenticated Cloudflare Tunnel connector for public access
@@ -103,6 +104,33 @@ Database backups are created daily under:
 ```
 
 The default retention period is 30 days.
+
+### Encrypted off-machine backups
+
+The `lcdash-offsite-backup-sync` service copies approved recovery artifacts to
+the existing `lcdash-backup:server-227` rclone crypt remote once per day.
+Encryption occurs locally before Google Drive receives file contents or names.
+
+Included:
+
+- compressed PostgreSQL backups;
+- verified Open WebUI snapshots;
+- approved knowledge snapshots;
+- JACK recovery exports; and
+- recovery manifests.
+
+Excluded:
+
+- `/srv/lcdash-platform/secrets`;
+- the protected credential record;
+- raw live CAD payloads; and
+- recordings and model files.
+
+The latest result is recorded locally in:
+
+```text
+/srv/lcdash-data/backups/.offsite-sync-status
+```
 
 ## Local AI
 

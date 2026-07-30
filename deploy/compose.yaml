@@ -189,6 +189,24 @@ services:
     healthcheck:
       disable: true
 
+  rclone-config-loader:
+    image: rclone/rclone:latest
+    container_name: lcdash-rclone-config-loader
+    entrypoint: ["/bin/sh", "-lc"]
+    command:
+      - >-
+        if [ ! -s /config/rclone/rclone.conf ]; then
+          cp /run/secrets/rclone_config_seed /config/rclone/rclone.conf;
+          chown 1000:1000 /config/rclone/rclone.conf;
+          chmod 600 /config/rclone/rclone.conf;
+        fi
+    secrets:
+      - rclone_config_seed
+    volumes:
+      - lcdash_rclone_config:/config/rclone
+    security_opt:
+      - no-new-privileges:true
+
   knowledge-drive-sync:
     image: rclone/rclone:latest
     container_name: lcdash-knowledge-drive-sync
@@ -201,10 +219,13 @@ services:
       KNOWLEDGE_SYNC_INTERVAL_SECONDS: "900"
     volumes:
       - ../scripts/sync_knowledge_drive.sh:/opt/lcdash/sync_knowledge_drive.sh:ro
-      - /srv/lcdash-platform/secrets/rclone.conf:/config/rclone/rclone.conf:ro
+      - lcdash_rclone_config:/config/rclone
       - /srv/lcdash-data/documents/centralsquare:/knowledge/centralsquare
     networks:
       - lcdash_private
+    depends_on:
+      rclone-config-loader:
+        condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
     healthcheck:
@@ -222,10 +243,13 @@ services:
       MINDSHARE_KNOWLEDGE_SYNC_INTERVAL_SECONDS: "900"
     volumes:
       - ../scripts/sync_mindshare_drive.sh:/opt/lcdash/sync_mindshare_drive.sh:ro
-      - /srv/lcdash-platform/secrets/rclone.conf:/config/rclone/rclone.conf:ro
+      - lcdash_rclone_config:/config/rclone
       - /srv/lcdash-data/documents/mindshare:/knowledge/mindshare
     networks:
       - lcdash_private
+    depends_on:
+      rclone-config-loader:
+        condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
     healthcheck:
@@ -340,6 +364,30 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  offsite-backup-sync:
+    image: rclone/rclone:latest
+    container_name: lcdash-offsite-backup-sync
+    restart: unless-stopped
+    user: "1000:1000"
+    entrypoint: ["/bin/sh", "/opt/lcdash/sync_offsite_backups.sh"]
+    environment:
+      OFFSITE_BACKUP_SOURCE: /backups
+      OFFSITE_BACKUP_REMOTE: lcdash-backup:server-227
+      OFFSITE_BACKUP_INTERVAL_SECONDS: "86400"
+    volumes:
+      - ../scripts/sync_offsite_backups.sh:/opt/lcdash/sync_offsite_backups.sh:ro
+      - lcdash_rclone_config:/config/rclone
+      - /srv/lcdash-data/backups:/backups
+    depends_on:
+      rclone-config-loader:
+        condition: service_completed_successfully
+      postgres-backup:
+        condition: service_started
+    networks:
+      - lcdash_private
+    security_opt:
+      - no-new-privileges:true
+
   parakeet-benchmark:
     profiles: ["benchmark"]
     build:
@@ -426,6 +474,7 @@ volumes:
   lcdash_openwebui_data:
   lcdash_speaches_models:
   lcdash_parakeet_models:
+  lcdash_rclone_config:
 
 secrets:
   centralsquare_username:
@@ -444,3 +493,5 @@ secrets:
     file: /srv/lcdash-platform/secrets/openwebui_admin_password
   cloudflare_tunnel_token:
     file: /srv/lcdash-platform/secrets/cloudflare_tunnel_token
+  rclone_config_seed:
+    file: /srv/lcdash-platform/secrets/rclone.conf
