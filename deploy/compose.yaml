@@ -197,9 +197,10 @@ services:
       - >-
         if [ ! -s /config/rclone/rclone.conf ]; then
           cp /run/secrets/rclone_config_seed /config/rclone/rclone.conf;
-          chown 1000:1000 /config/rclone/rclone.conf;
-          chmod 600 /config/rclone/rclone.conf;
-        fi
+        fi;
+        chown 1000:1000 /config/rclone /config/rclone/rclone.conf;
+        chmod 700 /config/rclone;
+        chmod 600 /config/rclone/rclone.conf
     secrets:
       - rclone_config_seed
     volumes:
