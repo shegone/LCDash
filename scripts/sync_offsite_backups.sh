@@ -14,6 +14,7 @@ while true; do
         --filter "+ /knowledge-*.tar.gz" \
         --filter "- **" \
         --min-size 1M \
+        --min-age 5m \
         --checksum \
         --metadata \
         --create-empty-src-dirs \
