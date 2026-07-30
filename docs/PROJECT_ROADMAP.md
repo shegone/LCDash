@@ -63,3 +63,21 @@ Build a secure web-based operations dashboard for Logan County 911 using the Cen
 - Add private speech-to-text transcription
 - Define access, retention, audit, and recording rules
 - Keep technical assistant and radio intelligence permissions separate
+
+## Phase 9 - Station Alert Voice Announcements
+
+- After station alert tones finish, allow MAE to read approved CAD call
+  information through the local text-to-speech service
+- Keep tones authoritative and never delay, interrupt, or block the initial
+  station alert
+- Let supervisors configure which fields may be spoken, such as call type,
+  assigned station or units, general location, and approved response notes
+- Exclude sensitive, restricted, or unverified narrative fields by default
+- Provide pronunciation rules for road names, unit identifiers, abbreviations,
+  and Logan County place names
+- Allow repeat, mute, volume, voice, and speaking-speed controls at each
+  authorized station
+- Log announcement generation and delivery status without storing unnecessary
+  spoken call details
+- Fall back to tones and the existing visual alert whenever voice generation
+  or station audio is unavailable
