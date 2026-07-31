@@ -183,6 +183,9 @@ class NGA911IntelligencePageTests(unittest.TestCase):
         self.assertIn("What happened", response.text)
         self.assertIn("Calls affected", response.text)
         self.assertIn("Interruption timeline", response.text)
+        self.assertIn("Acknowledge alert", response.text)
+        self.assertIn("Return to live network", response.text)
+        self.assertIn('data-event-id="evt-logan-2387"', response.text)
         self.assertIn("synthetic", response.text.lower())
 
     def test_disruption_test_links_to_matching_verizon_event(self):
