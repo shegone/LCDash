@@ -257,11 +257,11 @@ class MockNGA911IntelligenceProvider:
         now = datetime.now(timezone.utc)
         days = max(1, min(days, 14))
         paths = [
-            {"id": "verizon-fiber", "name": "Verizon Fiber", "technology": "Fiber", "status": "healthy", "latency_ms": 18, "jitter_ms": 2.1, "packet_loss_percent": 0.02, "availability_percent": 99.999, "last_change": _timestamp(now, 340)},
-            {"id": "optimum-fiber", "name": "Optimum Fiber", "technology": "Fiber", "status": "healthy", "latency_ms": 23, "jitter_ms": 3.4, "packet_loss_percent": 0.04, "availability_percent": 99.997, "last_change": _timestamp(now, 510)},
-            {"id": "firstnet-cradlepoint", "name": "FirstNet Cradlepoint", "technology": "LTE", "status": "healthy", "latency_ms": 51, "jitter_ms": 8.8, "packet_loss_percent": 0.18, "availability_percent": 99.982, "last_change": _timestamp(now, 74)},
-            {"id": "verizon-cradlepoint", "name": "Verizon Cradlepoint", "technology": "LTE", "status": "degraded", "latency_ms": 94, "jitter_ms": 31.7, "packet_loss_percent": 1.42, "availability_percent": 99.941, "last_change": _timestamp(now, 9)},
-            {"id": "starlink", "name": "Starlink", "technology": "LEO Satellite", "status": "healthy", "latency_ms": 68, "jitter_ms": 12.5, "packet_loss_percent": 0.31, "availability_percent": 99.963, "last_change": _timestamp(now, 132)},
+            {"id": "verizon-fiber", "name": "Verizon Fiber", "technology": "Fiber", "status": "healthy", "latency_ms": 18, "jitter_ms": 2.1, "packet_loss_percent": 0.02, "availability_percent": 99.999, "last_change": _timestamp(now, 340), "recent_event_id": "evt-logan-2368"},
+            {"id": "optimum-fiber", "name": "Optimum Fiber", "technology": "Fiber", "status": "healthy", "latency_ms": 23, "jitter_ms": 3.4, "packet_loss_percent": 0.04, "availability_percent": 99.997, "last_change": _timestamp(now, 510), "recent_event_id": "evt-logan-2387"},
+            {"id": "firstnet-cradlepoint", "name": "FirstNet Cradlepoint", "technology": "LTE", "status": "healthy", "latency_ms": 51, "jitter_ms": 8.8, "packet_loss_percent": 0.18, "availability_percent": 99.982, "last_change": _timestamp(now, 74), "recent_event_id": "evt-logan-2393"},
+            {"id": "verizon-cradlepoint", "name": "Verizon Cradlepoint", "technology": "LTE", "status": "degraded", "latency_ms": 94, "jitter_ms": 31.7, "packet_loss_percent": 1.42, "availability_percent": 99.941, "last_change": _timestamp(now, 9), "recent_event_id": "evt-logan-2401"},
+            {"id": "starlink", "name": "Starlink", "technology": "LEO Satellite", "status": "healthy", "latency_ms": 68, "jitter_ms": 12.5, "packet_loss_percent": 0.31, "availability_percent": 99.963, "last_change": _timestamp(now, 132), "recent_event_id": "evt-logan-2398"},
         ]
         consoles = [
             {"id": f"position-{number}", "name": f"Position {number}", "status": status, "dispatcher": dispatcher, "session_started": _timestamp(now, minutes), "calls_answered": calls, "average_answer_seconds": answer, "active_call_seconds": active, "barge_count": barge, "whisper_count": whisper, "observe_count": observe}
