@@ -61,6 +61,8 @@ class NGA911IntelligenceServiceTests(unittest.TestCase):
             "Verizon Fiber", "Optimum Fiber", "FirstNet Cradlepoint",
             "Verizon Cradlepoint", "Starlink",
         })
+        self.assertIn("Dylan Maples", {console["dispatcher"] for console in operations["consoles"]})
+        self.assertIn("synthetic", operations["identity_note"])
 
     def test_history_query_is_limited_and_events_are_retrievable(self):
         self.assertEqual(len(get_nga911_logan_operations(7)["daily_history"]), 7)

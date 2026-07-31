@@ -266,12 +266,12 @@ class MockNGA911IntelligenceProvider:
         consoles = [
             {"id": f"position-{number}", "name": f"Position {number}", "status": status, "dispatcher": dispatcher, "session_started": _timestamp(now, minutes), "calls_answered": calls, "average_answer_seconds": answer, "active_call_seconds": active, "barge_count": barge, "whisper_count": whisper, "observe_count": observe}
             for number, status, dispatcher, minutes, calls, answer, active, barge, whisper, observe in [
-                (1, "active_call", "A. Bryant", 287, 34, 7.8, 184, 0, 1, 2),
-                (2, "ready", "M. Ellis", 252, 29, 8.4, 0, 0, 0, 1),
-                (3, "ringing", "J. Carter", 198, 22, 6.9, 0, 1, 0, 3),
-                (4, "ready", "S. Hall", 176, 18, 9.1, 0, 0, 1, 0),
+                (1, "active_call", "Dylan Maples", 287, 34, 7.8, 184, 0, 1, 2),
+                (2, "ready", "Jonathan Butcher", 252, 29, 8.4, 0, 0, 0, 1),
+                (3, "ringing", "Amanda Crum", 198, 22, 6.9, 0, 1, 0, 3),
+                (4, "ready", "TJ Vance", 176, 18, 9.1, 0, 0, 1, 0),
                 (5, "signed_out", None, 0, 0, 0, 0, 0, 0, 0),
-                (6, "ready", "T. Morgan", 91, 11, 7.2, 0, 0, 0, 1),
+                (6, "ready", "Brianna Blankenship", 91, 11, 7.2, 0, 0, 0, 1),
             ]
         ]
         event_specs = [
@@ -315,6 +315,7 @@ class MockNGA911IntelligenceProvider:
             "core": {"name": "NGA ESInet / NEXiSCore", "status": "operational", "region": "Cloud-native active-active simulation"},
             "center": {"name": "Logan County 911", "status": "protected", "healthy_paths": 4, "total_paths": 5},
             "paths": paths, "consoles": consoles, "events": events, "daily_history": daily_history,
+            "identity_note": "Dispatcher display names are representative names observed in authorized Logan CAD activity; all phone presence and session metrics are synthetic.",
             "alert_policy": {"audible_enabled_by_user": False, "warning": "Yellow: impaired path", "critical": "Red: path unavailable", "unknown": "Gray: monitoring unavailable"},
         }
 
