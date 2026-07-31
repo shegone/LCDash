@@ -151,8 +151,8 @@ class NGA911IntelligencePageTests(unittest.TestCase):
         self.assertIn("Position 6", response.text)
         self.assertIn("DEMONSTRATION - SYNTHETIC DATA", response.text)
         self.assertIn("lcdash-nga911-operations.js?v=0.3.0", response.text)
-        self.assertIn("Logo-NGA-White-01-01.svg", response.text)
-        self.assertIn("Nex3s-Connect-Logo-White.png", response.text)
+        self.assertIn("/static/img/nga911-official-logo.svg", response.text)
+        self.assertIn("/static/img/nexis-connect-official-logo.png", response.text)
 
     def test_director_api_supports_history_and_event_detail(self):
         operations = self.client.get("/api/nga911/v1/director/operations?days=7")
