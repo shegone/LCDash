@@ -276,6 +276,12 @@ class StationAlertPageTests(unittest.TestCase):
         self.assertIn("endFrequency: 1350", script_response.text)
         self.assertIn("frequency: 1450", script_response.text)
         self.assertIn("lcdash.stationAlerts.stations", script_response.text)
+        self.assertIn('fetch("/api/voice/speech"', script_response.text)
+        self.assertIn('dispatchAudio.addEventListener("ended"', script_response.text)
+        self.assertIn("playAnnouncement(announcement)", script_response.text)
+        self.assertIn("playDispatchTone(alert.announcement)", script_response.text)
+        self.assertIn("announcementRequest.abort()", script_response.text)
+        self.assertIn("lcdash-station-alerts.js?v=0.5.0", response.text)
 
     @patch("app.main.get_live_station_alert_snapshot")
     def test_api_returns_sanitized_station_snapshot_and_no_store(self, snapshot_mock):

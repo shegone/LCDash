@@ -22,8 +22,13 @@
     let soundArmed = false;
     let dispatchAudio = null;
     let confirmationAudio = null;
+    let announcementAudio = null;
     let dispatchAudioUrl = "";
     let confirmationAudioUrl = "";
+    let announcementAudioUrl = "";
+    let announcementRequest = null;
+    let announcementCycle = 0;
+    let pendingAnnouncementText = "";
     let alertMap = null;
     let pollTimer = null;
     let firstSnapshotForStation = true;
@@ -243,6 +248,24 @@
         }
     }
 
+    function stopAnnouncement() {
+        announcementCycle += 1;
+        pendingAnnouncementText = "";
+        if (announcementRequest) {
+            announcementRequest.abort();
+            announcementRequest = null;
+        }
+        if (announcementAudio) {
+            announcementAudio.pause();
+            announcementAudio.currentTime = 0;
+            announcementAudio = null;
+        }
+        if (announcementAudioUrl) {
+            URL.revokeObjectURL(announcementAudioUrl);
+            announcementAudioUrl = "";
+        }
+    }
+
     function stopTone() {
         [dispatchAudio, confirmationAudio].forEach(function (audio) {
             if (!audio) {
@@ -251,6 +274,76 @@
             audio.pause();
             audio.currentTime = 0;
         });
+        stopAnnouncement();
+    }
+
+    async function playAnnouncement(announcement) {
+        const spokenText = String(announcement || "").trim();
+        if (!spokenText || !soundArmed || !overlay.classList.contains("visible")) {
+            updateArmedDisplay();
+            return;
+        }
+
+        stopAnnouncement();
+        const cycle = announcementCycle;
+        announcementRequest = new AbortController();
+        armStatus.dataset.audioState = "generating";
+        armStatus.innerHTML = '<span class="status-dot"></span> GENERATING MAE ANNOUNCEMENT';
+
+        try {
+            const response = await fetch("/api/voice/speech", {
+                method: "POST",
+                cache: "no-store",
+                headers: {
+                    "Accept": "audio/mpeg",
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    text: spokenText,
+                    voice: "",
+                    speed: 1.0,
+                    response_format: "mp3"
+                }),
+                signal: announcementRequest.signal
+            });
+            if (!response.ok) {
+                throw new Error("local speech returned " + response.status);
+            }
+
+            const audioBlob = await response.blob();
+            if (
+                cycle !== announcementCycle ||
+                !soundArmed ||
+                !overlay.classList.contains("visible")
+            ) {
+                return;
+            }
+
+            announcementRequest = null;
+            announcementAudioUrl = URL.createObjectURL(audioBlob);
+            announcementAudio = new Audio(announcementAudioUrl);
+            announcementAudio.preload = "auto";
+            announcementAudio.volume = 1;
+            announcementAudio.addEventListener("play", function () {
+                armStatus.dataset.audioState = "speaking";
+                armStatus.innerHTML = '<span class="status-dot"></span> MAE ANNOUNCEMENT PLAYING';
+            });
+            announcementAudio.addEventListener("ended", function () {
+                stopAnnouncement();
+                updateArmedDisplay();
+            });
+
+            const playback = announcementAudio.play();
+            if (playback && typeof playback.catch === "function") {
+                await playback;
+            }
+        } catch (error) {
+            if (error.name !== "AbortError" && cycle === announcementCycle) {
+                message.textContent = "Paging tones completed, but MAE could not speak: " + error.message;
+                stopAnnouncement();
+                updateArmedDisplay();
+            }
+        }
     }
 
     function writeWaveString(view, offset, value) {
@@ -353,8 +446,14 @@
                 armStatus.innerHTML = '<span class="status-dot"></span> PAGING AUDIO PLAYING';
             });
             dispatchAudio.addEventListener("ended", function () {
-                armStatus.dataset.audioState = "ready";
-                updateArmedDisplay();
+                const announcement = pendingAnnouncementText;
+                pendingAnnouncementText = "";
+                if (announcement) {
+                    playAnnouncement(announcement);
+                } else {
+                    armStatus.dataset.audioState = "ready";
+                    updateArmedDisplay();
+                }
             });
         }
 
@@ -415,13 +514,14 @@
         return soundArmed;
     }
 
-    function playDispatchTone() {
+    function playDispatchTone(announcement) {
         if (!soundArmed) {
             return;
         }
 
         ensureAudioPlayers();
         stopTone();
+        pendingAnnouncementText = String(announcement || "").trim();
         playAudio(
             dispatchAudio,
             "The browser blocked the station alert audio. Check the tab sound permission."
@@ -516,7 +616,7 @@
         overlay.classList.add("visible");
         renderAlertMap(alert);
         if (soundArmed) {
-            playDispatchTone();
+            playDispatchTone(alert.announcement);
         }
     }
 
@@ -545,6 +645,12 @@
             return;
         }
 
+        const now = new Date();
+        const stationNumber = String(selectedStations[0] || "100")
+            .replace(/^(station|sta)\s*[-:#]?\s*/i, "")
+            .trim();
+        const testTime = String(now.getHours()).padStart(2, "0") +
+            String(now.getMinutes()).padStart(2, "0");
         const demo = {
             incident_code: "STRUCT",
             incident_description: "TEST — Commercial Structure Fire",
@@ -558,6 +664,9 @@
             station_names: selectedStations.length ? selectedStations : ["TEST STATION"],
             cfs_number: "TEST-CFS-STRUCTURE-FIRE",
             dispatch_datetime: new Date().toISOString(),
+            announcement: "Station " + stationNumber +
+                ", respond to 911 Mark Spurlock Drive for a test commercial structure fire. Time is " +
+                testTime + ".",
             latitude: 37.8507803,
             longitude: -81.9975482
         };
