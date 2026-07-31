@@ -3,7 +3,7 @@
 {% block title %}NGA911 Intelligence | LCDash{% endblock %}
 
 {% block page_styles %}
-<link rel="stylesheet" href="/static/css/lcdash-nga911.css?v=0.2.0">
+<link rel="stylesheet" href="/static/css/lcdash-nga911.css?v=0.3.2">
 {% endblock %}
 
 {% block content %}
@@ -16,6 +16,9 @@
             inside LCDash or as an independent NGA911 operations dashboard.
         </p>
         <div class="nga-hero-actions">
+            <a class="btn btn-success fw-bold nga-live-network-cta" href="{{ '/nga911/operations' if standalone else '/nga911-intelligence/operations' }}">
+                <i class="bi bi-activity"></i> Open Live Network
+            </a>
             <button class="btn btn-info fw-bold" id="nga-refresh" type="button">
                 <i class="bi bi-arrow-clockwise"></i> Refresh Simulation
             </button>

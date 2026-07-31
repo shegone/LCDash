@@ -84,8 +84,10 @@ class NGA911IntelligencePageTests(unittest.TestCase):
         self.assertIn("DEMONSTRATION - SYNTHETIC DATA", response.text)
         self.assertIn("County and PSAP Overview", response.text)
         self.assertIn("Human-authorized operations", response.text)
-        self.assertIn("/static/css/lcdash-nga911.css?v=0.2.0", response.text)
+        self.assertIn("/static/css/lcdash-nga911.css?v=0.3.2", response.text)
         self.assertIn("/static/js/lcdash-nga911.js?v=0.1.1", response.text)
+        self.assertIn("Open Live Network", response.text)
+        self.assertIn('href="/nga911-intelligence/operations"', response.text)
 
     def test_versioned_api_returns_synthetic_contract(self):
         response = self.client.get("/api/nga911/v1/intelligence/overview")
@@ -107,6 +109,7 @@ class NGA911IntelligencePageTests(unittest.TestCase):
         self.assertIn("DEMONSTRATION - SYNTHETIC DATA", response.text)
         self.assertNotIn('href="/station-alerts"', response.text)
         self.assertNotIn('href="/mindshare"', response.text)
+        self.assertIn('href="/nga911/operations"', response.text)
 
     def test_embedded_county_page_shows_operational_detail(self):
         response = self.client.get("/nga911-intelligence/counties/demo-logan")
