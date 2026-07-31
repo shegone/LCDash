@@ -151,6 +151,8 @@ class NGA911IntelligencePageTests(unittest.TestCase):
         self.assertIn("Position 6", response.text)
         self.assertIn("DEMONSTRATION - SYNTHETIC DATA", response.text)
         self.assertIn("lcdash-nga911-operations.js?v=0.3.0", response.text)
+        self.assertIn("lcdash-nga911.css?v=0.3.1", response.text)
+        self.assertIn("lcdash-nga911-standalone.css?v=0.3.1", response.text)
         self.assertIn("/static/img/nga911-official-logo.svg", response.text)
         self.assertIn("/static/img/nexis-connect-official-logo.png", response.text)
 
