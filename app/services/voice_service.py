@@ -31,7 +31,16 @@ def _base_url() -> str:
 
 def prepare_text_for_speech(text: str) -> str:
     """Apply LCDash pronunciation rules without changing displayed text."""
-    prepared = re.sub(r"\bMAE\b", "May", text, flags=re.IGNORECASE)
+    prepared = str(text or "")
+    prepared = re.sub(r"(?m)^\s{0,3}#{1,6}\s*", "", prepared)
+    prepared = re.sub(r"(?m)^\s*[-*+]\s+", "", prepared)
+    prepared = re.sub(r"(?m)^\s*\d+[.)]\s+", "", prepared)
+    prepared = re.sub(r"[*_`~]", "", prepared)
+    prepared = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", prepared)
+    prepared = re.sub(r"\s*\n+\s*", ". ", prepared)
+    prepared = re.sub(r"([.!?])\.\s+", r"\1 ", prepared)
+    prepared = re.sub(r"\s+", " ", prepared).strip()
+    prepared = re.sub(r"\bMAE\b", "May", prepared, flags=re.IGNORECASE)
     prepared = re.sub(
         r"\bNGA[\s-]*9[\s-]*1[\s-]*1\b",
         "N G A nine one one",

@@ -76,6 +76,13 @@ class VoicePageTests(unittest.TestCase):
             prepare_text_for_speech("NGA911 protects 911 calls."),
             "N G A nine one one protects nine one one calls.",
         )
+        self.assertEqual(
+            prepare_text_for_speech(
+                "## **Executive Summary**\n* **Network:** NGA911 is healthy.\n"
+                "1. Review the [event details](https://example.test/event)."
+            ),
+            "Executive Summary. Network: N G A nine one one is healthy. Review the event details.",
+        )
 
 
 if __name__ == "__main__":
