@@ -107,6 +107,11 @@ from app.services.nga911_intelligence_service import (
     get_nga911_logan_event,
     get_nga911_logan_operations,
 )
+from app.services.nga911_nova_service import (
+    NOVAServiceError,
+    ask_nova,
+    get_nova_status,
+)
 
 app = FastAPI(
     title="LCDash",
@@ -140,6 +145,11 @@ class MAEChatRequest(BaseModel):
 
 
 class MindshareChatRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=4000)
+    history: list[MAEHistoryMessage] = Field(default_factory=list, max_length=6)
+
+
+class NOVAChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
     history: list[MAEHistoryMessage] = Field(default_factory=list, max_length=6)
 
@@ -1042,6 +1052,35 @@ def nga911_director_event_page(event_id: str, request: Request):
         context={"event": event, "standalone": request.url.path.startswith("/nga911/events/"), "version": "0.3.0"},
         headers={"Cache-Control": "no-store"},
     )
+
+
+@app.get("/nga911/nova")
+@app.get("/nga911-intelligence/nova")
+def nga911_nova_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="nga911_nova.html",
+        context={"standalone": request.url.path == "/nga911/nova", "version": "0.1.0"},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/nga911/v1/nova/status")
+def nga911_nova_status_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    return get_nova_status()
+
+
+@app.post("/api/nga911/v1/nova/chat")
+def nga911_nova_chat_api(chat_request: NOVAChatRequest, response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return ask_nova(
+            chat_request.question,
+            [message.model_dump() for message in chat_request.history],
+        )
+    except NOVAServiceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.get("/knowledge/documents/{library_key}/{document_id}")
