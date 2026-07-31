@@ -3,7 +3,7 @@
 {% block title %}NGA911 Intelligence | LCDash{% endblock %}
 
 {% block page_styles %}
-<link rel="stylesheet" href="/static/css/lcdash-nga911.css?v=0.1.0">
+<link rel="stylesheet" href="/static/css/lcdash-nga911.css?v=0.2.0">
 {% endblock %}
 
 {% block content %}
@@ -127,7 +127,7 @@
                     <tbody id="nga-county-table">
                     {% for county in overview.counties %}
                     <tr>
-                        <td><strong>{{ county.name }}</strong></td>
+                        <td><a class="nga-county-link" href="{{ '/nga911/counties/' if standalone else '/nga911-intelligence/counties/' }}{{ county.id }}"><strong>{{ county.name }}</strong><i class="bi bi-chevron-right"></i></a></td>
                         <td><span class="nga-status {{ county.status }}">{{ county.status|upper }}</span></td>
                         <td>{{ county.psaps }}</td>
                         <td>{{ "{:,}".format(county.sessions_24h) }}</td>

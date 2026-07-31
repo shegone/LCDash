@@ -7,6 +7,8 @@ from app.main import app
 from app.services.nga911_intelligence_service import (
     MockNGA911IntelligenceProvider,
     NGA911ProviderError,
+    get_nga911_counties,
+    get_nga911_county_detail,
     get_nga911_intelligence_overview,
 )
 
@@ -30,6 +32,20 @@ class NGA911IntelligenceServiceTests(unittest.TestCase):
         self.assertIn("summary", overview)
         self.assertIn("capabilities", overview)
 
+    def test_county_contract_is_isolated_and_synthetic(self):
+        detail = get_nga911_county_detail("demo-logan")
+
+        self.assertEqual(detail["schema_version"], "nga911-county-intelligence.v1")
+        self.assertTrue(detail["synthetic_data"])
+        self.assertEqual(detail["county"]["id"], "demo-logan")
+        self.assertGreater(len(detail["psaps"]), 0)
+        self.assertGreater(len(detail["call_paths"]), 0)
+        self.assertEqual(len(detail["session_trend"]), 24)
+        self.assertEqual(len(get_nga911_counties()), 4)
+
+    def test_unknown_county_returns_none(self):
+        self.assertIsNone(get_nga911_county_detail("not-a-county"))
+
 
 class NGA911IntelligencePageTests(unittest.TestCase):
     def setUp(self):
@@ -44,7 +60,7 @@ class NGA911IntelligencePageTests(unittest.TestCase):
         self.assertIn("DEMONSTRATION - SYNTHETIC DATA", response.text)
         self.assertIn("County and PSAP Overview", response.text)
         self.assertIn("Human-authorized operations", response.text)
-        self.assertIn("/static/css/lcdash-nga911.css?v=0.1.0", response.text)
+        self.assertIn("/static/css/lcdash-nga911.css?v=0.2.0", response.text)
         self.assertIn("/static/js/lcdash-nga911.js?v=0.1.1", response.text)
 
     def test_versioned_api_returns_synthetic_contract(self):
@@ -67,6 +83,36 @@ class NGA911IntelligencePageTests(unittest.TestCase):
         self.assertIn("DEMONSTRATION - SYNTHETIC DATA", response.text)
         self.assertNotIn('href="/station-alerts"', response.text)
         self.assertNotIn('href="/mindshare"', response.text)
+
+    def test_embedded_county_page_shows_operational_detail(self):
+        response = self.client.get("/nga911-intelligence/counties/demo-logan")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        self.assertIn("Logan County Demonstration", response.text)
+        self.assertIn("Resilient Call Paths", response.text)
+        self.assertIn("Source Confidence", response.text)
+        self.assertIn("DEMONSTRATION - SYNTHETIC DATA", response.text)
+
+    def test_standalone_county_page_keeps_standalone_shell(self):
+        response = self.client.get("/nga911/counties/demo-mountain")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Mountain Region Demonstration", response.text)
+        self.assertIn("Powered by the LCDash platform core", response.text)
+        self.assertNotIn('href="/station-alerts"', response.text)
+
+    def test_county_apis_are_versioned_and_return_404(self):
+        listing = self.client.get("/api/nga911/v1/counties")
+        detail = self.client.get("/api/nga911/v1/counties/demo-valley")
+        missing = self.client.get("/api/nga911/v1/counties/missing")
+
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(listing.json()["schema_version"], "nga911-counties.v1")
+        self.assertTrue(listing.json()["synthetic_data"])
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json()["county"]["id"], "demo-valley")
+        self.assertEqual(missing.status_code, 404)
 
     @patch("app.main.get_nga911_intelligence_overview")
     def test_page_explains_unconfigured_provider(self, overview):

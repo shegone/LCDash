@@ -1,0 +1,44 @@
+{% extends "layouts/nga911_base.html" if standalone else "layouts/base.html" %}
+
+{% block title %}{{ detail.county.name }} | NGA911 Intelligence{% endblock %}
+{% block page_styles %}<link rel="stylesheet" href="/static/css/lcdash-nga911.css?v=0.2.0">{% endblock %}
+
+{% block content %}
+<section class="nga-county-hero glass">
+    <div>
+        <a class="nga-back-link" href="{{ '/nga911' if standalone else '/nga911-intelligence' }}"><i class="bi bi-arrow-left"></i> Regional overview</a>
+        <div class="nga-kicker">COUNTY-ISOLATED INTELLIGENCE TENANT</div>
+        <h1>{{ detail.county.name }}</h1>
+        <p>Explainable NG911 service intelligence for authorized human review.</p>
+    </div>
+    <div class="nga-demo-ribbon">{{ detail.environment_label }}</div>
+</section>
+
+<section class="nga-metrics">
+    <article class="nga-metric glass"><i class="bi bi-telephone-inbound-fill"></i><span>24-HOUR SESSIONS</span><strong>{{ "{:,}".format(detail.summary.sessions_24h) }}</strong><small>Aggregate synthetic volume</small></article>
+    <article class="nga-metric glass"><i class="bi bi-shield-check"></i><span>AVAILABILITY</span><strong>{{ detail.summary.availability_percent }}%</strong><small>Conceptual service indicator</small></article>
+    <article class="nga-metric glass"><i class="bi bi-geo-alt-fill"></i><span>LOCATION CONFIDENCE</span><strong>{{ detail.summary.location_confidence_percent }}%</strong><small>High-confidence session share</small></article>
+    <article class="nga-metric glass"><i class="bi bi-stopwatch-fill"></i><span>MEDIAN DELIVERY</span><strong>{{ detail.summary.median_delivery_ms }} ms</strong><small>Simulated end-to-end signal</small></article>
+</section>
+
+<section class="nga-detail-grid">
+    <article class="nga-panel glass">
+        <header class="nga-panel-heading"><div><div class="nga-kicker">CALL DELIVERY</div><h2>Resilient Call Paths</h2></div><span class="nga-isolation-badge"><i class="bi bi-check-circle-fill"></i> ALTERNATE READY</span></header>
+        <div class="nga-path-list">{% for path in detail.call_paths %}<div class="nga-path"><i class="bi bi-diagram-3-fill"></i><div><strong>{{ path.name }}</strong><span>{{ path.role|upper }} · validated <time data-cad-time="{{ path.last_validated }}">{{ path.last_validated }}</time></span></div><b>{{ path.latency_ms }} ms</b><em>{{ path.status|upper }}</em></div>{% endfor %}</div>
+    </article>
+    <article class="nga-panel glass">
+        <header class="nga-panel-heading"><div><div class="nga-kicker">AUTHORIZED NODES</div><h2>PSAP Service Health</h2></div></header>
+        {% for psap in detail.psaps %}<div class="nga-psap-card"><div><span class="nga-status {{ psap.status }}">{{ psap.status|upper }}</span><h3>{{ psap.name }}</h3><p>{{ psap.ngcs }}</p></div><dl><div><dt>Sessions</dt><dd>{{ psap.sessions_24h }}</dd></div><div><dt>Latency</dt><dd>{{ psap.median_latency_ms }} ms</dd></div><div><dt>Heartbeat</dt><dd><time data-cad-time="{{ psap.last_heartbeat }}">{{ psap.last_heartbeat }}</time></dd></div></dl></div>{% endfor %}
+    </article>
+    <article class="nga-panel glass">
+        <header class="nga-panel-heading"><div><div class="nga-kicker">LOCATION QUALITY</div><h2>Source Confidence</h2></div></header>
+        <div class="nga-location-list">{% for source in detail.location_quality %}<div><div><strong>{{ source.source }}</strong><span>{{ source.share_percent }}% of sessions · {{ source.freshness_seconds }}s freshness</span></div><b>{{ source.confidence_percent }}%</b><progress max="100" value="{{ source.confidence_percent }}">{{ source.confidence_percent }}%</progress></div>{% endfor %}</div>
+    </article>
+    <article class="nga-panel glass">
+        <header class="nga-panel-heading"><div><div class="nga-kicker">SESSION TREND</div><h2>Last 24 Hours</h2></div></header>
+        <div class="nga-trend" aria-label="Synthetic hourly session trend">{% set peak = detail.session_trend|max(attribute='sessions') %}{% for point in detail.session_trend %}<div title="{{ point.hour }}: {{ point.sessions }} sessions"><span style="height: {{ (point.sessions / peak.sessions * 100)|round }}%"></span><small>{% if loop.index0 % 4 == 0 %}{{ point.hour }}{% endif %}</small></div>{% endfor %}</div>
+    </article>
+</section>
+
+<article class="nga-guardrail glass"><i class="bi bi-person-check-fill"></i><div><strong>Human-authorized operations</strong><p>{{ detail.guardrail }} This demonstration does not route calls or modify NGCS.</p></div></article>
+{% endblock %}

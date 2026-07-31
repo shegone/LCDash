@@ -101,6 +101,8 @@ from app.services.realtime_service import (
 )
 from app.services.nga911_intelligence_service import (
     NGA911ProviderError,
+    get_nga911_counties,
+    get_nga911_county_detail,
     get_nga911_intelligence_overview,
 )
 
@@ -920,6 +922,27 @@ def nga911_intelligence_overview_api(response: Response):
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+@app.get("/api/nga911/v1/counties")
+def nga911_counties_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return {"schema_version": "nga911-counties.v1", "synthetic_data": True, "counties": get_nga911_counties()}
+    except NGA911ProviderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/api/nga911/v1/counties/{county_id}")
+def nga911_county_api(county_id: str, response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        detail = get_nga911_county_detail(county_id)
+    except NGA911ProviderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if detail is None:
+        raise HTTPException(status_code=404, detail="NGA911 demonstration county not found")
+    return detail
+
+
 @app.get("/nga911")
 @app.get("/nga911-intelligence")
 def nga911_intelligence_page(request: Request):
@@ -949,6 +972,27 @@ def nga911_intelligence_page(request: Request):
             "overview": overview,
             "standalone": request.url.path == "/nga911",
             "version": "0.1.0",
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/nga911/counties/{county_id}")
+@app.get("/nga911-intelligence/counties/{county_id}")
+def nga911_county_page(county_id: str, request: Request):
+    try:
+        detail = get_nga911_county_detail(county_id)
+    except NGA911ProviderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if detail is None:
+        raise HTTPException(status_code=404, detail="NGA911 demonstration county not found")
+    return templates.TemplateResponse(
+        request=request,
+        name="nga911_county.html",
+        context={
+            "detail": detail,
+            "standalone": request.url.path.startswith("/nga911/counties/"),
+            "version": "0.2.0",
         },
         headers={"Cache-Control": "no-store"},
     )

@@ -14,6 +14,9 @@ class NGA911IntelligenceProvider(Protocol):
     def get_overview(self) -> dict:
         """Return the normalized NGA911 intelligence overview contract."""
 
+    def get_county_detail(self, county_id: str) -> dict | None:
+        """Return one isolated county intelligence contract when available."""
+
 
 def _timestamp(now: datetime, minutes_ago: int = 0) -> str:
     return (now - timedelta(minutes=minutes_ago)).isoformat().replace("+00:00", "Z")
@@ -183,6 +186,70 @@ class MockNGA911IntelligenceProvider:
             ],
         }
 
+    def get_county_detail(self, county_id: str) -> dict | None:
+        now = datetime.now(timezone.utc)
+        overview = self.get_overview()
+        county = next((item for item in overview["counties"] if item["id"] == county_id), None)
+        if county is None:
+            return None
+
+        profiles = {
+            "demo-logan": ("Logan Primary PSAP", "Charleston NGCS", 18, 99.1),
+            "demo-mountain": ("Mountain Regional PSAP", "Morgantown NGCS", 31, 95.8),
+            "demo-river": ("River Regional PSAP", "Charleston NGCS", 24, 98.3),
+            "demo-valley": ("Valley Regional PSAP", "Morgantown NGCS", 37, 94.9),
+        }
+        psap_name, ngcs, latency, device_confidence = profiles[county_id]
+        sessions = county["sessions_24h"]
+        return {
+            "schema_version": "nga911-county-intelligence.v1",
+            "generated_at": _timestamp(now),
+            "provider": self.provider_name,
+            "provider_mode": "mock",
+            "synthetic_data": True,
+            "environment_label": "DEMONSTRATION - SYNTHETIC DATA",
+            "county": county,
+            "summary": {
+                "sessions_24h": sessions,
+                "availability_percent": county["availability_percent"],
+                "location_confidence_percent": county["location_confidence_percent"],
+                "median_delivery_ms": latency + 71,
+                "alternate_path_ready": True,
+            },
+            "psaps": [
+                {
+                    "id": f"{county_id}-primary",
+                    "name": psap_name,
+                    "status": "online" if county["status"] == "operational" else "monitoring",
+                    "sessions_24h": sessions,
+                    "ngcs": ngcs,
+                    "median_latency_ms": latency + 71,
+                    "last_heartbeat": _timestamp(now, 1),
+                }
+            ],
+            "call_paths": [
+                {"name": "Primary ESInet ingress", "role": "primary", "status": "healthy", "latency_ms": latency, "last_validated": _timestamp(now, 4)},
+                {"name": "Alternate regional ingress", "role": "alternate", "status": "ready", "latency_ms": latency + 16, "last_validated": _timestamp(now, 18)},
+                {"name": "NGCS policy route", "role": "routing", "status": "healthy", "latency_ms": 12, "last_validated": _timestamp(now, 3)},
+            ],
+            "location_quality": [
+                {"source": "Device-based hybrid", "share_percent": 61.4, "confidence_percent": device_confidence, "freshness_seconds": 7},
+                {"source": "Network-derived", "share_percent": 28.2, "confidence_percent": county["location_confidence_percent"] - 2.1, "freshness_seconds": 13},
+                {"source": "Civic / registered", "share_percent": 10.4, "confidence_percent": 99.4, "freshness_seconds": 4},
+            ],
+            "session_trend": [
+                {"hour": f"{hour:02d}:00", "sessions": max(2, round(sessions / 24 + ((hour % 6) - 2) * 2))}
+                for hour in range(24)
+            ],
+            "intelligence": [item for item in overview["intelligence"] if (
+                county_id != "demo-logan" or item["severity"] in {"positive", "information"}
+            )][:2],
+            "service_events": [item for item in overview["service_events"] if (
+                county["name"] in item["scope"] or "Multi-region" in item["scope"]
+            )],
+            "guardrail": "Advisory intelligence only. Human authorization is required for every operational action.",
+        }
+
 
 def get_nga911_provider() -> NGA911IntelligenceProvider:
     provider_mode = settings.nga911_provider_mode.strip().lower()
@@ -196,3 +263,11 @@ def get_nga911_provider() -> NGA911IntelligenceProvider:
 
 def get_nga911_intelligence_overview() -> dict:
     return get_nga911_provider().get_overview()
+
+
+def get_nga911_counties() -> list[dict]:
+    return get_nga911_intelligence_overview()["counties"]
+
+
+def get_nga911_county_detail(county_id: str) -> dict | None:
+    return get_nga911_provider().get_county_detail(county_id)
