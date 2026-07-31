@@ -72,6 +72,10 @@ class VoicePageTests(unittest.TestCase):
             ),
             "May supports Logan County nine one one and a transferred nine one one call.",
         )
+        self.assertEqual(
+            prepare_text_for_speech("NGA911 protects 911 calls."),
+            "N G A nine one one protects nine one one calls.",
+        )
 
 
 if __name__ == "__main__":

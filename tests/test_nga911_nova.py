@@ -44,7 +44,8 @@ class NOVAPageTests(unittest.TestCase):
         self.assertIn("Build 14-day report", response.text)
         self.assertIn("NGA911 only", response.text)
         self.assertIn("Read only", response.text)
-        self.assertIn("/static/js/lcdash-nova.js?v=0.1.0", response.text)
+        self.assertIn("/static/js/lcdash-nova.js?v=0.1.1", response.text)
+        self.assertIn("detect your natural pause automatically", response.text)
         self.assertNotIn('href="/station-alerts"', response.text)
 
     def test_embedded_nova_page_uses_lcdash_shell(self):
