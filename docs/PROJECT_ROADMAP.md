@@ -107,6 +107,12 @@ Build a secure web-based operations dashboard for Logan County 911 using the Cen
 - Expose the county list and county detail through versioned normalized APIs so
   approved GovCloud providers can replace the synthetic source without
   rebuilding either user interface
+- Provide a director-friendly live network view for diverse ESInet paths and
+  cloud call-handling positions, with plain-language health states
+- Retain at least 14 days of queryable demonstration history for presentations
+  and map production retention to NGA requirements before live integration
+- Deliver permission-aware visual, audible, and browser alerts with a safe
+  synthetic disruption test and detailed interruption investigation pages
 - Do not make NGA911 cloud intelligence a dependency of call routing, CAD,
   radio, station alerting, or other emergency operations
 - Replace the mock provider only after NGA911 supplies approved API,

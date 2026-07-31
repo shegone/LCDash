@@ -17,6 +17,9 @@ class NGA911IntelligenceProvider(Protocol):
     def get_county_detail(self, county_id: str) -> dict | None:
         """Return one isolated county intelligence contract when available."""
 
+    def get_logan_operations(self, days: int = 14) -> dict:
+        """Return the normalized director operations contract."""
+
 
 def _timestamp(now: datetime, minutes_ago: int = 0) -> str:
     return (now - timedelta(minutes=minutes_ago)).isoformat().replace("+00:00", "Z")
@@ -250,6 +253,74 @@ class MockNGA911IntelligenceProvider:
             "guardrail": "Advisory intelligence only. Human authorization is required for every operational action.",
         }
 
+    def get_logan_operations(self, days: int = 14) -> dict:
+        now = datetime.now(timezone.utc)
+        days = max(1, min(days, 14))
+        paths = [
+            {"id": "verizon-fiber", "name": "Verizon Fiber", "technology": "Fiber", "status": "healthy", "latency_ms": 18, "jitter_ms": 2.1, "packet_loss_percent": 0.02, "availability_percent": 99.999, "last_change": _timestamp(now, 340)},
+            {"id": "optimum-fiber", "name": "Optimum Fiber", "technology": "Fiber", "status": "healthy", "latency_ms": 23, "jitter_ms": 3.4, "packet_loss_percent": 0.04, "availability_percent": 99.997, "last_change": _timestamp(now, 510)},
+            {"id": "firstnet-cradlepoint", "name": "FirstNet Cradlepoint", "technology": "LTE", "status": "healthy", "latency_ms": 51, "jitter_ms": 8.8, "packet_loss_percent": 0.18, "availability_percent": 99.982, "last_change": _timestamp(now, 74)},
+            {"id": "verizon-cradlepoint", "name": "Verizon Cradlepoint", "technology": "LTE", "status": "degraded", "latency_ms": 94, "jitter_ms": 31.7, "packet_loss_percent": 1.42, "availability_percent": 99.941, "last_change": _timestamp(now, 9)},
+            {"id": "starlink", "name": "Starlink", "technology": "LEO Satellite", "status": "healthy", "latency_ms": 68, "jitter_ms": 12.5, "packet_loss_percent": 0.31, "availability_percent": 99.963, "last_change": _timestamp(now, 132)},
+        ]
+        consoles = [
+            {"id": f"position-{number}", "name": f"Position {number}", "status": status, "dispatcher": dispatcher, "session_started": _timestamp(now, minutes), "calls_answered": calls, "average_answer_seconds": answer, "active_call_seconds": active, "barge_count": barge, "whisper_count": whisper, "observe_count": observe}
+            for number, status, dispatcher, minutes, calls, answer, active, barge, whisper, observe in [
+                (1, "active_call", "A. Bryant", 287, 34, 7.8, 184, 0, 1, 2),
+                (2, "ready", "M. Ellis", 252, 29, 8.4, 0, 0, 0, 1),
+                (3, "ringing", "J. Carter", 198, 22, 6.9, 0, 1, 0, 3),
+                (4, "ready", "S. Hall", 176, 18, 9.1, 0, 0, 1, 0),
+                (5, "signed_out", None, 0, 0, 0, 0, 0, 0, 0),
+                (6, "ready", "T. Morgan", 91, 11, 7.2, 0, 0, 0, 1),
+            ]
+        ]
+        event_specs = [
+            ("evt-logan-2401", "warning", "verizon-cradlepoint", "Elevated jitter on Verizon LTE path", 9, 0, "Calls remain protected by four alternate paths."),
+            ("evt-logan-2398", "critical", "starlink", "Starlink path temporarily unavailable", 1260, 11, "The path recovered automatically; no call delivery loss was observed."),
+            ("evt-logan-2393", "warning", "firstnet-cradlepoint", "FirstNet packet loss exceeded baseline", 2780, 17, "Traffic continued over the active fiber paths."),
+            ("evt-logan-2387", "critical", "optimum-fiber", "Optimum fiber heartbeat lost", 4870, 6, "The Verizon fiber path remained healthy during the interruption."),
+            ("evt-logan-2379", "warning", "starlink", "Satellite latency above normal range", 7220, 23, "No user-visible call impact was detected."),
+            ("evt-logan-2368", "information", "verizon-fiber", "Scheduled path validation completed", 11320, 4, "Primary and alternate delivery checks completed successfully."),
+            ("evt-logan-2359", "warning", "verizon-cradlepoint", "LTE signal quality degraded", 16240, 31, "The path remained available at reduced performance."),
+            ("evt-logan-2344", "critical", "firstnet-cradlepoint", "FirstNet tunnel re-established", 19110, 8, "Automatic recovery completed and alternate paths remained available."),
+        ]
+        path_names = {path["id"]: path["name"] for path in paths}
+        events = []
+        for event_id, severity, path_id, title, minutes_ago, duration, impact in event_specs:
+            if minutes_ago > days * 1440:
+                continue
+            events.append({
+                "id": event_id, "severity": severity, "path_id": path_id,
+                "path_name": path_names[path_id], "title": title,
+                "status": "active" if event_id == "evt-logan-2401" else "resolved",
+                "opened_at": _timestamp(now, minutes_ago),
+                "resolved_at": None if event_id == "evt-logan-2401" else _timestamp(now, minutes_ago - duration),
+                "duration_minutes": duration, "plain_language_impact": impact,
+                "calls_affected": 0, "automatic_failover": severity == "critical",
+                "metrics": {"latency_ms": 94 if path_id == "verizon-cradlepoint" else 72, "jitter_ms": 31.7 if severity == "warning" else 18.2, "packet_loss_percent": 1.42 if severity != "information" else 0.03},
+                "timeline": [
+                    {"at": _timestamp(now, minutes_ago), "label": "Condition detected"},
+                    {"at": _timestamp(now, max(0, minutes_ago - 2)), "label": "Alternate-path protection verified"},
+                    {"at": _timestamp(now, max(0, minutes_ago - duration)), "label": "Recovered and validated" if duration else "Supervisor review pending"},
+                ],
+            })
+        daily_history = [
+            {"date": (now - timedelta(days=offset)).date().isoformat(), "availability_percent": round(99.94 + ((offset * 7) % 6) / 100, 3), "events": 1 + (offset % 3), "sessions": 118 + ((offset * 17) % 42)}
+            for offset in range(days - 1, -1, -1)
+        ]
+        return {
+            "schema_version": "nga911-director-operations.v1", "generated_at": _timestamp(now),
+            "provider": self.provider_name, "provider_mode": "mock", "synthetic_data": True,
+            "environment_label": "DEMONSTRATION - SYNTHETIC DATA", "history_days": days,
+            "core": {"name": "NGA ESInet / NEXiSCore", "status": "operational", "region": "Cloud-native active-active simulation"},
+            "center": {"name": "Logan County 911", "status": "protected", "healthy_paths": 4, "total_paths": 5},
+            "paths": paths, "consoles": consoles, "events": events, "daily_history": daily_history,
+            "alert_policy": {"audible_enabled_by_user": False, "warning": "Yellow: impaired path", "critical": "Red: path unavailable", "unknown": "Gray: monitoring unavailable"},
+        }
+
+    def get_logan_event(self, event_id: str) -> dict | None:
+        return next((event for event in self.get_logan_operations(14)["events"] if event["id"] == event_id), None)
+
 
 def get_nga911_provider() -> NGA911IntelligenceProvider:
     provider_mode = settings.nga911_provider_mode.strip().lower()
@@ -271,3 +342,12 @@ def get_nga911_counties() -> list[dict]:
 
 def get_nga911_county_detail(county_id: str) -> dict | None:
     return get_nga911_provider().get_county_detail(county_id)
+
+
+def get_nga911_logan_operations(days: int = 14) -> dict:
+    return get_nga911_provider().get_logan_operations(days)
+
+
+def get_nga911_logan_event(event_id: str) -> dict | None:
+    provider = get_nga911_provider()
+    return provider.get_logan_event(event_id) if hasattr(provider, "get_logan_event") else None

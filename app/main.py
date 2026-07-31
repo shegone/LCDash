@@ -104,6 +104,8 @@ from app.services.nga911_intelligence_service import (
     get_nga911_counties,
     get_nga911_county_detail,
     get_nga911_intelligence_overview,
+    get_nga911_logan_event,
+    get_nga911_logan_operations,
 )
 
 app = FastAPI(
@@ -943,6 +945,24 @@ def nga911_county_api(county_id: str, response: Response):
     return detail
 
 
+@app.get("/api/nga911/v1/director/operations")
+def nga911_director_operations_api(response: Response, days: int = 14):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return get_nga911_logan_operations(days)
+    except NGA911ProviderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/api/nga911/v1/director/events/{event_id}")
+def nga911_director_event_api(event_id: str, response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    event = get_nga911_logan_event(event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="NGA911 demonstration event not found")
+    return {"schema_version": "nga911-director-event.v1", "synthetic_data": True, "event": event}
+
+
 @app.get("/nga911")
 @app.get("/nga911-intelligence")
 def nga911_intelligence_page(request: Request):
@@ -994,6 +1014,32 @@ def nga911_county_page(county_id: str, request: Request):
             "standalone": request.url.path.startswith("/nga911/counties/"),
             "version": "0.2.0",
         },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/nga911/operations")
+@app.get("/nga911-intelligence/operations")
+def nga911_director_operations_page(request: Request, days: int = 14):
+    operations = get_nga911_logan_operations(days)
+    return templates.TemplateResponse(
+        request=request,
+        name="nga911_operations.html",
+        context={"operations": operations, "standalone": request.url.path == "/nga911/operations", "version": "0.3.0"},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/nga911/events/{event_id}")
+@app.get("/nga911-intelligence/events/{event_id}")
+def nga911_director_event_page(event_id: str, request: Request):
+    event = get_nga911_logan_event(event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="NGA911 demonstration event not found")
+    return templates.TemplateResponse(
+        request=request,
+        name="nga911_event.html",
+        context={"event": event, "standalone": request.url.path.startswith("/nga911/events/"), "version": "0.3.0"},
         headers={"Cache-Control": "no-store"},
     )
 
