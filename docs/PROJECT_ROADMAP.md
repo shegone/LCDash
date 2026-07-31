@@ -113,6 +113,9 @@ Build a secure web-based operations dashboard for Logan County 911 using the Cen
   and map production retention to NGA requirements before live integration
 - Deliver permission-aware visual, audible, and browser alerts with a safe
   synthetic disruption test and detailed interruption investigation pages
+- Use current official NGA and NEXiS brand marks sourced from nga911.com for
+  demonstrations, retain source attribution, and replace them with the approved
+  partner brand package when NGA supplies it
 - Do not make NGA911 cloud intelligence a dependency of call routing, CAD,
   radio, station alerting, or other emergency operations
 - Replace the mock provider only after NGA911 supplies approved API,

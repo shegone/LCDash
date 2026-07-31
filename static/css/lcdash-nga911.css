@@ -5,3 +5,4 @@
 @media(max-width:1200px){.nga-console-grid{grid-template-columns:repeat(3,1fr)}.nga-network-map{grid-template-columns:1fr}.nga-network-node{max-width:460px;width:100%;margin:auto}.nga-live-path{grid-template-columns:150px 1fr 135px}.nga-ops-bottom{grid-template-columns:1fr}}
 @media(max-width:700px){.nga-ops-header{align-items:flex-start;flex-direction:column}.nga-live-path{grid-template-columns:1fr}.nga-path-state{text-align:left}.nga-console-grid{grid-template-columns:repeat(2,1fr)}.nga-push-alert{grid-template-columns:42px 1fr}.nga-push-alert a,.nga-push-alert button{grid-column:2}.nga-path-tooltip{left:0}.nga-event-facts{grid-template-columns:1fr}}
 .nga-identity-note{color:#7894aa;font-size:.65rem;margin:13px 0 0}.nga-identity-note i{color:#4edcff;margin-right:5px}
+.nga-nexis-connect-mark{display:block;width:min(180px,100%);height:64px;object-fit:contain;margin:0 auto 8px}.nga-network-node.core>i:has(+.nga-nexis-connect-mark){display:none}
