@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#06111f">
+    <title>{% block title %}NGA911 Intelligence{% endblock %}</title>
+    <link href="/static/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+    <link href="/static/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
+    <link href="/static/css/lcdash-core.css" rel="stylesheet">
+    <link href="/static/css/lcdash-mobile.css" rel="stylesheet">
+    <link href="/static/css/lcdash-nga911-standalone.css" rel="stylesheet">
+    {% block page_styles %}{% endblock %}
+    <script src="/static/js/lcdash-time.js"></script>
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to intelligence content</a>
+<aside class="sidebar" aria-label="NGA911 Intelligence navigation">
+    <div class="sidebar-brand">
+        <div class="nga-standalone-logo"><i class="bi bi-diagram-3-fill"></i></div>
+        <h4>NGA911</h4>
+        <div class="sidebar-brand-subtitle">Intelligence Platform</div>
+    </div>
+    <nav class="sidebar-navigation" aria-label="Primary navigation">
+        <section class="nav-section" aria-labelledby="nga-nav-intelligence">
+            <div class="nav-section-label" id="nga-nav-intelligence">Intelligence</div>
+            <div class="nav flex-column">
+                <a class="nav-link active" href="/nga911" aria-current="page">
+                    <i class="bi bi-grid-1x2-fill"></i><span>Overview</span>
+                </a>
+            </div>
+        </section>
+        <section class="nav-section" aria-labelledby="nga-nav-platform">
+            <div class="nav-section-label" id="nga-nav-platform">Platform</div>
+            <div class="nav flex-column">
+                <a class="nav-link" href="/api/nga911/v1/intelligence/overview">
+                    <i class="bi bi-braces"></i><span>API Contract</span>
+                </a>
+            </div>
+        </section>
+    </nav>
+    <div class="nga-standalone-sponsor">
+        <span>MODULAR DEMONSTRATION</span>
+        <strong>Powered by the LCDash platform core</strong>
+    </div>
+</aside>
+<main class="main" id="main-content" tabindex="-1">
+    <header class="topbar glass">
+        <div class="topbar-brand">
+            <h3>NGA911 Intelligence</h3>
+            <div class="topbar-subtitle">Multi-county GovCloud Concept</div>
+        </div>
+        <time class="clock" id="clock" aria-label="Local date and time"></time>
+    </header>
+    {% block content %}{% endblock %}
+</main>
+<script>LCDashTime.startClock("clock");</script>
+{% block page_scripts %}{% endblock %}
+</body>
+</html>

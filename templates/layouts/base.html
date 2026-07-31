@@ -79,6 +79,7 @@
             <div class="nav-section-label" id="nav-intelligence">Intelligence</div>
             <div class="nav flex-column">
                 {{ nav_item("/analytics", "bi-graph-up-arrow", "Analytics", current_path.startswith("/analytics")) }}
+                {{ nav_item("/nga911-intelligence", "bi-diagram-3-fill", "NGA911 Intelligence", current_path == "/nga911-intelligence") }}
                 {{ nav_item("/mae", "bi-robot", "MAE Assistant", current_path == "/mae") }}
                 {{ nav_item("/mindshare", "bi-broadcast", "Mindshare / JACK", current_path.startswith("/mindshare")) }}
                 {{ nav_item("/knowledge", "bi-journal-text", "Knowledge Library", current_path == "/knowledge") }}

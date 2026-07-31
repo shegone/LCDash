@@ -85,3 +85,24 @@ Build a secure web-based operations dashboard for Logan County 911 using the Cen
   spoken call details
 - Fall back to tones and the existing visual alert whenever voice generation
   or station audio is unavailable
+
+## Phase 10 - Modular Products and NGA911 Intelligence
+
+- Build LCDash as one modular platform with independently deployable product
+  profiles rather than separate code copies
+- Support full LCDash, NGA911 Intelligence-only, Station Alerts-only, supervisor
+  operations, and county-selected product profiles
+- Keep authentication, authorization, auditing, visual components, integration
+  contracts, and deployment tooling in a shared core
+- Keep CentralSquare Operations, Station Alerts, MAE, Analytics, Mindshare, and
+  NGA911 Intelligence as separately permissioned feature modules
+- Use a versioned normalized NGA911 intelligence contract so the demonstration
+  provider can later be replaced by approved AWS GovCloud APIs
+- Mark every mock NGA911 record and metric as synthetic demonstration data
+- Preserve county data isolation and allow only authorized regional roll-ups
+- Provide an NGA911-branded standalone shell using the same intelligence module
+  when a county does not want the full LCDash product
+- Do not make NGA911 cloud intelligence a dependency of call routing, CAD,
+  radio, station alerting, or other emergency operations
+- Replace the mock provider only after NGA911 supplies approved API,
+  authentication, tenant, retention, audit, and service-level requirements

@@ -128,6 +128,10 @@ class Settings:
         "EMS_UNIT_PREFIXES",
         "MED,EMS",
     )
+    nga911_provider_mode: str = _env(
+        "NGA911_PROVIDER_MODE",
+        "mock",
+    )
     ollama_base_url: str = _env("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
     mae_model: str = _env("MAE_MODEL", "qwen3.5:27b")
     mae_request_timeout_seconds: int = _env_int(

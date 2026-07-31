@@ -1,0 +1,202 @@
+{% extends "layouts/nga911_base.html" if standalone else "layouts/base.html" %}
+
+{% block title %}NGA911 Intelligence | LCDash{% endblock %}
+
+{% block page_styles %}
+<link rel="stylesheet" href="/static/css/lcdash-nga911.css?v=0.1.0">
+{% endblock %}
+
+{% block content %}
+<section class="nga-hero glass">
+    <div class="nga-hero-copy">
+        <div class="nga-kicker">NGA911 SPONSORED INTELLIGENCE CONCEPT</div>
+        <h1>NGA911 Intelligence</h1>
+        <p>
+            A multi-county NG911 intelligence layer designed for deployment
+            inside LCDash or as an independent NGA911 operations dashboard.
+        </p>
+        <div class="nga-hero-actions">
+            <button class="btn btn-info fw-bold" id="nga-refresh" type="button">
+                <i class="bi bi-arrow-clockwise"></i> Refresh Simulation
+            </button>
+            <span class="nga-updated">
+                Updated <time id="nga-generated-at" data-cad-time="{{ overview.generated_at }}">{{ overview.generated_at }}</time>
+            </span>
+        </div>
+    </div>
+    <div class="nga-environment-card">
+        <div class="nga-demo-ribbon">{{ overview.environment_label }}</div>
+        <div class="nga-cloud-mark"><i class="bi bi-cloud-lock-fill"></i></div>
+        <span>INTELLIGENCE PROVIDER</span>
+        <strong id="nga-provider-status">{{ overview.connection.status_label }}</strong>
+        <small>{{ overview.connection.region or "Provider region unavailable" }}</small>
+        <div class="nga-latency">
+            <span>SIMULATED API</span>
+            <b id="nga-api-latency">{{ overview.connection.api_latency_ms or 0 }} ms</b>
+        </div>
+    </div>
+</section>
+
+{% if overview.error %}
+<div class="alert alert-warning mt-4" role="alert">{{ overview.error }}</div>
+{% endif %}
+
+<section class="nga-metrics" aria-label="NGA911 intelligence summary">
+    <article class="nga-metric glass">
+        <i class="bi bi-buildings-fill"></i>
+        <span>PARTICIPATING COUNTIES</span>
+        <strong id="nga-counties">{{ overview.summary.participating_counties or 0 }}</strong>
+        <small>Synthetic regional roll-up</small>
+    </article>
+    <article class="nga-metric glass">
+        <i class="bi bi-headset"></i>
+        <span>PSAPS ONLINE</span>
+        <strong id="nga-psaps">{{ overview.summary.psaps_online or 0 }}</strong>
+        <small>Authorized operational nodes</small>
+    </article>
+    <article class="nga-metric glass">
+        <i class="bi bi-telephone-inbound-fill"></i>
+        <span>24-HOUR SESSIONS</span>
+        <strong id="nga-sessions">{{ "{:,}".format(overview.summary.call_sessions_24h or 0) }}</strong>
+        <small>Aggregate demonstration volume</small>
+    </article>
+    <article class="nga-metric glass">
+        <i class="bi bi-shield-check"></i>
+        <span>NETWORK AVAILABILITY</span>
+        <strong id="nga-availability">{{ overview.summary.network_availability_percent or 0 }}%</strong>
+        <small>Conceptual service indicator</small>
+    </article>
+    <article class="nga-metric glass">
+        <i class="bi bi-geo-alt-fill"></i>
+        <span>LOCATION CONFIDENCE</span>
+        <strong id="nga-location-confidence">{{ overview.summary.location_confidence_percent or 0 }}%</strong>
+        <small>High-confidence session share</small>
+    </article>
+</section>
+
+<section class="nga-layout">
+    <div class="nga-main-column">
+        <article class="nga-panel glass">
+            <header class="nga-panel-heading">
+                <div>
+                    <div class="nga-kicker">AI-ASSISTED SIGNAL CORRELATION</div>
+                    <h2>Operational Intelligence</h2>
+                    <p>Explainable findings for human review - never autonomous call control.</p>
+                </div>
+                <span class="nga-count-badge" id="nga-insight-count">{{ overview.intelligence|length }} INSIGHTS</span>
+            </header>
+            <div class="nga-insight-list" id="nga-intelligence-list">
+                {% for insight in overview.intelligence %}
+                <article class="nga-insight {{ insight.severity }}">
+                    <div class="nga-insight-icon">
+                        <i class="bi {% if insight.severity == 'advisory' %}bi-exclamation-triangle-fill{% elif insight.severity == 'positive' %}bi-check-circle-fill{% else %}bi-stars{% endif %}"></i>
+                    </div>
+                    <div>
+                        <div class="nga-insight-meta">
+                            <span>{{ insight.category }}</span>
+                            <time data-cad-time="{{ insight.detected_at }}">{{ insight.detected_at }}</time>
+                        </div>
+                        <h3>{{ insight.title }}</h3>
+                        <p>{{ insight.summary }}</p>
+                        <div class="nga-recommendation">
+                            <b>Recommended review:</b> {{ insight.recommendation }}
+                        </div>
+                        <div class="nga-evidence">
+                            <span>{{ insight.confidence_percent }}% model confidence</span>
+                            <span>{{ insight.evidence_count }} synthetic signals</span>
+                        </div>
+                    </div>
+                </article>
+                {% else %}
+                <div class="nga-empty">No intelligence findings are available.</div>
+                {% endfor %}
+            </div>
+        </article>
+
+        <article class="nga-panel glass">
+            <header class="nga-panel-heading">
+                <div>
+                    <div class="nga-kicker">REGIONAL OPERATIONS</div>
+                    <h2>County and PSAP Overview</h2>
+                </div>
+                <span class="nga-isolation-badge"><i class="bi bi-lock-fill"></i> COUNTY ISOLATED</span>
+            </header>
+            <div class="table-responsive">
+                <table class="table nga-table align-middle">
+                    <thead><tr><th>Demonstration tenant</th><th>Status</th><th>PSAPs</th><th>Sessions</th><th>Availability</th><th>Location</th><th>Events</th></tr></thead>
+                    <tbody id="nga-county-table">
+                    {% for county in overview.counties %}
+                    <tr>
+                        <td><strong>{{ county.name }}</strong></td>
+                        <td><span class="nga-status {{ county.status }}">{{ county.status|upper }}</span></td>
+                        <td>{{ county.psaps }}</td>
+                        <td>{{ "{:,}".format(county.sessions_24h) }}</td>
+                        <td>{{ county.availability_percent }}%</td>
+                        <td>{{ county.location_confidence_percent }}%</td>
+                        <td><span class="nga-event-count {% if county.open_events %}has-events{% endif %}">{{ county.open_events }}</span></td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </article>
+    </div>
+
+    <aside class="nga-side-column">
+        <article class="nga-panel glass">
+            <header class="nga-panel-heading compact">
+                <div>
+                    <div class="nga-kicker">SERVICE AWARENESS</div>
+                    <h2>Network Events</h2>
+                </div>
+                <span class="nga-event-total">{{ overview.summary.active_service_events or 0 }} ACTIVE</span>
+            </header>
+            <div class="nga-event-list" id="nga-event-list">
+                {% for event in overview.service_events %}
+                <article class="nga-event {{ event.severity }}">
+                    <div class="nga-event-topline">
+                        <span>{{ event.service }}</span>
+                        <b>{{ event.status|upper }}</b>
+                    </div>
+                    <h3>{{ event.scope }}</h3>
+                    <p>{{ event.description }}</p>
+                    <time data-cad-time="{{ event.updated_at }}">{{ event.updated_at }}</time>
+                </article>
+                {% endfor %}
+            </div>
+        </article>
+
+        <article class="nga-panel glass">
+            <header class="nga-panel-heading compact">
+                <div>
+                    <div class="nga-kicker">MODULAR PRODUCT LAYER</div>
+                    <h2>Intelligence Capabilities</h2>
+                </div>
+            </header>
+            <div class="nga-capability-list">
+                {% for capability in overview.capabilities %}
+                <div class="nga-capability">
+                    <i class="bi bi-boxes"></i>
+                    <div><strong>{{ capability.name }}</strong><p>{{ capability.description }}</p></div>
+                    <span>{{ capability.readiness|upper }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </article>
+
+        <article class="nga-guardrail glass">
+            <i class="bi bi-person-check-fill"></i>
+            <div>
+                <strong>Human-authorized operations</strong>
+                <p>This demonstration observes and explains. It does not route calls, modify NGCS, dispatch resources, or take autonomous action.</p>
+            </div>
+        </article>
+    </aside>
+</section>
+
+<script id="nga911-overview-data" type="application/json">{{ overview|tojson }}</script>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="/static/js/lcdash-nga911.js?v=0.1.0"></script>
+{% endblock %}

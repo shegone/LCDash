@@ -99,6 +99,10 @@ from app.services.realtime_service import (
     get_realtime_health,
     process_webhook_event,
 )
+from app.services.nga911_intelligence_service import (
+    NGA911ProviderError,
+    get_nga911_intelligence_overview,
+)
 
 app = FastAPI(
     title="LCDash",
@@ -902,6 +906,49 @@ def knowledge_page(request: Request):
             "knowledge_status": get_knowledge_status(),
             "documents": list_knowledge_documents(),
             "version": "0.3.0",
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/nga911/v1/intelligence/overview")
+def nga911_intelligence_overview_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return get_nga911_intelligence_overview()
+    except NGA911ProviderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/nga911")
+@app.get("/nga911-intelligence")
+def nga911_intelligence_page(request: Request):
+    try:
+        overview = get_nga911_intelligence_overview()
+    except NGA911ProviderError as exc:
+        overview = {
+            "synthetic_data": False,
+            "environment_label": "PROVIDER NOT CONFIGURED",
+            "generated_at": "",
+            "connection": {
+                "status": "unavailable",
+                "status_label": "GOVCLOUD CONNECTION UNAVAILABLE",
+            },
+            "summary": {},
+            "counties": [],
+            "intelligence": [],
+            "service_events": [],
+            "capabilities": [],
+            "error": str(exc),
+        }
+
+    return templates.TemplateResponse(
+        request=request,
+        name="nga911_intelligence.html",
+        context={
+            "overview": overview,
+            "standalone": request.url.path == "/nga911",
+            "version": "0.1.0",
         },
         headers={"Cache-Control": "no-store"},
     )
