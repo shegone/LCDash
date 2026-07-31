@@ -45,7 +45,7 @@ class NGA911IntelligencePageTests(unittest.TestCase):
         self.assertIn("County and PSAP Overview", response.text)
         self.assertIn("Human-authorized operations", response.text)
         self.assertIn("/static/css/lcdash-nga911.css?v=0.1.0", response.text)
-        self.assertIn("/static/js/lcdash-nga911.js?v=0.1.0", response.text)
+        self.assertIn("/static/js/lcdash-nga911.js?v=0.1.1", response.text)
 
     def test_versioned_api_returns_synthetic_contract(self):
         response = self.client.get("/api/nga911/v1/intelligence/overview")
