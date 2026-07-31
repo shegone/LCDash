@@ -8,6 +8,7 @@ from app.main import app
 from app.services import station_alert_service
 from app.services.station_alert_service import (
     build_empty_station_alert_snapshot,
+    build_station_alert_announcement,
     build_station_alert_snapshot,
 )
 
@@ -145,7 +146,39 @@ class StationAlertServiceTests(unittest.TestCase):
         self.assertEqual(alert["cfs_number"], "CFS26-30001")
         self.assertEqual(alert["unit_numbers"], ["ENG1", "TNK1"])
         self.assertEqual(alert["dispatch_datetime"], "2026-07-22T15:57:10Z")
+        self.assertEqual(
+            alert["announcement"],
+            "Station 100, respond to 100 MAIN STREET, LOGAN for a structure fire. Time is 1157.",
+        )
         self.assertNotIn("MED1", str(result))
+
+    def test_announcement_supports_multiple_stations(self):
+        announcement = build_station_alert_announcement(
+            {
+                "station_names": ["STA 100", "Station 200"],
+                "location": "911 Mark Spurlock Drive",
+                "incident_description": "Structure Fire",
+                "dispatch_datetime": "2026-07-22T19:23:00Z",
+            }
+        )
+
+        self.assertEqual(
+            announcement,
+            "Stations 100 and 200, respond to 911 Mark Spurlock Drive for a structure fire. Time is 1523.",
+        )
+
+    def test_announcement_requires_all_approved_fields(self):
+        base_alert = {
+            "station_names": ["STA 100"],
+            "location": "911 Mark Spurlock Drive",
+            "incident_description": "Structure Fire",
+            "dispatch_datetime": "2026-07-22T19:23:00Z",
+        }
+
+        for missing_field in base_alert:
+            alert = dict(base_alert)
+            alert[missing_field] = [] if missing_field == "station_names" else ""
+            self.assertEqual(build_station_alert_announcement(alert), "")
 
     def test_multiple_selected_stations_merge_units_and_alerts(self):
         result = build_station_alert_snapshot(
