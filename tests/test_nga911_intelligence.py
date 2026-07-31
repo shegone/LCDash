@@ -69,6 +69,10 @@ class NGA911IntelligenceServiceTests(unittest.TestCase):
         self.assertEqual(len(get_nga911_logan_operations(99)["daily_history"]), 14)
         self.assertEqual(get_nga911_logan_event("evt-logan-2401")["status"], "active")
         self.assertIsNone(get_nga911_logan_event("missing"))
+        test_event = get_nga911_logan_event("evt-logan-test-verizon-fiber")
+        self.assertEqual(test_event["path_name"], "Verizon Fiber")
+        self.assertEqual(test_event["title"], "Verizon Fiber connection lost")
+        self.assertEqual(test_event["metrics"]["packet_loss_percent"], 100.0)
 
 
 class NGA911IntelligencePageTests(unittest.TestCase):
@@ -180,6 +184,16 @@ class NGA911IntelligencePageTests(unittest.TestCase):
         self.assertIn("Calls affected", response.text)
         self.assertIn("Interruption timeline", response.text)
         self.assertIn("synthetic", response.text.lower())
+
+    def test_disruption_test_links_to_matching_verizon_event(self):
+        operations = self.client.get("/nga911/operations")
+        detail = self.client.get("/nga911/events/evt-logan-test-verizon-fiber")
+
+        self.assertIn('href="/nga911/events/evt-logan-test-verizon-fiber"', operations.text)
+        self.assertEqual(detail.status_code, 200)
+        self.assertIn("Verizon Fiber connection lost", detail.text)
+        self.assertIn("Verizon Fiber", detail.text)
+        self.assertNotIn("Optimum Fiber", detail.text)
 
     @patch("app.main.get_nga911_intelligence_overview")
     def test_page_explains_unconfigured_provider(self, overview):

@@ -320,6 +320,28 @@ class MockNGA911IntelligenceProvider:
         }
 
     def get_logan_event(self, event_id: str) -> dict | None:
+        if event_id == "evt-logan-test-verizon-fiber":
+            now = datetime.now(timezone.utc)
+            return {
+                "id": event_id,
+                "severity": "critical",
+                "path_id": "verizon-fiber",
+                "path_name": "Verizon Fiber",
+                "title": "Verizon Fiber connection lost",
+                "status": "simulation",
+                "opened_at": _timestamp(now),
+                "resolved_at": None,
+                "duration_minutes": 0,
+                "plain_language_impact": "Four alternate paths continue protecting Logan County 911 during this synthetic disruption test.",
+                "calls_affected": 0,
+                "automatic_failover": True,
+                "metrics": {"latency_ms": 0, "jitter_ms": 0, "packet_loss_percent": 100.0},
+                "timeline": [
+                    {"at": _timestamp(now), "label": "Synthetic Verizon Fiber loss triggered"},
+                    {"at": _timestamp(now), "label": "Four alternate paths verified available"},
+                    {"at": _timestamp(now), "label": "Supervisor demonstration alert displayed"},
+                ],
+            }
         return next((event for event in self.get_logan_operations(14)["events"] if event["id"] == event_id), None)
 
 
