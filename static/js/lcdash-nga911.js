@@ -22,6 +22,16 @@
             : value;
     }
 
+    function formatVisibleTimestamps() {
+        if (!window.LCDashTime) {
+            return;
+        }
+        document.querySelectorAll("[data-cad-time]").forEach(function (element) {
+            const value = element.dataset.cadTime || element.textContent;
+            element.textContent = window.LCDashTime.formatCadDisplayTime(value);
+        });
+    }
+
     function updateMetric(id, value) {
         const element = document.getElementById(id);
         if (!element) {
@@ -68,5 +78,6 @@
     }
 
     refreshButton.addEventListener("click", refreshOverview);
+    formatVisibleTimestamps();
     window.setInterval(refreshOverview, 60000);
 }());
