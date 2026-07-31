@@ -41,6 +41,18 @@ The exact credential record is:
 
 It must remain mode `600` and must never be committed to GitHub.
 
+## Production network assignment
+
+The production host currently receives `14.1.1.227/24` on `eno1` through
+DHCP from the local gateway. Ubuntu is not configured with a local static
+address. Preserve reliable access by creating and documenting a DHCP
+reservation for `.227` in the authorized gateway or DHCP service.
+
+Do not change the live server to a locally static address until the subnet,
+gateway, DNS servers, usable address range, and address ownership have been
+confirmed. A network-address change can interrupt the Cloudflare tunnel,
+CentralSquare webhook delivery, SSH access, and local integrations.
+
 ## Start or update
 
 ```bash
