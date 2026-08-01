@@ -21,6 +21,21 @@ if (-not (Test-Path -LiteralPath $computerExecutable)) {
 
 New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
 
+# Logon tasks can overlap with a manually started Computer instance. Treat an
+# already healthy listener as success instead of launching a second process
+# that would fail because port 8000 is occupied.
+try {
+    $health = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/health" -TimeoutSec 3
+    if ($health.status -eq "ok") {
+        $timestamp = Get-Date -Format "yyyy-MM-ddTHH:mm:ssK"
+        Add-Content -LiteralPath (Join-Path $logDirectory "computer-autostart.log") `
+            -Value "$timestamp Computer is already healthy; startup skipped."
+        exit 0
+    }
+} catch {
+    # No healthy local listener exists, so continue with normal startup.
+}
+
 $pathParts = @(
     "C:\Program Files\Git\cmd"
     $nodeDirectory

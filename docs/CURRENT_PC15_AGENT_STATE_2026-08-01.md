@@ -66,10 +66,11 @@ accessibility data. The canonical source is
 
 ## Next work
 
-1. Add durable PC15 autostart and verify it after a Windows sign-out/restart.
+1. Complete a cold-start PC15 autostart test after the open creative projects
+   have been saved; the non-disruptive scheduled-task test already passes.
 2. Establish a reversible Unreal/iClone working-copy and backup routine before
    allowing autonomous project edits.
-3. Inventory the current MAE avatar project, Reallusion assets, plugins, and
-   render pipeline using read-only checks.
+3. Install and validate Reallusion iClone Live Link 1.38+ and Auto Setup
+   All-in-One 2.03+ for UE 5.8. See `PC15_AVATAR_INVENTORY_2026-08-01.md`.
 4. Begin supervised avatar/video tasks, then expand autonomy only after each
    action class has a repeatable validation and rollback path.
