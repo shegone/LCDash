@@ -126,16 +126,25 @@ Build a secure web-based operations dashboard for Logan County 911 using the Cen
 
 ## Phase 11 - Offline Development Operator
 
-- Use the existing Open WebUI as the persistent chat interface and Open
-  Terminal as its authenticated file, shell, Git, and execution layer
+- Use the existing Open WebUI as the persistent portal, Open WebUI Computer as
+  the primary project workspace, and Open Terminal for quick one-off shell work
+- Provide separate Computer workspaces for isolated LCDash development on
+  `.227` and Windows/Unreal/MetaHuman work on `.15`
 - Give the operator a complete writable development clone while initially
   keeping the deployed checkout, production secrets, databases, backups, and
   Docker control outside the agent mount
 - Use the installed `qwen3.5:27b` Ollama model for initial acceptance testing
-- Benchmark Open Interpreter, OpenCode, and Goose as Codex-style harnesses
+- Use OpenCode as the first native coding backend, then benchmark it against
+  Open Interpreter, Goose, Qwen Code, OpenHands, Cline, and Aider
+- Benchmark Qwen3.5 27B, Qwen3-Coder 30B-A3B, Devstral Small 2 24B,
+  gpt-oss-20b, and GLM-4.7-Flash using the same local acceptance suite
 - Keep production `.227` workloads higher priority than coding inference
 - Use PC `.15` for Unreal, MetaHuman, video generation, rendering, Pixel
   Streaming, and portrait LED output
+- Prefer structured browser DOM/accessibility tools; allow general Windows or
+  Unreal control only as a supervised, explicitly enabled `.15` capability
+- Keep credentials out of model memory and add a narrow credential broker only
+  after the core workspace passes acceptance testing
 - Require confirmation for deployments, GitHub production-branch pushes,
   network/security changes, software installation, credentials, backups, and
   operational outputs
@@ -144,5 +153,9 @@ Build a secure web-based operations dashboard for Logan County 911 using the Cen
 - Pass the ten-task acceptance benchmark before expanding permissions
 - Maintain `LATEST_PC15.md`, `LATEST_PC227.md`, dated snapshots, and a concise
   Codex catch-up section at every meaningful stopping point
+- Expand the benchmark to twenty tasks before enabling unattended schedules,
+  messaging bots, credential retrieval, or read-only operations inspection
+- Follow the detailed target design and phased gates in
+  `docs/OFFLINE_AGENT_ARCHITECTURE_RESEARCH_2026-08-01.md`
 - Escalate repeated failures, security decisions, architecture changes, and
   production deployment work to hosted Codex
