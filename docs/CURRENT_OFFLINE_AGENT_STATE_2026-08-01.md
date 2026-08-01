@@ -9,8 +9,10 @@ the existing protected Open WebUI portal as the `cptr/LCDash` model/workspace.
 It provides a persistent chat agent backed by the real isolated development
 clone.
 
-This deployment did not grant access to the production checkout, production
-secrets, databases, backups, Docker control, raw CAD payloads, or `.15`.
+This deployment did not grant the container access to the production checkout,
+production secrets, databases, backups, Docker control, or raw CAD payloads.
+PC15 is connected as a separate Windows workspace rather than being mounted
+into the LCDash container.
 
 ## Live components
 
@@ -84,6 +86,13 @@ created and stored without printing it. The revoked token must never be reused.
   `qwen3.5:27b`, returned the expected project heading, and did not modify Git
   state.
 - The development clone was synchronized with GitHub after deployment.
+- Open WebUI on `.227` discovered the separate PC15 gateway model
+  `mae15.cptr/MAE_Avatar_Baseline 5.8`.
+- The PC15 workspace listed the Unreal project structure through the `.227`
+  Open WebUI chat path.
+- The same path invoked `windows_control`, identified
+  `iClone 8 - DefProject.iProject`, and reported visible controls without
+  clicking, typing, saving, or modifying the project.
 
 ## OpenCode native-adapter finding
 
@@ -110,9 +119,9 @@ the native adapter after a newer stable Computer release is available.
 - Local AI remains advisory and cannot control or block CAD, dispatch, ESInet,
   radio, emergency routing, alert release, station tones, or other emergency
   operations.
-- `.15` remains the Windows/Unreal/MetaHuman/iClone/video workstation. The user
-  is installing the licensed Reallusion iClone package; `.15` integration will
-  be addressed in a later phase.
+- `.15` remains the separate Windows/Unreal/MetaHuman/iClone/video workstation.
+  Its Computer gateway has broad workstation tools and must not be confused
+  with the isolated Linux `cptr/LCDash` workspace.
 
 ## Next work
 
@@ -123,5 +132,5 @@ the native adapter after a newer stable Computer release is available.
 3. Add a user-friendly workspace status panel or model description in Open
    WebUI if the selector alone is not sufficiently clear.
 4. Add durable automatic stopping-point handoffs.
-5. Inventory `.15` after iClone installation and prepare the separately named
-   `MAE Avatar 01` Windows workspace.
+5. Continue the MAE avatar/video build in the separately named PC15 workspace,
+   using observation-only tests before authorizing project mutations.
