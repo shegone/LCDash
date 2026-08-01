@@ -15,6 +15,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -131,6 +132,79 @@ def report_qwen_model_ids(client: ComputerClient) -> None:
     if not candidates:
         raise RuntimeError("qwen3.5:27b was not discovered by Computer")
     print("Computer qwen3.5:27b model IDs: " + ", ".join(candidates))
+
+
+def ensure_opencode_profile(client: ComputerClient) -> None:
+    _, result = client.call("/api/admin/agents")
+    profiles = result.get("profiles", []) if isinstance(result, dict) else []
+    configured = [
+        {
+            key: value
+            for key, value in profile.items()
+            if key
+            in {
+                "id",
+                "agent",
+                "name",
+                "mode",
+                "command",
+                "home",
+                "models",
+                "default_model",
+                "approval_mode",
+                "sandbox_mode",
+                "permission_mode",
+                "launch_args",
+                "api_endpoint",
+                "server_url",
+                "server_password",
+            }
+        }
+        for profile in profiles
+        if isinstance(profile, dict) and profile.get("id") != "lcdash-opencode"
+    ]
+    configured.append(
+        {
+            "id": "lcdash-opencode",
+            "agent": "opencode",
+            "name": "LCDash OpenCode",
+            "mode": "auto",
+            "command": "opencode",
+            "home": None,
+            "models": ["ollama/qwen3.5:27b", "ollama/qwen3.5:9b"],
+            "default_model": "ollama/qwen3.5:27b",
+            "server_url": "",
+            "server_password": "",
+        }
+    )
+    status, _ = client.call(
+        "/api/admin/agents", "PUT", {"profiles": configured}
+    )
+    if status != 200:
+        raise RuntimeError(f"OpenCode profile update failed with status {status}")
+
+    last_profile = None
+    for _ in range(6):
+        _, refreshed = client.call("/api/admin/agents/refresh", "POST", {})
+        refreshed_profiles = (
+            refreshed.get("profiles", []) if isinstance(refreshed, dict) else []
+        )
+        last_profile = next(
+            (
+                profile
+                for profile in refreshed_profiles
+                if isinstance(profile, dict) and profile.get("id") == "lcdash-opencode"
+            ),
+            None,
+        )
+        if last_profile and "ready" in json.dumps(last_profile).lower():
+            print("Computer OpenCode profile: ready")
+            return
+        time.sleep(5)
+    raise RuntimeError(
+        "OpenCode profile was saved but did not reach ready detection status: "
+        + json.dumps(last_profile, sort_keys=True)
+    )
 
 
 def ensure_workspace(client: ComputerClient) -> None:
@@ -342,6 +416,8 @@ def main() -> int:
     login_or_setup(client, password)
     ensure_ollama_connection(client)
     report_qwen_model_ids(client)
+    if "--configure-opencode" in sys.argv[1:]:
+        ensure_opencode_profile(client)
     ensure_workspace(client)
     ensure_gateway_key(client, rotate="--rotate-gateway-key" in sys.argv[1:])
     validate_gateway()

@@ -480,7 +480,10 @@ services:
       - no-new-privileges:true
 
   open-webui-computer:
-    image: ghcr.io/open-webui/computer@sha256:bbfb7e6716c5adb024a75c0e3fbbdd7c4334cc0fc47071c83fbc0b58e9a29e2d
+    build:
+      context: ./open-webui-computer
+      dockerfile: Dockerfile
+    image: lcdash-open-webui-computer:2026-08-01
     container_name: lcdash-open-webui-computer
     restart: unless-stopped
     ports:
