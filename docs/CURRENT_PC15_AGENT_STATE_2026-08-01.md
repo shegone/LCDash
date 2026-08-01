@@ -73,7 +73,12 @@ accessibility data. The canonical source is
 3. Completed: install iClone Live Link 1.38 Trial and validate Auto Setup
    All-in-One 2.03 for UE 5.8 against a verified pre-install backup. See
    `PC15_AVATAR_INVENTORY_2026-08-01.md`.
-4. The Live Link 1.38 Trial is expired. Use a disposable five-second FBX
-   export/import test through Auto Setup before considering the paid license.
-5. Begin supervised avatar/video tasks, then expand autonomy only after each
+4. Completed: native iClone Python created the isolated test project
+   `C:\MAE-Agent\tests\MAE_iClone_FBX_Test.iProject`. It loaded the neutral
+   female avatar and idle motion and verified the saved 77,258,714-byte file.
+   The helper is `scripts/iclone_create_disposable_test.py`; it does not export
+   FBX or change Unreal.
+5. Next: export that disposable project to FBX and import it through Auto Setup
+   before considering the paid Live Link license.
+6. Begin supervised avatar/video tasks, then expand autonomy only after each
    action class has a repeatable validation and rollback path.

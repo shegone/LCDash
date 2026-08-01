@@ -107,9 +107,12 @@ The no-purchase evaluation path is:
 
 ## Recommended first supervised workflow
 
-1. Create a disposable five-second iClone animation without changing the MAE
-   baseline project.
-2. Export it to FBX and import it through the verified Auto Setup integration.
+1. Completed: create a disposable iClone animation without changing the MAE
+   baseline project. The native iClone Python test loaded `Neutral_F.ccAvatar`,
+   applied `Female Idle_1.rlMotion`, and saved
+   `C:\MAE-Agent\tests\MAE_iClone_FBX_Test.iProject` (77,258,714 bytes).
+2. Export the disposable project to FBX and import it through the verified Auto
+   Setup integration.
 3. Retarget it to a disposable Unreal test character or sequence.
 4. Evaluate the result against Unreal-native MetaHuman animation options before
    considering the paid Live Link license.
