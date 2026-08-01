@@ -410,6 +410,16 @@ services:
       - >-
         export WEBUI_SECRET_KEY="$$(cat /run/secrets/openwebui_secret_key)";
         export WEBUI_ADMIN_PASSWORD="$$(cat /run/secrets/openwebui_admin_password)";
+        terminal_key="$$(cat /run/secrets/open_terminal_api_key)";
+        export TERMINAL_SERVER_CONNECTIONS="[{
+          \"id\": \"lcdash-local-operator\",
+          \"name\": \"LCDash Local Operator\",
+          \"enabled\": true,
+          \"url\": \"http://open-terminal:8000\",
+          \"key\": \"$${terminal_key}\",
+          \"auth_type\": \"bearer\",
+          \"config\": {\"access_grants\": []}
+        }]";
         exec bash /app/backend/start.sh
     environment:
       OLLAMA_BASE_URL: http://ollama:11434
@@ -431,6 +441,7 @@ services:
     secrets:
       - openwebui_secret_key
       - openwebui_admin_password
+      - open_terminal_api_key
     ports:
       - "127.0.0.1:3000:8080"
     volumes:
