@@ -57,8 +57,9 @@ Project signals:
 
 ## Reallusion bridge readiness
 
-The built-in Unreal Live Link and MetaHuman plugins are installed, but no
-Reallusion/iClone Unreal plugin was found at the project or UE 5.8 engine level.
+Initial inventory found the built-in Unreal Live Link and MetaHuman plugins but
+no Reallusion/iClone Unreal plugin. The bridge was then installed and validated
+as described below.
 
 Reallusion's current UE 5.8 path requires:
 
@@ -70,16 +71,30 @@ Reallusion's current UE 5.8 path requires:
 The installed iClone 8.74 and Character Creator 4.72 meet Reallusion's stated
 minimum versions for this bridge.
 
+## Bridge installation completed
+
+- iClone Unreal Live Link 1.38 Trial is installed in iClone 8.
+- The signed Reallusion Auto Setup 2.03 installer was verified before use.
+- A pre-install project backup was created at:
+  `C:\MAE-Agent\backups\MAE_Avatar_Baseline_pre_autosetup_20260801-191947`
+- The backup contains 681 project files totaling approximately 1.38 GB.
+- The UE 5.8 Auto Setup package was copied into the project only after a
+  collision check returned zero existing-file conflicts.
+- All 549 copied package files passed presence and size verification.
+- Installed project plugin: `Plugins\RLPlugin`, version 2.03, engine 5.8.0.
+- Unreal reopened successfully and logged
+  `LogPluginManager: Mounting Project plugin RLPlugin`.
+- No missing-module, incompatible-plugin, or plugin-load failure was found.
+- The unrelated PIX capture warning in the Unreal log does not indicate an
+  RLPlugin load failure.
+
 ## Recommended first supervised workflow
 
-1. Save and back up the current Unreal project and iClone project.
-2. Install iClone Live Link through Reallusion Hub.
-3. Download Auto Setup All-in-One 2.03 for UE 5.8.
-4. Close Unreal Editor before copying the Auto Setup plugin into the project.
-5. Reopen the project and verify plugin loading before enabling any autonomous
-   changes.
-6. Use `MAE_FullBody_Test` for a short observation-only Live Link connection
+1. Open iClone with the installed Live Link 1.38 Trial.
+2. Use `MAE_FullBody_Test` for a short observation-only Live Link connection
    test, then record a disposable five-second motion take.
+3. Evaluate the trial's practical and licensing limits before purchasing the
+   paid Live Link license.
 
 Do not change the project default map or modify the baseline MetaHuman until a
 recoverable project backup has been verified.

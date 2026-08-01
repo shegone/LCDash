@@ -70,7 +70,10 @@ accessibility data. The canonical source is
    have been saved; the non-disruptive scheduled-task test already passes.
 2. Establish a reversible Unreal/iClone working-copy and backup routine before
    allowing autonomous project edits.
-3. Install and validate Reallusion iClone Live Link 1.38+ and Auto Setup
-   All-in-One 2.03+ for UE 5.8. See `PC15_AVATAR_INVENTORY_2026-08-01.md`.
-4. Begin supervised avatar/video tasks, then expand autonomy only after each
+3. Completed: install iClone Live Link 1.38 Trial and validate Auto Setup
+   All-in-One 2.03 for UE 5.8 against a verified pre-install backup. See
+   `PC15_AVATAR_INVENTORY_2026-08-01.md`.
+4. Run an observation-first Live Link connection test and a disposable
+   five-second motion take before considering the paid license.
+5. Begin supervised avatar/video tasks, then expand autonomy only after each
    action class has a repeatable validation and rollback path.
