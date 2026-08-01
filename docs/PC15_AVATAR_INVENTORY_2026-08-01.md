@@ -88,13 +88,31 @@ minimum versions for this bridge.
 - The unrelated PIX capture warning in the Unreal log does not indicate an
   RLPlugin load failure.
 
+## Live Link trial result
+
+The installed iClone Unreal Live Link 1.38 Trial reports that its trial period
+has expired. No connection, transfer, activation, or recording was attempted.
+Do not purchase the paid connector solely to continue setup validation.
+
+The no-purchase evaluation path is:
+
+1. Keep the verified free Auto Setup 2.03 project integration.
+2. Create or edit a short disposable animation in iClone.
+3. Export the animation through the available FBX allowance or the user's
+   existing iClone subscription rights.
+4. Import through Auto Setup and retarget or sequence it in Unreal.
+5. Compare the resulting animation quality and labor against Unreal-native
+   MetaHuman Animator and audio-driven facial animation before deciding whether
+   real-time Live Link is worth its license cost.
+
 ## Recommended first supervised workflow
 
-1. Open iClone with the installed Live Link 1.38 Trial.
-2. Use `MAE_FullBody_Test` for a short observation-only Live Link connection
-   test, then record a disposable five-second motion take.
-3. Evaluate the trial's practical and licensing limits before purchasing the
-   paid Live Link license.
+1. Create a disposable five-second iClone animation without changing the MAE
+   baseline project.
+2. Export it to FBX and import it through the verified Auto Setup integration.
+3. Retarget it to a disposable Unreal test character or sequence.
+4. Evaluate the result against Unreal-native MetaHuman animation options before
+   considering the paid Live Link license.
 
 Do not change the project default map or modify the baseline MetaHuman until a
 recoverable project backup has been verified.

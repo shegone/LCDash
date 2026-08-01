@@ -73,7 +73,7 @@ accessibility data. The canonical source is
 3. Completed: install iClone Live Link 1.38 Trial and validate Auto Setup
    All-in-One 2.03 for UE 5.8 against a verified pre-install backup. See
    `PC15_AVATAR_INVENTORY_2026-08-01.md`.
-4. Run an observation-first Live Link connection test and a disposable
-   five-second motion take before considering the paid license.
+4. The Live Link 1.38 Trial is expired. Use a disposable five-second FBX
+   export/import test through Auto Setup before considering the paid license.
 5. Begin supervised avatar/video tasks, then expand autonomy only after each
    action class has a repeatable validation and rollback path.
