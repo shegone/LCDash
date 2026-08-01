@@ -331,6 +331,70 @@ def validate_read_only_agent_task() -> None:
     print("Computer read-only agent task: OK")
 
 
+def validate_opencode_agent_task() -> None:
+    gateway_key = GATEWAY_KEY_FILE.read_text(encoding="utf-8").strip()
+    auth_headers = {
+        "Authorization": f"Bearer {gateway_key}",
+        "Content-Type": "application/json",
+    }
+    model_request = urllib.request.Request(
+        BASE_URL + "/v1/models", headers=auth_headers
+    )
+    with urllib.request.urlopen(model_request, timeout=30) as response:
+        available = json.loads(response.read())
+    workspace_model_id = next(
+        (
+            item.get("id")
+            for item in available.get("data", [])
+            if isinstance(item, dict)
+            and str(item.get("id", "")).startswith("cptr/")
+        ),
+        None,
+    )
+    if not workspace_model_id:
+        raise RuntimeError("Computer workspace model is unavailable for OpenCode validation")
+
+    workspace_root = Path("/srv/lcdash-data/agent-workspaces/LCDash")
+    expected_heading = (workspace_root / "AGENTS.md").read_text(
+        encoding="utf-8"
+    ).splitlines()[0]
+    model_file = workspace_root / ".cptr/model"
+    original_model = model_file.read_text(encoding="utf-8")
+    try:
+        model_file.write_text(
+            "agent:lcdash-opencode/ollama/qwen3.5:27b\n", encoding="utf-8"
+        )
+        payload = json.dumps(
+            {
+                "model": workspace_model_id,
+                "stream": False,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": (
+                            "Read the first line of AGENTS.md and return only that line. "
+                            "Do not modify files and do not perform any other task."
+                        ),
+                    }
+                ],
+            }
+        ).encode("utf-8")
+        chat_request = urllib.request.Request(
+            BASE_URL + "/v1/chat/completions",
+            data=payload,
+            method="POST",
+            headers=auth_headers,
+        )
+        with urllib.request.urlopen(chat_request, timeout=300) as response:
+            result = json.loads(response.read())
+    finally:
+        model_file.write_text(original_model, encoding="utf-8")
+    content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+    if expected_heading not in str(content):
+        raise RuntimeError("OpenCode did not return the expected project heading")
+    print("Computer OpenCode read-only task: OK")
+
+
 def configure_open_webui(password: str) -> None:
     gateway_key = GATEWAY_KEY_FILE.read_text(encoding="utf-8").strip()
     client = ComputerClient(OPEN_WEBUI_BASE_URL)
@@ -424,6 +488,8 @@ def main() -> int:
     configure_open_webui(password)
     if "--validate-agent" in sys.argv[1:]:
         validate_read_only_agent_task()
+    if "--validate-opencode" in sys.argv[1:]:
+        validate_opencode_agent_task()
     print("Open WebUI Computer pilot initialization: complete")
     return 0
 
