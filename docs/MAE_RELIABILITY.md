@@ -46,6 +46,30 @@ Every MAE answer includes:
   approved local guidance, or MAE safety policy;
 - measured total, research, and model-generation time.
 
+## Incident-type call review
+
+Authorized supervisors can ask MAE for the latest one to ten completed calls
+matching an incident description or code, for example:
+
+`Show me the last five chest pain calls.`
+
+MAE returns a deterministic PostgreSQL-backed list with CFS number, received
+time, incident description, city, and priority. The result is explicitly
+labeled as completed-call history; an active call may not appear until the
+analytics collector stores it as completed.
+
+After selecting a CFS number, the supervisor can request one of three read-only
+CentralSquare responses:
+
+- `Give me a call summary for CFS26-12345.` for core call and unit fields;
+- `Give me a detailed call report for CFS26-12345.` for returned reporter,
+  command-log, and attached-data indicators; or
+- `Give me a call narrative for CFS26-12345.` for a chronological account based
+  strictly on returned CAD fields and command-log entries.
+
+The narrative must not infer an event, patient condition, or outcome that was
+not returned by CentralSquare.
+
 ## Controlled memory
 
 MAE does not self-modify. Memory candidates remain pending until an authorized

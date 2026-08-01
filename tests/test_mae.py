@@ -289,6 +289,138 @@ class MAEGuardrailTests(unittest.TestCase):
         self.assertIn("CFS26-50001", result["answer"])
 
     @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service.get_live_operations_snapshot")
+    @patch("app.services.mae_service.get_latest_completed_calls_by_incident")
+    def test_latest_five_calls_by_incident_type_are_verified_from_database(
+        self,
+        incident_calls_mock,
+        live_mock,
+        post_mock,
+    ):
+        incident_calls_mock.return_value = {
+            "available": True,
+            "incident_type": "chest pain",
+            "requested_limit": 5,
+            "calls_returned": 2,
+            "latest_stored_at": "2026-08-01T16:00:00+00:00",
+            "calls": [
+                {
+                    "cfs_number": "CFS26-51005",
+                    "call_received_at": "2026-08-01T16:00:00+00:00",
+                    "incident_description": "Chest Pain",
+                    "priority": "15",
+                    "city": "LOGAN",
+                },
+                {
+                    "cfs_number": "CFS26-50991",
+                    "call_received_at": "2026-08-01T14:30:00+00:00",
+                    "incident_description": "Chest Pain / Discomfort",
+                    "priority": "10",
+                    "city": "CHAPMANVILLE",
+                },
+            ],
+        }
+
+        result = ask_mae("Show me the last five chest pain calls.")
+
+        incident_calls_mock.assert_called_once_with("chest pain", 5)
+        live_mock.assert_not_called()
+        post_mock.assert_not_called()
+        self.assertIn("latest 2 completed calls", result["answer"])
+        self.assertIn("- 1. CFS26-51005", result["answer"])
+        self.assertIn("- 2. CFS26-50991", result["answer"])
+        self.assertIn("call narrative", result["answer"])
+        self.assertEqual(result["sources"][0]["kind"], "historical")
+
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service.get_call_detail")
+    def test_basic_call_summary_omits_command_log_details(
+        self,
+        call_detail_mock,
+        post_mock,
+    ):
+        call_detail_mock.return_value = {
+            "cfs_number": "CFS26-51005",
+            "incident_description": "Chest Pain",
+            "status": "Closed",
+            "priority": "15",
+            "location": "100 TEST STREET, LOGAN",
+            "call_datetime": "2026-08-01T16:00:00+00:00",
+            "assigned_units": [{"unit_number": "MED10", "status": "Clear"}],
+            "reporter": {"name": "TEST REPORTER"},
+            "command_logs": [{"text": "PRIVATE DETAIL"}],
+            "raw": {},
+        }
+
+        result = ask_mae("Give me a call summary for CFS26-51005.")
+
+        call_detail_mock.assert_called_once_with("CFS26-51005")
+        post_mock.assert_not_called()
+        self.assertIn("CFS26-51005", result["answer"])
+        self.assertIn("MED10", result["answer"])
+        self.assertNotIn("TEST REPORTER", result["answer"])
+        self.assertNotIn("PRIVATE DETAIL", result["answer"])
+
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service.get_call_detail")
+    def test_detailed_call_report_includes_returned_command_log(
+        self,
+        call_detail_mock,
+        post_mock,
+    ):
+        call_detail_mock.return_value = {
+            "cfs_number": "CFS26-51005",
+            "incident_description": "Chest Pain",
+            "status": "Closed",
+            "assigned_units": [],
+            "reporter": {"name": "TEST REPORTER"},
+            "command_logs": [{"text": "DOCUMENTED CAD EVENT"}],
+            "raw": {},
+        }
+
+        result = ask_mae("Give me a detailed call report for CFS26-51005.")
+
+        call_detail_mock.assert_called_once_with("CFS26-51005")
+        post_mock.assert_not_called()
+        self.assertIn("TEST REPORTER", result["answer"])
+        self.assertIn("DOCUMENTED CAD EVENT", result["answer"])
+
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service.get_call_detail")
+    def test_call_narrative_is_grounded_in_returned_cad_chronology(
+        self,
+        call_detail_mock,
+        post_mock,
+    ):
+        call_detail_mock.return_value = {
+            "cfs_number": "CFS26-51005",
+            "incident_description": "Chest Pain",
+            "location": "100 TEST STREET, LOGAN",
+            "call_datetime": "2026-08-01T16:00:00+00:00",
+            "assigned_units": [{"unit_number": "MED10"}],
+            "command_logs": [
+                {
+                    "timestamp": "2026-08-01T16:02:00+00:00",
+                    "text": "MED10 DISPATCHED",
+                },
+                {
+                    "timestamp": "2026-08-01T16:08:00+00:00",
+                    "text": "MED10 ON SCENE",
+                },
+            ],
+            "raw": {},
+        }
+
+        result = ask_mae("Give me a call narrative for CFS26-51005.")
+
+        call_detail_mock.assert_called_once_with("CFS26-51005")
+        post_mock.assert_not_called()
+        self.assertIn("based strictly", result["answer"])
+        self.assertIn("MED10 DISPATCHED", result["answer"])
+        self.assertIn("MED10 ON SCENE", result["answer"])
+        self.assertIn("does not infer", result["answer"])
+
+    @patch("app.services.mae_service.httpx.post")
     @patch("app.services.mae_service.get_recent_cad_activity")
     @patch("app.services.mae_service.get_live_operations_snapshot")
     @patch("app.services.mae_service.get_analytics_overview")
