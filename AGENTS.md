@@ -97,6 +97,118 @@ For each roadmap item:
 If a task fails repeatedly, stop changing things blindly. Record the exact
 failure, preserve the last known-good state, and request Codex review.
 
+## Mandatory local-agent execution protocol
+
+Apply this protocol before using tools or changing files. It is especially
+important for local models with limited context or unreliable long-horizon
+tool use.
+
+### 1. Classify and bound the request
+
+- First classify the request as `READ`, `PLAN`, `CHANGE`, `TEST`, `DEPLOY`, or
+  `OPERATE`.
+- Convert a broad request into ordered work packages. Each package must have
+  one outcome, an explicit file or subsystem scope, an acceptance check, and a
+  stopping point.
+- Do not execute an entire project roadmap in one response. Produce the
+  backlog, identify the critical path, and begin only the first safe package.
+- Never mix unrelated documentation, code, infrastructure, `.227`, and `.15`
+  changes in one branch or work package.
+
+### 2. Establish a checkpoint before work
+
+Before taking action, report and retain:
+
+- current branch and HEAD;
+- clean or dirty working-tree state;
+- pre-existing changed files that must be preserved;
+- task classification and allowed actions;
+- exact files or subsystem in scope;
+- prohibited actions; and
+- acceptance evidence required to finish.
+
+If the tree is dirty, do not overwrite, revert, discard, stage, or combine the
+existing changes unless the task explicitly owns them.
+
+### 3. Use progressive discovery
+
+- Read `AGENTS.md`, then the smallest authoritative source set needed for the
+  current work package.
+- Search filenames before searching file contents.
+- Start with at most five targeted file reads or searches. After that, pause
+  and summarize what was learned, what remains unknown, and whether more
+  discovery is justified.
+- Do not repeatedly search synonyms after the relevant source files are known.
+- For a master roadmap, synthesize in sections. Do not attempt to read every
+  repository file before producing useful output.
+- Treat old notes, local remote-tracking refs, and roadmap status as possibly
+  stale. Use `VERIFY` when current evidence is unavailable.
+
+### 4. Manage context deliberately
+
+- Keep a short working ledger in the response: `Known`, `Assumptions`,
+  `Unknowns`, `Current package`, and `Next checkpoint`.
+- When the task is large, complete one phase and report before continuing.
+- If output or context is becoming long, stop tool use and produce a concise
+  checkpoint rather than starting another discovery loop.
+- Never restart the full investigation after a continuation. Reuse the
+  evidence already gathered and continue from the recorded checkpoint.
+
+### 5. Verify every material claim
+
+- Distinguish observed facts, repository documentation, inference, and
+  recommendations.
+- Do not call a benchmark `PASS` until every requested acceptance check is
+  shown.
+- Re-read the final changed text and inspect the final diff before reporting.
+- Verify that only intended files changed.
+- Quote exact branch, file, and test names from tool output. Do not silently
+  correct or abbreviate them in the report.
+- A local remote-tracking branch is not proof of current GitHub state unless a
+  safe fetch was explicitly allowed and completed.
+- Do not infer production state from the development clone.
+
+### 6. Recover from errors conservatively
+
+- After the first failed edit or command, inspect the actual result before
+  retrying.
+- After a second failure of the same kind, stop that approach, preserve the
+  current state, and report the blocker.
+- Do not make repeated blind edits to repair formatting or syntax.
+- Never weaken tests, safety checks, authentication, audit, privacy filtering,
+  or fallbacks merely to obtain a passing result.
+
+### 7. Use a fixed completion report
+
+Every completed work package must report:
+
+1. outcome and `PASS`, `FAIL`, or `BLOCKED`;
+2. branch, HEAD, and working-tree state;
+3. files changed and a concise diff summary;
+4. commands or tests run and their exact results;
+5. safety, privacy, and boundary checks;
+6. assumptions or unverified facts;
+7. whether anything was committed, pushed, deployed, installed, or operated;
+8. exact next work package; and
+9. whether hosted Codex or user action is required.
+
+If the response stops before this report, the work package is not complete.
+
+### 8. Escalate at the correct boundary
+
+Escalate to hosted Codex before continuing when:
+
+- the same failure occurs twice;
+- the task touches production deployment, rollback, credentials, networking,
+  authentication, authorization, backup policy, or public-safety outputs;
+- documentation and code materially contradict each other;
+- the model cannot prove that its proposed change preserves existing safety
+  behavior;
+- the requested scope cannot fit into one bounded, reviewable work package; or
+- the model is unsure whether an action is read-only or state-changing.
+
+Escalation is a successful safety outcome, not a failed task.
+
 ## Actions the local agent may perform autonomously
 
 - Read repository files and non-secret documentation.

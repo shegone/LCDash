@@ -33,10 +33,15 @@ secret directory mounted.
 
 ## User access
 
-Open the existing protected Open WebUI site and choose `cptr/LCDash` from the
-model selector. This routes the conversation into the isolated Computer
-workspace while preserving Open WebUI conversation lineage through the
-configured custom headers.
+Open the existing protected Open WebUI site and select the LCDash workspace.
+The technical gateway identifier is `cptr/LCDash`, while the current screen may
+show the friendly label `LCDash - /workspace/LCDash` and the tool badge
+`LCDash Local Operator`.
+
+Seeing those labels confirms that the isolated LCDash development workspace is
+selected; it does not indicate production access. Conversations route into the
+containerized Computer workspace while preserving Open WebUI conversation
+lineage through the configured custom headers.
 
 Direct Computer port `8020` is loopback-only and is not published to the LAN or
 Internet.

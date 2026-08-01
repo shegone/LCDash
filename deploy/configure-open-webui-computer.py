@@ -277,9 +277,10 @@ def validate_read_only_agent_task() -> None:
     if not model_id:
         raise RuntimeError("Computer workspace model is unavailable for validation")
 
-    expected_heading = Path(
-        "/srv/lcdash-data/agent-workspaces/LCDash/AGENTS.md"
-    ).read_text(encoding="utf-8").splitlines()[0]
+    expected_headings = [
+        "# LCDash Local Agent Charter",
+        "## Mandatory local-agent execution protocol",
+    ]
     payload = json.dumps(
         {
             "model": model_id,
@@ -288,8 +289,10 @@ def validate_read_only_agent_task() -> None:
                 {
                     "role": "user",
                     "content": (
-                        "Read the first line of AGENTS.md and return only that line. "
-                        "Do not modify files and do not perform any other task."
+                        "Read AGENTS.md and return only these two heading lines in "
+                        "their original order: the document title and the mandatory "
+                        "local-agent execution protocol heading. Do not modify files "
+                        "and do not perform any other task."
                     ),
                 }
             ],
@@ -304,9 +307,12 @@ def validate_read_only_agent_task() -> None:
     with urllib.request.urlopen(chat_request, timeout=240) as response:
         result = json.loads(response.read())
     content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-    if expected_heading not in str(content):
-        raise RuntimeError("Computer agent did not return the expected project heading")
-    print("Computer read-only agent task: OK")
+    rendered_content = str(content)
+    if not all(heading in rendered_content for heading in expected_headings):
+        raise RuntimeError(
+            "Computer agent did not return the expected project instruction headings"
+        )
+    print("Computer project-instruction read-only task: OK")
 
 
 def configure_open_webui(password: str) -> None:
