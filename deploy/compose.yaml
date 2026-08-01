@@ -479,6 +479,21 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  open-webui-computer:
+    image: ghcr.io/open-webui/computer@sha256:bbfb7e6716c5adb024a75c0e3fbbdd7c4334cc0fc47071c83fbc0b58e9a29e2d
+    container_name: lcdash-open-webui-computer
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8020:8000"
+    volumes:
+      - lcdash_open_webui_computer_data:/data
+      - /srv/lcdash-data/agent-workspaces/LCDash:/workspace/LCDash
+    working_dir: /workspace/LCDash
+    networks:
+      - lcdash_private
+    security_opt:
+      - no-new-privileges:true
+
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: lcdash-cloudflared
@@ -508,6 +523,7 @@ volumes:
   lcdash_ollama_data:
   lcdash_openwebui_data:
   lcdash_open_terminal_data:
+  lcdash_open_webui_computer_data:
   lcdash_speaches_models:
   lcdash_parakeet_models:
   lcdash_rclone_config:
