@@ -445,6 +445,29 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  open-terminal:
+    image: ghcr.io/open-webui/open-terminal:latest
+    container_name: lcdash-open-terminal
+    restart: unless-stopped
+    environment:
+      OPEN_TERMINAL_API_KEY_FILE: /run/secrets/open_terminal_api_key
+      OPEN_TERMINAL_FILE_BROWSER_ROOT: /workspace
+      OPEN_TERMINAL_INFO: >-
+        Logan County LCDash local development operator. Read
+        /workspace/LCDash/AGENTS.md before performing project work. The writable
+        workspace is a development clone, not the live production checkout.
+      OPEN_TERMINAL_MAX_SESSIONS: "8"
+      OPEN_TERMINAL_LOG_RETENTION: "2592000"
+    secrets:
+      - open_terminal_api_key
+    volumes:
+      - /srv/lcdash-data/agent-workspaces:/workspace
+      - lcdash_open_terminal_data:/home/user
+    networks:
+      - lcdash_private
+    security_opt:
+      - no-new-privileges:true
+
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: lcdash-cloudflared
@@ -473,6 +496,7 @@ volumes:
   lcdash_postgres_data:
   lcdash_ollama_data:
   lcdash_openwebui_data:
+  lcdash_open_terminal_data:
   lcdash_speaches_models:
   lcdash_parakeet_models:
   lcdash_rclone_config:
@@ -492,6 +516,8 @@ secrets:
     file: /srv/lcdash-platform/secrets/openwebui_secret_key
   openwebui_admin_password:
     file: /srv/lcdash-platform/secrets/openwebui_admin_password
+  open_terminal_api_key:
+    file: /srv/lcdash-platform/secrets/open_terminal_api_key
   cloudflare_tunnel_token:
     file: /srv/lcdash-platform/secrets/cloudflare_tunnel_token
   rclone_config_seed:

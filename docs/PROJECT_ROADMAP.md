@@ -124,12 +124,15 @@ Build a secure web-based operations dashboard for Logan County 911 using the Cen
 - Replace the mock provider only after NGA911 supplies approved API,
   authentication, tenant, retention, audit, and service-level requirements
 
-## Phase 11 - Offline Development Agent
+## Phase 11 - Offline Development Operator
 
-- Run an isolated OpenHands-based local coding agent for routine development,
-  tests, documentation, Git preparation, and durable handoffs
-- Use local Ollama models with Qwen3-Coder 30B as the initial coding model and
-  gpt-oss 20B as an independent reasoning/tool-use reviewer
+- Use the existing Open WebUI as the persistent chat interface and Open
+  Terminal as its authenticated file, shell, Git, and execution layer
+- Give the operator a complete writable development clone while initially
+  keeping the deployed checkout, production secrets, databases, backups, and
+  Docker control outside the agent mount
+- Use the installed `qwen3.5:27b` Ollama model for initial acceptance testing
+- Benchmark Open Interpreter, OpenCode, and Goose as Codex-style harnesses
 - Keep production `.227` workloads higher priority than coding inference
 - Use PC `.15` for Unreal, MetaHuman, video generation, rendering, Pixel
   Streaming, and portrait LED output

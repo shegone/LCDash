@@ -9,18 +9,24 @@ security, architecture, production deployment, and recovery work.
 The root `AGENTS.md` file is the always-loaded project charter. It applies to
 OpenHands and any other agent working in this repository.
 
-## Proposed local stack
+## Local operator stack
 
-- OpenHands Local GUI or CLI for the agent workspace
+- Open WebUI as the persistent chat window
+- Open Terminal as the authenticated file, terminal, Git, and execution layer
+- A dedicated writable development clone under
+  `/srv/lcdash-data/agent-workspaces/LCDash`
 - Ollama for local model serving
-- Qwen3-Coder 30B as the initial coding model
-- gpt-oss 20B as an independent reasoning and tool-use reviewer
+- `qwen3.5:27b` as the initial installed local agent model
+- Open Interpreter, OpenCode, and Goose as benchmark candidates for the
+  Codex-style agent harness
 - Docker isolation for agent execution
 - Git branches and tests as the change-control boundary
 - Existing LCDash deployment tooling as the only normal production path
 
-OpenHands should start in confirmation mode. Do not use `--always-approve` for
-this public-safety project.
+The operator may work broadly inside its development clone. Live CAD,
+production secrets, databases, backups, Docker control, and the deployed
+checkout are deliberately not mounted into the first acceptance environment.
+Broader access is added one capability at a time after its behavior is tested.
 
 ## Workspace design
 
@@ -146,15 +152,16 @@ automatic production deployment authority.
 
 ## Implementation sequence
 
-1. Benchmark models without changing production services.
-2. Install OpenHands in an isolated environment.
+1. Add Open Terminal beside the existing Open WebUI and Ollama services.
+2. Connect it through Open WebUI's dedicated Open Terminal integration.
 3. Load `AGENTS.md` and confirm the agent can restate all hard boundaries.
 4. Run the ten-task acceptance benchmark in a disposable branch.
-5. Add tested hooks for dangerous-command blocking, audit logging, and
-   stop-time test/handoff enforcement.
-6. Enable local commits after successful review.
-7. Keep GitHub pushes and production deployment human-approved.
-8. Re-evaluate model quality and resource contention after real use.
+5. Benchmark Open Interpreter, OpenCode, and Goose against the same tasks.
+6. Select the best harness and add durable session/handoff automation.
+7. Add the `.15` workstation connector after authenticated remote management
+   is available there.
+8. Expand credentials and operational capabilities only after scoped tests.
+9. Re-evaluate model quality and resource contention after real use.
 
 ## References
 
@@ -168,3 +175,11 @@ automatic production deployment authority.
   https://docs.openhands.dev/sdk/guides/security
 - OpenHands conversation persistence:
   https://docs.openhands.dev/sdk/guides/convo-persistence
+- Open Terminal:
+  https://docs.openwebui.com/features/open-terminal/
+- Open Interpreter:
+  https://github.com/openinterpreter/openinterpreter
+- OpenCode:
+  https://github.com/anomalyco/opencode
+- Goose:
+  https://github.com/aaif-goose/goose
