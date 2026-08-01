@@ -289,6 +289,8 @@ services:
     container_name: lcdash-ollama
     restart: unless-stopped
     gpus: all
+    ports:
+      - "14.1.1.227:11434:11434"
     environment:
       OLLAMA_KEEP_ALIVE: "10m"
     volumes:
