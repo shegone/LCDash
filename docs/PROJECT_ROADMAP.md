@@ -123,3 +123,23 @@ Build a secure web-based operations dashboard for Logan County 911 using the Cen
   radio, station alerting, or other emergency operations
 - Replace the mock provider only after NGA911 supplies approved API,
   authentication, tenant, retention, audit, and service-level requirements
+
+## Phase 11 - Offline Development Agent
+
+- Run an isolated OpenHands-based local coding agent for routine development,
+  tests, documentation, Git preparation, and durable handoffs
+- Use local Ollama models with Qwen3-Coder 30B as the initial coding model and
+  gpt-oss 20B as an independent reasoning/tool-use reviewer
+- Keep production `.227` workloads higher priority than coding inference
+- Use PC `.15` for Unreal, MetaHuman, video generation, rendering, Pixel
+  Streaming, and portrait LED output
+- Require confirmation for deployments, GitHub production-branch pushes,
+  network/security changes, software installation, credentials, backups, and
+  operational outputs
+- Keep the agent in an isolated clone or worktree with no direct writable mount
+  of production current, secrets, or backups
+- Pass the ten-task acceptance benchmark before expanding permissions
+- Maintain `LATEST_PC15.md`, `LATEST_PC227.md`, dated snapshots, and a concise
+  Codex catch-up section at every meaningful stopping point
+- Escalate repeated failures, security decisions, architecture changes, and
+  production deployment work to hosted Codex
