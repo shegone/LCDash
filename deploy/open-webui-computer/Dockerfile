@@ -2,8 +2,8 @@ FROM ghcr.io/open-webui/computer@sha256:bbfb7e6716c5adb024a75c0e3fbbdd7c4334cc0f
 
 USER root
 
-ADD --checksum=sha256:9b09b4cd20beed42c3308267f1f663f1f79c76a7e6e0e9bdfc8d05536430628e \
-    https://github.com/anomalyco/opencode/releases/download/v1.1.51/opencode-linux-x64.tar.gz \
+ADD --checksum=sha256:a4dffcc00a5a93256c6bd06aa0c984320528f564db52a1f4becd5c7de9fb59a1 \
+    https://github.com/anomalyco/opencode/releases/download/v1.18.11/opencode-linux-x64.tar.gz \
     /tmp/opencode.tar.gz
 
 RUN tar -xzf /tmp/opencode.tar.gz -C /usr/local/bin \

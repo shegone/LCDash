@@ -12,13 +12,18 @@ OpenHands and any other agent working in this repository.
 ## Local operator stack
 
 - Open WebUI as the persistent chat window
+- Open WebUI Computer as the persistent project workspace, editor, Git,
+  terminal, chat, and local-agent layer
 - Open Terminal as the authenticated file, terminal, Git, and execution layer
 - A dedicated writable development clone under
   `/srv/lcdash-data/agent-workspaces/LCDash`
 - Ollama for local model serving
 - `qwen3.5:27b` as the initial installed local agent model
-- Open Interpreter, OpenCode, and Goose as benchmark candidates for the
-  Codex-style agent harness
+- Computer's built-in local agent as the Phase A baseline
+- OpenCode installed as a terminal fallback while its Computer 0.9.20 native
+  session adapter remains disabled pending a compatible upstream fix
+- Open Interpreter, Goose, Qwen Code, OpenHands, Cline, and Aider as later
+  benchmark candidates
 - Docker isolation for agent execution
 - Git branches and tests as the change-control boundary
 - Existing LCDash deployment tooling as the only normal production path
@@ -152,16 +157,22 @@ automatic production deployment authority.
 
 ## Implementation sequence
 
-1. Add Open Terminal beside the existing Open WebUI and Ollama services.
-2. Connect it through Open WebUI's dedicated Open Terminal integration.
-3. Load `AGENTS.md` and confirm the agent can restate all hard boundaries.
-4. Run the ten-task acceptance benchmark in a disposable branch.
-5. Benchmark Open Interpreter, OpenCode, and Goose against the same tasks.
-6. Select the best harness and add durable session/handoff automation.
-7. Add the `.15` workstation connector after authenticated remote management
-   is available there.
-8. Expand credentials and operational capabilities only after scoped tests.
-9. Re-evaluate model quality and resource contention after real use.
+1. Completed: add Open Terminal beside the existing Open WebUI and Ollama
+   services and connect it through Open WebUI.
+2. Completed: add an isolated Open WebUI Computer workspace with only the
+   development clone mounted writable.
+3. Completed: connect Computer to local Ollama and publish `cptr/LCDash` through
+   the existing Open WebUI portal.
+4. Completed: pin `qwen3.5:27b` for the workspace and confirm a read-only agent
+   task can load `AGENTS.md` without changing the repository.
+5. In progress: run the expanded acceptance benchmark in disposable branches.
+6. Benchmark additional models and Open Interpreter, Goose, Qwen Code,
+   OpenHands, Cline, and Aider. Re-test native OpenCode after the upstream
+   Computer adapter is updated; until then use its working terminal CLI only.
+7. Add durable session/handoff automation and sanitized observability.
+8. Add the `.15` Windows workspace after authenticated remote management is
+   available and the user's iClone installation is inventoried.
+9. Expand permissions only after each narrower layer passes acceptance testing.
 
 ## References
 
@@ -177,6 +188,10 @@ automatic production deployment authority.
   https://docs.openhands.dev/sdk/guides/convo-persistence
 - Open Terminal:
   https://docs.openwebui.com/features/open-terminal/
+- Open WebUI Computer:
+  https://docs.openwebui.com/ecosystem/computer/
+- Open WebUI Computer gateway integration:
+  https://docs.openwebui.com/ecosystem/computer/automate/open-webui/
 - Open Interpreter:
   https://github.com/openinterpreter/openinterpreter
 - OpenCode:
