@@ -90,8 +90,18 @@ accessibility data. The canonical source is
    materials, and textures. Unreal reported nonfatal duplicate-texture renames
    and missing bind-pose entries for several IK/control bones. The exact PASS
    report is `MAE_Unreal_FBX_Import.result.txt` in the shared handoff folder.
-7. Next: visually inspect the skeletal mesh and play the imported idle
-   animation to validate scale, orientation, materials, bind pose, and motion
-   before considering the paid Live Link license.
-8. Begin supervised avatar/video tasks, then expand autonomy only after each
+7. Completed: opened the skeletal mesh and animation editors for supervised
+   visual inspection. The imported animation is 341 frames / 5.683 seconds,
+   but a read-only raw-key check found 108 static bone tracks and zero changing
+   tracks. The FBX therefore contains a timed static pose, not the intended
+   idle motion; Unreal playback is not the cause.
+8. Next: correct the iClone motion-bake/export step using an unmistakable
+   walking or waving motion, export to a new non-overwriting FBX filename, and
+   run the raw-key checker before importing another Unreal test folder. Keep
+   the current project, FBX, and Unreal folder as evidence; do not overwrite or
+   delete them.
+9. After motion is verified, validate scale, orientation, materials, bind pose,
+   and morph-target material support before considering the paid Live Link
+   license.
+10. Begin supervised avatar/video tasks, then expand autonomy only after each
    action class has a repeatable validation and rollback path.
