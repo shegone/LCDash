@@ -339,6 +339,31 @@ services:
       retries: 5
       start_period: 20s
 
+  # This is intentionally profile-gated. It is never on the MAE/JACK voice
+  # path until a sample has been approved, and it has no published host port.
+  voice-chatterbox:
+    build:
+      context: ./chatterbox-canary
+      dockerfile: Dockerfile
+    container_name: lcdash-voice-chatterbox-canary
+    profiles: ["voice-chatterbox"]
+    restart: "no"
+    gpus: all
+    environment:
+      HF_HOME: /models
+    volumes:
+      - lcdash_chatterbox_models:/models
+    networks:
+      - lcdash_private
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   voice-model-loader:
     image: ghcr.io/speaches-ai/speaches@sha256:6ec12ebf890a17e0d4b242a8ba9e0eb1fb836e60e8a3c857aea9838d541579ac
     container_name: lcdash-voice-model-loader
@@ -543,6 +568,7 @@ volumes:
   lcdash_open_terminal_data:
   lcdash_open_webui_computer_data:
   lcdash_speaches_models:
+  lcdash_chatterbox_models:
   lcdash_parakeet_models:
   lcdash_rclone_config:
 
