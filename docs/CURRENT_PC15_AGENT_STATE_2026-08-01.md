@@ -84,9 +84,14 @@ accessibility data. The canonical source is
    test FBX under `C:\MAE-Agent\tests\fbx_export`. The supervised run passed
    on 2026-08-01 and produced `MAE_iClone_FBX_Test_Unreal.fbx` (10,220,384
    bytes). The license check, export call, and non-empty-file check all passed.
-6. Next: perform a separate supervised Auto Setup import of that disposable
-   FBX into a reversible Unreal test location, validate the character and idle
-   animation, and record the result before considering the paid Live Link
-   license.
-7. Begin supervised avatar/video tasks, then expand autonomy only after each
+6. Completed: supervised Unreal Python import into the isolated path
+   `/Game/MAE_Test/DisposableFBX_20260801`. The import created 63 assets,
+   including the skeletal mesh, skeleton, physics asset, idle animation,
+   materials, and textures. Unreal reported nonfatal duplicate-texture renames
+   and missing bind-pose entries for several IK/control bones. The exact PASS
+   report is `MAE_Unreal_FBX_Import.result.txt` in the shared handoff folder.
+7. Next: visually inspect the skeletal mesh and play the imported idle
+   animation to validate scale, orientation, materials, bind pose, and motion
+   before considering the paid Live Link license.
+8. Begin supervised avatar/video tasks, then expand autonomy only after each
    action class has a repeatable validation and rollback path.
