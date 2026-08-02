@@ -56,3 +56,6 @@ Stop it after its audition to release GPU memory:
 ```sh
 docker compose -f deploy/compose.yaml --profile voice-qwen3-tts stop voice-qwen3-tts
 ```
+
+Its speech-only pronunciation rules match LCDash: `MAE` is rendered as
+"May" and `911` as "nine one one." Displayed and stored text is unchanged.

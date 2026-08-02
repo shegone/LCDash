@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+import re
 from threading import Lock
 
 import soundfile as sf
@@ -31,6 +32,19 @@ class SpeechRequest(BaseModel):
     voice: str = "mae-synthetic-female"
     response_format: str = "wav"
     speed: float = Field(default=1.0, ge=0.7, le=1.3)
+
+
+def _prepare_text_for_speech(text: str) -> str:
+    """Apply voice-only pronunciations without changing displayed text."""
+    prepared = str(text or "")
+    prepared = re.sub(r"\bMAE\b", "May", prepared, flags=re.IGNORECASE)
+    prepared = re.sub(
+        r"\bNGA[\s-]*9[\s-]*1[\s-]*1\b",
+        "N G A nine one one",
+        prepared,
+        flags=re.IGNORECASE,
+    )
+    return re.sub(r"\b9[\s-]*1[\s-]*1\b", "nine one one", prepared)
 
 
 def _load_model():
@@ -78,7 +92,7 @@ def synthesize(request: SpeechRequest) -> Response:
 
     model = _load_model()
     wavs, sample_rate = model.generate_voice_design(
-        text=request.input,
+        text=_prepare_text_for_speech(request.input),
         language="English",
         instruct=MAE_VOICE_INSTRUCTION,
     )
