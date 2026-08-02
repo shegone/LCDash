@@ -31,6 +31,12 @@ def write_result(lines):
 
 def status_succeeded(status):
     """Compare RLPy status values without assuming their Python representation."""
+    # iClone 8.74 returns a Python bool from CheckExportFbxHasLicense, while
+    # other RFileIO calls use RStatus values.
+    if status is True:
+        return True
+    if status is False or status is None:
+        return False
     try:
         return status == RLPy.RStatus.Success
     except Exception:
