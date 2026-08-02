@@ -31,7 +31,7 @@ x-lcdash-environment: &lcdash-environment
   EMS_RESPONSE_AGENCIES: LEASA
   EMS_UNIT_PREFIXES: MED,EMS
   OLLAMA_BASE_URL: http://ollama:11434
-  MAE_MODEL: qwen3.5:27b
+  MAE_MODEL: qwen3.6:27b
   MAE_REQUEST_TIMEOUT_SECONDS: "120"
   MAE_EMBEDDING_MODEL: nomic-embed-text
   MAE_EMBEDDING_TIMEOUT_SECONDS: "45"
