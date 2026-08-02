@@ -17,6 +17,8 @@ its private gateway key. The credential is not stored in Git or this handoff.
 
 ## Installed and verified
 
+- Visual Studio Code 1.130.0 and Continue 2.0.0 (installed 2026-08-02; model
+  connection pending the approved protected gateway configuration)
 - Open WebUI Computer `0.9.20`
 - Ollama models hosted by `.227`, including `qwen3.5:27b`
 - Default PC15 chat model: `lcdash/qwen3.5:27b`
