@@ -34,8 +34,19 @@ docker compose -f deploy/compose.yaml --profile voice-chatterbox stop voice-chat
    healthy while the canary is stopped and after it is tested.
 4. No assistant default is changed until an authorized reviewer selects it.
 
-## Next canary
+## Qwen3-TTS female-voice canary
 
-Qwen3-TTS needs its own isolated service because its Python runtime and model
-are materially different. It will be added only after the Chatterbox GPU and
-quality checks are recorded.
+Qwen3-TTS has its own isolated Python runtime and model cache. It uses the
+official VoiceDesign model with a fixed synthetic MAE voice description; it
+does not use a reference recording or voice-cloning path. Start it only when
+Chatterbox is stopped:
+
+```sh
+docker compose -f deploy/compose.yaml --profile voice-qwen3-tts up -d --build voice-qwen3-tts
+```
+
+Stop it after its audition to release GPU memory:
+
+```sh
+docker compose -f deploy/compose.yaml --profile voice-qwen3-tts stop voice-qwen3-tts
+```

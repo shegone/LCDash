@@ -364,6 +364,31 @@ services:
       retries: 3
       start_period: 30s
 
+  # Qwen3-TTS is a separate synthetic female-voice audition service. It is
+  # profile-gated and must not run at the same time as the Chatterbox canary.
+  voice-qwen3-tts:
+    build:
+      context: ./qwen3-tts-canary
+      dockerfile: Dockerfile
+    container_name: lcdash-voice-qwen3-tts-canary
+    profiles: ["voice-qwen3-tts"]
+    restart: "no"
+    gpus: all
+    environment:
+      HF_HOME: /models
+    volumes:
+      - lcdash_qwen3_tts_models:/models
+    networks:
+      - lcdash_private
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8003/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   voice-model-loader:
     image: ghcr.io/speaches-ai/speaches@sha256:6ec12ebf890a17e0d4b242a8ba9e0eb1fb836e60e8a3c857aea9838d541579ac
     container_name: lcdash-voice-model-loader
@@ -569,6 +594,7 @@ volumes:
   lcdash_open_webui_computer_data:
   lcdash_speaches_models:
   lcdash_chatterbox_models:
+  lcdash_qwen3_tts_models:
   lcdash_parakeet_models:
   lcdash_rclone_config:
 
