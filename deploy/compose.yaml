@@ -353,6 +353,7 @@ services:
       HF_HOME: /models
     volumes:
       - lcdash_chatterbox_models:/models
+      - lcdash_synthetic_voice_library:/voices:ro
     networks:
       - lcdash_private
     security_opt:
@@ -594,6 +595,7 @@ volumes:
   lcdash_open_webui_computer_data:
   lcdash_speaches_models:
   lcdash_chatterbox_models:
+  lcdash_synthetic_voice_library:
   lcdash_qwen3_tts_models:
   lcdash_parakeet_models:
   lcdash_rclone_config:

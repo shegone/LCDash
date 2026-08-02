@@ -7,9 +7,11 @@ any MAE or JACK default voice changes.
 
 - It runs only on the internal Docker network.
 - It has no host port, no CentralSquare credentials, and no CAD access.
-- It accepts only the `lcdash-chatterbox-canary` model name and `synthetic`
-  voice identifier.
-- It does not accept, store, or use reference audio. Voice cloning is disabled.
+- It accepts only the `lcdash-chatterbox-canary` model name and approved
+  synthetic voice identifiers.
+- Its female voice may use only the fixed, Qwen-generated synthetic reference
+  installed by the deployment process. It never accepts a user-provided or
+  real-person reference recording.
 - Kokoro and the existing Speaches transcription service remain the live path.
 
 ## Starting the canary
@@ -33,6 +35,10 @@ docker compose -f deploy/compose.yaml --profile voice-chatterbox stop voice-chat
 3. The existing `/api/voice/status`, speech, and transcription paths remain
    healthy while the canary is stopped and after it is tested.
 4. No assistant default is changed until an authorized reviewer selects it.
+
+The Chatterbox female voice is conditioned from the Qwen-generated synthetic
+reference `mae_synthetic_female.wav`. This is a synthetic-to-synthetic
+workflow, not an imitation of a person.
 
 ## Qwen3-TTS female-voice canary
 
