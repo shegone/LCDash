@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from io import BytesIO
 import re
+import subprocess
 from threading import Lock
 
 import soundfile as sf
@@ -13,6 +14,7 @@ from pydantic import BaseModel, Field
 
 
 MODEL_ID = "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign"
+API_MODEL_ID = "lcdash-qwen3-tts-mae"
 MAE_VOICE_INSTRUCTION = (
     "A warm, confident adult American female emergency communications "
     "assistant. Calm and reassuring, with clear diction and natural "
@@ -28,7 +30,7 @@ class SpeechRequest(BaseModel):
     """Subset of the OpenAI speech request used by LCDash."""
 
     input: str = Field(min_length=1, max_length=4000)
-    model: str = "lcdash-qwen3-tts-mae-canary"
+    model: str = API_MODEL_ID
     voice: str = "mae-synthetic-female"
     response_format: str = "wav"
     speed: float = Field(default=1.0, ge=0.7, le=1.3)
@@ -75,19 +77,24 @@ def health() -> dict:
     }
 
 
+@app.get("/v1/models")
+def list_models() -> dict:
+    return {"object": "list", "data": [{"id": API_MODEL_ID, "object": "model"}]}
+
+
 @app.post("/v1/audio/speech")
 def synthesize(request: SpeechRequest) -> Response:
-    if request.model != "lcdash-qwen3-tts-mae-canary":
+    if request.model != API_MODEL_ID:
         raise HTTPException(status_code=400, detail="Unsupported canary model.")
     if request.voice != "mae-synthetic-female":
         raise HTTPException(
             status_code=400,
             detail="This canary permits only the approved synthetic MAE voice.",
         )
-    if request.response_format != "wav":
+    if request.response_format not in {"wav", "mp3"}:
         raise HTTPException(
             status_code=400,
-            detail="The Qwen3-TTS canary currently returns WAV only.",
+            detail="Unsupported audio format.",
         )
 
     model = _load_model()
@@ -98,4 +105,16 @@ def synthesize(request: SpeechRequest) -> Response:
     )
     output = BytesIO()
     sf.write(output, wavs[0], sample_rate, format="WAV")
-    return Response(content=output.getvalue(), media_type="audio/wav")
+    wav_bytes = output.getvalue()
+    if request.response_format == "wav":
+        return Response(content=wav_bytes, media_type="audio/wav")
+
+    converted = subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", "pipe:0", "-f", "mp3", "pipe:1"],
+        input=wav_bytes,
+        capture_output=True,
+        check=False,
+    )
+    if converted.returncode != 0:
+        raise HTTPException(status_code=503, detail="MP3 conversion failed.")
+    return Response(content=converted.stdout, media_type="audio/mpeg")

@@ -167,6 +167,18 @@ class Settings:
         "speaches-ai/Kokoro-82M-v1.0-ONNX",
     )
     voice_tts_voice: str = _env("VOICE_TTS_VOICE", "af_heart")
+    voice_qwen_tts_base_url: str = _env(
+        "VOICE_QWEN_TTS_BASE_URL",
+        "http://127.0.0.1:8003",
+    )
+    voice_qwen_tts_model: str = _env(
+        "VOICE_QWEN_TTS_MODEL",
+        "lcdash-qwen3-tts-mae",
+    )
+    voice_qwen_tts_voice: str = _env(
+        "VOICE_QWEN_TTS_VOICE",
+        "mae-synthetic-female",
+    )
     voice_stt_model: str = _env(
         "VOICE_STT_MODEL",
         "deepdml/faster-whisper-large-v3-turbo-ct2",

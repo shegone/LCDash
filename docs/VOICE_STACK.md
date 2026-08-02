@@ -14,7 +14,9 @@ It does not currently connect to or record the Mindshare radio network.
 ## Beta architecture
 
 - API server: Speaches, private to the Docker network
-- Text to speech: Kokoro 82M ONNX
+- MAE text to speech: Qwen3-TTS 1.7B VoiceDesign with the approved synthetic
+  female MAE profile
+- JACK and fallback text to speech: Kokoro 82M ONNX
 - Speech to text: Faster-Whisper distilled small English
 - Model loader: automatically restores both models into a persistent cache
 - User interface: `/voice`
@@ -23,7 +25,8 @@ It does not currently connect to or record the Mindshare radio network.
   - `POST /api/voice/speech`
   - `POST /api/voice/transcribe`
 
-The browser never connects directly to the speech container.
+The browser never connects directly to either speech container. Qwen3-TTS is
+private to the Docker network and has no CAD credentials or direct CAD access.
 
 The Speaches image is pinned by digest so a future upstream `latest` update
 cannot silently change the tested production runtime.
@@ -46,6 +49,10 @@ button.
 
 Browser microphone access requires either HTTPS or a localhost connection.
 Remote supervisor access must therefore use the secured HTTPS dashboard URL.
+
+MAE uses the Qwen3-TTS synthetic female voice. It is a text-designed synthetic
+voice, not an imitation of a real speaker. The speech-only pronunciation
+dictionary renders `MAE` as "May" and `911` as "nine one one."
 
 ## JACK conversational voice mode
 

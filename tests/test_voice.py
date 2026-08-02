@@ -26,6 +26,7 @@ class VoicePageTests(unittest.TestCase):
         self.assertEqual(
             voice_ids,
             {
+                "mae-synthetic-female",
                 "af_heart",
                 "af_bella",
                 "af_nicole",

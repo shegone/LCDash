@@ -13,6 +13,11 @@ class VoiceServiceError(Exception):
 
 
 VOICE_CHOICES = (
+    {
+        "id": "mae-synthetic-female",
+        "label": "MAE",
+        "description": "Expressive synthetic American female (Qwen3-TTS)",
+    },
     {"id": "af_heart", "label": "Heart", "description": "Warm American female"},
     {"id": "af_bella", "label": "Bella", "description": "Clear American female"},
     {"id": "af_nicole", "label": "Nicole", "description": "Natural American female"},
@@ -27,6 +32,18 @@ VOICE_CHOICES = (
 
 def _base_url() -> str:
     return settings.voice_base_url.rstrip("/")
+
+
+def _tts_base_url(voice: str) -> str:
+    if voice == settings.voice_qwen_tts_voice:
+        return settings.voice_qwen_tts_base_url.rstrip("/")
+    return _base_url()
+
+
+def _tts_model(voice: str) -> str:
+    if voice == settings.voice_qwen_tts_voice:
+        return settings.voice_qwen_tts_model
+    return settings.voice_tts_model
 
 
 def prepare_text_for_speech(text: str) -> str:
@@ -54,9 +71,9 @@ def prepare_text_for_speech(text: str) -> str:
 def get_voice_status() -> dict[str, Any]:
     result: dict[str, Any] = {
         "connected": False,
-        "service": "Speaches",
+        "service": "Qwen3-TTS and Speaches",
         "tts": {
-            "model": settings.voice_tts_model,
+            "model": _tts_model(settings.voice_tts_voice),
             "voice": settings.voice_tts_voice,
             "ready": False,
         },
@@ -69,25 +86,38 @@ def get_voice_status() -> dict[str, Any]:
 
     try:
         with httpx.Client(timeout=8.0) as client:
-            health_response = client.get(f"{_base_url()}/health")
-            health_response.raise_for_status()
+            stt_health_response = client.get(f"{_base_url()}/health")
+            stt_health_response.raise_for_status()
+            tts_health_response = client.get(
+                f"{_tts_base_url(settings.voice_tts_voice)}/health"
+            )
+            tts_health_response.raise_for_status()
+            tts_models_response = client.get(
+                f"{_tts_base_url(settings.voice_tts_voice)}/v1/models"
+            )
+            tts_models_response.raise_for_status()
+            stt_models_response = client.get(f"{_base_url()}/v1/models")
+            stt_models_response.raise_for_status()
+            tts_payload = tts_models_response.json()
+            stt_payload = stt_models_response.json()
             result["connected"] = True
-
-            models_response = client.get(f"{_base_url()}/v1/models")
-            models_response.raise_for_status()
-            payload = models_response.json()
     except (httpx.HTTPError, ValueError) as exc:
         result["detail"] = str(exc)
         return result
 
     model_ids = {
         str(item.get("id") or "")
-        for item in payload.get("data", [])
+        for item in tts_payload.get("data", [])
         if isinstance(item, dict)
     }
-    result["tts"]["ready"] = settings.voice_tts_model in model_ids
-    result["stt"]["ready"] = settings.voice_stt_model in model_ids
-    result["installed_models"] = sorted(model_ids)
+    stt_model_ids = {
+        str(item.get("id") or "")
+        for item in stt_payload.get("data", [])
+        if isinstance(item, dict)
+    }
+    result["tts"]["ready"] = _tts_model(settings.voice_tts_voice) in model_ids
+    result["stt"]["ready"] = settings.voice_stt_model in stt_model_ids
+    result["installed_models"] = sorted(model_ids | stt_model_ids)
     return result
 
 
@@ -109,9 +139,9 @@ def synthesize_speech(
     try:
         with httpx.Client(timeout=settings.voice_request_timeout_seconds) as client:
             response = client.post(
-                f"{_base_url()}/v1/audio/speech",
+                f"{_tts_base_url(selected_voice)}/v1/audio/speech",
                 json={
-                    "model": settings.voice_tts_model,
+                    "model": _tts_model(selected_voice),
                     "voice": selected_voice,
                     "input": prepare_text_for_speech(text),
                     "response_format": response_format,
@@ -129,7 +159,10 @@ def synthesize_speech(
             "The local speech engine is unavailable."
         ) from exc
 
-    media_type = "audio/mpeg" if response_format == "mp3" else "audio/wav"
+    response_media_type = response.headers.get("content-type", "").split(";", 1)[0]
+    media_type = response_media_type or (
+        "audio/mpeg" if response_format == "mp3" else "audio/wav"
+    )
     return response.content, media_type
 
 

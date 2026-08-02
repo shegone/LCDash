@@ -146,7 +146,7 @@
             cache: "no-store",
             body: JSON.stringify({
                 text: spokenText,
-                voice: "af_heart",
+                voice: "mae-synthetic-female",
                 speed: 1.0,
                 response_format: "mp3"
             })
