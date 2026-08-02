@@ -456,6 +456,31 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  # Private STT evaluation service. Whisper remains the live default until the
+  # supervisor microphone A/B checks are complete.
+  voice-parakeet:
+    profiles: ["voice-parakeet"]
+    build:
+      context: ./parakeet-stt
+      dockerfile: Dockerfile
+    container_name: lcdash-voice-parakeet-canary
+    restart: "no"
+    gpus: all
+    environment:
+      HF_HOME: /models
+    volumes:
+      - lcdash_parakeet_models:/models
+    networks:
+      - lcdash_private
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8004/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   open-webui:
     image: ghcr.io/open-webui/open-webui:v0.11.0
     container_name: lcdash-open-webui

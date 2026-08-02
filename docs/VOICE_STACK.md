@@ -93,6 +93,18 @@ retain the same API contract. Benchmark:
 
 No cloned voice should be used without documented permission from the speaker.
 
+## Parakeet STT evaluation plan
+
+Parakeet TDT 0.6B v3 is now available as a private canary for complete-audio,
+English transcription. Whisper Large-v3-Turbo remains the live MAE/JACK
+transcription default until a supervisor microphone A/B evaluation is complete.
+
+The evaluation compares at least 15 short local recordings containing normal
+questions, unit numbers, locations, CAD terms, pauses, and ordinary background
+noise. Review accuracy, silence behavior, turnaround time, and any missed
+dispatch terminology before changing the default. Do not use this offline TDT
+model as a future continuous radio-streaming engine.
+
 ## Radio boundary
 
 The radio ingestion service will be separate from the voice API. Before it is
