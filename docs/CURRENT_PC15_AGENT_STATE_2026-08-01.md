@@ -78,7 +78,13 @@ accessibility data. The canonical source is
    female avatar and idle motion and verified the saved 77,258,714-byte file.
    The helper is `scripts/iclone_create_disposable_test.py`; it does not export
    FBX or change Unreal.
-5. Next: export that disposable project to FBX and import it through Auto Setup
-   before considering the paid Live Link license.
-6. Begin supervised avatar/video tasks, then expand autonomy only after each
+5. Prepared, not yet executed: guarded native iClone FBX helper
+   `scripts/iclone_export_disposable_fbx.py`. It requires exactly one avatar,
+   checks the FBX export license, refuses overwrite, and can write only the
+   test FBX under `C:\MAE-Agent\tests\fbx_export`. The first run remains a
+   supervised user action; inspect its result before any Unreal import.
+6. Next: manually run that helper in the saved disposable iClone project,
+   inspect the FBX/result file, then perform a separate supervised Auto Setup
+   import before considering the paid Live Link license.
+7. Begin supervised avatar/video tasks, then expand autonomy only after each
    action class has a repeatable validation and rollback path.
