@@ -54,6 +54,24 @@ class MAEReliabilityServiceTests(unittest.TestCase):
         self.assertEqual(catalog["mode"], "read-only")
         self.assertGreaterEqual(catalog["tool_count"], 10)
 
+    def test_cad_inquiry_broker_is_allowlisted_and_excludes_commands(self):
+        catalog = get_mae_tool_catalog()
+        operations = catalog["cad_inquiry_operations"]
+        operation_ids = {operation["id"] for operation in operations}
+        routes = " ".join(operation["route"] for operation in operations)
+
+        self.assertEqual(
+            operation_ids,
+            {
+                "cfs_detail",
+                "active_operations",
+                "recent_arrivals",
+                "unit_roster",
+            },
+        )
+        self.assertNotIn("run_command", routes)
+        self.assertNotIn("PUT ", routes)
+
 
 class MAEReliabilityPageTests(unittest.TestCase):
     def setUp(self):
