@@ -440,6 +440,19 @@ services:
       AUDIO_TTS_OPENAI_API_KEY: local-speech-service
       AUDIO_TTS_MODEL: speaches-ai/Kokoro-82M-v1.0-ONNX
       AUDIO_TTS_VOICE: af_heart
+      # Design-phase local-agent capacity. These stay inside the existing
+      # Open WebUI service and do not grant access beyond the attached tools.
+      ENABLE_SUBAGENTS: "True"
+      SUBAGENTS_BACKGROUND_ENABLED: "True"
+      SUBAGENTS_MAX_CONCURRENT: "4"
+      SUBAGENTS_MAX_ASYNC: "2"
+      SUBAGENTS_MAX_ITERATIONS: "12"
+      SUBAGENTS_MAX_OUTPUT: "30000"
+      # Improve retrieval over project documentation and handoffs. Existing
+      # knowledge is reindexed separately after this deployment is verified.
+      ENABLE_RAG_HYBRID_SEARCH: "True"
+      ENABLE_RAG_HYBRID_SEARCH_ENRICHED_TEXTS: "True"
+      ENABLE_KB_EXEC: "True"
     secrets:
       - openwebui_secret_key
       - openwebui_admin_password

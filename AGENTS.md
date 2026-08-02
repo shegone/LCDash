@@ -22,8 +22,9 @@ Read these before planning work:
 2. `docs/CURRENT_PRODUCTION_STATE_2026-07-31.md`
 3. `docs/SERVER_DEPLOYMENT.md`
 4. The documentation for the module being changed
-5. The latest Git history and current working-tree status
-6. The cross-PC files described in `docs/OFFLINE_AGENT_OPERATIONS.md`
+5. The relevant task skill in `agent-skills/`
+6. The latest Git history and current working-tree status
+7. The cross-PC files described in `docs/OFFLINE_AGENT_OPERATIONS.md`
 
 Do not rely on an old chat summary when current code, tests, Git, or live
 read-only status contradicts it.
@@ -286,8 +287,14 @@ always-approve mode against production systems.
 
 ## Local model strategy
 
-- Prefer a coding-focused local model such as Qwen3-Coder 30B for routine code
-  work and a second reasoning/tool-use model such as gpt-oss 20B for review.
+- Use `qwen3-coder:30b` for bounded repository exploration, coding, tests,
+  code review, and implementation work. Use `qwen3.6:27b` for planning,
+  general operations, vision, desktop-control, and cross-domain work.
+- Start no more than four concurrent local sub-agents. Keep background work at
+  two workers or fewer. Each worker needs a separate, bounded outcome; never
+  give parallel workers overlapping file-edit scopes.
+- Select and read the matching `agent-skills/` instruction before taking a
+  task-specific action. The root charter always overrides a task skill.
 - Require at least a 22K context window for OpenHands; 32K is the normal target.
 - Do not assume a model is reliable because it produces fluent text. Judge it
   by tool use, diffs, tests, and repeatable task benchmarks.
