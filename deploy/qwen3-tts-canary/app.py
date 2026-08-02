@@ -20,6 +20,16 @@ MAE_VOICE_INSTRUCTION = (
     "assistant. Calm and reassuring, with clear diction and natural "
     "empathetic expression. Professional and composed, never theatrical."
 )
+JACK_VOICE_INSTRUCTION = (
+    "A mature American male technical assistant with a gentle Appalachian "
+    "Southern character. Older, calm, slow, and steady with warm, clear "
+    "diction. Reassuring and thoughtful, never exaggerated, theatrical, or "
+    "an imitation of a real person."
+)
+VOICE_PROFILES = {
+    "mae-synthetic-female": MAE_VOICE_INSTRUCTION,
+    "jack-synthetic-southern-male": JACK_VOICE_INSTRUCTION,
+}
 
 app = FastAPI(title="LCDash Qwen3-TTS Canary", docs_url=None, redoc_url=None)
 _model = None
@@ -86,10 +96,10 @@ def list_models() -> dict:
 def synthesize(request: SpeechRequest) -> Response:
     if request.model != API_MODEL_ID:
         raise HTTPException(status_code=400, detail="Unsupported canary model.")
-    if request.voice != "mae-synthetic-female":
+    if request.voice not in VOICE_PROFILES:
         raise HTTPException(
             status_code=400,
-            detail="This canary permits only the approved synthetic MAE voice.",
+            detail="This service permits only approved synthetic voice profiles.",
         )
     if request.response_format not in {"wav", "mp3"}:
         raise HTTPException(
@@ -101,7 +111,7 @@ def synthesize(request: SpeechRequest) -> Response:
     wavs, sample_rate = model.generate_voice_design(
         text=_prepare_text_for_speech(request.input),
         language="English",
-        instruct=MAE_VOICE_INSTRUCTION,
+        instruct=VOICE_PROFILES[request.voice],
     )
     output = BytesIO()
     sf.write(output, wavs[0], sample_rate, format="WAV")

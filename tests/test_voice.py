@@ -27,6 +27,7 @@ class VoicePageTests(unittest.TestCase):
             voice_ids,
             {
                 "mae-synthetic-female",
+                "jack-synthetic-southern-male",
                 "af_heart",
                 "af_bella",
                 "af_nicole",

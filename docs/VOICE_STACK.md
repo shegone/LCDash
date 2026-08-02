@@ -54,6 +54,10 @@ MAE uses the Qwen3-TTS synthetic female voice. It is a text-designed synthetic
 voice, not an imitation of a real speaker. The speech-only pronunciation
 dictionary renders `MAE` as "May" and `911` as "nine one one."
 
+The Voice Lab also provides a Qwen3-TTS synthetic JACK audition profile: a
+mature, slow, Appalachian/Southern American male character. It is not enabled
+for JACK until a supervisor approves the audition.
+
 ## JACK conversational voice mode
 
 The JACK technical-assistant page uses the same private conversational loop as

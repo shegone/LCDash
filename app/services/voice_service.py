@@ -18,6 +18,11 @@ VOICE_CHOICES = (
         "label": "MAE",
         "description": "Expressive synthetic American female (Qwen3-TTS)",
     },
+    {
+        "id": "jack-synthetic-southern-male",
+        "label": "JACK",
+        "description": "Mature, steady Southern American male (Qwen3-TTS)",
+    },
     {"id": "af_heart", "label": "Heart", "description": "Warm American female"},
     {"id": "af_bella", "label": "Bella", "description": "Clear American female"},
     {"id": "af_nicole", "label": "Nicole", "description": "Natural American female"},
@@ -35,13 +40,19 @@ def _base_url() -> str:
 
 
 def _tts_base_url(voice: str) -> str:
-    if voice == settings.voice_qwen_tts_voice:
+    if voice in {
+        settings.voice_qwen_tts_voice,
+        "jack-synthetic-southern-male",
+    }:
         return settings.voice_qwen_tts_base_url.rstrip("/")
     return _base_url()
 
 
 def _tts_model(voice: str) -> str:
-    if voice == settings.voice_qwen_tts_voice:
+    if voice in {
+        settings.voice_qwen_tts_voice,
+        "jack-synthetic-southern-male",
+    }:
         return settings.voice_qwen_tts_model
     return settings.voice_tts_model
 
