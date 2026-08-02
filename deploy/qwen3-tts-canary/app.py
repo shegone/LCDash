@@ -22,7 +22,7 @@ MAE_VOICE_INSTRUCTION = (
 )
 JACK_VOICE_INSTRUCTION = (
     "A mature American male technical assistant with a gentle Appalachian "
-    "Southern character. Older, calm, slow, and steady with warm, clear "
+    "Southern character. Older, calm, measured, and steady with warm, clear "
     "diction. Reassuring and thoughtful, never exaggerated, theatrical, or "
     "an imitation of a real person."
 )

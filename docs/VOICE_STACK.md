@@ -54,9 +54,9 @@ MAE uses the Qwen3-TTS synthetic female voice. It is a text-designed synthetic
 voice, not an imitation of a real speaker. The speech-only pronunciation
 dictionary renders `MAE` as "May" and `911` as "nine one one."
 
-The Voice Lab also provides a Qwen3-TTS synthetic JACK audition profile: a
-mature, slow, Appalachian/Southern American male character. It is not enabled
-for JACK until a supervisor approves the audition.
+JACK uses the Qwen3-TTS synthetic male voice: a mature, measured
+Appalachian/Southern American character at a conversational 1.05× cadence.
+It is a text-designed synthetic voice, not an imitation of a real speaker.
 
 ## JACK conversational voice mode
 
@@ -65,9 +65,8 @@ MAE. It listens for a question, transcribes it locally, submits it through
 JACK's existing read-only Mindshare documentation workflow, speaks the answer,
 and resumes listening.
 
-JACK uses the `am_michael` Kokoro voice as the current mature American male
-voice. This is a standard synthesized voice and is not a clone or imitation of
-Jack Hines. Individual JACK answers also include a **Listen** button.
+JACK uses the approved Qwen3-TTS synthetic Southern male voice. Individual
+JACK answers also include a **Listen** button.
 
 JACK uses a compact, product-focused retrieval context and concise response
 budget so the CPU-based local model can answer promptly. The browser allows a

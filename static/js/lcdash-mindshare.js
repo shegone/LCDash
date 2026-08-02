@@ -137,8 +137,8 @@
             cache: "no-store",
             body: JSON.stringify({
                 text: spokenText,
-                voice: "am_michael",
-                speed: 0.96,
+                voice: "jack-synthetic-southern-male",
+                speed: 1.05,
                 response_format: "mp3"
             })
         });
