@@ -148,6 +148,16 @@
         return response.blob();
     }
 
+    function answerForSpeech(text) {
+        // JACK keeps source citations in the text answer. They are useful on
+        // screen, but reciting titles and page numbers interrupts a natural
+        // conversation. Remove only the inline [Document, page N] labels.
+        return String(text || "")
+            .replace(/\s*\[[^\]]+?,\s*page\s+\d+\]/gi, "")
+            .replace(/\s{2,}/g, " ")
+            .trim();
+    }
+
     async function playSpeechAudio(audioBlob, requestId) {
         if (!audioBlob || requestId !== activeSpeechRequest) return;
         if (activeAudioUrl) URL.revokeObjectURL(activeAudioUrl);
@@ -183,7 +193,7 @@
             );
         }
         const audioBlob = await requestSpeechAudio(
-            text, activeSpeechController.signal
+            answerForSpeech(text), activeSpeechController.signal
         );
         await playSpeechAudio(audioBlob, requestId);
         if (requestId === activeSpeechRequest) activeSpeechController = null;
@@ -437,10 +447,19 @@
         evidence.forEach(function (item) {
             const group = document.createElement("div");
             group.className = "mae-evidence-group";
-            const heading = document.createElement("div");
+            const heading = document.createElement(
+                item.document_id ? "a" : "div"
+            );
             heading.className = "mae-evidence-heading";
             heading.textContent =
                 item.title || item.file_name || "Mindshare document";
+            if (item.document_id) {
+                heading.href =
+                    `/knowledge/documents/mindshare/${item.document_id}`;
+                heading.target = "_blank";
+                heading.rel = "noopener noreferrer";
+                heading.title = "Open the supporting PDF";
+            }
             const metadata = document.createElement("div");
             metadata.className = "mae-evidence-metadata";
             metadata.textContent = item.page_number
@@ -631,7 +650,9 @@
                 if (!voiceModeActive || speechRequestId !== activeSpeechRequest) {
                     return null;
                 }
-                return requestSpeechAudio(clean, activeSpeechController.signal);
+                return requestSpeechAudio(
+                    answerForSpeech(clean), activeSpeechController.signal
+                );
             });
             synthesisChain = audioPromise.then(function () { return undefined; });
             speechChain = speechChain.then(function () {

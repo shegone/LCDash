@@ -354,6 +354,7 @@ def _evidence(results: list[dict]) -> list[dict]:
         {
             "title": result.get("title") or result.get("file_name") or "",
             "file_name": result.get("file_name") or "",
+            "document_id": int(result.get("document_id") or 0),
             "page_number": int(result.get("page_number") or 0),
             "content": str(result.get("content") or "")[:900],
             "retrieval": result.get("retrieval") or [],

@@ -99,6 +99,9 @@ class VoicePageTests(unittest.TestCase):
         self.assertIn("let synthesisChain = Promise.resolve()", script)
         self.assertIn("const audioPromise = synthesisChain.then", script)
         self.assertIn("groupedSpeech.length >= 140", script)
+        self.assertIn("function answerForSpeech(text)", script)
+        self.assertIn("answerForSpeech(clean)", script)
+        self.assertIn("/knowledge/documents/mindshare/${item.document_id}", script)
 
     def test_live_stt_uses_cpu_to_avoid_jack_gpu_contention(self):
         compose = (Path(__file__).parents[1] / "deploy/compose.yaml").read_text(

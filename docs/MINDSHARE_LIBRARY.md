@@ -68,6 +68,11 @@ The local Ollama model remains warm for 30 minutes after use. This avoids a
 full model reload during normal supervisor conversations while still allowing
 GPU memory to be released after an extended idle period.
 
+JACK retains its supporting citations in the written answer. In voice mode,
+the browser omits inline document-title and page-number labels so the answer
+sounds conversational; the on-screen supporting-document titles remain
+clickable for approved PDFs.
+
 ## Memorial identity
 
 JACK is named in honor of John Joseph "Jack" Hines III. Its conversational

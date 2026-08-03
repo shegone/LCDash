@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, Mock, patch
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services.mindshare_service import _focus_results, ask_mindshare
+from app.services.mindshare_service import _evidence, _focus_results, ask_mindshare
 from scripts.index_knowledge import _is_supported_document
 
 
@@ -165,6 +165,16 @@ class MindshareServiceTests(unittest.TestCase):
         self.assertEqual(tokens, ["Back up ", "first."])
         self.assertEqual(result["answer"], "Back up first.")
         self.assertTrue(stream_mock.call_args.kwargs["json"]["stream"])
+
+    def test_evidence_keeps_the_approved_pdf_document_id(self):
+        evidence = _evidence([{
+            "document_id": 42,
+            "title": "Mindshare Radio Interface 2 Manual",
+            "file_name": "mri2.pdf",
+            "page_number": 40,
+            "content": "Back up the configuration first.",
+        }])
+        self.assertEqual(evidence[0]["document_id"], 42)
 
     def test_named_product_prioritizes_title_match_over_incidental_mention(self):
         results = [
