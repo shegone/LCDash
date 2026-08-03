@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from fastapi.testclient import TestClient
 
@@ -117,8 +117,55 @@ class MindsharePageTests(unittest.TestCase):
         self.assertIn("MRI2", response.json()["answer"])
         ask_mock.assert_called_once()
 
+    @patch("app.main.ask_mindshare")
+    def test_stream_endpoint_emits_tokens_and_final_payload(self, ask_mock):
+        def streamed(question, history, token_callback=None):
+            token_callback("Use the documented procedure.")
+            return {"answer": "Use the documented procedure.", "sources": [], "evidence": []}
+
+        ask_mock.side_effect = streamed
+        response = self.client.post(
+            "/api/mindshare/chat/stream",
+            json={"question": "How do I update MRI2?", "history": []},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('"type":"token"', response.text)
+        self.assertIn('"type":"complete"', response.text)
+
 
 class MindshareServiceTests(unittest.TestCase):
+    @patch("app.services.mindshare_service.httpx.stream")
+    @patch("app.services.mindshare_service.search_knowledge")
+    def test_supported_answer_streams_ollama_tokens(
+        self, search_mock, stream_mock
+    ):
+        search_mock.return_value = [{
+            "title": "Mindshare Radio Interface 2 Manual",
+            "file_name": "mri2.pdf",
+            "page_number": 40,
+            "content": "Back up the configuration before software update.",
+            "coverage": 0.75,
+            "semantic_score": 0.7,
+            "hybrid_score": 0.7,
+            "matched_terms": ["update", "mri2"],
+            "retrieval": ["keyword", "semantic"],
+        }]
+        stream_response = MagicMock()
+        stream_response.iter_lines.return_value = [
+            '{"message":{"content":"Back up "}}',
+            '{"message":{"content":"first."},"done":true}',
+        ]
+        stream_mock.return_value.__enter__.return_value = stream_response
+        tokens = []
+
+        result = ask_mindshare(
+            "How do I update MRI2?", token_callback=tokens.append
+        )
+
+        self.assertEqual(tokens, ["Back up ", "first."])
+        self.assertEqual(result["answer"], "Back up first.")
+        self.assertTrue(stream_mock.call_args.kwargs["json"]["stream"])
+
     def test_named_product_prioritizes_title_match_over_incidental_mention(self):
         results = [
             {
@@ -180,8 +227,8 @@ class MindshareServiceTests(unittest.TestCase):
         )
         self.assertNotIn("CentralSquare", post_mock.call_args.kwargs["json"])
         options = post_mock.call_args.kwargs["json"]["options"]
-        self.assertEqual(options["num_ctx"], 4096)
-        self.assertEqual(options["num_predict"], 160)
+        self.assertEqual(options["num_ctx"], 3072)
+        self.assertEqual(options["num_predict"], 110)
 
     @patch("app.services.mindshare_service.httpx.post")
     @patch("app.services.mindshare_service.search_knowledge")

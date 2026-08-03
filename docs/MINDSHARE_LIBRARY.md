@@ -38,6 +38,24 @@ documents.
 JACK, the Mindshare Technical Assistant, is read-only. It cannot change consoles,
 gateways, radios, firmware, software, or CAD records.
 
+## Public company website source
+
+JACK also indexes a fixed allowlist of public pages from `css-mindshare.com`
+once per day. This source is limited to public company, product, download, and
+FAQ material. It does not crawl or authenticate to the customer portal,
+support portal, forms, store, or any login-protected area. Website-derived
+material remains separate from Logan County system documents and has no CAD
+access.
+
+## Conversational streaming
+
+In JACK voice mode, Ollama response tokens are sent through a private NDJSON
+stream. The browser detects complete sentences and queues them to the fixed
+synthetic JACK voice in order, allowing speech to begin before the entire
+answer is complete. The final answer is still audited with its evidence and
+assurance metadata. If streaming fails, the existing complete-answer route is
+used automatically.
+
 ## Memorial identity
 
 JACK is named in honor of John Joseph "Jack" Hines III. Its conversational

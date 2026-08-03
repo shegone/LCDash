@@ -579,6 +579,87 @@
         questionInput.disabled = busy;
     }
 
+    async function fetchStreamedAnswer(question, requestHistory, speakResponse, signal) {
+        const response = await fetch("/api/mindshare/chat/stream", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            cache: "no-store",
+            signal: signal,
+            body: JSON.stringify({question: question, history: requestHistory})
+        });
+        if (!response.ok || !response.body) {
+            throw new Error("JACK's response stream is unavailable.");
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let wireBuffer = "";
+        let speechBuffer = "";
+        let speechChain = Promise.resolve();
+        let payload = null;
+        let streamedSpeech = false;
+
+        function queueSentence(sentence) {
+            const clean = sentence.trim();
+            if (!clean || !speakResponse || !voiceModeActive) return;
+            streamedSpeech = true;
+            speechChain = speechChain.then(function () {
+                if (!voiceModeActive) return undefined;
+                return speakAnswer(clean);
+            });
+        }
+
+        function consumeEvent(event) {
+            if (event.type === "token") {
+                speechBuffer += String(event.text || "");
+                let match = speechBuffer.match(/^([\s\S]*?[.!?])(?=\s|$)/);
+                while (match) {
+                    queueSentence(match[1]);
+                    speechBuffer = speechBuffer.slice(match[1].length).trimStart();
+                    match = speechBuffer.match(/^([\s\S]*?[.!?])(?=\s|$)/);
+                }
+            } else if (event.type === "complete") {
+                payload = event.payload || {};
+            } else if (event.type === "error") {
+                throw new Error(event.detail || "JACK could not complete the inquiry.");
+            }
+        }
+
+        while (true) {
+            const part = await reader.read();
+            wireBuffer += decoder.decode(part.value || new Uint8Array(), {stream: !part.done});
+            const lines = wireBuffer.split("\n");
+            wireBuffer = lines.pop() || "";
+            lines.filter(Boolean).forEach(function (line) {
+                consumeEvent(JSON.parse(line));
+            });
+            if (part.done) break;
+        }
+        if (wireBuffer.trim()) consumeEvent(JSON.parse(wireBuffer));
+        if (!payload) throw new Error("JACK's response stream ended early.");
+        if (speechBuffer.trim()) queueSentence(speechBuffer);
+        if (speakResponse && voiceModeActive && !streamedSpeech && payload.answer) {
+            queueSentence(payload.answer);
+        }
+        await speechChain;
+        return payload;
+    }
+
+    async function fetchCompleteAnswer(question, requestHistory, signal) {
+        const response = await fetch("/api/mindshare/chat", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            cache: "no-store",
+            signal: signal,
+            body: JSON.stringify({question: question, history: requestHistory})
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+            throw new Error(payload.detail || "The inquiry could not be completed.");
+        }
+        return payload;
+    }
+
     async function ask(question, options) {
         if (!question) return;
         const settings = options || {};
@@ -611,28 +692,27 @@
         }, 15000);
 
         try {
-            const response = await fetch("/api/mindshare/chat", {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                cache: "no-store",
-                signal: controller.signal,
-                body: JSON.stringify({
-                    question: question,
-                    history: requestHistory
-                })
-            });
-            const responseText = await response.text();
-            let payload = {};
-            try {
-                payload = responseText ? JSON.parse(responseText) : {};
-            } catch (parseError) {
-                throw new Error(
-                    "JACK's secure connection returned an invalid response."
-                );
-            }
-            if (!response.ok) {
-                throw new Error(
-                    payload.detail || "The inquiry could not be completed."
+            let payload;
+            if (settings.speakResponse && voiceModeActive) {
+                try {
+                    payload = await fetchStreamedAnswer(
+                        question, requestHistory, true, controller.signal
+                    );
+                } catch (streamError) {
+                    if (streamError.name === "AbortError") throw streamError;
+                    setVoiceState(
+                        "processing",
+                        "JACK is completing the answer",
+                        "The standard private response path is being used."
+                    );
+                    payload = await fetchCompleteAnswer(
+                        question, requestHistory, controller.signal
+                    );
+                    await speakAnswer(payload.answer);
+                }
+            } else {
+                payload = await fetchCompleteAnswer(
+                    question, requestHistory, controller.signal
                 );
             }
             addMessage("assistant", payload.answer, payload);
@@ -649,19 +729,6 @@
             window.clearTimeout(timeoutId);
             window.clearTimeout(progressId);
             setBusy(false);
-        }
-
-        if (settings.speakResponse && voiceModeActive && answerToSpeak) {
-            try {
-                await speakAnswer(answerToSpeak);
-            } catch (error) {
-                setVoiceState(
-                    "error",
-                    "I could not play the answer",
-                    error.message ||
-                    "The written answer is still available above."
-                );
-            }
         }
 
         if (voiceModeActive) {

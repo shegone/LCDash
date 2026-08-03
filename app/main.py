@@ -2,6 +2,8 @@ import asyncio
 import base64
 import binascii
 import json
+from queue import Queue
+from threading import Thread
 import secrets
 from typing import Literal
 
@@ -1309,6 +1311,48 @@ def mindshare_chat_api(
         return result
     except MindshareServiceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/api/mindshare/chat/stream")
+def mindshare_chat_stream_api(chat_request: MindshareChatRequest, request: Request):
+    events: Queue[dict] = Queue()
+    history = [message.model_dump() for message in chat_request.history]
+    user_email = _authenticated_user_email(request)
+
+    def run() -> None:
+        try:
+            result = ask_mindshare(
+                chat_request.question,
+                history,
+                token_callback=lambda token: events.put({"type": "token", "text": token}),
+            )
+            audit = record_jack_interaction(
+                user_email=user_email,
+                question=chat_request.question,
+                result=result,
+            )
+            result["interaction_id"] = audit.get("interaction_id") or ""
+            result["audit_saved"] = bool(audit.get("saved"))
+            events.put({"type": "complete", "payload": result})
+        except MindshareServiceError as exc:
+            events.put({"type": "error", "detail": str(exc)})
+        finally:
+            events.put({"type": "done"})
+
+    Thread(target=run, daemon=True).start()
+
+    def stream():
+        while True:
+            event = events.get()
+            yield json.dumps(event, separators=(",", ":")) + "\n"
+            if event["type"] == "done":
+                break
+
+    return StreamingResponse(
+        stream(),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache, no-store", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post("/api/mindshare/feedback")

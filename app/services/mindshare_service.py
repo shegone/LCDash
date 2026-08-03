@@ -1,4 +1,6 @@
 from time import perf_counter
+import json
+from collections.abc import Callable
 
 import httpx
 
@@ -363,6 +365,7 @@ def _evidence(results: list[dict]) -> list[dict]:
 def ask_mindshare(
     question: str,
     history: list[dict] | None = None,
+    token_callback: Callable[[str], None] | None = None,
 ) -> dict:
     started = perf_counter()
     clean_question = (question or "").strip()
@@ -511,25 +514,45 @@ Scope and safety:
     )
 
     try:
-        response = httpx.post(
-            f"{settings.ollama_base_url.rstrip('/')}/api/chat",
-            json={
+        request_payload = {
                 "model": settings.mae_model,
                 "messages": messages,
-                "stream": False,
+                "stream": token_callback is not None,
                 "think": False,
                 "options": {
                     "temperature": 0.1,
                     "num_ctx": 3072,
                     "num_predict": 110,
                 },
-            },
-            timeout=settings.mae_request_timeout_seconds,
-        )
-        response.raise_for_status()
-        answer = str(
-            (response.json().get("message") or {}).get("content") or ""
-        ).strip()
+            }
+        if token_callback is None:
+            response = httpx.post(
+                f"{settings.ollama_base_url.rstrip('/')}/api/chat",
+                json=request_payload,
+                timeout=settings.mae_request_timeout_seconds,
+            )
+            response.raise_for_status()
+            answer = str(
+                (response.json().get("message") or {}).get("content") or ""
+            ).strip()
+        else:
+            answer_parts = []
+            with httpx.stream(
+                "POST",
+                f"{settings.ollama_base_url.rstrip('/')}/api/chat",
+                json=request_payload,
+                timeout=settings.mae_request_timeout_seconds,
+            ) as response:
+                response.raise_for_status()
+                for line in response.iter_lines():
+                    if not line:
+                        continue
+                    event = json.loads(line)
+                    token = str((event.get("message") or {}).get("content") or "")
+                    if token:
+                        answer_parts.append(token)
+                        token_callback(token)
+            answer = "".join(answer_parts).strip()
     except (httpx.HTTPError, ValueError, TypeError) as exc:
         raise MindshareServiceError(
             "JACK could not complete the Mindshare inquiry."
