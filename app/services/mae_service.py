@@ -4,7 +4,7 @@ import json
 import re
 from threading import Lock
 from time import monotonic, perf_counter
-from typing import Any
+from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -3118,6 +3118,7 @@ def ask_mae(
     question: str,
     history: list[dict] | None = None,
     conversation_entities: dict | None = None,
+    token_callback: Callable[[str], None] | None = None,
 ) -> dict:
     request_started = perf_counter()
     clean_question = (question or "").strip()
@@ -3284,7 +3285,7 @@ def ask_mae(
             conversation_history,
             context,
         ),
-        "stream": False,
+        "stream": token_callback is not None,
         "think": False,
         "options": {
             "temperature": 0.2,
@@ -3295,13 +3296,32 @@ def ask_mae(
 
     generation_started = perf_counter()
     try:
-        response = httpx.post(
-            f"{settings.ollama_base_url.rstrip('/')}/api/chat",
-            json=payload,
-            timeout=settings.mae_request_timeout_seconds,
-        )
-        response.raise_for_status()
-        answer = str(response.json().get("message", {}).get("content") or "").strip()
+        if token_callback is None:
+            response = httpx.post(
+                f"{settings.ollama_base_url.rstrip('/')}/api/chat",
+                json=payload,
+                timeout=settings.mae_request_timeout_seconds,
+            )
+            response.raise_for_status()
+            answer = str(response.json().get("message", {}).get("content") or "").strip()
+        else:
+            answer_parts = []
+            with httpx.stream(
+                "POST",
+                f"{settings.ollama_base_url.rstrip('/')}/api/chat",
+                json=payload,
+                timeout=settings.mae_request_timeout_seconds,
+            ) as response:
+                response.raise_for_status()
+                for line in response.iter_lines():
+                    if not line:
+                        continue
+                    event = json.loads(line)
+                    token = str(event.get("message", {}).get("content") or "")
+                    if token:
+                        answer_parts.append(token)
+                        token_callback(token)
+            answer = "".join(answer_parts).strip()
     except (httpx.HTTPError, ValueError, TypeError) as exc:
         raise MAEServiceError(f"The local MAE model is unavailable: {exc}") from exc
 

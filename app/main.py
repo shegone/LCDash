@@ -1452,6 +1452,50 @@ def mae_chat_api(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+@app.post("/api/mae/chat/stream")
+def mae_chat_stream_api(chat_request: MAEChatRequest, request: Request):
+    events: Queue[dict] = Queue()
+    history = [message.model_dump() for message in chat_request.history]
+    entities = chat_request.entities.model_dump()
+    user_email = _authenticated_user_email(request)
+
+    def run() -> None:
+        try:
+            result = ask_mae(
+                chat_request.question,
+                history,
+                entities,
+                token_callback=lambda token: events.put({"type": "token", "text": token}),
+            )
+            audit = record_mae_interaction(
+                user_email=user_email,
+                question=chat_request.question,
+                result=result,
+            )
+            result["interaction_id"] = audit.get("interaction_id") or ""
+            result["audit_saved"] = bool(audit.get("saved"))
+            events.put({"type": "complete", "payload": result})
+        except MAEServiceError as exc:
+            events.put({"type": "error", "detail": str(exc)})
+        finally:
+            events.put({"type": "done"})
+
+    Thread(target=run, daemon=True).start()
+
+    def stream():
+        while True:
+            event = events.get()
+            yield json.dumps(event, separators=(",", ":")) + "\n"
+            if event["type"] == "done":
+                break
+
+    return StreamingResponse(
+        stream(),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache, no-store", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.post("/api/mae/feedback")
 def mae_feedback_api(
     feedback_request: MAEFeedbackRequest,

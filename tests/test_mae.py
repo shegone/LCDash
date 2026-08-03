@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -49,6 +50,16 @@ class MAEPageTests(unittest.TestCase):
         avatar = self.client.get("/static/img/mae/mae-neutral.jpg")
         self.assertEqual(avatar.status_code, 200)
         self.assertEqual(avatar.headers["content-type"], "image/jpeg")
+
+    def test_mae_browser_uses_streamed_synthesize_ahead_voice(self):
+        script = (Path(__file__).parents[1] / "static/js/lcdash-mae.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"/api/mae/chat/stream"', script)
+        self.assertIn("let synthesisChain = Promise.resolve()", script)
+        self.assertIn("const audioPromise = synthesisChain.then", script)
+        self.assertIn("groupedSpeech.length >= 140", script)
+        self.assertIn("let alreadySpoken = false", script)
 
     def test_mae_write_refusal_includes_assurance_and_timing(self):
         result = ask_mae("Dispatch MED10 and close the call.")
@@ -111,6 +122,24 @@ class MAEPageTests(unittest.TestCase):
             audit_mock.call_args.kwargs["user_email"],
             "supervisor@example.com",
         )
+
+    @patch("app.main.record_mae_interaction")
+    @patch("app.main.ask_mae")
+    def test_stream_endpoint_emits_tokens_and_final_payload(self, ask_mock, audit_mock):
+        def streamed(question, history, entities, token_callback=None):
+            token_callback("Three active calls.")
+            return {"answer": "Three active calls.", "sources": [], "write_access": False}
+
+        ask_mock.side_effect = streamed
+        audit_mock.return_value = {"saved": True, "interaction_id": "test-id"}
+        response = self.client.post(
+            "/api/mae/chat/stream",
+            headers={"cf-access-authenticated-user-email": "supervisor@example.com"},
+            json={"question": "How many calls are active?", "history": []},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('"type":"token"', response.text)
+        self.assertIn('"type":"complete"', response.text)
 
     @patch("app.main.record_mae_feedback")
     def test_feedback_endpoint_records_supervisor_rating(self, feedback_mock):

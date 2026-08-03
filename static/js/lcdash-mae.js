@@ -37,6 +37,8 @@
     let speechDetected = false;
     let discardRecording = false;
     let activeAudioUrl = "";
+    let activeSpeechController = null;
+    let activeSpeechRequest = 0;
 
     function setStatus(cardId, online, text) {
         const card = document.getElementById(cardId);
@@ -127,23 +129,14 @@
         });
     }
 
-    async function speakAnswer(text) {
+    async function requestSpeechAudio(text, signal) {
         const spokenText = String(text || "").trim().slice(0, 2500);
-        if (!spokenText) return;
-
-        if (voiceModeActive) {
-            setMicrophoneEnabled(false);
-            setVoiceState(
-                "speaking",
-                "MAE is speaking",
-                "The microphone is paused to prevent an echo."
-            );
-        }
-
+        if (!spokenText) return null;
         const response = await fetch("/api/voice/speech", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
             cache: "no-store",
+            signal: signal,
             body: JSON.stringify({
                 text: spokenText,
                 voice: "mae-synthetic-female",
@@ -156,7 +149,11 @@
             throw new Error(payload.detail || "MAE could not generate speech.");
         }
 
-        const audioBlob = await response.blob();
+        return response.blob();
+    }
+
+    async function playSpeechAudio(audioBlob, requestId) {
+        if (!audioBlob || requestId !== activeSpeechRequest) return;
         if (activeAudioUrl) URL.revokeObjectURL(activeAudioUrl);
         activeAudioUrl = URL.createObjectURL(audioBlob);
         voicePlayer.src = activeAudioUrl;
@@ -169,6 +166,25 @@
             const playPromise = voicePlayer.play();
             if (playPromise) playPromise.catch(reject);
         });
+    }
+
+    async function speakAnswer(text) {
+        activeSpeechRequest += 1;
+        const requestId = activeSpeechRequest;
+        if (activeSpeechController) activeSpeechController.abort();
+        activeSpeechController = new AbortController();
+        if (voicePlayer) {
+            voicePlayer.pause();
+            voicePlayer.removeAttribute("src");
+            voicePlayer.load();
+        }
+        if (voiceModeActive) {
+            setMicrophoneEnabled(false);
+            setVoiceState("speaking", "MAE is speaking", "The microphone is paused to prevent an echo.");
+        }
+        const audioBlob = await requestSpeechAudio(text, activeSpeechController.signal);
+        await playSpeechAudio(audioBlob, requestId);
+        if (requestId === activeSpeechRequest) activeSpeechController = null;
     }
 
     async function transcribeRecording(blob) {
@@ -364,6 +380,9 @@
     function endVoiceMode() {
         voiceModeActive = false;
         stopListeningCycle(true);
+        activeSpeechRequest += 1;
+        if (activeSpeechController) activeSpeechController.abort();
+        activeSpeechController = null;
         if (voicePlayer) {
             voicePlayer.pause();
             voicePlayer.removeAttribute("src");
@@ -671,10 +690,106 @@
         if (busy) messages.scrollTop = messages.scrollHeight;
     }
 
+    async function fetchCompleteAnswer(question, requestHistory, signal) {
+        const response = await fetch("/api/mae/chat", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            cache: "no-store",
+            signal: signal,
+            body: JSON.stringify({question: question, history: requestHistory, entities: entities})
+        });
+        const responseText = await response.text();
+        let payload = {};
+        try {
+            payload = responseText ? JSON.parse(responseText) : {};
+        } catch (parseError) {
+            throw new Error("MAE's secure connection returned an invalid response. Please try the question again.");
+        }
+        if (!response.ok) throw new Error(payload.detail || "MAE could not complete the inquiry.");
+        return payload;
+    }
+
+    async function fetchStreamedAnswer(question, requestHistory, signal) {
+        const response = await fetch("/api/mae/chat/stream", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            cache: "no-store",
+            signal: signal,
+            body: JSON.stringify({question: question, history: requestHistory, entities: entities})
+        });
+        if (!response.ok || !response.body) throw new Error("MAE's response stream is unavailable.");
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let wireBuffer = "";
+        let speechBuffer = "";
+        let groupedSpeech = "";
+        let synthesisChain = Promise.resolve();
+        let speechChain = Promise.resolve();
+        let payload = null;
+        let streamedSpeech = false;
+        activeSpeechRequest += 1;
+        const speechRequestId = activeSpeechRequest;
+        if (activeSpeechController) activeSpeechController.abort();
+        activeSpeechController = new AbortController();
+        if (voicePlayer) { voicePlayer.pause(); voicePlayer.removeAttribute("src"); voicePlayer.load(); }
+
+        function queueSpeechChunk(sentence) {
+            const clean = sentence.trim();
+            if (!clean || !voiceModeActive) return;
+            streamedSpeech = true;
+            setMicrophoneEnabled(false);
+            setVoiceState("speaking", "MAE is speaking", "The next part of the answer is being prepared.");
+            const audioPromise = synthesisChain.then(function () {
+                if (!voiceModeActive || speechRequestId !== activeSpeechRequest) return null;
+                return requestSpeechAudio(clean, activeSpeechController.signal);
+            });
+            synthesisChain = audioPromise.then(function () { return undefined; });
+            speechChain = speechChain.then(function () { return audioPromise; }).then(function (audioBlob) {
+                if (!voiceModeActive) return undefined;
+                return playSpeechAudio(audioBlob, speechRequestId);
+            });
+        }
+        function acceptSentence(sentence) {
+            if (!streamedSpeech) { queueSpeechChunk(sentence); return; }
+            groupedSpeech = `${groupedSpeech} ${sentence}`.trim();
+            if (groupedSpeech.length >= 140) { queueSpeechChunk(groupedSpeech); groupedSpeech = ""; }
+        }
+        function consumeEvent(event) {
+            if (event.type === "token") {
+                speechBuffer += String(event.text || "");
+                let match = speechBuffer.match(/^([\s\S]*?[.!?])(?=\s|$)/);
+                while (match) {
+                    acceptSentence(match[1]);
+                    speechBuffer = speechBuffer.slice(match[1].length).trimStart();
+                    match = speechBuffer.match(/^([\s\S]*?[.!?])(?=\s|$)/);
+                }
+            } else if (event.type === "complete") payload = event.payload || {};
+            else if (event.type === "error") throw new Error(event.detail || "MAE could not complete the inquiry.");
+        }
+        while (true) {
+            const part = await reader.read();
+            wireBuffer += decoder.decode(part.value || new Uint8Array(), {stream: !part.done});
+            const lines = wireBuffer.split("\n");
+            wireBuffer = lines.pop() || "";
+            lines.filter(Boolean).forEach(function (line) { consumeEvent(JSON.parse(line)); });
+            if (part.done) break;
+        }
+        if (wireBuffer.trim()) consumeEvent(JSON.parse(wireBuffer));
+        if (!payload) throw new Error("MAE's response stream ended early.");
+        groupedSpeech = `${groupedSpeech} ${speechBuffer}`.trim();
+        if (groupedSpeech) queueSpeechChunk(groupedSpeech);
+        if (!streamedSpeech && payload.answer) queueSpeechChunk(payload.answer);
+        await speechChain;
+        if (speechRequestId === activeSpeechRequest) activeSpeechController = null;
+        return payload;
+    }
+
     async function ask(question, options) {
         if (!question) return;
         const settings = options || {};
         let answerToSpeak = "";
+        let alreadySpoken = false;
         addMessage("user", question);
         const requestHistory = history.slice(-8);
         history.push({role: "user", content: question});
@@ -693,33 +808,20 @@
         }, maeRequestTimeoutMs);
 
         try {
-            const response = await fetch("/api/mae/chat", {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                cache: "no-store",
-                signal: controller.signal,
-                body: JSON.stringify({
-                    question: question,
-                    history: requestHistory,
-                    entities: entities
-                })
-            });
-            const responseText = await response.text();
-            let payload = {};
-
-            try {
-                payload = responseText ? JSON.parse(responseText) : {};
-            } catch (parseError) {
-                throw new Error(
-                    "MAE's secure connection returned an invalid response. " +
-                    "Please try the question again."
-                );
-            }
-
-            if (!response.ok) {
-                throw new Error(
-                    payload.detail || "MAE could not complete the inquiry."
-                );
+            let payload;
+            if (settings.speakResponse && voiceModeActive) {
+                try {
+                    payload = await fetchStreamedAnswer(question, requestHistory, controller.signal);
+                    alreadySpoken = true;
+                } catch (streamError) {
+                    if (streamError.name === "AbortError") throw streamError;
+                    setVoiceState("processing", "MAE is completing the answer", "The standard private response path is being used.");
+                    payload = await fetchCompleteAnswer(question, requestHistory, controller.signal);
+                    await speakAnswer(payload.answer);
+                    alreadySpoken = true;
+                }
+            } else {
+                payload = await fetchCompleteAnswer(question, requestHistory, controller.signal);
             }
             mergeEntities(payload.entities);
             addMessage("assistant", payload.answer, payload);
@@ -736,7 +838,7 @@
             setBusy(false);
         }
 
-        if (settings.speakResponse && voiceModeActive && answerToSpeak) {
+        if (settings.speakResponse && voiceModeActive && answerToSpeak && !alreadySpoken) {
             try {
                 await speakAnswer(answerToSpeak);
             } catch (error) {
