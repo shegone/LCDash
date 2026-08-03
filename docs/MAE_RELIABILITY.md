@@ -55,6 +55,15 @@ aggregate charts. It is download-only: it does not print, email, store a
 separate copy, query live CAD, or write to CAD. Caller data, locations,
 narratives, recordings, credentials, and raw CAD payloads are excluded.
 
+## JACK voice resilience
+
+JACK normally uses the private GPU for his fixed Qwen3-TTS voice. When the
+shared RTX 3090 has insufficient free VRAM because a higher-priority local
+conversational model is active, JACK loads the same local voice model on CPU
+instead of returning a speech-generation error. The first CPU fallback response
+may take longer, but it preserves the selected voice and does not send audio or
+text to an external service.
+
 ## Incident-type call review
 
 Authorized supervisors can ask MAE for the latest one to ten completed calls

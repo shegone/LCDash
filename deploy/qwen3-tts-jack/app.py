@@ -25,6 +25,7 @@ REFERENCE_TEXT = (
 app = FastAPI(title="LCDash Fixed JACK Voice", docs_url=None, redoc_url=None)
 _model = None
 _voice_clone_prompt = None
+_model_device = "unloaded"
 _model_lock = Lock()
 
 
@@ -37,7 +38,7 @@ class SpeechRequest(BaseModel):
 
 
 def _load_model_and_prompt():
-    global _model, _voice_clone_prompt
+    global _model, _voice_clone_prompt, _model_device
     with _model_lock:
         if not REFERENCE_AUDIO.is_file():
             raise HTTPException(status_code=503, detail="JACK reference voice is not ready.")
@@ -45,12 +46,29 @@ def _load_model_and_prompt():
             import torch
             from qwen_tts import Qwen3TTSModel
 
-            _model = Qwen3TTSModel.from_pretrained(
-                MODEL_ID,
-                device_map="cuda:0",
-                dtype=torch.bfloat16,
-                attn_implementation="sdpa",
-            )
+            try:
+                _model = Qwen3TTSModel.from_pretrained(
+                    MODEL_ID,
+                    device_map="cuda:0",
+                    dtype=torch.bfloat16,
+                    attn_implementation="sdpa",
+                )
+                _model_device = "cuda"
+            except RuntimeError as exc:
+                if "out of memory" not in str(exc).lower():
+                    raise
+                # The 27B conversational model may temporarily consume nearly
+                # all of the shared RTX 3090. Preserve JACK availability by
+                # using the same local voice model on CPU instead of returning
+                # a 500 response to the supervisor.
+                torch.cuda.empty_cache()
+                _model = Qwen3TTSModel.from_pretrained(
+                    MODEL_ID,
+                    device_map="cpu",
+                    dtype=torch.float32,
+                    attn_implementation="sdpa",
+                )
+                _model_device = "cpu"
         if _voice_clone_prompt is None:
             _voice_clone_prompt = _model.create_voice_clone_prompt(
                 ref_audio=str(REFERENCE_AUDIO),
@@ -84,6 +102,7 @@ def health() -> dict:
         "model": MODEL_ID,
         "model_loaded": _model is not None,
         "reference_ready": REFERENCE_AUDIO.is_file(),
+        "active_device": _model_device,
         "voice_mode": "fixed-synthetic-reference-only",
         "voice_cloning_enabled": False,
     }
