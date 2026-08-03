@@ -34,7 +34,16 @@ VIEW_CATALOG = {
         "label_key": "label",
         "value_key": "count",
         "chart_type": "bar",
-        "aliases": ("weekday", "day of week", "day of the week", "busiest day"),
+        "aliases": (
+            "weekday",
+            "weekdays",
+            "day of week",
+            "days of week",
+            "day of the week",
+            "days of the week",
+            "busiest day",
+            "busiest days",
+        ),
     },
     "agency_mix": {
         "title": "Calls by Agency",

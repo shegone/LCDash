@@ -27,6 +27,9 @@ def _snapshot():
 def test_view_inference_requires_explicit_visual_request():
     assert infer_view_key("What was the busiest day of the week?") is None
     assert infer_view_key("Chart the busiest day of the week") == "weekday_volume"
+    assert infer_view_key(
+        "Show me a chart of the busiest days of the week for the last 30 days."
+    ) == "weekday_volume"
 
 
 def test_visualization_uses_only_allowlisted_aggregate_points():
