@@ -168,6 +168,10 @@ system is not enough evidence to declare a subscription unhealthy. The page
 contains no CAD payloads, caller information, addresses, unit locations,
 credentials, webhook secrets, or event hashes.
 
-The controlled end-to-end production CAD test is intentionally deferred. Until
-that test is completed, observed metadata confirms receipt but does not replace
-formal operational validation.
+The controlled receiver and browser-delivery acceptance completed August 3,
+2026. Both CFS and unit sources accepted a unique authenticated synthetic event,
+rejected its immediate duplicate, emitted one metadata-only browser event, and
+retained the connected live snapshot plus 30-second reconciliation. Existing
+metadata also confirmed prior real CentralSquare deliveries for both sources.
+See `REALTIME_ACCEPTANCE_2026-08-03.md` for the bounded evidence and remaining
+public-browser observation note.
