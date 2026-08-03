@@ -297,7 +297,7 @@ services:
     ports:
       - "14.1.1.227:11434:11434"
     environment:
-      OLLAMA_KEEP_ALIVE: "10m"
+      OLLAMA_KEEP_ALIVE: "30m"
     volumes:
       - lcdash_ollama_data:/root/.ollama
     networks:

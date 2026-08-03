@@ -56,6 +56,10 @@ answer is complete. The final answer is still audited with its evidence and
 assurance metadata. If streaming fails, the existing complete-answer route is
 used automatically.
 
+The local Ollama model remains warm for 30 minutes after use. This avoids a
+full model reload during normal supervisor conversations while still allowing
+GPU memory to be released after an extended idle period.
+
 ## Memorial identity
 
 JACK is named in honor of John Joseph "Jack" Hines III. Its conversational
