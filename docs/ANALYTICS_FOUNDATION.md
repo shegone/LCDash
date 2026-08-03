@@ -55,6 +55,10 @@ Entry section because she is an ambulance-service employee rather than a Logan
 County dispatcher. This reporting rule does not delete her records or alter
 overall call, unit, station, response, or EMS analytics.
 
+For the Calls by Agency display, the stored `LCEOC` agency code is presented as
+`911 Center / Administrative`. This is a display-only label for 911-center and
+administrative call categories; counts and stored source values are unchanged.
+
 ## Tables
 
 - `lcdash_analytics.calls`

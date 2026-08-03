@@ -24,10 +24,18 @@ MAX_CUSTOM_DAYS = 366
 # Keep the historical call records, but exclude the exact normalized identity
 # from Dispatcher / CAD Entry workload and processing-time reporting.
 EXCLUDED_DISPATCHER_IDENTITY = "KIM MAYNARD"
+AGENCY_DISPLAY_LABELS = {
+    "LCEOC": "911 Center / Administrative",
+}
 
 
 class AnalyticsRangeError(ValueError):
     """Raised when an analytics date range is invalid."""
+
+
+def _agency_display_label(value: object) -> str:
+    label = str(value or "Unknown").strip() or "Unknown"
+    return AGENCY_DISPLAY_LABELS.get(label.upper(), label)
 
 
 @dataclass(frozen=True)
@@ -498,7 +506,7 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
     )
     agency_mix = [
         {
-            "label": row[0],
+            "label": _agency_display_label(row[0]),
             "count": int(row[1]),
             "percent": round((int(row[1]) / total_calls) * 100, 1)
             if total_calls
