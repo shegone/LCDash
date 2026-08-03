@@ -50,6 +50,11 @@ number of timed samples so small samples are visible. CAD processing is not 911
 phone-answer time. NGA911 integration can later add answer time, call duration,
 abandoned-call, transfer, queue-delay, and callback metrics.
 
+Kim Maynard is excluded by exact normalized name from this Dispatcher / CAD
+Entry section because she is an ambulance-service employee rather than a Logan
+County dispatcher. This reporting rule does not delete her records or alter
+overall call, unit, station, response, or EMS analytics.
+
 ## Tables
 
 - `lcdash_analytics.calls`

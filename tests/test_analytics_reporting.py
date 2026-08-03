@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services.analytics_reporting import (
+    EXCLUDED_DISPATCHER_IDENTITY,
     AnalyticsRangeError,
     get_analytics_overview,
     resolve_analytics_window,
@@ -23,6 +24,9 @@ class AnalyticsWindowTests(unittest.TestCase):
         self.assertEqual(window.key, "7d")
         self.assertEqual(window.label, "Last 7 days")
         self.assertEqual((window.end_at - window.start_at).days, 7)
+
+    def test_non_dispatcher_employee_is_explicitly_excluded_from_dispatcher_metrics(self):
+        self.assertEqual(EXCLUDED_DISPATCHER_IDENTITY, "KIM MAYNARD")
 
     def test_custom_range_is_inclusive_of_end_date(self):
         window = resolve_analytics_window(

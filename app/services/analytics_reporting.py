@@ -20,6 +20,10 @@ PERIOD_OPTIONS = {
 }
 DEFAULT_PERIOD = "30d"
 MAX_CUSTOM_DAYS = 366
+# This person is an ambulance-service employee, not a Logan County dispatcher.
+# Keep the historical call records, but exclude the exact normalized identity
+# from Dispatcher / CAD Entry workload and processing-time reporting.
+EXCLUDED_DISPATCHER_IDENTITY = "KIM MAYNARD"
 
 
 class AnalyticsRangeError(ValueError):
@@ -166,6 +170,7 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
     params = {
         "window_start": window.start_at,
         "window_end": window.end_at,
+        "excluded_dispatcher_identity": EXCLUDED_DISPATCHER_IDENTITY,
     }
 
     metrics_row = repository.fetchone(
@@ -239,6 +244,7 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
             WHERE call_received_at >= %(window_start)s
               AND call_received_at < %(window_end)s
               AND BTRIM(call_taker) <> ''
+              AND UPPER(BTRIM(call_taker)) <> %(excluded_dispatcher_identity)s
         ),
         call_processing AS (
             SELECT
@@ -313,6 +319,7 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
             WHERE call_received_at >= %(window_start)s
               AND call_received_at < %(window_end)s
               AND BTRIM(call_taker) <> ''
+              AND UPPER(BTRIM(call_taker)) <> %(excluded_dispatcher_identity)s
         ),
         call_processing AS (
             SELECT
