@@ -54,10 +54,10 @@ MAE uses the Qwen3-TTS synthetic female voice. It is a text-designed synthetic
 voice, not an imitation of a real speaker. The speech-only pronunciation
 dictionary renders `MAE` as "May" and `911` as "nine one one."
 
-JACK uses a fixed, fully synthetic older male Appalachian/Southern character
-at an unhurried 0.92× cadence. A single generated synthetic reference is reused
-for every response so the speaker identity remains stable. It is not an
-imitation of a real person.
+JACK uses a fixed, fully synthetic older male southern West Virginia/Appalachian
+character at an unhurried 0.92× cadence. A single generated synthetic reference
+is reused for every response so the speaker identity remains stable. It is not
+an imitation of a real person.
 
 ## JACK conversational voice mode
 

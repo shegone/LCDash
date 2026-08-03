@@ -21,10 +21,12 @@ MAE_VOICE_INSTRUCTION = (
     "empathetic expression. Professional and composed, never theatrical."
 )
 JACK_VOICE_INSTRUCTION = (
-    "A mature American male technical assistant with a gentle Appalachian "
-    "Southern character. Older, calm, measured, and steady with warm, clear "
-    "diction. Reassuring and thoughtful, never exaggerated, theatrical, or "
-    "an imitation of a real person."
+    "An older native Appalachian American man from southern West Virginia, "
+    "with a low warm baritone, relaxed unhurried cadence, and a gentle rural "
+    "Southern/Appalachian inflection. He sounds seasoned, steady, friendly, "
+    "and clear. Do not sound English, British, Australian, youthful, theatrical, "
+    "or like a generic northern American announcer. This is a synthetic "
+    "character, not an imitation of a real person."
 )
 VOICE_PROFILES = {
     "mae-synthetic-female": MAE_VOICE_INSTRUCTION,
