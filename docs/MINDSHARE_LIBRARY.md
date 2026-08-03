@@ -41,11 +41,14 @@ gateways, radios, firmware, software, or CAD records.
 ## Public company website source
 
 JACK also indexes a fixed allowlist of public pages from `css-mindshare.com`
-once per day. This source is limited to public company, product, download, and
-FAQ material. It does not crawl or authenticate to the customer portal,
-support portal, forms, store, or any login-protected area. Website-derived
-material remains separate from Logan County system documents and has no CAD
-access.
+once per day. This source is limited to public company, product, download,
+case-study, and FAQ material. PDF links found on the allowlisted Downloads and
+Case Studies pages are collected only when they remain on the CSS Mindshare
+site under its public uploads path and pass PDF and size checks. This includes
+public product literature, data sheets, market papers, and case studies. It
+does not crawl or authenticate to the customer portal, support portal, forms,
+store, or any login-protected area. Website-derived material remains separate
+from Logan County system documents and has no CAD access.
 
 ## Conversational streaming
 
