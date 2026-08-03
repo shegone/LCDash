@@ -75,6 +75,15 @@ _PRODUCT_FOCUS_RULES = (
 )
 
 _QUERY_REWRITES = (
+    (
+        (
+            "what does mri stand for",
+            "what is mri",
+            "define mri",
+            "mri meaning",
+        ),
+        "Mindshare Radio Interface",
+    ),
     (("phone book", "phonebook"), "Console Exec Enable Phone Book Sharing"),
     (("display resolution",), "Add Display Resolution"),
     (
@@ -95,6 +104,18 @@ _QUERY_REWRITES = (
     ),
 )
 
+_DOCUMENTED_DEFINITIONS = (
+    (
+        (
+            "what does mri stand for",
+            "what is mri",
+            "define mri",
+            "mri meaning",
+        ),
+        "In the Mindshare product context, MRI stands for Mindshare Radio Interface.",
+    ),
+)
+
 
 def _retrieval_question(question: str) -> str:
     normalized = " ".join((question or "").lower().split())
@@ -102,6 +123,28 @@ def _retrieval_question(question: str) -> str:
         if any(alias in normalized for alias in aliases):
             return rewrite
     return question
+
+
+def _documented_definition(question: str) -> str | None:
+    normalized = " ".join((question or "").lower().split()).rstrip("?.! ")
+    for prompts, answer in _DOCUMENTED_DEFINITIONS:
+        if normalized in prompts:
+            return answer
+    return None
+
+
+def _may_use_general_knowledge(question: str) -> bool:
+    """Allow plain technical concepts, never undocumented operating details."""
+    normalized = " ".join((question or "").lower().split())
+    if _product_focus(question):
+        return False
+    restricted_terms = (
+        "port", "ip address", "subnet", "gateway", "frequency",
+        "firmware", "password", "credential", "license key", "api key",
+        "firewall", "configuration", "config", "multicast", "install ",
+        "update ", "upgrade ", "reconfigure ", "reset ",
+    )
+    return not any(term in normalized for term in restricted_terms)
 
 
 def _prioritize_rewritten_title(
@@ -416,7 +459,10 @@ def ask_mindshare(
     direct_results = [
         result for result in focused_results if _result_is_direct(result)
     ]
-    if not direct_results:
+    general_knowledge = not direct_results and _may_use_general_knowledge(
+        clean_question
+    )
+    if not direct_results and not general_knowledge:
         product_focus = _product_focus(clean_question)
         focus_detail = (
             f" for {product_focus[0]}" if product_focus else ""
@@ -448,6 +494,30 @@ def ask_mindshare(
                 "total_ms": round((perf_counter() - started) * 1000),
             },
             "model": settings.mae_model,
+            "write_access": False,
+        }
+
+    definition = _documented_definition(clean_question)
+    if definition:
+        return {
+            "answer": definition,
+            "sources": [
+                {
+                    "name": "Mindshare technical library",
+                    "detail": "Document-derived product definition",
+                    "available": True,
+                }
+            ],
+            "evidence": _evidence(direct_results),
+            "assurance": {
+                "level": "high",
+                "label": "Document-derived definition",
+                "detail": "The product definition was verified in the indexed Mindshare source shown.",
+            },
+            "timing": {
+                "total_ms": round((perf_counter() - started) * 1000),
+            },
+            "model": "Mindshare documented product glossary",
             "write_access": False,
         }
 
@@ -502,6 +572,29 @@ Scope and safety:
   include only documented actionable steps, and finish with a complete sentence.
 """.strip()
 
+    if general_knowledge:
+        system_prompt = """
+You are JACK, the Mindshare Technical Assistant for Logan County 911.
+
+Answer this ordinary technical-concept question from your general technical
+knowledge. Start with `General technical guidance:` so it is not confused with
+a documented Mindshare procedure. Be concise, factual, and practical.
+
+Do not provide a port, frequency, credential, license value, IP address,
+firmware instruction, configuration setting, or equipment-changing step. Do
+not claim a vendor-specific fact or cite a document that was not supplied. If
+the question needs a product-specific answer, say that the manual or product
+model is needed. You are read-only and cannot change equipment.
+""".strip()
+    else:
+        system_prompt = system_prompt.replace(
+            "- Cite supporting material inline as [Document title, page N].",
+            "- Cite supporting material inline as [Document title, page N].\n"
+            "- You may add one `Suggestion (inference):` only when it follows "
+            "from the cited passages. Never infer a setting, port, frequency, "
+            "credential, firmware action, or change command.",
+        )
+
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(recent_history)
     messages.append(
@@ -509,7 +602,11 @@ Scope and safety:
             "role": "user",
             "content": (
                 f"Question:\n{clean_question}\n\n"
-                f"Mindshare library passages:\n{context}"
+                + (
+                    "No product-specific source was supplied; answer only as general technical guidance."
+                    if general_knowledge
+                    else f"Mindshare library passages:\n{context}"
+                )
             ),
         }
     )
@@ -563,6 +660,27 @@ Scope and safety:
         raise MindshareServiceError(
             "JACK returned an empty response."
         )
+
+    if general_knowledge:
+        return {
+            "answer": answer,
+            "sources": [
+                {
+                    "name": "JACK general technical knowledge",
+                    "detail": "Not a Mindshare documented procedure",
+                    "available": True,
+                }
+            ],
+            "evidence": [],
+            "assurance": {
+                "level": "general",
+                "label": "General technical guidance",
+                "detail": "Use the applicable product manual before making any configuration or operational change.",
+            },
+            "timing": {"total_ms": round((perf_counter() - started) * 1000)},
+            "model": settings.mae_model,
+            "write_access": False,
+        }
 
     top_score = max(
         float(result.get("hybrid_score") or 0)

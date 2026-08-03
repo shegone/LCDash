@@ -256,6 +256,85 @@ class MindshareServiceTests(unittest.TestCase):
 
     @patch("app.services.mindshare_service.httpx.post")
     @patch("app.services.mindshare_service.search_knowledge")
+    def test_mri_definition_is_derived_from_mindshare_documents(
+        self,
+        search_mock,
+        post_mock,
+    ):
+        search_mock.return_value = [
+            {
+                "document_id": 17,
+                "title": "Mindshare Radio Interface Manual",
+                "file_name": "mindshare-radio-interface.pdf",
+                "page_number": 5,
+                "content": "The Mindshare Radio Interface provides radio connectivity.",
+                "coverage": 1.0,
+                "semantic_score": 0.8,
+                "hybrid_score": 0.8,
+                "matched_terms": ["mindshare", "radio", "interface"],
+            }
+        ]
+
+        result = ask_mindshare("What does MRI stand for?")
+
+        self.assertEqual(
+            result["answer"],
+            "In the Mindshare product context, MRI stands for Mindshare Radio Interface.",
+        )
+        self.assertEqual(result["model"], "Mindshare documented product glossary")
+        self.assertEqual(result["assurance"]["level"], "high")
+        self.assertEqual(result["evidence"][0]["document_id"], 17)
+        self.assertEqual(
+            search_mock.call_args.args[0], "Mindshare Radio Interface"
+        )
+        post_mock.assert_not_called()
+
+    @patch("app.services.mindshare_service.httpx.post")
+    @patch("app.services.mindshare_service.search_knowledge", return_value=[])
+    def test_safe_general_technical_question_uses_labeled_model_guidance(
+        self,
+        search_mock,
+        post_mock,
+    ):
+        post_mock.return_value = Mock(
+            raise_for_status=Mock(),
+            json=Mock(
+                return_value={
+                    "message": {
+                        "content": "General technical guidance: A router directs traffic between networks."
+                    }
+                }
+            ),
+        )
+
+        result = ask_mindshare("What does a network router do?")
+
+        self.assertIn("General technical guidance:", result["answer"])
+        self.assertEqual(result["assurance"]["level"], "general")
+        self.assertEqual(result["evidence"], [])
+        self.assertIn("general technical knowledge", result["sources"][0]["name"].lower())
+        self.assertIn(
+            "not a mindshare documented procedure",
+            result["sources"][0]["detail"].lower(),
+        )
+        self.assertIn("Start with `General technical guidance:`", post_mock.call_args.kwargs["json"]["messages"][0]["content"])
+        search_mock.assert_called_once()
+
+    @patch("app.services.mindshare_service.httpx.post")
+    @patch("app.services.mindshare_service.search_knowledge", return_value=[])
+    def test_undocumented_configuration_question_remains_refused(
+        self,
+        search_mock,
+        post_mock,
+    ):
+        result = ask_mindshare("What port should I configure for the gateway?")
+
+        self.assertIn("could not find", result["answer"])
+        post_mock.assert_not_called()
+        search_mock.assert_called_once()
+
+    @patch("app.services.mindshare_service.httpx.post")
+    @patch("app.services.mindshare_service.search_knowledge")
     def test_password_request_is_stopped_before_document_search(
         self,
         search_mock,

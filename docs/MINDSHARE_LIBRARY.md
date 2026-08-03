@@ -38,6 +38,25 @@ documents.
 JACK, the Mindshare Technical Assistant, is read-only. It cannot change consoles,
 gateways, radios, firmware, software, or CAD records.
 
+## Document-derived product definitions
+
+JACK can answer approved short product-definition questions from the indexed
+Mindshare library without asking the conversational model to infer a procedure.
+For example, `What does MRI stand for?` returns `Mindshare Radio Interface`
+only after the matching indexed manual is found. These answers carry source
+evidence and do not relax the documented-procedure, credential, or read-only
+boundaries.
+
+## General technical guidance and suggestions
+
+When no product-specific procedure is needed, JACK may answer ordinary technical
+concept questions from its local general knowledge. Those answers are explicitly
+labeled `General technical guidance` and do not claim Mindshare-document support.
+For a documented product question, JACK may offer one clearly marked suggestion
+only when it logically follows from cited material. He still will not invent or
+recommend exact ports, frequencies, credentials, firmware steps, configuration
+values, or equipment-changing actions without direct approved documentation.
+
 ## Public company website source
 
 JACK also indexes a fixed allowlist of public pages from `css-mindshare.com`
