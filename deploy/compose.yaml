@@ -331,6 +331,13 @@ services:
     container_name: lcdash-speaches
     restart: unless-stopped
     gpus: all
+    environment:
+      # Keep conversational STT reliable while JACK's 27B model and Qwen TTS
+      # occupy the RTX 3090. Short microphone clips run efficiently on the
+      # i9 CPU and INT8 avoids CUDA out-of-memory failures on follow-up turns.
+      WHISPER__INFERENCE_DEVICE: cpu
+      WHISPER__COMPUTE_TYPE: int8
+      WHISPER__CPU_THREADS: 8
     volumes:
       - lcdash_speaches_models:/home/ubuntu/.cache/huggingface/hub
     networks:

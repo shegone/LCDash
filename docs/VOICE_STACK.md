@@ -97,6 +97,16 @@ retain the same API contract. Benchmark:
 
 No cloned voice should be used without documented permission from the speaker.
 
+## Live STT resource placement
+
+JACK's live microphone transcription runs Faster-Whisper on the server CPU
+with INT8 computation and eight CPU threads. This intentional split leaves the
+RTX 3090 available for the 27B conversational model and Qwen JACK voice, which
+otherwise leave too little CUDA working memory for reliable follow-up
+transcription. Short conversational recordings remain local and are not
+stored. Parakeet remains a separately evaluated canary rather than the live
+default.
+
 ## Parakeet STT evaluation plan
 
 Parakeet TDT 0.6B v3 is now available as a private canary for complete-audio,

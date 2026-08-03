@@ -100,6 +100,14 @@ class VoicePageTests(unittest.TestCase):
         self.assertIn("const audioPromise = synthesisChain.then", script)
         self.assertIn("groupedSpeech.length >= 140", script)
 
+    def test_live_stt_uses_cpu_to_avoid_jack_gpu_contention(self):
+        compose = (Path(__file__).parents[1] / "deploy/compose.yaml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("WHISPER__INFERENCE_DEVICE: cpu", compose)
+        self.assertIn("WHISPER__COMPUTE_TYPE: int8", compose)
+        self.assertIn("WHISPER__CPU_THREADS: 8", compose)
+
 
 if __name__ == "__main__":
     unittest.main()
