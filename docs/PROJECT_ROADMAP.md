@@ -23,6 +23,7 @@ Build a secure web-based operations dashboard for Logan County 911 using the Cen
 - Supervisor dashboards
 - MAE allowlisted custom chart previews and matching aggregate PDF exports - completed and deployed
 - Supervisor-saved custom Analytics widgets using fresh aggregate data - completed and deployed
+- Pre-Built Reports catalog and read-only County Commission Monthly Report - completed locally, pending production deployment
 
 ## Phase 5 - Integrations
 - CommsCoach

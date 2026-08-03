@@ -1,0 +1,131 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Pre-Built Reports | LCDash{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="/static/css/lcdash-reports.css?v=20260803-county-commission">
+
+<section class="reports-hero glass">
+    <div>
+        <div class="reports-eyebrow">SUPERVISOR REPORT LIBRARY</div>
+        <h1>Pre-Built Reports</h1>
+        <p>Run repeatable, verified reports directly from approved read-only sources.</p>
+    </div>
+    <div class="reports-safety">
+        <i class="bi bi-shield-lock-fill"></i>
+        <div><strong>Read-only reporting</strong><span>No CAD commands or updates</span></div>
+    </div>
+</section>
+
+<div class="report-catalog mt-4">
+    <article class="report-catalog-card glass is-active">
+        <div class="report-card-icon"><i class="bi bi-building-check"></i></div>
+        <div>
+            <div class="reports-eyebrow">MONTHLY</div>
+            <h3>County Commission Report</h3>
+            <p>Fire, law-enforcement, and LEASA assigned-unit run totals.</p>
+        </div>
+        <span class="report-ready-chip">READY</span>
+    </article>
+    <article class="report-catalog-card glass is-placeholder">
+        <div class="report-card-icon"><i class="bi bi-plus-lg"></i></div>
+        <div>
+            <div class="reports-eyebrow">FUTURE TEMPLATE</div>
+            <h3>Additional Reports</h3>
+            <p>New recurring reports can be added to this library.</p>
+        </div>
+    </article>
+</div>
+
+<section class="report-builder glass mt-4" aria-labelledby="county-report-title">
+    <div class="report-builder-header">
+        <div>
+            <div class="reports-eyebrow">COUNTY COMMISSION</div>
+            <h2 id="county-report-title">Monthly CAD Run Report</h2>
+            <p>Counts every assigned unit by its responding agency for the selected month.</p>
+        </div>
+        <form id="county-report-form" class="report-controls">
+            <label for="county-report-month">Report month</label>
+            <div class="report-control-row">
+                <input id="county-report-month" name="month" type="month" required>
+                <button id="county-report-run" type="submit">
+                    <i class="bi bi-play-fill"></i> Run report
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <div class="report-definition">
+        <i class="bi bi-info-circle-fill"></i>
+        <div>
+            <strong>Report definition</strong>
+            <span>
+                Direct CentralSquare CFS query using the selected month’s record-created window.
+                Run totals count assigned units, matching the established county report. Phone totals
+                are excluded because they come from the separate phone system.
+            </span>
+        </div>
+    </div>
+
+    <div id="county-report-progress" class="report-progress" hidden aria-live="polite">
+        <div class="report-progress-spinner" aria-hidden="true"></div>
+        <div>
+            <strong id="county-report-progress-title">Starting monthly query…</strong>
+            <span id="county-report-progress-detail">This can take about two minutes.</span>
+        </div>
+    </div>
+
+    <div id="county-report-error" class="report-error" hidden></div>
+
+    <article id="county-report-output" class="county-report" hidden>
+        <header class="county-report-heading">
+            <div class="county-report-mark"><i class="bi bi-headset"></i></div>
+            <div>
+                <div class="county-report-county">Logan County 911</div>
+                <h2>County Commission Monthly Report</h2>
+                <div id="county-report-period" class="county-report-period"></div>
+            </div>
+            <div class="county-report-actions">
+                <button id="county-report-print" type="button"><i class="bi bi-printer"></i> Print</button>
+                <a id="county-report-pdf" href="#"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
+            </div>
+        </header>
+
+        <div class="county-report-grid">
+            <section class="county-report-section fire">
+                <h3>Fire Departments</h3>
+                <table>
+                    <thead><tr><th>Department</th><th>Run Totals</th></tr></thead>
+                    <tbody id="county-report-fire"></tbody>
+                    <tfoot><tr><th>FIRE TOTAL</th><th id="county-report-fire-total"></th></tr></tfoot>
+                </table>
+            </section>
+
+            <section class="county-report-section law">
+                <h3>Law Enforcement</h3>
+                <table>
+                    <thead><tr><th>Department</th><th>Run Totals</th></tr></thead>
+                    <tbody id="county-report-law"></tbody>
+                    <tfoot><tr><th>LAW TOTAL</th><th id="county-report-law-total"></th></tr></tfoot>
+                </table>
+            </section>
+
+            <section class="county-report-section ems">
+                <h3>Emergency Medical Services</h3>
+                <table>
+                    <thead><tr><th>Department</th><th>Run Totals</th></tr></thead>
+                    <tbody id="county-report-ems"></tbody>
+                    <tfoot><tr><th>LEASA TOTAL</th><th id="county-report-leasa-total"></th></tr></tfoot>
+                </table>
+            </section>
+        </div>
+
+        <footer class="county-report-footer">
+            <span id="county-report-source"></span>
+            <span id="county-report-generated"></span>
+        </footer>
+    </article>
+</section>
+
+<script src="/static/js/lcdash-reports.js?v=20260803-county-commission"></script>
+{% endblock %}

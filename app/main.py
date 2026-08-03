@@ -43,6 +43,12 @@ from app.services.analytics_reporting import (
     get_analytics_overview,
 )
 from app.services.mae_analytics_report_service import build_analytics_report
+from app.services.county_commission_report_service import (
+    CountyCommissionReportBusyError,
+    build_county_commission_pdf,
+    get_county_commission_job,
+    start_county_commission_job,
+)
 from app.services.mae_analytics_visualization_service import (
     list_saved_widgets,
     retire_widget,
@@ -169,6 +175,10 @@ class AnalyticsWidgetRequest(BaseModel):
 
 class AnalyticsWidgetRetireRequest(BaseModel):
     widget_id: int = Field(gt=0)
+
+
+class CountyCommissionReportRequest(BaseModel):
+    month: str = Field(pattern=r"^\d{4}-\d{2}$")
 
 
 class MindshareChatRequest(BaseModel):
@@ -964,6 +974,58 @@ def analytics_page(
             "version": "0.3.0",
         },
         headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/reports")
+def reports_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="reports.html",
+        context={"version": "0.4.0"},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/api/reports/county-commission/jobs")
+def county_commission_job_start_api(
+    report_request: CountyCommissionReportRequest,
+):
+    try:
+        return start_county_commission_job(report_request.month)
+    except CountyCommissionReportBusyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/reports/county-commission/jobs/{job_id}")
+def county_commission_job_api(job_id: str, response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    job = get_county_commission_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Monthly report job not found.")
+    return job
+
+
+@app.get("/api/reports/county-commission/jobs/{job_id}/pdf")
+def county_commission_job_pdf_api(job_id: str):
+    job = get_county_commission_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Monthly report job not found.")
+    if job.get("status") != "complete" or not job.get("result"):
+        raise HTTPException(status_code=409, detail="Monthly report is not complete.")
+    report = job["result"]
+    month = report.get("month") or "monthly"
+    return Response(
+        content=build_county_commission_pdf(report),
+        media_type="application/pdf",
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": (
+                f'attachment; filename="logan-county-commission-{month}.pdf"'
+            ),
+        },
     )
 
 
