@@ -50,3 +50,6 @@ the remove button.
   iClone helper `scripts/iclone_create_disposable_test.py`; that helper requires
   iClone's `RLPy` runtime and is intentionally outside the application test
   suite.
+- Production deployment completed on August 3, 2026. The exact acceptance
+  question returned the allowlisted `weekday_volume` bar chart with seven
+  aggregate points, an audited answer, and read-only status.
