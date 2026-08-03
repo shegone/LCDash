@@ -662,6 +662,8 @@ model is needed. You are read-only and cannot change equipment.
         )
 
     if general_knowledge:
+        if not answer.lower().startswith("general technical guidance:"):
+            answer = f"General technical guidance: {answer}"
         return {
             "answer": answer,
             "sources": [

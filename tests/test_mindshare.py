@@ -301,7 +301,7 @@ class MindshareServiceTests(unittest.TestCase):
             json=Mock(
                 return_value={
                     "message": {
-                        "content": "General technical guidance: A router directs traffic between networks."
+                        "content": "A router directs traffic between networks."
                     }
                 }
             ),
