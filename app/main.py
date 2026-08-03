@@ -85,6 +85,11 @@ from app.services.mindshare_evaluation_service import (
     list_mindshare_evaluation_cases,
     run_mindshare_evaluation_case,
 )
+from app.services.jack_memory_service import (
+    create_jack_memory_candidate,
+    list_jack_memory_items,
+    review_jack_memory,
+)
 from app.services.voice_service import (
     VOICE_CHOICES,
     VoiceServiceError,
@@ -196,6 +201,18 @@ class MAEMemoryCreateRequest(BaseModel):
 
 
 class MAEMemoryReviewRequest(BaseModel):
+    memory_id: int = Field(gt=0)
+    decision: str = Field(min_length=7, max_length=20)
+
+
+class JackMemoryCreateRequest(BaseModel):
+    title: str = Field(min_length=3, max_length=200)
+    trigger_text: str = Field(min_length=3, max_length=1000)
+    guidance: str = Field(min_length=3, max_length=4000)
+    source_interaction_id: str = Field(default="", max_length=36)
+
+
+class JackMemoryReviewRequest(BaseModel):
     memory_id: int = Field(gt=0)
     decision: str = Field(min_length=7, max_length=20)
 
@@ -1193,6 +1210,7 @@ def mindshare_reliability_page(request: Request):
             "evaluation_cases": list_mindshare_evaluation_cases(),
             "evaluation_summary": get_mindshare_evaluation_summary(),
             "feedback_items": list_jack_feedback(),
+            "memory_items": list_jack_memory_items(),
             "version": "0.4.0",
         },
         headers={"Cache-Control": "no-store"},
@@ -1405,6 +1423,60 @@ def mindshare_feedback_api(
         raise HTTPException(
             status_code=503,
             detail=result.get("message") or "JACK feedback could not be saved.",
+        )
+    return result
+
+
+@app.get("/api/mindshare/memory")
+def jack_memory_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    return {"items": list_jack_memory_items()}
+
+
+@app.post("/api/mindshare/memory")
+def jack_memory_create_api(
+    memory_request: JackMemoryCreateRequest,
+    request: Request,
+    response: Response,
+):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        result = create_jack_memory_candidate(
+            title=memory_request.title,
+            trigger_text=memory_request.trigger_text,
+            guidance=memory_request.guidance,
+            created_by=_authenticated_user_email(request),
+            source_interaction_id=memory_request.source_interaction_id or None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not result.get("saved"):
+        raise HTTPException(
+            status_code=503,
+            detail=result.get("message") or "JACK memory candidate could not be saved.",
+        )
+    return result
+
+
+@app.post("/api/mindshare/memory/review")
+def jack_memory_review_api(
+    memory_request: JackMemoryReviewRequest,
+    request: Request,
+    response: Response,
+):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        result = review_jack_memory(
+            memory_id=memory_request.memory_id,
+            decision=memory_request.decision,
+            reviewed_by=_authenticated_user_email(request),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not result.get("saved"):
+        raise HTTPException(
+            status_code=404,
+            detail=result.get("message") or "JACK memory candidate not found.",
         )
     return result
 

@@ -112,11 +112,14 @@ class MindshareReliabilityPageTests(unittest.TestCase):
             "recent_runs": [],
         },
     )
+    @patch("app.main.list_jack_memory_items", return_value=[])
     @patch("app.main.list_jack_feedback", return_value=[])
-    def test_reliability_page_loads(self, feedback_mock, summary_mock):
+    def test_reliability_page_loads(self, feedback_mock, memory_mock, summary_mock):
         response = self.client.get("/mindshare/reliability")
         self.assertEqual(response.status_code, 200)
         self.assertIn("JACK Reliability Center", response.text)
+        self.assertIn("Supervisor-Approved JACK Knowledge", response.text)
+        self.assertIn('id="jack-memory-form"', response.text)
         self.assertIn("jack-console-01", response.text)
         self.assertEqual(response.headers["cache-control"], "no-store")
 
@@ -177,6 +180,43 @@ class MindshareReliabilityPageTests(unittest.TestCase):
             user_email="boss@example.com",
             rating="helpful",
             comment="",
+        )
+
+    @patch("app.main.create_jack_memory_candidate")
+    def test_memory_candidate_endpoint_records_authenticated_user(self, create_mock):
+        create_mock.return_value = {"saved": True, "memory_id": 4, "status": "pending"}
+        response = self.client.post(
+            "/api/mindshare/memory",
+            json={
+                "title": "Local console label",
+                "trigger_text": "console label",
+                "guidance": "Use the supervisor-approved local label.",
+                "source_interaction_id": "",
+            },
+            headers={"cf-access-authenticated-user-email": "boss@example.com"},
+        )
+        self.assertEqual(response.status_code, 200)
+        create_mock.assert_called_once_with(
+            title="Local console label",
+            trigger_text="console label",
+            guidance="Use the supervisor-approved local label.",
+            created_by="boss@example.com",
+            source_interaction_id=None,
+        )
+
+    @patch("app.main.review_jack_memory")
+    def test_memory_review_endpoint_records_authenticated_user(self, review_mock):
+        review_mock.return_value = {"saved": True, "memory_id": 4, "status": "approved"}
+        response = self.client.post(
+            "/api/mindshare/memory/review",
+            json={"memory_id": 4, "decision": "approved"},
+            headers={"cf-access-authenticated-user-email": "boss@example.com"},
+        )
+        self.assertEqual(response.status_code, 200)
+        review_mock.assert_called_once_with(
+            memory_id=4,
+            decision="approved",
+            reviewed_by="boss@example.com",
         )
 
 

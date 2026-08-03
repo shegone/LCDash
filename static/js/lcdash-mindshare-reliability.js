@@ -63,4 +63,55 @@
             runAll.innerHTML = '<i class="bi bi-arrow-repeat"></i> Run all 30 again';
         });
     }
+
+    const memoryForm = document.getElementById("jack-memory-form");
+    if (memoryForm) {
+        memoryForm.addEventListener("submit", async function (event) {
+            event.preventDefault();
+            const formData = new FormData(memoryForm);
+            const status = document.getElementById("jack-memory-form-status");
+            if (status) status.textContent = "Saving...";
+            try {
+                const response = await fetch("/api/mindshare/memory", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    cache: "no-store",
+                    body: JSON.stringify({
+                        title: formData.get("title"),
+                        trigger_text: formData.get("trigger_text"),
+                        guidance: formData.get("guidance"),
+                        source_interaction_id: ""
+                    })
+                });
+                const payload = await response.json();
+                if (!response.ok) throw new Error(payload.detail || "Could not save JACK knowledge.");
+                window.location.reload();
+            } catch (error) {
+                if (status) status.textContent = error.message || "Could not save JACK knowledge.";
+            }
+        });
+    }
+
+    document.querySelectorAll("[data-review-jack-memory]").forEach(function (button) {
+        button.addEventListener("click", async function () {
+            button.disabled = true;
+            try {
+                const response = await fetch("/api/mindshare/memory/review", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    cache: "no-store",
+                    body: JSON.stringify({
+                        memory_id: Number(button.dataset.reviewJackMemory),
+                        decision: button.dataset.decision
+                    })
+                });
+                const payload = await response.json();
+                if (!response.ok) throw new Error(payload.detail || "JACK knowledge review failed.");
+                window.location.reload();
+            } catch (error) {
+                button.disabled = false;
+                window.alert(error.message || "JACK knowledge review failed.");
+            }
+        });
+    });
 })();

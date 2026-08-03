@@ -5,6 +5,7 @@ from collections.abc import Callable
 import httpx
 
 from app.config.settings import settings
+from app.services.jack_memory_service import find_approved_jack_memory
 from app.services.knowledge_service import (
     get_document_passages,
     get_knowledge_status,
@@ -420,6 +421,8 @@ def ask_mindshare(
     if boundary:
         return boundary
 
+    approved_memory = find_approved_jack_memory(clean_question, limit=4)
+
     retrieval_question = _retrieval_question(clean_question)
     results = search_knowledge(
         retrieval_question,
@@ -463,8 +466,10 @@ def ask_mindshare(
     # coverage even when they do not establish a product-specific answer.
     # Route safe, non-Mindshare concepts to clearly labeled general guidance;
     # retain document-first behavior for named products and procedures.
-    general_knowledge = _may_use_general_knowledge(clean_question)
-    if not direct_results and not general_knowledge:
+    general_knowledge = (
+        _may_use_general_knowledge(clean_question) and not approved_memory
+    )
+    if not direct_results and not general_knowledge and not approved_memory:
         product_focus = _product_focus(clean_question)
         focus_detail = (
             f" for {product_focus[0]}" if product_focus else ""
@@ -524,6 +529,19 @@ def ask_mindshare(
         }
 
     context = _build_context(direct_results)
+    if approved_memory:
+        memory_blocks = [
+            (
+                f"Approved local guidance: {item['title']}\n"
+                f"{item['guidance']}"
+            )
+            for item in approved_memory
+        ]
+        context = "\n\n".join(
+            part
+            for part in (context, "\n\n".join(memory_blocks))
+            if part
+        )
     recent_history = []
     for message in (history or [])[-2:]:
         role = str(message.get("role") or "").strip().lower()
@@ -557,6 +575,8 @@ Memorial identity and voice:
 
 Scope and safety:
 - Answer only from the supplied Mindshare technical-library passages.
+- Supervisor-approved local guidance may supplement those passages. Clearly
+  label it as local guidance and never present it as a vendor-manual statement.
 - This assistant is separate from MAE and has no CentralSquare CAD access.
 - Never invent a procedure, setting, port, address, version, or compatibility claim.
 - Never reveal credentials, license secrets, private keys, or passwords.
@@ -574,7 +594,18 @@ Scope and safety:
   include only documented actionable steps, and finish with a complete sentence.
 """.strip()
 
-    if general_knowledge:
+    if approved_memory and not direct_results:
+        system_prompt = """
+You are JACK, the Mindshare Technical Assistant for Logan County 911.
+
+Answer from the supplied supervisor-approved local guidance. Begin with
+`Supervisor-approved local guidance:` so it is not confused with a vendor
+manual. Be concise, factual, practical, and read-only. Do not reveal
+credentials or claim to change equipment. Do not invent settings, ports,
+frequencies, versions, firmware steps, or compatibility details beyond the
+approved guidance. If the guidance does not answer the question, say so.
+""".strip()
+    elif general_knowledge:
         system_prompt = """
 You are JACK, the Mindshare Technical Assistant for Logan County 911.
 
@@ -607,7 +638,11 @@ model is needed. You are read-only and cannot change equipment.
                 + (
                     "No product-specific source was supplied; answer only as general technical guidance."
                     if general_knowledge
-                    else f"Mindshare library passages:\n{context}"
+                    else (
+                        f"Supervisor-approved local guidance:\n{context}"
+                        if approved_memory and not direct_results
+                        else f"Mindshare library and approved local context:\n{context}"
+                    )
                 )
             ),
         }
@@ -619,6 +654,7 @@ model is needed. You are read-only and cannot change equipment.
                 "messages": messages,
                 "stream": token_callback is not None,
                 "think": False,
+                "keep_alive": "2h",
                 "options": {
                     "temperature": 0.1,
                     "num_ctx": 3072,
@@ -663,6 +699,32 @@ model is needed. You are read-only and cannot change equipment.
             "JACK returned an empty response."
         )
 
+    if approved_memory and not direct_results:
+        if not answer.lower().startswith("supervisor-approved local guidance:"):
+            answer = f"Supervisor-approved local guidance: {answer}"
+        return {
+            "answer": answer,
+            "sources": [
+                {
+                    "name": "JACK approved local knowledge",
+                    "detail": (
+                        f"{len(approved_memory)} supervisor-approved guidance "
+                        f"item{'' if len(approved_memory) == 1 else 's'}"
+                    ),
+                    "available": True,
+                }
+            ],
+            "evidence": [],
+            "assurance": {
+                "level": "approved_local",
+                "label": "Supervisor-approved local guidance",
+                "detail": "This guidance was approved locally and is not presented as a vendor-manual statement.",
+            },
+            "timing": {"total_ms": round((perf_counter() - started) * 1000)},
+            "model": settings.mae_model,
+            "write_access": False,
+        }
+
     if general_knowledge:
         if not answer.lower().startswith("general technical guidance:"):
             answer = f"General technical guidance: {answer}"
@@ -691,18 +753,30 @@ model is needed. You are read-only and cannot change equipment.
         for result in direct_results
     )
     assurance_level = "high" if top_score >= 0.5 else "supported"
-    return {
-        "answer": answer,
-        "sources": [
+    sources = [
+        {
+            "name": "Mindshare technical library",
+            "detail": (
+                f"{len(direct_results[:3])} supporting passage"
+                f"{'' if len(direct_results[:3]) == 1 else 's'}"
+            ),
+            "available": True,
+        }
+    ]
+    if approved_memory:
+        sources.append(
             {
-                "name": "Mindshare technical library",
+                "name": "JACK approved local knowledge",
                 "detail": (
-                    f"{len(direct_results[:3])} supporting passage"
-                    f"{'' if len(direct_results[:3]) == 1 else 's'}"
+                    f"{len(approved_memory)} supervisor-approved guidance "
+                    f"item{'' if len(approved_memory) == 1 else 's'}"
                 ),
                 "available": True,
             }
-        ],
+        )
+    return {
+        "answer": answer,
+        "sources": sources,
         "evidence": _evidence(direct_results),
         "assurance": {
             "level": assurance_level,

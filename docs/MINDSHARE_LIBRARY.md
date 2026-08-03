@@ -57,6 +57,16 @@ only when it logically follows from cited material. He still will not invent or
 recommend exact ports, frequencies, credentials, firmware steps, configuration
 values, or equipment-changing actions without direct approved documentation.
 
+## Supervisor-approved local knowledge
+
+JACK has a local learning ledger in the Reliability Center. A supervisor may
+create a proposed title, recall phrase, and guidance item. New items remain
+pending and cannot affect answers until a supervisor explicitly approves them.
+Approved local guidance is labeled separately from vendor documentation, keeps
+its creator and approver audit fields, records use counts, and can be retired.
+Secret-like values are rejected, and no memory item grants CAD or equipment
+write access or overrides JACK's credential and action boundaries.
+
 ## Public company website source
 
 JACK also indexes a fixed allowlist of public pages from `css-mindshare.com`
@@ -83,9 +93,11 @@ into more natural phrases, and the next audio phrase is synthesized while the
 current phrase is playing. This removes the avoidable generate-play-generate
 gaps without running concurrent inference against the voice model.
 
-The local Ollama model remains warm for 30 minutes after use. This avoids a
-full model reload during normal supervisor conversations while still allowing
-GPU memory to be released after an extended idle period.
+JACK asks Ollama to keep the local conversational model warm for two hours
+after use. This avoids a full model reload during a normal supervisor work
+session while still allowing GPU memory to be released after extended idle
+time. A first question after deployment, model replacement, or a long idle
+period can still require a cold model load.
 
 JACK retains its supporting citations in the written answer. In voice mode,
 the browser omits inline document-title and page-number labels so the answer

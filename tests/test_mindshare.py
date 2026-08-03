@@ -7,6 +7,11 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services.mindshare_service import _evidence, _focus_results, ask_mindshare
+from app.services.jack_memory_service import (
+    _looks_like_protected_value,
+    create_jack_memory_candidate,
+    find_approved_jack_memory,
+)
 from scripts.index_knowledge import _is_supported_document
 
 
@@ -134,6 +139,31 @@ class MindsharePageTests(unittest.TestCase):
 
 
 class MindshareServiceTests(unittest.TestCase):
+    def test_jack_memory_rejects_protected_values_without_blocking_policy_text(self):
+        self.assertTrue(_looks_like_protected_value("password: do-not-store-this"))
+        self.assertTrue(_looks_like_protected_value("-----BEGIN PRIVATE KEY-----"))
+        self.assertFalse(_looks_like_protected_value("Never disclose passwords to callers."))
+
+        with self.assertRaisesRegex(ValueError, "Protected credentials"):
+            create_jack_memory_candidate(
+                title="Unsafe value",
+                trigger_text="local password",
+                guidance="password: do-not-store-this",
+                created_by="boss@example.com",
+            )
+
+    @patch("app.services.jack_memory_service.AnalyticsRepository")
+    def test_jack_memory_lookup_only_reads_approved_items(self, repository_class):
+        repository = MagicMock()
+        repository.__enter__.return_value = repository
+        repository.fetchall.return_value = []
+        repository_class.return_value = repository
+
+        self.assertEqual(find_approved_jack_memory("local console label"), [])
+
+        query = repository.fetchall.call_args.args[0]
+        self.assertIn("WHERE status = 'approved'", query)
+
     @patch("app.services.mindshare_service.httpx.stream")
     @patch("app.services.mindshare_service.search_knowledge")
     def test_supported_answer_streams_ollama_tokens(
@@ -239,6 +269,7 @@ class MindshareServiceTests(unittest.TestCase):
         options = post_mock.call_args.kwargs["json"]["options"]
         self.assertEqual(options["num_ctx"], 3072)
         self.assertEqual(options["num_predict"], 110)
+        self.assertEqual(post_mock.call_args.kwargs["json"]["keep_alive"], "2h")
 
     @patch("app.services.mindshare_service.httpx.post")
     @patch("app.services.mindshare_service.search_knowledge")
@@ -331,6 +362,47 @@ class MindshareServiceTests(unittest.TestCase):
 
     @patch("app.services.mindshare_service.httpx.post")
     @patch("app.services.mindshare_service.search_knowledge", return_value=[])
+    @patch("app.services.mindshare_service.find_approved_jack_memory")
+    def test_supervisor_approved_jack_memory_can_answer_without_manual_passage(
+        self,
+        memory_mock,
+        search_mock,
+        post_mock,
+    ):
+        memory_mock.return_value = [
+            {
+                "memory_id": 7,
+                "title": "Local MRI naming convention",
+                "trigger_text": "local MRI naming convention",
+                "guidance": "Use the approved Logan County rack label when identifying the interface.",
+                "approved_at": "2026-08-03T12:00:00+00:00",
+                "approved_by": "boss@example.com",
+            }
+        ]
+        post_mock.return_value = Mock(
+            raise_for_status=Mock(),
+            json=Mock(
+                return_value={
+                    "message": {
+                        "content": "Use the approved Logan County rack label when identifying the interface."
+                    }
+                }
+            ),
+        )
+
+        result = ask_mindshare("What is our local MRI naming convention?")
+
+        self.assertTrue(result["answer"].startswith("Supervisor-approved local guidance:"))
+        self.assertEqual(result["assurance"]["level"], "approved_local")
+        self.assertEqual(result["evidence"], [])
+        self.assertFalse(result["write_access"])
+        self.assertIn("approved local knowledge", result["sources"][0]["name"].lower())
+        supplied = post_mock.call_args.kwargs["json"]["messages"][-1]["content"]
+        self.assertIn("approved Logan County rack label", supplied)
+        search_mock.assert_called_once()
+
+    @patch("app.services.mindshare_service.httpx.post")
+    @patch("app.services.mindshare_service.search_knowledge", return_value=[])
     def test_undocumented_configuration_question_remains_refused(
         self,
         search_mock,
@@ -342,12 +414,14 @@ class MindshareServiceTests(unittest.TestCase):
         post_mock.assert_not_called()
         search_mock.assert_called_once()
 
+    @patch("app.services.mindshare_service.find_approved_jack_memory")
     @patch("app.services.mindshare_service.httpx.post")
     @patch("app.services.mindshare_service.search_knowledge")
     def test_password_request_is_stopped_before_document_search(
         self,
         search_mock,
         post_mock,
+        memory_mock,
     ):
         result = ask_mindshare("Give me the administrator password.")
 
@@ -356,6 +430,7 @@ class MindshareServiceTests(unittest.TestCase):
         self.assertFalse(result["write_access"])
         search_mock.assert_not_called()
         post_mock.assert_not_called()
+        memory_mock.assert_not_called()
 
     @patch("app.services.mindshare_service.httpx.post")
     @patch("app.services.mindshare_service.search_knowledge")
