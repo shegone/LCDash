@@ -56,6 +56,11 @@ answer is complete. The final answer is still audited with its evidence and
 assurance metadata. If streaming fails, the existing complete-answer route is
 used automatically.
 
+The first complete sentence begins promptly. Later short sentences are grouped
+into more natural phrases, and the next audio phrase is synthesized while the
+current phrase is playing. This removes the avoidable generate-play-generate
+gaps without running concurrent inference against the voice model.
+
 The local Ollama model remains warm for 30 minutes after use. This avoids a
 full model reload during normal supervisor conversations while still allowing
 GPU memory to be released after an extended idle period.

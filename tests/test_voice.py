@@ -96,6 +96,9 @@ class VoicePageTests(unittest.TestCase):
         self.assertIn("speed: 0.92", script)
         self.assertIn("activeSpeechController.abort()", script)
         self.assertIn("status.jack_tts.ready", script)
+        self.assertIn("let synthesisChain = Promise.resolve()", script)
+        self.assertIn("const audioPromise = synthesisChain.then", script)
+        self.assertIn("groupedSpeech.length >= 140", script)
 
 
 if __name__ == "__main__":

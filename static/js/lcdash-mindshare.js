@@ -122,34 +122,14 @@
         });
     }
 
-    async function speakAnswer(text) {
+    async function requestSpeechAudio(text, signal) {
         const spokenText = String(text || "").trim().slice(0, 2500);
-        if (!spokenText) return;
-
-        activeSpeechRequest += 1;
-        const requestId = activeSpeechRequest;
-        if (activeSpeechController) activeSpeechController.abort();
-        activeSpeechController = new AbortController();
-        if (voicePlayer) {
-            voicePlayer.pause();
-            voicePlayer.removeAttribute("src");
-            voicePlayer.load();
-        }
-
-        if (voiceModeActive) {
-            setMicrophoneEnabled(false);
-            setVoiceState(
-                "speaking",
-                "JACK is speaking",
-                "The microphone is paused to prevent an echo."
-            );
-        }
-
+        if (!spokenText) return null;
         const response = await fetch("/api/voice/speech", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
             cache: "no-store",
-            signal: activeSpeechController.signal,
+            signal: signal,
             body: JSON.stringify({
                 text: spokenText,
                 voice: "jack-synthetic-southern-male",
@@ -157,7 +137,6 @@
                 response_format: "mp3"
             })
         });
-        if (requestId !== activeSpeechRequest) return;
         if (!response.ok) {
             const payload = await response.json().catch(function () {
                 return {};
@@ -166,8 +145,11 @@
                 payload.detail || "JACK could not generate speech."
             );
         }
+        return response.blob();
+    }
 
-        const audioBlob = await response.blob();
+    async function playSpeechAudio(audioBlob, requestId) {
+        if (!audioBlob || requestId !== activeSpeechRequest) return;
         if (activeAudioUrl) URL.revokeObjectURL(activeAudioUrl);
         activeAudioUrl = URL.createObjectURL(audioBlob);
         voicePlayer.src = activeAudioUrl;
@@ -180,6 +162,30 @@
             const playPromise = voicePlayer.play();
             if (playPromise) playPromise.catch(reject);
         });
+    }
+
+    async function speakAnswer(text) {
+        activeSpeechRequest += 1;
+        const requestId = activeSpeechRequest;
+        if (activeSpeechController) activeSpeechController.abort();
+        activeSpeechController = new AbortController();
+        if (voicePlayer) {
+            voicePlayer.pause();
+            voicePlayer.removeAttribute("src");
+            voicePlayer.load();
+        }
+        if (voiceModeActive) {
+            setMicrophoneEnabled(false);
+            setVoiceState(
+                "speaking",
+                "JACK is speaking",
+                "The microphone is paused to prevent an echo."
+            );
+        }
+        const audioBlob = await requestSpeechAudio(
+            text, activeSpeechController.signal
+        );
+        await playSpeechAudio(audioBlob, requestId);
         if (requestId === activeSpeechRequest) activeSpeechController = null;
     }
 
@@ -595,18 +601,57 @@
         const decoder = new TextDecoder();
         let wireBuffer = "";
         let speechBuffer = "";
+        let groupedSpeech = "";
+        let synthesisChain = Promise.resolve();
         let speechChain = Promise.resolve();
         let payload = null;
         let streamedSpeech = false;
 
-        function queueSentence(sentence) {
+        activeSpeechRequest += 1;
+        const speechRequestId = activeSpeechRequest;
+        if (activeSpeechController) activeSpeechController.abort();
+        activeSpeechController = new AbortController();
+        if (voicePlayer) {
+            voicePlayer.pause();
+            voicePlayer.removeAttribute("src");
+            voicePlayer.load();
+        }
+
+        function queueSpeechChunk(sentence) {
             const clean = sentence.trim();
             if (!clean || !speakResponse || !voiceModeActive) return;
             streamedSpeech = true;
-            speechChain = speechChain.then(function () {
-                if (!voiceModeActive) return undefined;
-                return speakAnswer(clean);
+            setMicrophoneEnabled(false);
+            setVoiceState(
+                "speaking",
+                "JACK is speaking",
+                "The next part of the answer is being prepared."
+            );
+            const audioPromise = synthesisChain.then(function () {
+                if (!voiceModeActive || speechRequestId !== activeSpeechRequest) {
+                    return null;
+                }
+                return requestSpeechAudio(clean, activeSpeechController.signal);
             });
+            synthesisChain = audioPromise.then(function () { return undefined; });
+            speechChain = speechChain.then(function () {
+                return audioPromise;
+            }).then(function (audioBlob) {
+                if (!voiceModeActive) return undefined;
+                return playSpeechAudio(audioBlob, speechRequestId);
+            });
+        }
+
+        function acceptSentence(sentence) {
+            if (!streamedSpeech) {
+                queueSpeechChunk(sentence);
+                return;
+            }
+            groupedSpeech = `${groupedSpeech} ${sentence}`.trim();
+            if (groupedSpeech.length >= 140) {
+                queueSpeechChunk(groupedSpeech);
+                groupedSpeech = "";
+            }
         }
 
         function consumeEvent(event) {
@@ -614,7 +659,7 @@
                 speechBuffer += String(event.text || "");
                 let match = speechBuffer.match(/^([\s\S]*?[.!?])(?=\s|$)/);
                 while (match) {
-                    queueSentence(match[1]);
+                    acceptSentence(match[1]);
                     speechBuffer = speechBuffer.slice(match[1].length).trimStart();
                     match = speechBuffer.match(/^([\s\S]*?[.!?])(?=\s|$)/);
                 }
@@ -637,11 +682,13 @@
         }
         if (wireBuffer.trim()) consumeEvent(JSON.parse(wireBuffer));
         if (!payload) throw new Error("JACK's response stream ended early.");
-        if (speechBuffer.trim()) queueSentence(speechBuffer);
+        groupedSpeech = `${groupedSpeech} ${speechBuffer}`.trim();
+        if (groupedSpeech) queueSpeechChunk(groupedSpeech);
         if (speakResponse && voiceModeActive && !streamedSpeech && payload.answer) {
-            queueSentence(payload.answer);
+            queueSpeechChunk(payload.answer);
         }
         await speechChain;
+        if (speechRequestId === activeSpeechRequest) activeSpeechController = null;
         return payload;
     }
 
