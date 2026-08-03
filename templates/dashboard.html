@@ -17,13 +17,24 @@
         </div>
     </div>
 
-    <div
-        class="view-mode-badge"
-        id="dashboard-freshness"
-        aria-live="polite"
-        aria-label="Live supervisor and wallboard view"
-    >
-        Live Supervisor View
+    <div class="dashboard-view-controls">
+        <button
+            class="dashboard-refresh-button"
+            id="dashboard-refresh-button"
+            type="button"
+            aria-label="Refresh dashboard data now"
+        >
+            <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+            <span id="dashboard-refresh-button-label">Refresh</span>
+        </button>
+        <div
+            class="view-mode-badge"
+            id="dashboard-freshness"
+            aria-live="polite"
+            aria-label="Live supervisor and wallboard view"
+        >
+            Live Supervisor View
+        </div>
     </div>
 </div>
 
@@ -96,6 +107,9 @@
                     data-last-updated="{{ last_updated }}"
                 >
                     Loading...
+                </div>
+                <div class="realtime-detail" id="dashboard-last-success-age">
+                    Updated just now
                 </div>
             </div>
 

@@ -8,6 +8,7 @@
 
     let secondsUntilRefresh = REFRESH_SECONDS;
     let refreshInProgress = false;
+    let refreshPending = false;
     let lastSuccessfulRefresh = Date.now();
     let realtimeRefreshTimer = null;
     let realtimeSource = null;
@@ -105,7 +106,7 @@
 
     function markConnected() {
         const statusBar = element("dashboard-status-bar");
-        statusBar?.classList.remove("is-stale", "is-disconnected");
+        statusBar?.classList.remove("is-stale", "is-disconnected", "is-updating");
 
         updateCadStatus("CONNECTED", "ops-good", "bi-circle-fill");
         setFreshness("Live Supervisor View", "is-live");
@@ -116,8 +117,62 @@
         );
     }
 
+    function markUpdating() {
+        element("dashboard-status-bar")?.classList.add("is-updating");
+        setFreshness("Updating live data", "is-updating");
+    }
+
+    function markRequestFailed() {
+        const statusBar = element("dashboard-status-bar");
+        statusBar?.classList.remove("is-updating");
+        statusBar?.classList.add("is-disconnected");
+
+        updateCadStatus("LAST KNOWN", "ops-warning", "bi-clock-history");
+        replaceStatusHeading(
+            "Dashboard Connection Issue",
+            "ops-danger",
+            "bi-cloud-slash-fill"
+        );
+        setFreshness("Reconnecting - showing last known data", "is-reconnecting");
+    }
+
+    function setRefreshButtonBusy(isBusy) {
+        const button = element("dashboard-refresh-button");
+        const label = element("dashboard-refresh-button-label");
+
+        if (button) {
+            button.disabled = isBusy;
+            button.setAttribute("aria-busy", String(isBusy));
+        }
+        if (label) {
+            label.textContent = isBusy ? "Updating" : "Refresh";
+        }
+    }
+
+    function updateLastSuccessAge() {
+        const age = element("dashboard-last-success-age");
+        if (!age) {
+            return;
+        }
+
+        const ageSeconds = Math.max(
+            0,
+            Math.floor((Date.now() - lastSuccessfulRefresh) / 1000)
+        );
+        if (ageSeconds < 2) {
+            age.textContent = "Updated just now";
+        } else if (ageSeconds < 60) {
+            age.textContent = "Updated " + ageSeconds + " seconds ago";
+        } else {
+            const ageMinutes = Math.floor(ageSeconds / 60);
+            age.textContent = "Updated " + ageMinutes +
+                (ageMinutes === 1 ? " minute ago" : " minutes ago");
+        }
+    }
+
     function markDisconnected() {
         const statusBar = element("dashboard-status-bar");
+        statusBar?.classList.remove("is-updating");
         statusBar?.classList.add("is-disconnected");
 
         updateCadStatus("RECONNECTING", "ops-danger", "bi-arrow-repeat");
@@ -425,10 +480,13 @@
 
     async function refreshDashboard() {
         if (refreshInProgress) {
+            refreshPending = true;
             return;
         }
 
         refreshInProgress = true;
+        markUpdating();
+        setRefreshButtonBusy(true);
         const controller = new AbortController();
         const timeoutId = window.setTimeout(function () {
             controller.abort();
@@ -460,11 +518,18 @@
 
             applySnapshot(data);
         } catch (error) {
-            markDisconnected();
+            markRequestFailed();
         } finally {
             window.clearTimeout(timeoutId);
             refreshInProgress = false;
-            secondsUntilRefresh = REFRESH_SECONDS;
+            setRefreshButtonBusy(false);
+            if (refreshPending) {
+                refreshPending = false;
+                secondsUntilRefresh = 0;
+                window.setTimeout(refreshDashboard, 0);
+            } else {
+                secondsUntilRefresh = REFRESH_SECONDS;
+            }
             markStaleIfNeeded();
         }
     }
@@ -477,7 +542,7 @@
         realtimeRefreshTimer = window.setTimeout(function () {
             realtimeRefreshTimer = null;
             if (refreshInProgress) {
-                secondsUntilRefresh = 0;
+                refreshPending = true;
                 return;
             }
             refreshDashboard();
@@ -561,6 +626,7 @@
         LCDashTime.updateElementFromCadTime("last-updated", {timeOnly: true});
         LCDashTime.updateCallElapsedTimers();
         LCDashTime.updateLocalTime("dashboard-local-time");
+        updateLastSuccessAge();
         markStaleIfNeeded();
 
         const countdown = element("refresh-countdown");
@@ -591,6 +657,14 @@
         if (realtimeSource) {
             realtimeSource.close();
         }
+    });
+
+    element("dashboard-refresh-button")?.addEventListener("click", function () {
+        if (realtimeRefreshTimer !== null) {
+            window.clearTimeout(realtimeRefreshTimer);
+            realtimeRefreshTimer = null;
+        }
+        refreshDashboard();
     });
 
     startRealtimeEvents();

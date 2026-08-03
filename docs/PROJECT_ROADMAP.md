@@ -12,6 +12,7 @@ Build a secure web-based operations dashboard for Logan County 911 using the Cen
 - Active Calls
 - Call Details
 - Units
+- Dashboard browser refresh resiliency, visible freshness, and manual recovery - completed
 
 ## Phase 3 - Mapping
 - GIS map
