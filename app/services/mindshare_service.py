@@ -330,10 +330,10 @@ def _result_is_direct(result: dict) -> bool:
 
 def _build_context(results: list[dict]) -> str:
     blocks = []
-    for index, result in enumerate(results[:3], start=1):
+    for index, result in enumerate(results[:2], start=1):
         page_number = int(result.get("page_number") or 0)
         page_label = f"page {page_number}" if page_number else "page unknown"
-        content = str(result.get("content") or "").strip()[:900]
+        content = str(result.get("content") or "").strip()[:600]
         blocks.append(
             "\n".join(
                 (
@@ -376,7 +376,7 @@ def ask_mindshare(
     retrieval_question = _retrieval_question(clean_question)
     results = search_knowledge(
         retrieval_question,
-        limit=12,
+        limit=8,
         library_key="mindshare",
     )
     if retrieval_question != clean_question:
@@ -520,8 +520,8 @@ Scope and safety:
                 "think": False,
                 "options": {
                     "temperature": 0.1,
-                    "num_ctx": 4096,
-                    "num_predict": 160,
+                    "num_ctx": 3072,
+                    "num_predict": 110,
                 },
             },
             timeout=settings.mae_request_timeout_seconds,
