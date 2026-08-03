@@ -737,6 +737,30 @@
 
         <div class="row g-4 mb-4">
             <div class="col-xl-7">
+                <div class="glass chart-card">
+                    <div class="analytics-eyebrow">WEEKLY DEMAND</div>
+                    <h4 class="mb-0">Calls by Day of Week</h4>
+                    <div class="chart-wrap compact"><canvas id="weekday-volume-chart"></canvas></div>
+                </div>
+            </div>
+            <div class="col-xl-5">
+                <div class="glass list-card">
+                    <div class="analytics-eyebrow">DEMAND PATTERN</div>
+                    <h4>Busiest Day of Week</h4>
+                    {% set busiest_weekday = analytics_snapshot.weekday_volume|max(attribute='count') %}
+                    <div class="analytics-list-row">
+                        <div class="fw-bold text-white">{{ busiest_weekday.label }}</div>
+                        <div class="analytics-count">{{ busiest_weekday.count }} <span class="data-note">calls</span></div>
+                    </div>
+                    <div class="data-note mt-3">
+                        Uses each completed call's received time in Logan County local time.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4 mb-4">
+            <div class="col-xl-7">
                 <div class="glass list-card">
                     <div class="d-flex justify-content-between align-items-start gap-3">
                         <div>

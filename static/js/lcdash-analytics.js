@@ -242,6 +242,30 @@
         });
     }
 
+    function renderWeekday(snapshot) {
+        const canvas = document.getElementById("weekday-volume-chart");
+        const rows = snapshot.weekday_volume || [];
+        if (!canvas || !rows.length) {
+            return;
+        }
+        const options = baseOptions();
+        options.plugins.legend.display = false;
+        new Chart(canvas, {
+            type: "bar",
+            data: {
+                labels: rows.map((row) => row.label),
+                datasets: [{
+                    data: rows.map((row) => row.count),
+                    backgroundColor: "rgba(167, 139, 250, .68)",
+                    borderColor: "#a78bfa",
+                    borderWidth: 1,
+                    borderRadius: 5
+                }]
+            },
+            options
+        });
+    }
+
     function printAnalyticsTable(snapshot, sectionId, reportTitle) {
         const section = document.getElementById(sectionId);
         const table = section ? section.querySelector("table") : null;
@@ -326,6 +350,7 @@
         Chart.defaults.color = "#cfe6fb";
         renderDaily(snapshot);
         renderHourly(snapshot);
+        renderWeekday(snapshot);
         renderAgencies(snapshot);
         renderDispatchers(snapshot);
         renderStationDiscipline(snapshot);

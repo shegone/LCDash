@@ -70,6 +70,7 @@ class AnalyticsWindowTests(unittest.TestCase):
         self.assertEqual(result["metrics"]["total_calls"], 0)
         self.assertEqual(result["station_discipline"], [])
         self.assertEqual(result["station_discipline_groups"], [])
+        self.assertEqual(result["weekday_volume"], [])
         self.assertEqual(result["dispatcher_metrics"]["calls_with_call_taker"], 0)
         self.assertEqual(result["dispatchers"], [])
         self.assertEqual(
@@ -133,6 +134,10 @@ class AnalyticsOverviewRouteTests(unittest.TestCase):
             ],
             "daily_volume": [{"date": "2026-07-26", "label": "Jul 26", "count": 42}],
             "hourly_volume": [{"hour": 0, "label": "12 AM", "count": 2}],
+            "weekday_volume": [
+                {"weekday": 0, "label": "Sunday", "count": 7},
+                {"weekday": 1, "label": "Monday", "count": 9},
+            ],
             "agency_mix": [{"label": "LEASA", "count": 42, "percent": 100.0}],
             "incident_types": [{"label": "Medical", "count": 20, "percent": 47.6}],
             "busiest_units": [

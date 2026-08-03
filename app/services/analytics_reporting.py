@@ -159,6 +159,7 @@ def _empty_overview(window: AnalyticsWindow, message: str) -> dict:
         "dispatchers": [],
         "daily_volume": [],
         "hourly_volume": [],
+        "weekday_volume": [],
         "agency_mix": [],
         "incident_types": [],
         "busiest_units": [],
@@ -484,6 +485,39 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
             "count": hourly_lookup.get(hour, 0),
         }
         for hour in range(24)
+    ]
+
+    weekday_rows = repository.fetchall(
+        """
+        SELECT
+            EXTRACT(DOW FROM call_received_at AT TIME ZONE 'America/New_York')::integer
+                AS local_weekday,
+            COUNT(*) AS call_count
+        FROM lcdash_analytics.calls
+        WHERE call_received_at >= %(window_start)s
+          AND call_received_at < %(window_end)s
+        GROUP BY local_weekday
+        ORDER BY local_weekday
+        """,
+        params,
+    )
+    weekday_lookup = {int(row[0]): int(row[1]) for row in weekday_rows}
+    weekday_labels = [
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+    ]
+    weekday_volume = [
+        {
+            "weekday": weekday,
+            "label": weekday_labels[weekday],
+            "count": weekday_lookup.get(weekday, 0),
+        }
+        for weekday in range(7)
     ]
 
     agency_rows = repository.fetchall(
@@ -814,6 +848,7 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
         "dispatchers": dispatchers,
         "daily_volume": daily_volume,
         "hourly_volume": hourly_volume,
+        "weekday_volume": weekday_volume,
         "agency_mix": agency_mix,
         "incident_types": incident_types,
         "busiest_units": busiest_units,
