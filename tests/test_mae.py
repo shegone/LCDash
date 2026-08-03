@@ -80,6 +80,39 @@ class MAEPageTests(unittest.TestCase):
         self.assertFalse(response.json()["write_access"])
         self.assertEqual(response.headers["cache-control"], "no-store")
 
+    @patch("app.main.build_analytics_report", return_value=b"%PDF-synthetic")
+    @patch("app.main.get_analytics_overview")
+    def test_analytics_report_endpoint_returns_download_only_pdf(
+        self,
+        analytics_mock,
+        report_mock,
+    ):
+        analytics_mock.return_value = {"available": True, "period_label": "Last 7 days"}
+
+        response = self.client.post(
+            "/api/mae/analytics-report",
+            json={"period": "7d"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"%PDF-synthetic")
+        self.assertEqual(response.headers["content-type"], "application/pdf")
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        self.assertIn("attachment", response.headers["content-disposition"])
+        analytics_mock.assert_called_once_with(period="7d")
+        report_mock.assert_called_once_with(analytics_mock.return_value)
+
+    @patch("app.main.get_analytics_overview", return_value={"available": False})
+    def test_analytics_report_requires_available_historical_analytics(
+        self,
+        analytics_mock,
+    ):
+        response = self.client.post("/api/mae/analytics-report", json={"period": "7d"})
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.headers["content-type"], "application/json")
+        analytics_mock.assert_called_once_with(period="7d")
+
     @patch("app.main.record_mae_interaction")
     @patch("app.main.ask_mae")
     def test_chat_endpoint_accepts_question_and_history(

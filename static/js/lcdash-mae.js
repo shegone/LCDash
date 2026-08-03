@@ -656,6 +656,53 @@
             const feedback = buildFeedback(responsePayload.interaction_id);
             if (feedback) bubble.appendChild(feedback);
 
+            const hasAnalyticsSource = Array.isArray(sources) && sources.some(function (source) {
+                return source.name === "PostgreSQL analytics" && source.available !== false;
+            });
+            if (hasAnalyticsSource) {
+                const reportButton = document.createElement("button");
+                reportButton.type = "button";
+                reportButton.className = "mae-read-aloud";
+                reportButton.innerHTML = '<i class="bi bi-file-earmark-pdf"></i> Download analytics PDF';
+                reportButton.addEventListener("click", async function () {
+                    reportButton.disabled = true;
+                    reportButton.innerHTML = '<i class="bi bi-arrow-repeat"></i> Preparing report...';
+                    const periods = {
+                        "Last 24 hours": "24h", "Last 7 days": "7d", "Last 30 days": "30d",
+                        "Last 90 days": "90d", "Last 365 days": "365d"
+                    };
+                    const analyticsSource = sources.find(function (source) {
+                        return source.name === "PostgreSQL analytics";
+                    });
+                    try {
+                        const response = await fetch("/api/mae/analytics-report", {
+                            method: "POST",
+                            headers: {"Content-Type": "application/json"},
+                            cache: "no-store",
+                            body: JSON.stringify({period: periods[analyticsSource.detail] || "30d"})
+                        });
+                        if (!response.ok) {
+                            const error = await response.json().catch(function () { return {}; });
+                            throw new Error(error.detail || "MAE could not prepare the analytics report.");
+                        }
+                        const blob = await response.blob();
+                        const link = document.createElement("a");
+                        link.href = URL.createObjectURL(blob);
+                        link.download = "mae-analytics-report.pdf";
+                        document.body.appendChild(link);
+                        link.click();
+                        link.remove();
+                        window.setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
+                    } catch (error) {
+                        window.alert(error.message || "MAE could not prepare the analytics report.");
+                    } finally {
+                        reportButton.disabled = false;
+                        reportButton.innerHTML = '<i class="bi bi-file-earmark-pdf"></i> Download analytics PDF';
+                    }
+                });
+                bubble.appendChild(reportButton);
+            }
+
             const readButton = document.createElement("button");
             readButton.type = "button";
             readButton.className = "mae-read-aloud";

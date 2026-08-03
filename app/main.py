@@ -42,6 +42,7 @@ from app.services.analytics_reporting import (
     PERIOD_OPTIONS,
     get_analytics_overview,
 )
+from app.services.mae_analytics_report_service import build_analytics_report
 from app.services.mae_service import (
     MAEServiceError,
     ask_mae,
@@ -144,6 +145,10 @@ class MAEChatRequest(BaseModel):
     entities: MAEConversationEntities = Field(
         default_factory=MAEConversationEntities
     )
+
+
+class MAEAnalyticsReportRequest(BaseModel):
+    period: str = Field(default="30d", pattern="^(24h|7d|30d|90d|365d)$")
 
 
 class MindshareChatRequest(BaseModel):
@@ -831,6 +836,31 @@ def analytics_overview_api(
         return get_analytics_overview(period=period, start=start, end=end)
     except AnalyticsRangeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/mae/analytics-report")
+def mae_analytics_report_api(report_request: MAEAnalyticsReportRequest):
+    """Create an aggregate-only supervisor download from verified analytics."""
+    try:
+        snapshot = get_analytics_overview(period=report_request.period)
+    except AnalyticsRangeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not snapshot.get("available"):
+        raise HTTPException(
+            status_code=503,
+            detail="Historical analytics are not available for this report.",
+        )
+
+    report = build_analytics_report(snapshot)
+    return Response(
+        content=report,
+        media_type="application/pdf",
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": "attachment; filename=mae-analytics-report.pdf",
+        },
+    )
 
 
 @app.get("/analytics")

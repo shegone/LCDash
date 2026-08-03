@@ -46,6 +46,15 @@ Every MAE answer includes:
   approved local guidance, or MAE safety policy;
 - measured total, research, and model-generation time.
 
+## Supervisor analytics PDFs
+
+When a MAE answer used the verified PostgreSQL analytics source, the supervisor
+can download an aggregate analytics PDF. The report is generated server-side
+from the selected historical window and contains only summary metrics and
+aggregate charts. It is download-only: it does not print, email, store a
+separate copy, query live CAD, or write to CAD. Caller data, locations,
+narratives, recordings, credentials, and raw CAD payloads are excluded.
+
 ## Incident-type call review
 
 Authorized supervisors can ask MAE for the latest one to ten completed calls
