@@ -136,7 +136,7 @@ def _documented_definition(question: str) -> str | None:
 def _may_use_general_knowledge(question: str) -> bool:
     """Allow plain technical concepts, never undocumented operating details."""
     normalized = " ".join((question or "").lower().split())
-    if _product_focus(question):
+    if _product_focus(question) or "mindshare" in normalized or "mri" in normalized:
         return False
     restricted_terms = (
         "port", "ip address", "subnet", "gateway", "frequency",
@@ -459,9 +459,11 @@ def ask_mindshare(
     direct_results = [
         result for result in focused_results if _result_is_direct(result)
     ]
-    general_knowledge = not direct_results and _may_use_general_knowledge(
-        clean_question
-    )
+    # Broad public-site pages can match generic technical words with high
+    # coverage even when they do not establish a product-specific answer.
+    # Route safe, non-Mindshare concepts to clearly labeled general guidance;
+    # retain document-first behavior for named products and procedures.
+    general_knowledge = _may_use_general_knowledge(clean_question)
     if not direct_results and not general_knowledge:
         product_focus = _product_focus(clean_question)
         focus_detail = (

@@ -290,12 +290,21 @@ class MindshareServiceTests(unittest.TestCase):
         post_mock.assert_not_called()
 
     @patch("app.services.mindshare_service.httpx.post")
-    @patch("app.services.mindshare_service.search_knowledge", return_value=[])
+    @patch("app.services.mindshare_service.search_knowledge")
     def test_safe_general_technical_question_uses_labeled_model_guidance(
         self,
         search_mock,
         post_mock,
     ):
+        search_mock.return_value = [
+            {
+                "title": "Public Mindshare Download Page",
+                "content": "A router is mentioned in this unrelated page.",
+                "coverage": 1.0,
+                "semantic_score": 0.0,
+                "hybrid_score": 0.0,
+            }
+        ]
         post_mock.return_value = Mock(
             raise_for_status=Mock(),
             json=Mock(
