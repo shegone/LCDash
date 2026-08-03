@@ -12,6 +12,11 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+from app.services.mae_analytics_visualization_service import (
+    build_visualization,
+    validate_view_key,
+)
+
 
 def _chart(title: str, rows: list[dict], limit: int = 8) -> Drawing:
     drawing = Drawing(468, 220)
@@ -29,7 +34,7 @@ def _chart(title: str, rows: list[dict], limit: int = 8) -> Drawing:
     return drawing
 
 
-def build_analytics_report(snapshot: dict) -> bytes:
+def build_analytics_report(snapshot: dict, view_key: str = "") -> bytes:
     """Return a PDF containing only verified aggregate analytics values."""
     output = BytesIO()
     document = SimpleDocTemplate(output, pagesize=letter, rightMargin=42, leftMargin=42, topMargin=42, bottomMargin=42)
@@ -44,6 +49,26 @@ def build_analytics_report(snapshot: dict) -> bytes:
     rows = [["Metric", "Verified value"], ["Total calls", str(metrics.get("total_calls") or 0)], ["Unit responses", str(metrics.get("unit_responses") or 0)], ["Average CAD processing", str(metrics.get("average_processing") or "Not available")], ["Average response", str(metrics.get("average_response") or "Not available")], ["Median response", str(metrics.get("median_response") or "Not available")]]
     table = Table(rows, colWidths=[2.7 * inch, 3.6 * inch])
     table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#16344a")), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white), ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#a0aec0")), ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#edf2f7")), ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("PADDING", (0, 0), (-1, -1), 6)]))
-    story.extend([Paragraph("Verified Overview", styles["Heading2"]), table, Spacer(1, 14), _chart("Recent Daily Call Volume", snapshot.get("daily_volume") or [], limit=10), _chart("Calls by Agency", snapshot.get("agency_mix") or []), _chart("Top Incident Types", snapshot.get("incident_types") or []), Spacer(1, 8), Paragraph("Source: LCDash PostgreSQL analytics. This report uses aggregate historical analytics only. It does not contain caller, address, narrative, recording, credential, or CAD write data.", styles["BodyText"])])
+    charts = []
+    if view_key:
+        safe_key = validate_view_key(view_key)
+        spec = build_visualization(snapshot, safe_key)
+        charts.append(
+            _chart(
+                spec["title"],
+                [
+                    {"label": point["label"], "count": point["value"]}
+                    for point in spec["points"][:12]
+                ],
+                limit=12,
+            )
+        )
+    else:
+        charts.extend([
+            _chart("Recent Daily Call Volume", snapshot.get("daily_volume") or [], limit=10),
+            _chart("Calls by Agency", snapshot.get("agency_mix") or []),
+            _chart("Top Incident Types", snapshot.get("incident_types") or []),
+        ])
+    story.extend([Paragraph("Verified Overview", styles["Heading2"]), table, Spacer(1, 14), *charts, Spacer(1, 8), Paragraph("Source: LCDash PostgreSQL analytics. This report uses aggregate historical analytics only. It does not contain caller, address, narrative, recording, credential, or CAD write data.", styles["BodyText"])])
     document.build(story)
     return output.getvalue()

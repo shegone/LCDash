@@ -266,6 +266,71 @@
         });
     }
 
+    function savedWidgetRows(snapshot, viewKey) {
+        const definitions = {
+            daily_volume: ["daily_volume", "label", "count", "line"],
+            hourly_volume: ["hourly_volume", "label", "count", "bar"],
+            weekday_volume: ["weekday_volume", "label", "count", "bar"],
+            agency_mix: ["agency_mix", "label", "count", "doughnut"],
+            incident_types: ["incident_types", "label", "count", "bar"],
+            dispatcher_workload: ["dispatchers", "call_taker", "calls_entered", "bar"],
+            busiest_units: ["busiest_units", "unit_number", "responses", "bar"],
+            busiest_stations: ["busiest_stations", "station", "calls", "bar"]
+        };
+        const definition = definitions[viewKey];
+        if (!definition) return null;
+        return {
+            rows: (snapshot[definition[0]] || []).slice(0, 30),
+            labelKey: definition[1],
+            valueKey: definition[2],
+            type: definition[3]
+        };
+    }
+
+    function renderSavedWidgets(snapshot) {
+        document.querySelectorAll("[data-saved-widget]").forEach((card) => {
+            const config = savedWidgetRows(snapshot, card.dataset.viewKey);
+            const canvas = card.querySelector("canvas");
+            if (!config || !canvas || !config.rows.length) return;
+            const options = baseOptions();
+            if (config.type === "doughnut") {
+                delete options.scales;
+            } else {
+                options.plugins.legend.display = false;
+            }
+            new Chart(canvas, {
+                type: config.type,
+                data: {
+                    labels: config.rows.map((row) => row[config.labelKey]),
+                    datasets: [{
+                        label: "Calls",
+                        data: config.rows.map((row) => row[config.valueKey]),
+                        backgroundColor: config.type === "doughnut"
+                            ? chartColors()
+                            : "rgba(76, 201, 255, .58)",
+                        borderColor: "#4cc9ff",
+                        borderWidth: 1,
+                        tension: .3,
+                        fill: config.type === "line"
+                    }]
+                },
+                options
+            });
+            const retire = card.querySelector("[data-retire-widget]");
+            if (retire) retire.addEventListener("click", async () => {
+                retire.disabled = true;
+                const response = await fetch("/api/analytics/widgets/retire", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    cache: "no-store",
+                    body: JSON.stringify({widget_id: Number(card.dataset.widgetId)})
+                });
+                if (response.ok) card.remove();
+                else retire.disabled = false;
+            });
+        });
+    }
+
     function printAnalyticsTable(snapshot, sectionId, reportTitle) {
         const section = document.getElementById(sectionId);
         const table = section ? section.querySelector("table") : null;
@@ -354,6 +419,7 @@
         renderAgencies(snapshot);
         renderDispatchers(snapshot);
         renderStationDiscipline(snapshot);
+        renderSavedWidgets(snapshot);
     }
 
     if (document.readyState === "loading") {

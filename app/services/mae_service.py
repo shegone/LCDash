@@ -20,6 +20,9 @@ from app.services.cad_service import get_call_detail, simplify_call
 from app.services.centralsquare import CentralSquareAPIError, CentralSquareClient
 from app.services.knowledge_service import search_knowledge
 from app.services.mae_memory_service import find_approved_memory
+from app.services.mae_analytics_visualization_service import (
+    build_requested_visualization,
+)
 from app.services.mae_tool_registry import get_mae_tool_catalog
 from app.services.operations_service import (
     get_live_operations_snapshot,
@@ -114,7 +117,7 @@ LIVE_PATTERN = re.compile(
 ANALYTICS_PATTERN = re.compile(
     r"\b(analytics|average|busiest|calls by|completed calls?|historical|history|"
     r"last \d+ (?:hours?|days?)|month|past|report|response time|"
-    r"statistics|stats|trend|week|year|yesterday)\b",
+    r"statistics|stats|trend|chart|graph|visualize|week|year|yesterday)\b",
     re.IGNORECASE,
 )
 RECENT_HOURS_PATTERN = re.compile(
@@ -1328,11 +1331,16 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
         period = _period_from_question(question)
         analytics = get_analytics_overview(period=period)
         analytics_for_comparison = analytics
+        analytics_context = _trim_rows(analytics)
+        analytics_context["daily_volume"] = _trim_rows(
+            (analytics.get("daily_volume") or [])[-30:],
+            30,
+        )
         context.append(
             {
                 "source": "PostgreSQL analytics",
                 "purpose": "Historical completed-call analysis",
-                "data": _trim_rows(analytics),
+                "data": analytics_context,
             }
         )
         sources.append(
@@ -1912,6 +1920,9 @@ def _finalize_mae_response(
     )
     response.setdefault("clarification_required", False)
     response.setdefault("choices", [])
+    visualization = build_requested_visualization(question, context)
+    if visualization:
+        response["analytics_visualization"] = visualization
     response["assurance"] = _assurance_summary(response, sources)
     return response
 

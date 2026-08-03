@@ -231,6 +231,23 @@ CREATE TABLE IF NOT EXISTS lcdash_analytics.jack_memory (
     last_used_at TIMESTAMPTZ
 );
 
+CREATE TABLE IF NOT EXISTS lcdash_analytics.saved_analytics_widgets (
+    widget_id BIGSERIAL PRIMARY KEY,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_by TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL,
+    view_key TEXT NOT NULL CHECK (
+        view_key IN (
+            'daily_volume', 'hourly_volume', 'weekday_volume', 'agency_mix',
+            'incident_types', 'dispatcher_workload', 'busiest_units',
+            'busiest_stations'
+        )
+    ),
+    status TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active', 'retired'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_analytics_calls_received
     ON lcdash_analytics.calls(call_received_at);
 CREATE INDEX IF NOT EXISTS idx_analytics_calls_agency_received
@@ -274,6 +291,8 @@ CREATE INDEX IF NOT EXISTS idx_mae_memory_status
     ON lcdash_analytics.mae_memory(status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_jack_memory_status
     ON lcdash_analytics.jack_memory(status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_saved_analytics_widgets_status
+    ON lcdash_analytics.saved_analytics_widgets(status, created_at DESC);
 
 CREATE OR REPLACE VIEW lcdash_analytics.unit_response_metrics AS
 SELECT

@@ -765,6 +765,35 @@
     text-align: center;
 }
 
+.mae-analytics-visual {
+    margin-top: 14px;
+    padding: 14px;
+    border: 1px solid rgba(76, 201, 255, .22);
+    border-radius: 14px;
+    background: rgba(5, 20, 35, .72);
+}
+
+.mae-analytics-visual-heading {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.mae-analytics-visual-heading small {
+    color: #8fb7d9;
+}
+
+.mae-analytics-chart-wrap {
+    height: 260px;
+}
+
+.mae-analytics-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
 @media (max-width: 991.98px) {
     .mae-hero,
     .mae-identity {

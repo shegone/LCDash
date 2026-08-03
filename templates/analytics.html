@@ -409,6 +409,19 @@
             flex: 1 1 auto;
         }
     }
+    .saved-widget-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 16px;
+    }
+
+    .saved-widget-card {
+        padding: 18px;
+    }
+
+    .saved-widget-chart {
+        height: 280px;
+    }
 </style>
 
 <div class="glass analytics-hero mb-4">
@@ -922,6 +935,32 @@
     </div>
 {% endif %}
 
+{% if saved_widgets and analytics_snapshot.available %}
+    <section class="glass p-4 mt-4" aria-labelledby="saved-analytics-title">
+        <div class="analytics-eyebrow">SUPERVISOR-SAVED VIEWS</div>
+        <h4 id="saved-analytics-title" class="mb-1">Custom Analytics Widgets</h4>
+        <div class="data-note mb-3">
+            Saved configurations use fresh aggregate data from the reporting window selected above.
+        </div>
+        <div class="saved-widget-grid">
+            {% for widget in saved_widgets %}
+                <article class="glass saved-widget-card" data-saved-widget data-widget-id="{{ widget.widget_id }}" data-view-key="{{ widget.view_key }}">
+                    <div class="d-flex justify-content-between align-items-start gap-3">
+                        <div>
+                            <div class="analytics-eyebrow">CUSTOM VIEW</div>
+                            <h5 class="mb-0">{{ widget.title }}</h5>
+                        </div>
+                        <button class="btn btn-sm btn-outline-secondary" type="button" data-retire-widget title="Remove this saved widget">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                    <div class="saved-widget-chart mt-3"><canvas></canvas></div>
+                </article>
+            {% endfor %}
+        </div>
+    </section>
+{% endif %}
+
 <div class="data-note mt-4">
     <strong class="text-info">Privacy-Minimized:</strong>
     Metrics use completed calls stored in PostgreSQL. Average response is measured from call received
@@ -931,7 +970,7 @@
 
 <script id="analytics-snapshot" type="application/json">{{ analytics_snapshot|tojson }}</script>
 <script src="/static/js/chart.umd.min.js?v=4.4.7"></script>
-<script src="/static/js/lcdash-analytics.js?v=20260726-print"></script>
+<script src="/static/js/lcdash-analytics.js?v=20260803-saved-widgets"></script>
 <script>
     LCDashTime.updateCadDisplayTimes();
 </script>

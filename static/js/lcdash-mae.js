@@ -586,6 +586,76 @@
         return controls;
     }
 
+    function buildAnalyticsVisualization(spec) {
+        if (!spec || !Array.isArray(spec.points) || !spec.points.length) return null;
+        const panel = document.createElement("section");
+        panel.className = "mae-analytics-visual";
+        const heading = document.createElement("div");
+        heading.className = "mae-analytics-visual-heading";
+        heading.innerHTML = `<strong>${spec.title}</strong><small>${spec.period_label} Â· aggregate completed calls</small>`;
+        const chartWrap = document.createElement("div");
+        chartWrap.className = "mae-analytics-chart-wrap";
+        const canvas = document.createElement("canvas");
+        chartWrap.appendChild(canvas);
+        const actions = document.createElement("div");
+        actions.className = "mae-analytics-actions";
+
+        const saveButton = document.createElement("button");
+        saveButton.type = "button";
+        saveButton.className = "mae-read-aloud";
+        saveButton.innerHTML = '<i class="bi bi-pin-angle"></i> Save to Analytics';
+        saveButton.addEventListener("click", async function () {
+            saveButton.disabled = true;
+            try {
+                const response = await fetch("/api/analytics/widgets", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    cache: "no-store",
+                    body: JSON.stringify({title: spec.title, view_key: spec.view_key})
+                });
+                const payload = await response.json().catch(function () { return {}; });
+                if (!response.ok) throw new Error(payload.detail || "Widget could not be saved.");
+                saveButton.innerHTML = '<i class="bi bi-check-circle"></i> Saved to Analytics';
+            } catch (error) {
+                saveButton.disabled = false;
+                window.alert(error.message || "Widget could not be saved.");
+            }
+        });
+        actions.appendChild(saveButton);
+        panel.append(heading, chartWrap, actions);
+
+        window.setTimeout(function () {
+            if (typeof Chart === "undefined") return;
+            new Chart(canvas, {
+                type: spec.chart_type || "bar",
+                data: {
+                    labels: spec.points.map(function (point) { return point.label; }),
+                    datasets: [{
+                        label: "Calls",
+                        data: spec.points.map(function (point) { return point.value; }),
+                        backgroundColor: spec.chart_type === "doughnut"
+                            ? ["#4cc9ff", "#69ffb9", "#ffd66b", "#a78bfa", "#ff7b9c", "#5eead4"]
+                            : "rgba(76, 201, 255, .55)",
+                        borderColor: "#4cc9ff",
+                        borderWidth: 1,
+                        tension: .3,
+                        fill: spec.chart_type === "line"
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {legend: {display: spec.chart_type === "doughnut"}},
+                    scales: spec.chart_type === "doughnut" ? {} : {
+                        x: {ticks: {color: "#8fb7d9"}, grid: {color: "rgba(143,183,217,.08)"}},
+                        y: {beginAtZero: true, ticks: {color: "#8fb7d9", precision: 0}, grid: {color: "rgba(143,183,217,.1)"}}
+                    }
+                }
+            });
+        }, 0);
+        return panel;
+    }
+
     function addMessage(role, content, payload) {
         const responsePayload = payload || {};
         const article = document.createElement("article");
@@ -636,6 +706,9 @@
         const choices = buildChoices(responsePayload.choices);
         if (choices) bubble.appendChild(choices);
 
+        const visualization = buildAnalyticsVisualization(responsePayload.analytics_visualization);
+        if (visualization) bubble.appendChild(visualization);
+
         const assurance = buildAssurance(responsePayload.assurance);
         if (assurance) bubble.appendChild(assurance);
 
@@ -679,7 +752,10 @@
                             method: "POST",
                             headers: {"Content-Type": "application/json"},
                             cache: "no-store",
-                            body: JSON.stringify({period: periods[analyticsSource.detail] || "30d"})
+                            body: JSON.stringify({
+                                period: (responsePayload.analytics_visualization || {}).period_key || periods[analyticsSource.detail] || "30d",
+                                view_key: (responsePayload.analytics_visualization || {}).view_key || ""
+                            })
                         });
                         if (!response.ok) {
                             const error = await response.json().catch(function () { return {}; });

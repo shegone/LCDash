@@ -43,6 +43,11 @@ from app.services.analytics_reporting import (
     get_analytics_overview,
 )
 from app.services.mae_analytics_report_service import build_analytics_report
+from app.services.mae_analytics_visualization_service import (
+    list_saved_widgets,
+    retire_widget,
+    save_widget,
+)
 from app.services.mae_service import (
     MAEServiceError,
     ask_mae,
@@ -154,6 +159,16 @@ class MAEChatRequest(BaseModel):
 
 class MAEAnalyticsReportRequest(BaseModel):
     period: str = Field(default="30d", pattern="^(24h|7d|30d|90d|365d)$")
+    view_key: str = Field(default="", max_length=40)
+
+
+class AnalyticsWidgetRequest(BaseModel):
+    title: str = Field(default="", max_length=200)
+    view_key: str = Field(min_length=3, max_length=40)
+
+
+class AnalyticsWidgetRetireRequest(BaseModel):
+    widget_id: int = Field(gt=0)
 
 
 class MindshareChatRequest(BaseModel):
@@ -869,7 +884,10 @@ def mae_analytics_report_api(report_request: MAEAnalyticsReportRequest):
             detail="Historical analytics are not available for this report.",
         )
 
-    report = build_analytics_report(snapshot)
+    try:
+        report = build_analytics_report(snapshot, report_request.view_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return Response(
         content=report,
         media_type="application/pdf",
@@ -878,6 +896,35 @@ def mae_analytics_report_api(report_request: MAEAnalyticsReportRequest):
             "Content-Disposition": "attachment; filename=mae-analytics-report.pdf",
         },
     )
+
+
+@app.get("/api/analytics/widgets")
+def analytics_widgets_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    return {"items": list_saved_widgets()}
+
+
+@app.post("/api/analytics/widgets")
+def analytics_widget_save_api(widget: AnalyticsWidgetRequest, request: Request):
+    try:
+        result = save_widget(
+            title=widget.title,
+            view_key=widget.view_key,
+            created_by=_authenticated_user_email(request),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not result.get("saved"):
+        raise HTTPException(status_code=503, detail=result.get("message") or "Widget could not be saved.")
+    return result
+
+
+@app.post("/api/analytics/widgets/retire")
+def analytics_widget_retire_api(widget: AnalyticsWidgetRetireRequest):
+    result = retire_widget(widget_id=widget.widget_id)
+    if not result.get("saved"):
+        raise HTTPException(status_code=404, detail=result.get("message") or "Widget not found.")
+    return result
 
 
 @app.get("/analytics")
@@ -909,6 +956,7 @@ def analytics_page(
         context={
             "database_status": database_status,
             "analytics_snapshot": analytics_snapshot,
+            "saved_widgets": list_saved_widgets(),
             "period_options": [
                 (key, value[0]) for key, value in PERIOD_OPTIONS.items()
             ],

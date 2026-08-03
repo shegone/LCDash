@@ -29,7 +29,7 @@ class MAEPageTests(unittest.TestCase):
         self.assertIn('id="mae-voice-player"', response.text)
         self.assertIn("/static/css/lcdash-mae.css", response.text)
         self.assertIn(
-            "/static/js/lcdash-mae.js?v=20260729-request-timeout",
+            "/static/js/lcdash-mae.js?v=20260803-custom-analytics",
             response.text,
         )
         self.assertIn("/static/img/mae/mae-neutral.jpg", response.text)
@@ -100,7 +100,7 @@ class MAEPageTests(unittest.TestCase):
         self.assertEqual(response.headers["cache-control"], "no-store")
         self.assertIn("attachment", response.headers["content-disposition"])
         analytics_mock.assert_called_once_with(period="7d")
-        report_mock.assert_called_once_with(analytics_mock.return_value)
+        report_mock.assert_called_once_with(analytics_mock.return_value, "")
 
     @patch("app.main.get_analytics_overview", return_value={"available": False})
     def test_analytics_report_requires_available_historical_analytics(
