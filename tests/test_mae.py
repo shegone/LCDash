@@ -28,6 +28,14 @@ class MAEPageTests(unittest.TestCase):
         self.assertIn('id="mae-voice-session"', response.text)
         self.assertIn('id="mae-voice-player"', response.text)
         self.assertIn("/static/css/lcdash-mae.css", response.text)
+        self.assertIn("Analytics Studio", response.text)
+        self.assertIn("Busiest weekdays", response.text)
+        self.assertIn("Peak hours", response.text)
+        self.assertIn("Dispatcher workload", response.text)
+        self.assertIn(
+            "Show me a chart of the busiest days of the week for the last 30 days.",
+            response.text,
+        )
         self.assertIn(
             "/static/js/lcdash-mae.js?v=20260803-custom-analytics",
             response.text,
