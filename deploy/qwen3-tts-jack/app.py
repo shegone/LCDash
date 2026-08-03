@@ -1,9 +1,9 @@
-"""Private, synthetic-voice Qwen3-TTS canary for LCDash voice testing."""
+"""Private, fixed synthetic JACK voice using a generated reference prompt."""
 
 from __future__ import annotations
 
 from io import BytesIO
-import re
+from pathlib import Path
 import subprocess
 from threading import Lock
 
@@ -13,55 +13,34 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 
-MODEL_ID = "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign"
-API_MODEL_ID = "lcdash-qwen3-tts-mae"
-MAE_VOICE_INSTRUCTION = (
-    "A warm, confident adult American female emergency communications "
-    "assistant. Calm and reassuring, with clear diction and natural "
-    "empathetic expression. Professional and composed, never theatrical."
+MODEL_ID = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+API_MODEL_ID = "lcdash-qwen3-tts-jack"
+VOICE_ID = "jack-synthetic-southern-male"
+REFERENCE_AUDIO = Path("/voices/jack_synthetic_southern_reference.wav")
+REFERENCE_TEXT = (
+    "Good evening. I am JACK, your steady technical assistant. "
+    "I will speak clearly, carefully, and at an unhurried pace."
 )
-JACK_VOICE_INSTRUCTION = (
-    "A mature American male technical assistant with a gentle Appalachian "
-    "Southern character. Older, calm, measured, and steady with warm, clear "
-    "diction. Reassuring and thoughtful, never exaggerated, theatrical, or "
-    "an imitation of a real person."
-)
-VOICE_PROFILES = {
-    "mae-synthetic-female": MAE_VOICE_INSTRUCTION,
-    "jack-synthetic-southern-male": JACK_VOICE_INSTRUCTION,
-}
 
-app = FastAPI(title="LCDash Qwen3-TTS Canary", docs_url=None, redoc_url=None)
+app = FastAPI(title="LCDash Fixed JACK Voice", docs_url=None, redoc_url=None)
 _model = None
+_voice_clone_prompt = None
 _model_lock = Lock()
 
 
 class SpeechRequest(BaseModel):
-    """Subset of the OpenAI speech request used by LCDash."""
-
     input: str = Field(min_length=1, max_length=4000)
     model: str = API_MODEL_ID
-    voice: str = "mae-synthetic-female"
+    voice: str = VOICE_ID
     response_format: str = "wav"
-    speed: float = Field(default=1.0, ge=0.7, le=1.3)
+    speed: float = Field(default=0.92, ge=0.7, le=1.3)
 
 
-def _prepare_text_for_speech(text: str) -> str:
-    """Apply voice-only pronunciations without changing displayed text."""
-    prepared = str(text or "")
-    prepared = re.sub(r"\bMAE\b", "May", prepared, flags=re.IGNORECASE)
-    prepared = re.sub(
-        r"\bNGA[\s-]*9[\s-]*1[\s-]*1\b",
-        "N G A nine one one",
-        prepared,
-        flags=re.IGNORECASE,
-    )
-    return re.sub(r"\b9[\s-]*1[\s-]*1\b", "nine one one", prepared)
-
-
-def _load_model():
-    global _model
+def _load_model_and_prompt():
+    global _model, _voice_clone_prompt
     with _model_lock:
+        if not REFERENCE_AUDIO.is_file():
+            raise HTTPException(status_code=503, detail="JACK reference voice is not ready.")
         if _model is None:
             import torch
             from qwen_tts import Qwen3TTSModel
@@ -72,11 +51,15 @@ def _load_model():
                 dtype=torch.bfloat16,
                 attn_implementation="sdpa",
             )
-    return _model
+        if _voice_clone_prompt is None:
+            _voice_clone_prompt = _model.create_voice_clone_prompt(
+                ref_audio=str(REFERENCE_AUDIO),
+                ref_text=REFERENCE_TEXT,
+            )
+    return _model, _voice_clone_prompt
 
 
 def _apply_speed(wav_bytes: bytes, speed: float) -> bytes:
-    """Change cadence without changing the designed voice identity."""
     if abs(speed - 1.0) < 0.001:
         return wav_bytes
     converted = subprocess.run(
@@ -96,11 +79,12 @@ def _apply_speed(wav_bytes: bytes, speed: float) -> bytes:
 @app.get("/health")
 def health() -> dict:
     return {
-        "service": "lcdash-qwen3-tts-canary",
+        "service": "lcdash-qwen3-tts-jack",
         "ready": True,
         "model": MODEL_ID,
         "model_loaded": _model is not None,
-        "voice_mode": "synthetic-voice-design-only",
+        "reference_ready": REFERENCE_AUDIO.is_file(),
+        "voice_mode": "fixed-synthetic-reference-only",
         "voice_cloning_enabled": False,
     }
 
@@ -112,24 +96,16 @@ def list_models() -> dict:
 
 @app.post("/v1/audio/speech")
 def synthesize(request: SpeechRequest) -> Response:
-    if request.model != API_MODEL_ID:
-        raise HTTPException(status_code=400, detail="Unsupported canary model.")
-    if request.voice not in VOICE_PROFILES:
-        raise HTTPException(
-            status_code=400,
-            detail="This service permits only approved synthetic voice profiles.",
-        )
+    if request.model != API_MODEL_ID or request.voice != VOICE_ID:
+        raise HTTPException(status_code=400, detail="Unsupported JACK voice request.")
     if request.response_format not in {"wav", "mp3"}:
-        raise HTTPException(
-            status_code=400,
-            detail="Unsupported audio format.",
-        )
+        raise HTTPException(status_code=400, detail="Unsupported audio format.")
 
-    model = _load_model()
-    wavs, sample_rate = model.generate_voice_design(
-        text=_prepare_text_for_speech(request.input),
+    model, voice_clone_prompt = _load_model_and_prompt()
+    wavs, sample_rate = model.generate_voice_clone(
+        text=request.input,
         language="English",
-        instruct=VOICE_PROFILES[request.voice],
+        voice_clone_prompt=voice_clone_prompt,
     )
     output = BytesIO()
     sf.write(output, wavs[0], sample_rate, format="WAV")

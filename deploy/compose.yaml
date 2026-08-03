@@ -46,6 +46,8 @@ x-lcdash-environment: &lcdash-environment
   VOICE_QWEN_TTS_BASE_URL: http://voice-qwen3-tts:8003
   VOICE_QWEN_TTS_MODEL: lcdash-qwen3-tts-mae
   VOICE_QWEN_TTS_VOICE: mae-synthetic-female
+  VOICE_JACK_TTS_BASE_URL: http://voice-qwen3-tts-jack:8005
+  VOICE_JACK_TTS_MODEL: lcdash-qwen3-tts-jack
   VOICE_STT_MODEL: deepdml/faster-whisper-large-v3-turbo-ct2
   VOICE_REQUEST_TIMEOUT_SECONDS: "180"
 
@@ -392,6 +394,31 @@ services:
       retries: 3
       start_period: 30s
 
+  # Fixed synthetic JACK character voice. A generated reference is mounted
+  # read-only and reused so each response has the same speaker identity.
+  voice-qwen3-tts-jack:
+    build:
+      context: ./qwen3-tts-jack
+      dockerfile: Dockerfile
+    container_name: lcdash-voice-qwen3-tts-jack
+    restart: unless-stopped
+    gpus: all
+    environment:
+      HF_HOME: /models
+    volumes:
+      - lcdash_qwen3_tts_jack_models:/models
+      - lcdash_synthetic_voice_library:/voices:ro
+    networks:
+      - lcdash_private
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8005/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   voice-model-loader:
     image: ghcr.io/speaches-ai/speaches@sha256:6ec12ebf890a17e0d4b242a8ba9e0eb1fb836e60e8a3c857aea9838d541579ac
     container_name: lcdash-voice-model-loader
@@ -624,6 +651,7 @@ volumes:
   lcdash_chatterbox_models:
   lcdash_synthetic_voice_library:
   lcdash_qwen3_tts_models:
+  lcdash_qwen3_tts_jack_models:
   lcdash_parakeet_models:
   lcdash_rclone_config:
 

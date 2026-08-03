@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -45,6 +46,7 @@ class VoicePageTests(unittest.TestCase):
         get_status.return_value = {
             "connected": True,
             "tts": {"ready": True},
+            "jack_tts": {"ready": True},
             "stt": {"ready": True},
         }
         response = self.client.get("/api/voice/status")
@@ -85,6 +87,15 @@ class VoicePageTests(unittest.TestCase):
             ),
             "Executive Summary. Network: N G A nine one one is healthy. Review the event details.",
         )
+
+    def test_jack_uses_fixed_voice_and_prevents_stale_playback(self):
+        script = (Path(__file__).parents[1] / "static/js/lcdash-mindshare.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('voice: "jack-synthetic-southern-male"', script)
+        self.assertIn("speed: 0.92", script)
+        self.assertIn("activeSpeechController.abort()", script)
+        self.assertIn("status.jack_tts.ready", script)
 
 
 if __name__ == "__main__":

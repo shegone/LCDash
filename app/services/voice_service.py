@@ -40,18 +40,20 @@ def _base_url() -> str:
 
 
 def _tts_base_url(voice: str) -> str:
+    if voice == "jack-synthetic-southern-male":
+        return settings.voice_jack_tts_base_url.rstrip("/")
     if voice in {
         settings.voice_qwen_tts_voice,
-        "jack-synthetic-southern-male",
     }:
         return settings.voice_qwen_tts_base_url.rstrip("/")
     return _base_url()
 
 
 def _tts_model(voice: str) -> str:
+    if voice == "jack-synthetic-southern-male":
+        return settings.voice_jack_tts_model
     if voice in {
         settings.voice_qwen_tts_voice,
-        "jack-synthetic-southern-male",
     }:
         return settings.voice_qwen_tts_model
     return settings.voice_tts_model
@@ -88,6 +90,11 @@ def get_voice_status() -> dict[str, Any]:
             "voice": settings.voice_tts_voice,
             "ready": False,
         },
+        "jack_tts": {
+            "model": _tts_model("jack-synthetic-southern-male"),
+            "voice": "jack-synthetic-southern-male",
+            "ready": False,
+        },
         "stt": {
             "model": settings.voice_stt_model,
             "ready": False,
@@ -107,9 +114,14 @@ def get_voice_status() -> dict[str, Any]:
                 f"{_tts_base_url(settings.voice_tts_voice)}/v1/models"
             )
             tts_models_response.raise_for_status()
+            jack_models_response = client.get(
+                f"{_tts_base_url('jack-synthetic-southern-male')}/v1/models"
+            )
+            jack_models_response.raise_for_status()
             stt_models_response = client.get(f"{_base_url()}/v1/models")
             stt_models_response.raise_for_status()
             tts_payload = tts_models_response.json()
+            jack_payload = jack_models_response.json()
             stt_payload = stt_models_response.json()
             result["connected"] = True
     except (httpx.HTTPError, ValueError) as exc:
@@ -126,7 +138,15 @@ def get_voice_status() -> dict[str, Any]:
         for item in stt_payload.get("data", [])
         if isinstance(item, dict)
     }
+    jack_model_ids = {
+        str(item.get("id") or "")
+        for item in jack_payload.get("data", [])
+        if isinstance(item, dict)
+    }
     result["tts"]["ready"] = _tts_model(settings.voice_tts_voice) in model_ids
+    result["jack_tts"]["ready"] = (
+        _tts_model("jack-synthetic-southern-male") in jack_model_ids
+    )
     result["stt"]["ready"] = settings.voice_stt_model in stt_model_ids
     result["installed_models"] = sorted(model_ids | stt_model_ids)
     return result

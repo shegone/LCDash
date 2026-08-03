@@ -179,6 +179,14 @@ class Settings:
         "VOICE_QWEN_TTS_VOICE",
         "mae-synthetic-female",
     )
+    voice_jack_tts_base_url: str = _env(
+        "VOICE_JACK_TTS_BASE_URL",
+        "http://127.0.0.1:8005",
+    )
+    voice_jack_tts_model: str = _env(
+        "VOICE_JACK_TTS_MODEL",
+        "lcdash-qwen3-tts-jack",
+    )
     voice_stt_model: str = _env(
         "VOICE_STT_MODEL",
         "deepdml/faster-whisper-large-v3-turbo-ct2",

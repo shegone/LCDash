@@ -29,6 +29,8 @@
     let speechDetected = false;
     let discardRecording = false;
     let activeAudioUrl = "";
+    let activeSpeechController = null;
+    let activeSpeechRequest = 0;
 
     if (!form || !questionInput || !messages) return;
 
@@ -80,6 +82,8 @@
                 status.connected &&
                 status.tts &&
                 status.tts.ready &&
+                status.jack_tts &&
+                status.jack_tts.ready &&
                 status.stt &&
                 status.stt.ready
             );
@@ -122,6 +126,16 @@
         const spokenText = String(text || "").trim().slice(0, 2500);
         if (!spokenText) return;
 
+        activeSpeechRequest += 1;
+        const requestId = activeSpeechRequest;
+        if (activeSpeechController) activeSpeechController.abort();
+        activeSpeechController = new AbortController();
+        if (voicePlayer) {
+            voicePlayer.pause();
+            voicePlayer.removeAttribute("src");
+            voicePlayer.load();
+        }
+
         if (voiceModeActive) {
             setMicrophoneEnabled(false);
             setVoiceState(
@@ -135,13 +149,15 @@
             method: "POST",
             headers: {"Content-Type": "application/json"},
             cache: "no-store",
+            signal: activeSpeechController.signal,
             body: JSON.stringify({
                 text: spokenText,
                 voice: "jack-synthetic-southern-male",
-                speed: 1.05,
+                speed: 0.92,
                 response_format: "mp3"
             })
         });
+        if (requestId !== activeSpeechRequest) return;
         if (!response.ok) {
             const payload = await response.json().catch(function () {
                 return {};
@@ -164,6 +180,7 @@
             const playPromise = voicePlayer.play();
             if (playPromise) playPromise.catch(reject);
         });
+        if (requestId === activeSpeechRequest) activeSpeechController = null;
     }
 
     async function transcribeRecording(blob) {
@@ -373,9 +390,13 @@
     function endVoiceMode() {
         voiceModeActive = false;
         stopListeningCycle(true);
+        activeSpeechRequest += 1;
+        if (activeSpeechController) activeSpeechController.abort();
+        activeSpeechController = null;
         if (voicePlayer) {
             voicePlayer.pause();
             voicePlayer.removeAttribute("src");
+            voicePlayer.load();
         }
         if (microphoneStream) {
             microphoneStream.getTracks().forEach(function (track) {
