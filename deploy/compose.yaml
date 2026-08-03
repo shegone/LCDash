@@ -363,6 +363,21 @@ services:
       - lcdash_private
     security_opt:
       - no-new-privileges:true
+
+  mindshare-public-site-sync:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: lcdash-mindshare-public-site-sync
+    restart: unless-stopped
+    command: ["python", "scripts/sync_mindshare_public_site.py"]
+    environment:
+      MINDSHARE_PUBLIC_SITE_TARGET: /knowledge/mindshare/Public CSS Mindshare Website
+      MINDSHARE_PUBLIC_SITE_SYNC_SECONDS: "86400"
+    volumes:
+      - /srv/lcdash-data/documents/mindshare:/knowledge/mindshare
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health')"]
       interval: 30s
