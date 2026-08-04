@@ -29,6 +29,8 @@
     let announcementRequest = null;
     let announcementCycle = 0;
     let pendingAnnouncementText = "";
+    let announcementReleasePending = false;
+    let announcementError = "";
     let alertMap = null;
     let pollTimer = null;
     let firstSnapshotForStation = true;
@@ -251,6 +253,8 @@
     function stopAnnouncement() {
         announcementCycle += 1;
         pendingAnnouncementText = "";
+        announcementReleasePending = false;
+        announcementError = "";
         if (announcementRequest) {
             announcementRequest.abort();
             announcementRequest = null;
@@ -277,14 +281,43 @@
         stopAnnouncement();
     }
 
-    async function playAnnouncement(announcement) {
+    function releasePreparedAnnouncement() {
+        announcementReleasePending = true;
+        if (!soundArmed || !overlay.classList.contains("visible")) {
+            updateArmedDisplay();
+            return;
+        }
+        if (!announcementAudio) {
+            if (announcementError) {
+                message.textContent = "Paging tones completed, but MAE could not speak: " + announcementError;
+                updateArmedDisplay();
+            } else {
+                armStatus.dataset.audioState = "finalizing";
+                armStatus.innerHTML = '<span class="status-dot"></span> FINALIZING MAE ANNOUNCEMENT';
+            }
+            return;
+        }
+
+        announcementReleasePending = false;
+        const playback = announcementAudio.play();
+        if (playback && typeof playback.catch === "function") {
+            playback.catch(function (error) {
+                if (soundArmed) {
+                    message.textContent = "Paging tones completed, but MAE could not speak: " + error.message;
+                }
+                stopAnnouncement();
+                updateArmedDisplay();
+            });
+        }
+    }
+
+    async function prepareAnnouncement(announcement) {
         const spokenText = String(announcement || "").trim();
         if (!spokenText || !soundArmed || !overlay.classList.contains("visible")) {
             updateArmedDisplay();
             return;
         }
 
-        stopAnnouncement();
         const cycle = announcementCycle;
         announcementRequest = new AbortController();
         armStatus.dataset.audioState = "generating";
@@ -324,6 +357,7 @@
             announcementAudio = new Audio(announcementAudioUrl);
             announcementAudio.preload = "auto";
             announcementAudio.volume = 1;
+            announcementAudio.load();
             announcementAudio.addEventListener("play", function () {
                 armStatus.dataset.audioState = "speaking";
                 armStatus.innerHTML = '<span class="status-dot"></span> MAE ANNOUNCEMENT PLAYING';
@@ -333,15 +367,22 @@
                 updateArmedDisplay();
             });
 
-            const playback = announcementAudio.play();
-            if (playback && typeof playback.catch === "function") {
-                await playback;
+            if (announcementReleasePending) {
+                releasePreparedAnnouncement();
+            } else {
+                armStatus.dataset.audioState = "ready";
+                armStatus.innerHTML = '<span class="status-dot"></span> MAE ANNOUNCEMENT READY';
             }
         } catch (error) {
             if (error.name !== "AbortError" && cycle === announcementCycle) {
-                message.textContent = "Paging tones completed, but MAE could not speak: " + error.message;
-                stopAnnouncement();
-                updateArmedDisplay();
+                announcementRequest = null;
+                announcementError = error.message;
+                if (announcementReleasePending) {
+                    releasePreparedAnnouncement();
+                } else {
+                    armStatus.dataset.audioState = "unavailable";
+                    armStatus.innerHTML = '<span class="status-dot"></span> MAE ANNOUNCEMENT UNAVAILABLE';
+                }
             }
         }
     }
@@ -449,7 +490,7 @@
                 const announcement = pendingAnnouncementText;
                 pendingAnnouncementText = "";
                 if (announcement) {
-                    playAnnouncement(announcement);
+                    releasePreparedAnnouncement();
                 } else {
                     armStatus.dataset.audioState = "ready";
                     updateArmedDisplay();
@@ -522,6 +563,9 @@
         ensureAudioPlayers();
         stopTone();
         pendingAnnouncementText = String(announcement || "").trim();
+        if (pendingAnnouncementText) {
+            prepareAnnouncement(pendingAnnouncementText);
+        }
         playAudio(
             dispatchAudio,
             "The browser blocked the station alert audio. Check the tab sound permission."

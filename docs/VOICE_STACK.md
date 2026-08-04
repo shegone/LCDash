@@ -54,6 +54,15 @@ MAE uses the Qwen3-TTS synthetic female voice. It is a text-designed synthetic
 voice, not an imitation of a real speaker. The speech-only pronunciation
 dictionary renders `MAE` as "May" and `911` as "nine one one."
 
+## Station-alert announcement timing
+
+When station-alert sound is armed, the browser begins generating the approved
+MAE announcement as soon as the paging tone starts. The resulting audio is
+prepared but never played during the tone. Only the tone's completion event can
+release playback, so speech cannot overlap, interrupt, or delay the
+authoritative paging audio. If preparation is still in progress when the tone
+ends, the page waits for the prepared audio rather than restarting the request.
+
 JACK uses a fixed, fully synthetic older male southern West Virginia/Appalachian
 character at an unhurried 0.92× cadence. A single generated synthetic reference
 is reused for every response so the speaker identity remains stable. It is not
