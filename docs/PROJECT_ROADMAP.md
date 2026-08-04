@@ -72,10 +72,10 @@ Build a secure web-based operations dashboard for Logan County 911 using the Cen
 
 - Immediately after the audible station alert finishes, have MAE speak one
   concise dispatch announcement through the local text-to-speech service
-- Use the standard announcement pattern:
-  `Station {station}, respond to {address} for a {call type}. Time is {24-hour time}.`
+- Use the standard announcement pattern with natural spoken 24-hour local time:
+  `Station {station}, respond to {address} for a {call type}. Time is {spoken 24-hour time}.`
 - Example:
-  `Station 100, respond to 911 Mark Spurlock Drive for a structure fire. Time is 1523.`
+  `Station 100, respond to 911 Mark Spurlock Drive for a structure fire. Time is fifteen twenty-three.`
 - Keep tones authoritative and never delay, interrupt, or block the initial
   station alert
 - Let supervisors configure which fields may be spoken, such as call type,

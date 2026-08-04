@@ -80,6 +80,39 @@ def _announcement_station_name(value) -> str:
     return station.strip(" ,.-")
 
 
+def _spoken_number(value: int) -> str:
+    words_under_twenty = (
+        "zero", "one", "two", "three", "four", "five", "six", "seven",
+        "eight", "nine", "ten", "eleven", "twelve", "thirteen",
+        "fourteen", "fifteen", "sixteen", "seventeen", "eighteen",
+        "nineteen",
+    )
+    tens_words = (
+        "", "", "twenty", "thirty", "forty", "fifty",
+    )
+    if value < 20:
+        return words_under_twenty[value]
+    tens, remainder = divmod(value, 10)
+    return tens_words[tens] if not remainder else f"{tens_words[tens]}-{words_under_twenty[remainder]}"
+
+
+def _spoken_dispatch_time(value: datetime) -> str:
+    """Return a clear local twenty-four-hour time for text-to-speech."""
+    local_time = value.astimezone(LOCAL_TIMEZONE)
+    hour = local_time.hour
+    minute = local_time.minute
+    hour_phrase = (
+        f"zero {_spoken_number(hour)}"
+        if hour < 10
+        else _spoken_number(hour)
+    )
+    if minute == 0:
+        return f"{hour_phrase} hundred"
+    elif minute < 10:
+        return f"{hour_phrase} oh {_spoken_number(minute)}"
+    return f"{hour_phrase} {_spoken_number(minute)}"
+
+
 def build_station_alert_announcement(alert: dict) -> str:
     """Build a concise announcement from the station-alert safe field set."""
     station_names = [
@@ -105,10 +138,10 @@ def build_station_alert_announcement(alert: dict) -> str:
     else:
         station_phrase = "Stations " + ", ".join(station_names[:-1]) + f" and {station_names[-1]}"
 
-    local_time = dispatch_time.astimezone(LOCAL_TIMEZONE).strftime("%H%M")
+    spoken_time = _spoken_dispatch_time(dispatch_time)
     return (
         f"{station_phrase}, respond to {location} for a "
-        f"{incident.lower()}. Time is {local_time}."
+        f"{incident.lower()}. Time is {spoken_time}."
     )
 
 

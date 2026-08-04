@@ -62,6 +62,9 @@ prepared but never played during the tone. Only the tone's completion event can
 release playback, so speech cannot overlap, interrupt, or delay the
 authoritative paging audio. If preparation is still in progress when the tone
 ends, the page waits for the prepared audio rather than restarting the request.
+Station-alert speech expands dispatch time into natural 24-hour wording, such
+as "fifteen twenty-three," rather than relying on the voice engine to infer
+how to read compact digits.
 
 JACK uses a fixed, fully synthetic older male southern West Virginia/Appalachian
 character at an unhurried 0.92× cadence. A single generated synthetic reference

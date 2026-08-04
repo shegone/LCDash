@@ -148,7 +148,7 @@ class StationAlertServiceTests(unittest.TestCase):
         self.assertEqual(alert["dispatch_datetime"], "2026-07-22T15:57:10Z")
         self.assertEqual(
             alert["announcement"],
-            "Station 100, respond to 100 MAIN STREET, LOGAN for a structure fire. Time is 1157.",
+            "Station 100, respond to 100 MAIN STREET, LOGAN for a structure fire. Time is eleven fifty-seven.",
         )
         self.assertNotIn("MED1", str(result))
 
@@ -164,8 +164,27 @@ class StationAlertServiceTests(unittest.TestCase):
 
         self.assertEqual(
             announcement,
-            "Stations 100 and 200, respond to 911 Mark Spurlock Drive for a structure fire. Time is 1523.",
+            "Stations 100 and 200, respond to 911 Mark Spurlock Drive for a structure fire. Time is fifteen twenty-three.",
         )
+
+    def test_announcement_uses_natural_twenty_four_hour_speech(self):
+        base_alert = {
+            "station_names": ["STA 100"],
+            "location": "100 Main Street",
+            "incident_description": "Structure Fire",
+        }
+
+        zero_five = build_station_alert_announcement({
+            **base_alert,
+            "dispatch_datetime": "2026-07-22T04:05:00Z",
+        })
+        fifteen_hundred = build_station_alert_announcement({
+            **base_alert,
+            "dispatch_datetime": "2026-07-22T19:00:00Z",
+        })
+
+        self.assertTrue(zero_five.endswith("Time is zero zero oh five."))
+        self.assertTrue(fifteen_hundred.endswith("Time is fifteen hundred."))
 
     def test_announcement_requires_all_approved_fields(self):
         base_alert = {
