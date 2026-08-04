@@ -12,6 +12,7 @@ from app.services.operations_service import (
     sort_dashboard_calls,
 )
 from app.services.unit_service import get_all_units
+from app.services.voice_service import spoken_24_hour_time
 
 
 STATION_ROSTER_CACHE_SECONDS = 60
@@ -80,37 +81,10 @@ def _announcement_station_name(value) -> str:
     return station.strip(" ,.-")
 
 
-def _spoken_number(value: int) -> str:
-    words_under_twenty = (
-        "zero", "one", "two", "three", "four", "five", "six", "seven",
-        "eight", "nine", "ten", "eleven", "twelve", "thirteen",
-        "fourteen", "fifteen", "sixteen", "seventeen", "eighteen",
-        "nineteen",
-    )
-    tens_words = (
-        "", "", "twenty", "thirty", "forty", "fifty",
-    )
-    if value < 20:
-        return words_under_twenty[value]
-    tens, remainder = divmod(value, 10)
-    return tens_words[tens] if not remainder else f"{tens_words[tens]}-{words_under_twenty[remainder]}"
-
-
 def _spoken_dispatch_time(value: datetime) -> str:
     """Return a clear local twenty-four-hour time for text-to-speech."""
     local_time = value.astimezone(LOCAL_TIMEZONE)
-    hour = local_time.hour
-    minute = local_time.minute
-    hour_phrase = (
-        f"zero {_spoken_number(hour)}"
-        if hour < 10
-        else _spoken_number(hour)
-    )
-    if minute == 0:
-        return f"{hour_phrase} hundred"
-    elif minute < 10:
-        return f"{hour_phrase} oh {_spoken_number(minute)}"
-    return f"{hour_phrase} {_spoken_number(minute)}"
+    return spoken_24_hour_time(local_time.hour, local_time.minute)
 
 
 def build_station_alert_announcement(alert: dict) -> str:

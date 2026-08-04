@@ -82,6 +82,16 @@ class VoicePageTests(unittest.TestCase):
         )
         self.assertEqual(
             prepare_text_for_speech(
+                "Dispatch time is 1523. At 08:05, the unit updated."
+            ),
+            "Dispatch time is fifteen twenty-three. At zero eight oh five, the unit updated.",
+        )
+        self.assertEqual(
+            prepare_text_for_speech("The call was received at 15:00."),
+            "The call was received at fifteen hundred.",
+        )
+        self.assertEqual(
+            prepare_text_for_speech(
                 "## **Executive Summary**\n* **Network:** NGA911 is healthy.\n"
                 "1. Review the [event details](https://example.test/event)."
             ),

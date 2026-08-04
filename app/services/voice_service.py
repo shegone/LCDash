@@ -34,6 +34,22 @@ VOICE_CHOICES = (
     {"id": "am_puck", "label": "Puck", "description": "Conversational American male"},
 )
 
+_WORDS_UNDER_TWENTY = (
+    "zero", "one", "two", "three", "four", "five", "six", "seven",
+    "eight", "nine", "ten", "eleven", "twelve", "thirteen",
+    "fourteen", "fifteen", "sixteen", "seventeen", "eighteen",
+    "nineteen",
+)
+_TENS_WORDS = ("", "", "twenty", "thirty", "forty", "fifty")
+_PREFIXED_TIME_PATTERN = re.compile(
+    r"\b(?P<prefix>(?:dispatch\s+)?time(?:\s+(?:is|was))?\s*[:]?|at)\s+"
+    r"(?P<hour>[01]\d|2[0-3])(?::?)(?P<minute>[0-5]\d)\b",
+    flags=re.IGNORECASE,
+)
+_COLON_TIME_PATTERN = re.compile(
+    r"\b(?P<hour>[01]\d|2[0-3]):(?P<minute>[0-5]\d)\b"
+)
+
 
 def _base_url() -> str:
     return settings.voice_base_url.rstrip("/")
@@ -59,6 +75,40 @@ def _tts_model(voice: str) -> str:
     return settings.voice_tts_model
 
 
+def _spoken_number(value: int) -> str:
+    if value < 20:
+        return _WORDS_UNDER_TWENTY[value]
+    tens, remainder = divmod(value, 10)
+    return (
+        _TENS_WORDS[tens]
+        if not remainder
+        else f"{_TENS_WORDS[tens]}-{_WORDS_UNDER_TWENTY[remainder]}"
+    )
+
+
+def spoken_24_hour_time(hour: int, minute: int) -> str:
+    """Write an HHMM value as unambiguous speech, for example 15:23."""
+    if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+        raise ValueError("Hour and minute must form a valid 24-hour time.")
+    hour_phrase = (
+        f"zero {_spoken_number(hour)}"
+        if hour < 10
+        else _spoken_number(hour)
+    )
+    if minute == 0:
+        return f"{hour_phrase} hundred"
+    if minute < 10:
+        return f"{hour_phrase} oh {_spoken_number(minute)}"
+    return f"{hour_phrase} {_spoken_number(minute)}"
+
+
+def _expand_time_match(match: re.Match) -> str:
+    return (
+        f"{match.group('prefix')} "
+        f"{spoken_24_hour_time(int(match.group('hour')), int(match.group('minute')))}"
+    )
+
+
 def prepare_text_for_speech(text: str) -> str:
     """Apply LCDash pronunciation rules without changing displayed text."""
     prepared = str(text or "")
@@ -78,6 +128,13 @@ def prepare_text_for_speech(text: str) -> str:
         flags=re.IGNORECASE,
     )
     prepared = re.sub(r"\b9[\s-]*1[\s-]*1\b", "nine one one", prepared)
+    prepared = _PREFIXED_TIME_PATTERN.sub(_expand_time_match, prepared)
+    prepared = _COLON_TIME_PATTERN.sub(
+        lambda match: spoken_24_hour_time(
+            int(match.group("hour")), int(match.group("minute"))
+        ),
+        prepared,
+    )
     return prepared
 
 

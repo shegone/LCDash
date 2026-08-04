@@ -96,6 +96,9 @@ engine. Displayed and stored text is not changed.
 
 - `MAE` is spoken as `May`.
 - `911`, `9-1-1`, and `9 1 1` are spoken as `nine one one`.
+- Recognized 24-hour times are expanded before synthesis: `1523` is spoken as
+  `fifteen twenty-three`, `1500` as `fifteen hundred`, and `08:05` as
+  `zero eight oh five`. Displayed and stored text is unchanged.
 
 ## GPU upgrade
 
