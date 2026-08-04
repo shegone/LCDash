@@ -40,6 +40,7 @@ x-lcdash-environment: &lcdash-environment
   KNOWLEDGE_INDEX_INTERVAL_SECONDS: "3600"
   MINDSHARE_KNOWLEDGE_SOURCE_DIR: /knowledge/mindshare
   MINDSHARE_KNOWLEDGE_INDEX_INTERVAL_SECONDS: "3600"
+  GIS_REFERENCE_DIR: /gis/reference
   VOICE_BASE_URL: http://speaches:8000
   VOICE_TTS_MODEL: speaches-ai/Kokoro-82M-v1.0-ONNX
   VOICE_TTS_VOICE: mae-synthetic-female
@@ -94,6 +95,7 @@ services:
     volumes:
       - /srv/lcdash-data/documents/centralsquare:/knowledge/centralsquare:ro
       - /srv/lcdash-data/documents/mindshare:/knowledge/mindshare:ro
+      - /srv/lcdash-data/gis-public:/gis/reference:ro
     networks:
       - lcdash_private
     depends_on:

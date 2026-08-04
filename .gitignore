@@ -224,3 +224,15 @@ __marimo__/
 # only the explicit project model selection.
 .cptr/*
 !.cptr/model
+
+# Operational GIS sources and generated map layers stay on the private server.
+data/gis-source/
+data/gis-public/
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.qix
+*.sbn
+*.sbx

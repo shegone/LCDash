@@ -146,6 +146,10 @@ class Settings:
         "MINDSHARE_KNOWLEDGE_SOURCE_DIR",
         "knowledge/mindshare",
     )
+    gis_reference_dir: str = _env(
+        "GIS_REFERENCE_DIR",
+        "data/gis-public",
+    )
     knowledge_index_interval_seconds: int = _env_int(
         "KNOWLEDGE_INDEX_INTERVAL_SECONDS",
         3600,

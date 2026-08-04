@@ -26,6 +26,10 @@ from app.services.map_service import (
     build_empty_map_snapshot,
     get_live_map_snapshot,
 )
+from app.services.gis_reference_service import (
+    available_reference_layers,
+    get_reference_layer,
+)
 from app.services.heatmap_service import (
     ALLOWED_HEATMAP_HOURS,
     build_empty_heatmap_snapshot,
@@ -604,6 +608,24 @@ def map_api(response: Response):
         return get_live_map_snapshot()
     except CentralSquareAPIError as exc:
         return build_empty_map_snapshot(str(exc))
+
+
+@app.get("/api/operations/map/reference")
+def map_reference_catalog_api(response: Response):
+    """List only reviewed, locally mounted GIS reference layers."""
+    response.headers["Cache-Control"] = "private, max-age=3600"
+    return {"layers": available_reference_layers()}
+
+
+@app.get("/api/operations/map/reference/{layer}")
+def map_reference_layer_api(layer: str, response: Response):
+    """Serve one minimized static GIS layer; source archives remain private."""
+    reference_layer = get_reference_layer(layer)
+    if reference_layer is None:
+        raise HTTPException(status_code=404, detail="GIS reference layer not available")
+
+    response.headers["Cache-Control"] = "private, max-age=3600"
+    return reference_layer
 
 
 def _validated_heatmap_hours(hours: int) -> int:
