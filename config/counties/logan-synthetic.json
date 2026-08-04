@@ -1,0 +1,126 @@
+{
+  "profile_version": "1.0",
+  "contract_version": "1.0",
+  "tenant_id": "logan-synthetic",
+  "display_name": "Logan County Synthetic Sandbox",
+  "timezone": "America/New_York",
+  "region": "us-east-1",
+  "cad_provider": "synthetic-centralsquare",
+  "capabilities": [
+    "supervisor_dashboard",
+    "centralsquare_operations",
+    "active_calls",
+    "call_detail",
+    "units",
+    "realtime_reconciliation",
+    "analytics",
+    "reports",
+    "county_commission_report",
+    "heatmap",
+    "gis",
+    "mae",
+    "mae_analytics_reports",
+    "mae_memory_evaluation",
+    "jack",
+    "jack_memory_evaluation",
+    "knowledge",
+    "knowledge_indexing",
+    "mindshare_radio_intelligence",
+    "voice",
+    "avatar",
+    "mobile",
+    "station_alerts",
+    "ems_delay",
+    "cad_messages",
+    "realtime_webhooks",
+    "paging",
+    "public_warning",
+    "nga911",
+    "nova"
+  ],
+  "modules": [
+    "supervisor_dashboard",
+    "centralsquare_operations",
+    "active_calls",
+    "call_detail",
+    "units",
+    "realtime_reconciliation",
+    "analytics",
+    "reports",
+    "county_commission_report",
+    "heatmap",
+    "gis",
+    "mae",
+    "mae_analytics_reports",
+    "mae_memory_evaluation",
+    "jack",
+    "jack_memory_evaluation",
+    "knowledge",
+    "knowledge_indexing",
+    "voice",
+    "mobile",
+    "nga911",
+    "nova"
+  ],
+  "branding": {
+    "short_name": "Logan Synthetic",
+    "logo_asset": "synthetic/logan/mark.svg",
+    "primary_color": "#07111F",
+    "accent_color": "#29D9FF",
+    "background_color": "#020711"
+  },
+  "agencies": [
+    {
+      "id": "logan-synthetic-dispatch",
+      "name": "Synthetic Logan Dispatch",
+      "abbreviation": "SLD",
+      "disciplines": ["dispatch"]
+    },
+    {
+      "id": "logan-synthetic-response",
+      "name": "Synthetic Logan Response",
+      "abbreviation": "SLR",
+      "disciplines": ["law", "fire", "ems"]
+    }
+  ],
+  "unit_status_mappings": {
+    "AVL": "Available",
+    "DSP": "Assigned",
+    "ENR": "Enroute",
+    "ONS": "On Scene",
+    "CLR": "Cleared"
+  },
+  "gis_sources": [
+    {
+      "id": "logan-synthetic-reference",
+      "source_type": "synthetic_geojson",
+      "data_class": "public_synthetic",
+      "layers": ["roads", "stations", "response_zones"]
+    }
+  ],
+  "identity_federation": {
+    "provider": "synthetic-cognito",
+    "trusted_tenant_claim": "custom:tenant_id",
+    "metadata_only": true,
+    "mfa_required": true
+  },
+  "retention": {
+    "analytics_days": 30,
+    "audit_days": 90,
+    "export_days": 7
+  },
+  "ai_policy": {
+    "advisory_only": true,
+    "protected_data_allowed": false,
+    "inference_provider": "synthetic-bedrock",
+    "retrieval_provider": "synthetic-knowledge",
+    "allowed_tools": ["read_calls", "read_units", "read_analytics", "read_knowledge", "read_gis"]
+  },
+  "voice_profile": {
+    "provider": "synthetic-polly",
+    "voice_id": "logan-synthetic-voice",
+    "optional": true,
+    "pronunciation_911": "nine one one"
+  },
+  "alert_permissions": []
+}

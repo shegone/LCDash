@@ -50,8 +50,12 @@ is contacted.
 
 ## Package 2 - County profiles and feature boundaries
 
-- [ ] Define and validate the non-secret county-profile JSON schema.
-- [ ] Add Logan synthetic and second-county synthetic fixtures.
+- [x] Define and validate the non-secret county-profile JSON schema.
+- [x] Add Logan synthetic and second-county synthetic fixtures.
+
+The first two bullets were implemented by Kiro and accepted by hosted Codex on
+2026-08-04 after the combined 31-test Package 1A-2A suite passed.
+
 - [ ] Move county-specific agency, unit, pronunciation, timezone, branding,
   GIS, and module settings out of shared logic where safe.
 - [ ] Add deny-by-default module capability and operational-output controls.

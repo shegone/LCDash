@@ -1,0 +1,216 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lcdash.example.invalid/schemas/county-profile-1.0.json",
+  "title": "LCDash non-secret county profile",
+  "description": "Version 1.0 non-secret configuration for one county deployment cell.",
+  "type": "object",
+  "additionalProperties": false,
+  "propertyNames": {"not": {"pattern": "[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Cc][Oo][Dd][Ee]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn]|[Aa][Pp][Ii][-_ ]?[Kk][Ee][Yy]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll]|[Pp][Rr][Ii][Vv][Aa][Tt][Ee][-_ ]?[Kk][Ee][Yy]"}},
+  "required": [
+    "profile_version",
+    "contract_version",
+    "tenant_id",
+    "display_name",
+    "timezone",
+    "region",
+    "cad_provider",
+    "capabilities",
+    "modules",
+    "branding",
+    "agencies",
+    "unit_status_mappings",
+    "gis_sources",
+    "identity_federation",
+    "retention",
+    "ai_policy",
+    "voice_profile",
+    "alert_permissions"
+  ],
+  "properties": {
+    "profile_version": {"const": "1.0"},
+    "contract_version": {"const": "1.0"},
+    "tenant_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"},
+    "display_name": {"type": "string", "minLength": 1, "maxLength": 120},
+    "timezone": {"type": "string", "pattern": "^[A-Za-z_]+(?:/[A-Za-z0-9_+.-]+)+$"},
+    "region": {"type": "string", "pattern": "^(?:us|us-gov)-[a-z]+-[0-9]+$"},
+    "cad_provider": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"},
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/moduleCapability"}
+    },
+    "modules": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/moduleCapability"}
+    },
+    "branding": {"$ref": "#/$defs/branding"},
+    "agencies": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/agency"}
+    },
+    "unit_status_mappings": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "allOf": [
+          {"pattern": "^[A-Za-z0-9 _-]{1,80}$"},
+          {"not": {"pattern": "[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Cc][Oo][Dd][Ee]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn]|[Aa][Pp][Ii][-_ ]?[Kk][Ee][Yy]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll]|[Pp][Rr][Ii][Vv][Aa][Tt][Ee][-_ ]?[Kk][Ee][Yy]"}}
+        ]
+      },
+      "additionalProperties": {"type": "string", "minLength": 1, "maxLength": 80}
+    },
+    "gis_sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/gisSource"}
+    },
+    "identity_federation": {"$ref": "#/$defs/identityFederation"},
+    "retention": {"$ref": "#/$defs/retention"},
+    "ai_policy": {"$ref": "#/$defs/aiPolicy"},
+    "voice_profile": {"$ref": "#/$defs/voiceProfile"},
+    "alert_permissions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "station_alert_preview",
+          "ems_delay_dry_run",
+          "paging_preview",
+          "public_warning_preview"
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "moduleCapability": {
+      "type": "string",
+      "enum": [
+        "supervisor_dashboard",
+        "centralsquare_operations",
+        "active_calls",
+        "call_detail",
+        "units",
+        "realtime_reconciliation",
+        "analytics",
+        "reports",
+        "county_commission_report",
+        "heatmap",
+        "gis",
+        "mae",
+        "mae_analytics_reports",
+        "mae_memory_evaluation",
+        "jack",
+        "jack_memory_evaluation",
+        "knowledge",
+        "knowledge_indexing",
+        "mindshare_radio_intelligence",
+        "voice",
+        "avatar",
+        "mobile",
+        "station_alerts",
+        "ems_delay",
+        "cad_messages",
+        "realtime_webhooks",
+        "paging",
+        "public_warning",
+        "nga911",
+        "nova"
+      ]
+    },
+    "branding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["short_name", "logo_asset", "primary_color", "accent_color", "background_color"],
+      "properties": {
+        "short_name": {"type": "string", "minLength": 1, "maxLength": 40},
+        "logo_asset": {"type": "string", "pattern": "^synthetic/[a-z0-9/_-]+\\.(?:svg|png)$"},
+        "primary_color": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}$"},
+        "accent_color": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}$"},
+        "background_color": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}$"}
+      }
+    },
+    "agency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "abbreviation", "disciplines"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"},
+        "name": {"type": "string", "minLength": 1, "maxLength": 120},
+        "abbreviation": {"type": "string", "pattern": "^[A-Z0-9-]{2,16}$"},
+        "disciplines": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"enum": ["dispatch", "law", "fire", "ems", "emergency-management"]}
+        }
+      }
+    },
+    "gisSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "source_type", "data_class", "layers"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"},
+        "source_type": {"enum": ["synthetic_geojson", "authoritative_reference", "managed_map"]},
+        "data_class": {"enum": ["public_synthetic", "county_authoritative"]},
+        "layers": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{1,62}$"}
+        }
+      }
+    },
+    "identityFederation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "trusted_tenant_claim", "metadata_only", "mfa_required"],
+      "properties": {
+        "provider": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"},
+        "trusted_tenant_claim": {"type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9_:.-]{1,80}$"},
+        "metadata_only": {"const": true},
+        "mfa_required": {"type": "boolean"}
+      }
+    },
+    "retention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["analytics_days", "audit_days", "export_days"],
+      "properties": {
+        "analytics_days": {"type": "integer", "minimum": 1, "maximum": 3650},
+        "audit_days": {"type": "integer", "minimum": 1, "maximum": 3650},
+        "export_days": {"type": "integer", "minimum": 1, "maximum": 3650}
+      }
+    },
+    "aiPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["advisory_only", "protected_data_allowed", "inference_provider", "retrieval_provider", "allowed_tools"],
+      "properties": {
+        "advisory_only": {"const": true},
+        "protected_data_allowed": {"const": false},
+        "inference_provider": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"},
+        "retrieval_provider": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"},
+        "allowed_tools": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"enum": ["read_calls", "read_units", "read_analytics", "read_knowledge", "read_gis"]}
+        }
+      }
+    },
+    "voiceProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "voice_id", "optional", "pronunciation_911"],
+      "properties": {
+        "provider": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"},
+        "voice_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"},
+        "optional": {"const": true},
+        "pronunciation_911": {"const": "nine one one"}
+      }
+    }
+  }
+}

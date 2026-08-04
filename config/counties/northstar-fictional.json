@@ -1,0 +1,117 @@
+{
+  "profile_version": "1.0",
+  "contract_version": "1.0",
+  "tenant_id": "northstar-fictional",
+  "display_name": "Northstar County Fictional Demonstration",
+  "timezone": "America/Chicago",
+  "region": "us-west-2",
+  "cad_provider": "synthetic-northstar-cad",
+  "capabilities": [
+    "supervisor_dashboard",
+    "centralsquare_operations",
+    "active_calls",
+    "call_detail",
+    "units",
+    "realtime_reconciliation",
+    "analytics",
+    "reports",
+    "county_commission_report",
+    "heatmap",
+    "gis",
+    "mae",
+    "mae_analytics_reports",
+    "mae_memory_evaluation",
+    "jack",
+    "jack_memory_evaluation",
+    "knowledge",
+    "knowledge_indexing",
+    "mindshare_radio_intelligence",
+    "voice",
+    "avatar",
+    "mobile",
+    "station_alerts",
+    "ems_delay",
+    "cad_messages",
+    "realtime_webhooks",
+    "paging",
+    "public_warning",
+    "nga911",
+    "nova"
+  ],
+  "modules": [
+    "supervisor_dashboard",
+    "active_calls",
+    "call_detail",
+    "units",
+    "analytics",
+    "reports",
+    "heatmap",
+    "gis",
+    "mae",
+    "knowledge",
+    "voice",
+    "avatar",
+    "mobile"
+  ],
+  "branding": {
+    "short_name": "Northstar Fictional",
+    "logo_asset": "synthetic/northstar/mark.svg",
+    "primary_color": "#161126",
+    "accent_color": "#9E7BFF",
+    "background_color": "#08050F"
+  },
+  "agencies": [
+    {
+      "id": "northstar-fictional-communications",
+      "name": "Northstar Fictional Communications",
+      "abbreviation": "NFC",
+      "disciplines": ["dispatch", "emergency-management"]
+    },
+    {
+      "id": "northstar-fictional-public-safety",
+      "name": "Northstar Fictional Public Safety",
+      "abbreviation": "NFPS",
+      "disciplines": ["law", "fire", "ems"]
+    }
+  ],
+  "unit_status_mappings": {
+    "READY": "Available",
+    "ASSIGNED": "Assigned",
+    "RESPONDING": "Enroute",
+    "ARRIVED": "On Scene",
+    "COMPLETE": "Cleared"
+  },
+  "gis_sources": [
+    {
+      "id": "northstar-fictional-managed-map",
+      "source_type": "managed_map",
+      "data_class": "public_synthetic",
+      "layers": ["fictional_roads", "fictional_facilities", "fictional_districts"]
+    }
+  ],
+  "identity_federation": {
+    "provider": "synthetic-oidc",
+    "trusted_tenant_claim": "lcdash_tenant",
+    "metadata_only": true,
+    "mfa_required": true
+  },
+  "retention": {
+    "analytics_days": 14,
+    "audit_days": 60,
+    "export_days": 3
+  },
+  "ai_policy": {
+    "advisory_only": true,
+    "protected_data_allowed": false,
+    "inference_provider": "synthetic-local-inference",
+    "retrieval_provider": "synthetic-pgvector",
+    "allowed_tools": ["read_calls", "read_units", "read_knowledge", "read_gis"]
+  },
+  "voice_profile": {
+    "provider": "synthetic-local-voice",
+    "voice_id": "northstar-fictional-voice",
+    "optional": true,
+    "pronunciation_911": "nine one one"
+  },
+  "alert_permissions": ["station_alert_preview", "ems_delay_dry_run"]
+}
