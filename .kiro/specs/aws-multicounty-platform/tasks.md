@@ -19,9 +19,9 @@ credentials or AWS writes.
 
 ## Package 1A - Inventory and characterization baseline
 
-- [ ] Inventory existing direct imports and calls to CentralSquare, Ollama,
+- [x] Inventory existing direct imports and calls to CentralSquare, Ollama,
   knowledge, speech, GIS, database, and identity services.
-- [ ] Add characterization tests for current normalized calls, units,
+- [x] Add characterization tests for current normalized calls, units,
   analytics, MAE/JACK tools, and error handling.
 
 Acceptance: the dependency inventory is complete, existing behavior is captured
