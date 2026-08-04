@@ -2,7 +2,10 @@ from datetime import datetime, timedelta, timezone
 from math import floor
 
 from app.services.cad_service import simplify_call
-from app.services.centralsquare import CentralSquareAPIError, CentralSquareClient
+from app.integrations.cad.centralsquare import (
+    CentralSquareCadAdapter as CentralSquareClient,
+)
+from app.services.centralsquare import CentralSquareAPIError
 from app.services.map_service import valid_coordinates
 
 

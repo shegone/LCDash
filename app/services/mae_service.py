@@ -17,7 +17,10 @@ from app.services.analytics_database import (
 )
 from app.services.analytics_reporting import get_analytics_overview
 from app.services.cad_service import get_call_detail, simplify_call
-from app.services.centralsquare import CentralSquareAPIError, CentralSquareClient
+from app.integrations.cad.centralsquare import (
+    CentralSquareCadAdapter as CentralSquareClient,
+)
+from app.services.centralsquare import CentralSquareAPIError
 from app.services.knowledge_service import search_knowledge
 from app.services.mae_memory_service import find_approved_memory
 from app.services.mae_analytics_visualization_service import (

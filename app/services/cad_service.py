@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 
-from app.services.centralsquare import CentralSquareClient
+from app.integrations.cad.centralsquare import (
+    CentralSquareCadAdapter as CentralSquareClient,
+)
 
 
 def _safe_text(value, default: str = "") -> str:

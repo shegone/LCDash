@@ -5,7 +5,10 @@ from zoneinfo import ZoneInfo
 
 from app.auth.oauth import CentralSquareAuthError
 from app.services.cad_service import get_active_calls
-from app.services.centralsquare import CentralSquareAPIError, CentralSquareClient
+from app.integrations.cad.centralsquare import (
+    CentralSquareCadAdapter as CentralSquareClient,
+)
+from app.services.centralsquare import CentralSquareAPIError
 from app.services.operations_service import (
     build_full_unit_roster,
     build_unit_board,

@@ -4,7 +4,10 @@ from datetime import datetime, timedelta, timezone
 from app.config.settings import settings
 from app.services.analytics_database import AnalyticsRepository
 from app.services.analytics_models import normalize_analytics_bundle
-from app.services.centralsquare import CentralSquareAPIError, CentralSquareClient
+from app.integrations.cad.centralsquare import (
+    CentralSquareCadAdapter as CentralSquareClient,
+)
+from app.services.centralsquare import CentralSquareAPIError
 from app.services.unit_service import get_all_units
 
 

@@ -1,7 +1,10 @@
 from datetime import datetime, timezone
 
 from app.services.cad_service import get_active_calls
-from app.services.centralsquare import CentralSquareAPIError, CentralSquareClient
+from app.integrations.cad.centralsquare import (
+    CentralSquareCadAdapter as CentralSquareClient,
+)
+from app.services.centralsquare import CentralSquareAPIError
 from app.services.unit_service import classify_unit, get_all_units
 
 

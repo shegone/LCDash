@@ -113,8 +113,10 @@ from app.services.voice_service import (
     transcribe_audio,
 )
 from app.services.centralsquare import (
-    CentralSquareClient,
     CentralSquareAPIError,
+)
+from app.integrations.cad.centralsquare import (
+    CentralSquareCadAdapter as CentralSquareClient,
 )
 from app.services.realtime_service import (
     browser_event,

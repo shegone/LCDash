@@ -4,7 +4,9 @@
 from datetime import datetime, timedelta, timezone
 import json
 
-from app.services.centralsquare import CentralSquareClient
+from app.integrations.cad.centralsquare import (
+    CentralSquareCadAdapter as CentralSquareClient,
+)
 
 
 def _records(result: dict) -> list[dict]:

@@ -40,8 +40,10 @@ binding, timeouts, pagination, rate limits, redaction, and audit behavior.
 
 ## Package 1C - CentralSquare adapter migration
 
-- [ ] Move CentralSquare access behind its adapter without changing existing
+- [x] Move CentralSquare access behind its adapter without changing existing
   behavior or the on-prem Docker configuration inherited in this branch.
+
+Implementation completed by Kiro and accepted by hosted Codex on 2026-08-04.
 
 Acceptance: full existing suite plus new contract tests pass; no live service
 is contacted.

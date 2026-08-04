@@ -14,10 +14,10 @@ from app.services.analytics_database import (
     AnalyticsRepository,
 )
 from app.services.analytics_models import normalize_personnel_identity
-from app.services.centralsquare import (
-    CentralSquareAPIError,
-    CentralSquareClient,
+from app.integrations.cad.centralsquare import (
+    CentralSquareCadAdapter as CentralSquareClient,
 )
+from app.services.centralsquare import CentralSquareAPIError
 
 
 def build_parser() -> argparse.ArgumentParser:

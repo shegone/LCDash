@@ -1,157 +1,170 @@
-# Kiro Package 1B completion report
+# Kiro Package 1C completion report
 
 STATUS: PASS (accepted by hosted Codex on 2026-08-04)
 
 ## Outcome
 
-Package 1B is complete. The repository now has version 1 immutable tenant and
-county-profile models; stable CAD, inference, retrieval, STT, and TTS provider
-protocols; explicit capability catalogs preserving inherited LCDash modules;
-and deterministic synthetic providers. Twelve focused contract tests prove
-normalization, deny-by-default operational capability handling, tenant binding,
-timeouts, pagination, rate limits, redaction/minimization, audit behavior, deep
-immutability, protocol conformance, and network-free speech behavior.
+Package 1C is complete. Inherited CentralSquare read access now sits behind a
+concrete `CentralSquareCadAdapter` implementing the accepted version 1
+`CadProvider` contract. The inherited `app/services/centralsquare.py` HTTP/OAuth
+client remains unchanged as the low-level transport, preserving on-premises
+configuration, request shapes, timeout defaults, Docker behavior, and test
+seams. Existing read consumers retain their `CentralSquareClient` local symbol
+as a compatibility alias to the adapter, so external API semantics and mocks
+remain stable.
 
-No inherited application service was migrated or changed. Package 1C did not
-begin.
+The adapter exposes normalized provider reads and a raw read compatibility shim.
+It does not expose `run_command`. Event ingestion, subscription registration,
+call updates, messages, and acknowledgments remain explicit provider methods
+that deny by default. The inherited EMS command path and subscription scripts
+remain separate on the low-level operational transport and were not enabled,
+invoked, or changed.
 
 ## Checkpoint and working tree
 
 - Branch: `aws/modular-county-platform`
-- Starting and current HEAD: `305030259d4098255e283833325251ced57c36cb`
+- Starting and current HEAD: `f81fbedc893416da43bceac07abff5d9d440c257`
 - Starting state: clean; no pre-existing changes
-- Final state: uncommitted Package 1B files only
+- Final state: uncommitted Package 1C files only
 - Classification: `CHANGE + TEST`, local isolated AWS worktree
 
 ## Files changed
 
-- Added `app/core/__init__.py` and `app/core/tenancy.py`.
-- Added shared contracts in `app/integrations/contracts.py` and deterministic
-  implementations in `app/integrations/synthetic.py`.
-- Added public provider package surfaces under `app/integrations/cad/`,
-  `app/integrations/ai/`, `app/integrations/knowledge/`, and
-  `app/integrations/speech/`, plus `app/integrations/__init__.py`.
-- Added `tests/contracts/__init__.py` and
-  `tests/contracts/test_provider_contracts.py`.
-- Updated `.kiro/specs/aws-multicounty-platform/tasks.md` to record Package 1B
-  implementation complete while leaving acceptance checkboxes open for Codex.
+- Added `app/integrations/cad/centralsquare.py`.
+- Updated `app/integrations/cad/__init__.py` to publish the adapter.
+- Changed only the CentralSquare client import seam in:
+  - `app/main.py`
+  - `app/services/analytics_collector.py`
+  - `app/services/cad_service.py`
+  - `app/services/county_commission_report_service.py`
+  - `app/services/heatmap_service.py`
+  - `app/services/mae_service.py`
+  - `app/services/operations_service.py`
+  - `app/services/station_alert_service.py`
+  - `app/services/unit_service.py`
+  - `scripts/backfill_dispatcher_names.py`
+  - `scripts/inspect_subscription_agencies.py`
+- Added `tests/contracts/test_centralsquare_adapter.py`.
+- Updated `.kiro/specs/aws-multicounty-platform/tasks.md` to record Package 1C
+  implementation complete while leaving hosted acceptance open.
 - Replaced `handoffs/KIRO_LATEST.md` with this report and added
-  `handoffs/KIRO_PACKAGE_1B_2026-08-04.md`.
+  `handoffs/KIRO_PACKAGE_1C_2026-08-04.md`.
 
-No inherited file under `app/services/`, `app/auth/`, `app/main.py`, `scripts/`,
-`deploy/`, `database/`, `static/`, or `templates/` changed.
+`app/auth/oauth.py`, `app/services/centralsquare.py`, settings, Docker files,
+templates, routes, operational services, subscription/output scripts, and
+deployment definitions were not changed. The two changed scripts are read-only
+inspection/backfill consumers and received the same import-only adapter seam.
 
-## Contract design
+## Adapter design and compatibility
 
-- `TenantContext` is frozen and binds trusted tenant, subject, identity source,
-  roles, request ID, authentication time, and contract version. Providers bind
-  to the deployment tenant, while permitting a new trusted request ID for the
-  same tenant.
-- `CountyProfile` is frozen and recursively freezes nested branding, agencies,
-  unit/status mappings, GIS sources, identity federation, retention, AI, voice,
-  capabilities, modules, and alert permissions. It contains no secret field.
-- `ModuleCapability` explicitly retains dashboard, CentralSquare operations,
-  calls, units, reconciliation, analytics, reports, county reports, heatmaps,
-  GIS, MAE, JACK, memory/evaluation, knowledge/indexing, Mindshare Radio,
-  voice/avatar, mobile, station alerts, EMS delay, CAD messaging, webhooks,
-  paging, public warning, NGA911, and NOVA capability identities.
-- CAD declarations include authentication, health, normalized call/unit/event
-  reads and ingestion, plus subscription, update, message, and acknowledgment
-  operations. The synthetic default omits all operational/write capabilities,
-  so those methods fail closed and emit minimized denial audit events.
-- Inference declarations retain chat, streaming, embeddings, tools, and
-  guardrails. Retrieval retains search, passages, indexing, status, citations,
-  and approved memory. STT and TTS declarations retain batch/streaming and
-  advanced vocabulary, diarization, SSML, lexicon, and voice-profile options.
-- No new dependency was required. The implementation uses standard-library
-  dataclasses, protocols, enums, mappings, and regular expressions.
+- `CentralSquareReadTransport` describes only the inherited raw read methods.
+  Default adapter construction creates the unchanged inherited client, so its
+  OAuth and environment configuration behavior remains intact.
+- `legacy_tenant_context()` provides an internal trusted Logan server binding;
+  provider calls reject a different tenant. Request IDs may vary within the
+  same bound deployment tenant.
+- Provider call/detail and unit methods return the immutable normalized models
+  accepted in Package 1B. They reuse `simplify_call()` and `normalize_unit()`
+  internally, preventing parallel normalization drift.
+- Provider pagination maps an opaque integer cursor to the inherited
+  `skip`/`limit` contract and honors the transport's `next` signal.
+- Provider-facing transport timeouts and HTTP 429 failures translate to
+  sanitized `ProviderTimeout` and `ProviderRateLimit` errors with minimized
+  audit outcomes. Other failures become a generic `ProviderError`.
+- Raw compatibility methods preserve current method names, arguments, and raw
+  response shapes for inherited normalized services, analytics collection,
+  reports, heatmaps, MAE, station-alert preparation, and diagnostics.
+- The adapter capability set contains authentication, health, call search,
+  call detail, unit search, and event normalization only. It omits event
+  ingestion and every CAD write/subscription/output capability by default.
 
 ## Commands and exact results
 
-- `python -m unittest tests.contracts.test_provider_contracts -v`:
-  `Ran 12 tests in 0.101s` and `OK`.
-- `python -m compileall -q app/core app/integrations tests/contracts`:
+- Package 1C focused test:
+  `python -m unittest tests.contracts.test_centralsquare_adapter -v`:
+  `Ran 6 tests in 0.007s` and `OK`.
+- Combined feasible baseline:
+  `python -m unittest tests.test_aws_package_1a_characterization tests.contracts.test_provider_contracts tests.contracts.test_centralsquare_adapter -v`:
+  latest run `Ran 23 tests in 0.012s` and `OK`.
+- `python -m py_compile` for the adapter and every changed application module:
   exit code `0`, no errors.
-- `python -m unittest tests.test_aws_package_1a_characterization tests.contracts.test_provider_contracts -v`:
-  latest run `Ran 17 tests in 0.013s` and `OK`.
 
-The combined run is the relevant feasible local baseline: all five accepted
-Package 1A characterization tests and all twelve Package 1B contract tests.
-The earlier Package 1A handoff records that the broader inherited suite cannot
-load in this workstation's Python environment because pytest, psycopg, and
-timezone data are absent. Nothing was installed to change that environment.
-The compile check generated ignored `__pycache__` folders. Two verified,
-repository-local cleanup commands were blocked by execution policy, so that
-cleanup approach stopped; `git check-ignore -v` confirms the bytecode is
-excluded by `.gitignore` and it is absent from the Git-visible file list.
+The first focused run had five passing tests and one import error because its
+wiring assertion loaded unrelated analytics code requiring the workstation's
+missing `psycopg` package. The test was corrected to inspect the exact source
+import seams without loading unrelated database/runtime dependencies; the
+second focused run passed all six. Nothing was installed.
 
 ## Acceptance evidence
 
-1. Normalization/minimization: synthetic CAD maps only allowlisted immutable
-   call/unit/event fields and drops an injected raw payload field.
-2. Capability denial: subscription, event ingestion, CAD update, messaging,
-   acknowledgment, and retrieval indexing deny by default with audit evidence.
-3. Tenant binding: an alternate tenant context is denied; a new trusted request
-   for the bound tenant is accepted and separately audited.
-4. Timeouts: injected latency deterministically raises a sanitized
-   `ProviderTimeout` and audit outcome.
-5. Pagination: cursor pages return exact non-overlapping records and terminal
-   cursors.
-6. Rate limits: deterministic per-operation limits raise
-   `ProviderRateLimit` with retry metadata and audit outcome.
-7. Redaction: inference, retrieval, and TTS outputs replace synthetic protected
-   values and do not copy them into outputs.
-8. Audit: events contain tenant, provider, operation, outcome, request ID, and
-   sanitized reason only; request payloads are excluded.
-9. Protocol breadth: runtime checks pass for CAD, inference, retrieval, STT,
-   and TTS providers, and all inherited modules have explicit declarations.
-10. Live-service exclusion: every contract test blocks socket and HTTP client
-    entry points and asserts none were called.
+1. Normalization parity: adapter call fields are compared directly with the
+   output of the inherited `simplify_call`; unit normalization reuses the
+   inherited `normalize_unit` implementation.
+2. Minimization: provider models omit raw payloads, reporter data, phone data,
+   narratives, and command-log content while preserving required normalized
+   operational fields.
+3. Pagination: two call pages and one unit page prove exact stable offsets,
+   limits, non-overlap, and terminal cursors.
+4. Timeout/error translation: a synthetic wrapped transport timeout becomes a
+   sanitized `ProviderTimeout`; synthetic HTTP 429 becomes
+   `ProviderRateLimit` with deterministic retry metadata.
+5. Tenant binding: a different immutable tenant context fails before transport
+   use and records a minimized denial.
+6. Capability denial: subscription, update, message, and acknowledgment methods
+   fail closed and record capability denials; no `run_command` exists on the
+   adapter.
+7. Compatibility: fake transport tests prove raw search, unit, detail, and
+   analytics signatures and response identities remain unchanged.
+8. Consumer migration: source assertions prove every named read consumer and
+   read-only inspection/backfill script uses the adapter alias while EMS command
+   delivery and subscription registration stay on the separate inherited transport.
+9. No network: every focused test blocks socket, HTTP GET/POST/PUT/stream, and
+   HTTP client entry points and asserts they were unused.
 
 ## Safety, privacy, and boundary review
 
-- Synthetic fixtures only; no raw CAD payload, protected record, credential,
-  operational address, or live identifier was used.
-- No provider imports an AWS SDK, HTTP client, database client, subprocess, or
-  operating-system command surface. Network calls are blocked in tests.
+- Synthetic fixtures only; no live CAD payload, protected record, credential,
+  operational address, or real identifier was used.
 - No access to `E:\Projects\LCDash`, `.227`, `.15`, live CAD, credentials,
   backups, operational data, or operational outputs occurred.
-- No AWS CLI/API/CDK/deployment, webhook, CAD write, subscription, EMS delivery,
-  paging, station alert, or public-warning action occurred.
-- The separately authorized editor extensions reported by hosted Codex did not
-  change Package 1B behavior or test scope; no AWS login or credentials were
-  configured by Kiro.
-- Nothing was committed, pushed, merged, deployed, installed, or operated by
-  Kiro.
+- No AWS CLI/API/CDK/deployment, webhook registration, CAD write, subscription,
+  EMS delivery, paging, station alert, or public-warning action occurred.
+- No settings, secrets, Docker, deployment, or inherited transport behavior was
+  changed.
+- Nothing was committed, pushed, merged, deployed, installed, or operated.
 
 ## Assumptions and unverified facts
 
-These are application contracts and deterministic test doubles, not proof that
-any future CentralSquare or AWS adapter conforms. County-profile schema parsing,
-authorization implementation, cross-tenant enforcement at every storage/API
-boundary, managed-service selection, and region/partition availability remain
-later packages and require their own tests and current authoritative review.
+The adapter is verified against a fake transport only. It does not prove vendor
+permission, live API compatibility, cloud egress behavior, concurrent credential
+use, rate limits, or webhook behavior. The compatibility tenant is an internal
+single-county bridge; Package 2 and later identity work must replace it with
+trusted deployment/federation bindings before multi-county activation.
+
+The workstation still lacks the broader inherited suite dependencies documented
+in earlier handoffs (`pytest`, `psycopg`, and timezone data). The complete
+feasible Package 1A+1B+1C standard-library baseline passed; no dependency was
+installed to expand the environment.
 
 ## Hosted Codex acceptance
 
-Hosted Codex independently reviewed the complete Package 1B source and handoff,
-reran the combined Package 1A+1B suite, compiled the new packages, checked the
-changed-file boundary, and scanned for secret-like values and prohibited
-provider imports. The combined rerun completed with `Ran 17 tests in 0.008s`
-and `OK`; compilation succeeded; both scans reported no matches; and inherited
-runtime code remained unchanged. Package 1B is accepted.
+Hosted Codex independently reviewed the adapter, every migrated import seam,
+the separated operational transports, focused tests, and the durable handoff.
+The combined Package 1A+1B+1C rerun completed with `Ran 23 tests in 0.030s`
+and `OK`; changed modules compiled; diff and secret scans were clean; and no
+live network entry point was used. Package 1C is accepted.
 
 ## Exact next package and gate
 
-Stop here. Package 1C is the next planned package, but Kiro must not start
-CentralSquare adapter migration without a new bounded assignment. No AWS
-resource creation may occur until the documented Package 5A account, role,
-budget, logging, rollback, and approval evidence is complete.
+Stop here. Package 2 is next in the roadmap, but Kiro must not begin county
+profiles or feature boundaries without a new bounded assignment. AWS resource
+creation must wait for the documented Package 5A account, role, budget, logging,
+rollback, and approval evidence.
 
 ## Codex catch-up
 
-Package 1B was accepted by hosted Codex after independent source, test,
-compilation, scope, prohibited-import, and secret reviews. The combined Package
-1A+1B standard-library suite passes 17/17, including fail-closed network
-sentinels. The new layer is unused by inherited runtime code, so application
-behavior is unchanged. Package 1C requires a new bounded assignment.
+Package 1C was accepted by hosted Codex after independent adapter, import-seam,
+operational-boundary, test, compilation, diff, and secret reviews. The adapter
+keeps the inherited transport and raw behavior intact, adds provider
+normalization/error/audit boundaries, and denies operational capabilities. The
+combined feasible suite passes 23/23 with fail-closed network sentinels.

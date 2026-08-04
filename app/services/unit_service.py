@@ -1,6 +1,9 @@
 from datetime import datetime, timezone
 
-from app.services.centralsquare import CentralSquareAPIError, CentralSquareClient
+from app.integrations.cad.centralsquare import (
+    CentralSquareCadAdapter as CentralSquareClient,
+)
+from app.services.centralsquare import CentralSquareAPIError
 
 
 UNIT_PAGE_LIMIT = 100
