@@ -1,164 +1,157 @@
-# Kiro Package 1A completion report
+# Kiro Package 1B completion report
 
 STATUS: PASS (accepted by hosted Codex on 2026-08-04)
 
 ## Outcome
 
-Package 1A is complete. The inherited direct service dependencies are recorded
-in `docs/AWS_PACKAGE_1A_DEPENDENCY_INVENTORY.md`. A five-test synthetic
-characterization baseline now freezes current normalized call, unit, analytics,
-MAE/JACK read-only tool, and roster-error behavior. Fail-closed sentinels prove
-that the tests do not use sockets, HTTP clients, or PostgreSQL connections.
-Application code and behavior were not changed.
+Package 1B is complete. The repository now has version 1 immutable tenant and
+county-profile models; stable CAD, inference, retrieval, STT, and TTS provider
+protocols; explicit capability catalogs preserving inherited LCDash modules;
+and deterministic synthetic providers. Twelve focused contract tests prove
+normalization, deny-by-default operational capability handling, tenant binding,
+timeouts, pagination, rate limits, redaction/minimization, audit behavior, deep
+immutability, protocol conformance, and network-free speech behavior.
+
+No inherited application service was migrated or changed. Package 1C did not
+begin.
 
 ## Checkpoint and working tree
 
 - Branch: `aws/modular-county-platform`
-- Starting and current HEAD: `5edbf8c0d4419de053160c1cf920fdc75982f625`
+- Starting and current HEAD: `305030259d4098255e283833325251ced57c36cb`
 - Starting state: clean; no pre-existing changes
-- Final state: uncommitted Package 1A documentation and test changes only
+- Final state: uncommitted Package 1B files only
 - Classification: `CHANGE + TEST`, local isolated AWS worktree
 
 ## Files changed
 
-- Added `docs/AWS_PACKAGE_1A_DEPENDENCY_INVENTORY.md`.
-- Added `tests/test_aws_package_1a_characterization.py`.
-- Replaced `handoffs/KIRO_LATEST.md` with this fixed completion report.
-- Added `handoffs/KIRO_PACKAGE_1A_2026-08-04.md` as the durable snapshot.
+- Added `app/core/__init__.py` and `app/core/tenancy.py`.
+- Added shared contracts in `app/integrations/contracts.py` and deterministic
+  implementations in `app/integrations/synthetic.py`.
+- Added public provider package surfaces under `app/integrations/cad/`,
+  `app/integrations/ai/`, `app/integrations/knowledge/`, and
+  `app/integrations/speech/`, plus `app/integrations/__init__.py`.
+- Added `tests/contracts/__init__.py` and
+  `tests/contracts/test_provider_contracts.py`.
+- Updated `.kiro/specs/aws-multicounty-platform/tasks.md` to record Package 1B
+  implementation complete while leaving acceptance checkboxes open for Codex.
+- Replaced `handoffs/KIRO_LATEST.md` with this report and added
+  `handoffs/KIRO_PACKAGE_1B_2026-08-04.md`.
 
-No file under `app/`, `scripts/`, `deploy/`, `database/`, `static/`, or
-`templates/` changed.
+No inherited file under `app/services/`, `app/auth/`, `app/main.py`, `scripts/`,
+`deploy/`, `database/`, `static/`, or `templates/` changed.
 
-## Tests and exact results
+## Contract design
 
-- `python -m pytest tests/test_aws_package_1a_characterization.py -q`
-  could not run: `No module named pytest`. Nothing was installed.
-- Initial `unittest` import could not run because this workstation has no
-  installed `psycopg`. The test now supplies a test-only import stub when the
-  package is absent; any connection attempt still fails closed.
-- `python -m unittest tests.test_aws_package_1a_characterization -v`:
-  `Ran 5 tests in 0.003s` and `OK`.
-- A selected inherited-suite attempt could not load because the workstation
-  also lacks timezone data: `ZoneInfoNotFoundError: 'No time zone found with
-  key America/New_York'`. The same command first used a test-process-only
-  psycopg stub; it made no connection. Per the two-failure safety rule, no
-  further environment workarounds or installs were attempted.
+- `TenantContext` is frozen and binds trusted tenant, subject, identity source,
+  roles, request ID, authentication time, and contract version. Providers bind
+  to the deployment tenant, while permitting a new trusted request ID for the
+  same tenant.
+- `CountyProfile` is frozen and recursively freezes nested branding, agencies,
+  unit/status mappings, GIS sources, identity federation, retention, AI, voice,
+  capabilities, modules, and alert permissions. It contains no secret field.
+- `ModuleCapability` explicitly retains dashboard, CentralSquare operations,
+  calls, units, reconciliation, analytics, reports, county reports, heatmaps,
+  GIS, MAE, JACK, memory/evaluation, knowledge/indexing, Mindshare Radio,
+  voice/avatar, mobile, station alerts, EMS delay, CAD messaging, webhooks,
+  paging, public warning, NGA911, and NOVA capability identities.
+- CAD declarations include authentication, health, normalized call/unit/event
+  reads and ingestion, plus subscription, update, message, and acknowledgment
+  operations. The synthetic default omits all operational/write capabilities,
+  so those methods fail closed and emit minimized denial audit events.
+- Inference declarations retain chat, streaming, embeddings, tools, and
+  guardrails. Retrieval retains search, passages, indexing, status, citations,
+  and approved memory. STT and TTS declarations retain batch/streaming and
+  advanced vocabulary, diarization, SSML, lexicon, and voice-profile options.
+- No new dependency was required. The implementation uses standard-library
+  dataclasses, protocols, enums, mappings, and regular expressions.
 
-The passing Package 1A tests cover:
+## Commands and exact results
 
-1. deterministic normalized CFS call fields and unit status timing;
-2. paginated unit-service contract, normalization, and conservative grouping;
-3. minimized analytics normalization with no raw narrative copy;
-4. MAE read-only catalog and JACK credential refusal before retrieval/model use;
-5. roster failure fallback while preserving the active-unit contract.
+- `python -m unittest tests.contracts.test_provider_contracts -v`:
+  `Ran 12 tests in 0.101s` and `OK`.
+- `python -m compileall -q app/core app/integrations tests/contracts`:
+  exit code `0`, no errors.
+- `python -m unittest tests.test_aws_package_1a_characterization tests.contracts.test_provider_contracts -v`:
+  latest run `Ran 17 tests in 0.013s` and `OK`.
+
+The combined run is the relevant feasible local baseline: all five accepted
+Package 1A characterization tests and all twelve Package 1B contract tests.
+The earlier Package 1A handoff records that the broader inherited suite cannot
+load in this workstation's Python environment because pytest, psycopg, and
+timezone data are absent. Nothing was installed to change that environment.
+The compile check generated ignored `__pycache__` folders. Two verified,
+repository-local cleanup commands were blocked by execution policy, so that
+cleanup approach stopped; `git check-ignore -v` confirms the bytecode is
+excluded by `.gitignore` and it is absent from the Git-visible file list.
+
+## Acceptance evidence
+
+1. Normalization/minimization: synthetic CAD maps only allowlisted immutable
+   call/unit/event fields and drops an injected raw payload field.
+2. Capability denial: subscription, event ingestion, CAD update, messaging,
+   acknowledgment, and retrieval indexing deny by default with audit evidence.
+3. Tenant binding: an alternate tenant context is denied; a new trusted request
+   for the bound tenant is accepted and separately audited.
+4. Timeouts: injected latency deterministically raises a sanitized
+   `ProviderTimeout` and audit outcome.
+5. Pagination: cursor pages return exact non-overlapping records and terminal
+   cursors.
+6. Rate limits: deterministic per-operation limits raise
+   `ProviderRateLimit` with retry metadata and audit outcome.
+7. Redaction: inference, retrieval, and TTS outputs replace synthetic protected
+   values and do not copy them into outputs.
+8. Audit: events contain tenant, provider, operation, outcome, request ID, and
+   sanitized reason only; request payloads are excluded.
+9. Protocol breadth: runtime checks pass for CAD, inference, retrieval, STT,
+   and TTS providers, and all inherited modules have explicit declarations.
+10. Live-service exclusion: every contract test blocks socket and HTTP client
+    entry points and asserts none were called.
 
 ## Safety, privacy, and boundary review
 
 - Synthetic fixtures only; no raw CAD payload, protected record, credential,
-  address, or operational identifier was used.
-- Socket, HTTP, and psycopg calls are blocked and asserted unused in every new
-  test.
-- No access to `E:\Projects\LCDash`, `.227`, `.15`, live CAD, backups,
-  credentials, operational data, or operational outputs occurred.
-- No AWS CLI, CDK deploy, AWS API, web request, webhook, CAD write,
-  subscription, EMS delivery, paging, station alert, or public-warning action
-  occurred.
-- No software was installed. Nothing was committed, pushed, merged, deployed,
-  or operated.
-- Final diff review must be completed by hosted Codex before acceptance.
-
-## Kiro recommended advanced AWS migration path
-
-Preserve every LCDash capability behind versioned, tenant-bound provider and
-module contracts, then deploy county-silo application cells with a metadata-only
-shared control plane. The strongest advanced path is:
-
-- Application and delivery: containerized FastAPI web and bounded workers on
-  multi-AZ ECS/Fargate behind CloudFront, WAF, and ALB; ECR immutable images;
-  CDK; GitHub OIDC and CodePipeline/CodeBuild/CodeDeploy blue-green releases.
-- Database structure: Aurora PostgreSQL-compatible or RDS PostgreSQL with RDS
-  Proxy, one county database cell and KMS key per isolation boundary, retained
-  `tenant_id` fail-visible columns, PITR/AWS Backup, and expand-contract
-  migrations. Keep PostgreSQL/pgvector-compatible repository fallbacks.
-- STT: Amazon Transcribe streaming and batch providers, with the inherited
-  Parakeet/local provider retained where region, partition, vocabulary,
-  latency, or accuracy requirements are unmet.
-- TTS: Amazon Polly streaming provider with pronunciation lexicons and SSML;
-  retain Qwen/Kokoro/local branded-voice providers where voice or partition
-  parity is unavailable. Speech remains optional and outside authoritative
-  station tones until separately accepted.
-- AI/inference: Amazon Bedrock Converse/ConverseStream behind an
-  `InferenceProvider`, with Guardrails plus deterministic validation. Evaluate
-  AgentCore runtime, gateway, identity, memory, and observability only after
-  tool contracts are stable. Retain Ollama/local inference as the regional,
-  partition, outage, privacy, or model-quality fallback.
-- Knowledge/retrieval: versioned approved documents in county KMS-encrypted S3;
-  Bedrock Knowledge Bases where supported, with Aurora PostgreSQL/pgvector or
-  an OpenSearch-compatible provider as fallback. Preserve lexical search,
-  citations, document partitioning, supervisor-approved memory, minimization,
-  and re-index workflows.
-- GIS: Amazon Location for base maps, geocoding, routing, and optional
-  geofencing, overlaid with authoritative county GIS in versioned encrypted S3.
-  Retain the local GeoJSON/private-tile provider when Amazon Location is
-  unavailable or county-authoritative data must stay independent.
-- Identity/authorization: federated Cognito or county IdP login with MFA;
-  immutable tenant claims bound by deployment; one deny-by-default
-  `TenantAuthorizationService`, optionally implemented with Verified
-  Permissions. Keep an application policy-engine fallback where GovCloud
-  feature parity is insufficient. Never trust client-selected tenant IDs.
-- Analytics/reporting: normalized events through EventBridge/SQS/Step Functions
-  and bounded ECS collectors into county PostgreSQL; S3/Glue/Athena/QuickSight
-  only for approved de-identified aggregate planes. Preserve existing PDF,
-  dashboard, historical, audit, evaluation, and county-report outputs through
-  normalized repositories and report providers.
-- Operational modules: preserve CAD operations, units, realtime reconciliation,
-  MAE, JACK, NOVA/NGA911, reports, GIS, voice/avatar, station-alert, EMS-delay,
-  paging, and public-warning capability definitions. CAD begins bounded
-  read-only polling. Webhooks and every output/write interface remain absent or
-  denied until vendor confirmation, tenant/capability policy, authentication,
-  audit, synthetic contract tests, single-writer fencing, rollback, and named
-  human authorization are complete. AI remains advisory and cannot block or
-  directly trigger CAD, call routing, radio, ESInet, tones, paging, or alerts.
-- Platform services: AppConfig for non-secret county profiles/capabilities;
-  Secrets Manager and county KMS keys; private subnets/endpoints and controlled
-  egress; CloudWatch, ADOT/X-Ray, CloudTrail, Config, GuardDuty, Security Hub,
-  Inspector, alarms, budgets, quotas, and tested restore/rollback evidence.
-
-Commercial and GovCloud service/model/voice availability must be verified from
-current authoritative AWS documentation during later packages. A versioned
-region/partition capability registry must choose an approved provider fallback
-or fail synthesis; unsupported capabilities must never silently disappear.
-This is advisory only and creates no Package 1B+ implementation or AWS resource.
+  operational address, or live identifier was used.
+- No provider imports an AWS SDK, HTTP client, database client, subprocess, or
+  operating-system command surface. Network calls are blocked in tests.
+- No access to `E:\Projects\LCDash`, `.227`, `.15`, live CAD, credentials,
+  backups, operational data, or operational outputs occurred.
+- No AWS CLI/API/CDK/deployment, webhook, CAD write, subscription, EMS delivery,
+  paging, station alert, or public-warning action occurred.
+- The separately authorized editor extensions reported by hosted Codex did not
+  change Package 1B behavior or test scope; no AWS login or credentials were
+  configured by Kiro.
+- Nothing was committed, pushed, merged, deployed, installed, or operated by
+  Kiro.
 
 ## Assumptions and unverified facts
 
-The inventory is based on a local source scan of Python under `app/`, `scripts/`,
-and `deploy/`. Runtime configuration and service availability were intentionally
-not inspected. AWS recommendations above are architecture advice; current
-commercial/GovCloud availability remains an explicit authoritative-verification
-item for later work.
+These are application contracts and deterministic test doubles, not proof that
+any future CentralSquare or AWS adapter conforms. County-profile schema parsing,
+authorization implementation, cross-tenant enforcement at every storage/API
+boundary, managed-service selection, and region/partition availability remain
+later packages and require their own tests and current authoritative review.
 
 ## Hosted Codex acceptance
 
-Hosted Codex independently reviewed every Package 1A artifact, compared the
-inventory with targeted source searches across all seven required dependency
-areas, reran the fail-closed characterization suite, checked changed-file scope,
-and scanned the artifacts for secret-like values. The rerun completed with
-`Ran 5 tests in 0.003s` and `OK`; the secret-pattern scan reported no matches;
-and no application or infrastructure file changed. Package 1A is accepted.
+Hosted Codex independently reviewed the complete Package 1B source and handoff,
+reran the combined Package 1A+1B suite, compiled the new packages, checked the
+changed-file boundary, and scanned for secret-like values and prohibited
+provider imports. The combined rerun completed with `Ran 17 tests in 0.008s`
+and `OK`; compilation succeeded; both scans reported no matches; and inherited
+runtime code remained unchanged. Package 1B is accepted.
 
 ## Exact next package and gate
 
-Stop here. Package 1B is the next planned package, but Kiro must not begin it
-without a new bounded assignment from hosted Codex.
-The human AWS deployment authorization gate remains incomplete, so no AWS
-resource creation or deployment command is permitted.
+Stop here. Package 1C is the next planned package, but Kiro must not start
+CentralSquare adapter migration without a new bounded assignment. No AWS
+resource creation may occur until the documented Package 5A account, role,
+budget, logging, rollback, and approval evidence is complete.
 
 ## Codex catch-up
 
-Package 1A was accepted by hosted Codex after independent diff, source-inventory,
-test, scope, and secret reviews. The focused standard-library suite passes 5/5
-with explicit live-service blockers. The default environment lacks pytest,
-psycopg, and timezone data, so the inherited suite was not runnable and nothing
-was installed. Application behavior is unchanged. Package 1B requires a new
-bounded assignment; do not infer authorization for Package 1B or AWS.
+Package 1B was accepted by hosted Codex after independent source, test,
+compilation, scope, prohibited-import, and secret reviews. The combined Package
+1A+1B standard-library suite passes 17/17, including fail-closed network
+sentinels. The new layer is unused by inherited runtime code, so application
+behavior is unchanged. Package 1C requires a new bounded assignment.

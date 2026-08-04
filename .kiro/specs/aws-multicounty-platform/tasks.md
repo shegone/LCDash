@@ -29,9 +29,11 @@ by synthetic characterization tests, and no live service is contacted.
 
 ## Package 1B - Provider protocols and synthetic providers
 
-- [ ] Define versioned `TenantContext`, `CountyProfile`, `CadProvider`,
+- [x] Define versioned `TenantContext`, `CountyProfile`, `CadProvider`,
   `InferenceProvider`, `RetrievalProvider`, and speech provider protocols.
-- [ ] Add synthetic providers and provider contract tests.
+- [x] Add synthetic providers and provider contract tests.
+
+Implementation completed by Kiro and accepted by hosted Codex on 2026-08-04.
 
 Acceptance: contract tests cover normalization, capability denial, tenant
 binding, timeouts, pagination, rate limits, redaction, and audit behavior.
