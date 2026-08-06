@@ -738,6 +738,28 @@
                 });
                 bubble.appendChild(citationBlock);
             }
+            if (responsePayload.report_preview) {
+                const preview = responsePayload.report_preview;
+                const panel = document.createElement("div");
+                panel.className = "mae-report-preview";
+                const notice = document.createElement("p");
+                notice.textContent = `${preview.source || "approved source"} · ${preview.freshness || "freshness unavailable"}. ${preview.disclaimer || "Review before saving or exporting."}`;
+                const save = document.createElement("button");
+                save.type = "button";
+                save.textContent = "Save as Template";
+                save.addEventListener("click", async function () {
+                    const title = window.prompt("Template name", "MAE report");
+                    if (!title) return;
+                    const result = await fetch("/api/cloud-ai/reports/templates", {
+                        method: "POST", headers: {"Content-Type": "application/json"},
+                        body: JSON.stringify({title: title, intent: preview.intent, visible_to_roles: ["supervisor"]})
+                    });
+                    if (!result.ok) window.alert("The report template could not be saved.");
+                    else save.disabled = true;
+                });
+                panel.append(notice, save);
+                bubble.appendChild(panel);
+            }
             article.append(avatar, bubble);
             messages.appendChild(article);
             messages.scrollTop = messages.scrollHeight;

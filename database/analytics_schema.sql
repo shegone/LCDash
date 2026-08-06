@@ -301,6 +301,23 @@ CREATE INDEX IF NOT EXISTS idx_jack_memory_status
 CREATE INDEX IF NOT EXISTS idx_saved_analytics_widgets_status
     ON lcdash_analytics.saved_analytics_widgets(status, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS lcdash_analytics.report_templates (
+    template_id UUID PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    metric TEXT NOT NULL,
+    dimensions JSONB NOT NULL,
+    period TEXT NOT NULL,
+    current_cad_fallback BOOLEAN NOT NULL DEFAULT FALSE,
+    author_subject TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    visible_to_roles JSONB NOT NULL,
+    CHECK (version >= 1)
+);
+CREATE INDEX IF NOT EXISTS idx_report_templates_tenant_created
+    ON lcdash_analytics.report_templates(tenant_id, created_at DESC);
+
 CREATE OR REPLACE VIEW lcdash_analytics.unit_response_metrics AS
 SELECT
     response.cfs_number,

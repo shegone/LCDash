@@ -3,6 +3,7 @@ import base64
 import binascii
 from contextlib import asynccontextmanager
 import json
+import re
 from queue import Queue
 from threading import Thread
 import secrets
@@ -57,6 +58,12 @@ from app.services.analytics_reporting import (
     get_analytics_overview,
 )
 from app.services.mae_analytics_report_service import build_analytics_report
+from app.services.cloud_report_service import (
+    PostgresReportTemplateStore,
+    ReportIntent,
+    create_report_template,
+    safe_template_record,
+)
 from app.services.county_commission_report_service import (
     CountyCommissionReportBusyError,
     build_county_commission_pdf,
@@ -240,6 +247,24 @@ class MAEChatRequest(BaseModel):
 class MAEAnalyticsReportRequest(BaseModel):
     period: str = Field(default="30d", pattern="^(24h|7d|30d|90d|365d)$")
     view_key: str = Field(default="", max_length=40)
+
+
+class CloudReportIntentRequest(BaseModel):
+    metric: str = Field(max_length=40)
+    dimensions: list[str] = Field(min_length=1, max_length=3)
+    period: str = Field(max_length=10)
+    current_cad_fallback: bool = False
+
+
+class CloudReportTemplateRequest(BaseModel):
+    title: str = Field(min_length=3, max_length=100)
+    intent: CloudReportIntentRequest
+    visible_to_roles: list[str] = Field(min_length=1, max_length=4)
+
+
+class CloudReportExportRequest(BaseModel):
+    intent: CloudReportIntentRequest
+    preview_confirmed: Literal[True]
 
 
 class AnalyticsWidgetRequest(BaseModel):
@@ -1351,6 +1376,159 @@ def county_commission_job_api(
         job_id,
         tenant_context=tenant_context,
     )
+
+
+def _cloud_report_intent(payload: CloudReportIntentRequest) -> ReportIntent:
+    try:
+        return ReportIntent(
+            metric=payload.metric,
+            dimensions=tuple(payload.dimensions),
+            period=payload.period,
+            current_cad_fallback=payload.current_cad_fallback,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _require_cloud_report_identity(
+    tenant_context: TenantContext | None, *, write: bool = False,
+) -> TenantContext:
+    if tenant_context is None or tenant_context.tenant_id != settings.tenant_id:
+        raise HTTPException(status_code=403, detail="Trusted tenant identity is required.")
+    if write and not tenant_context.roles.intersection({"supervisor", "admin"}):
+        raise HTTPException(status_code=403, detail="Supervisor report permission is required.")
+    return tenant_context
+
+
+def _analytics_report_rows(snapshot: dict, intent: ReportIntent) -> list[dict]:
+    if not snapshot.get("available"):
+        return []
+    if intent.metric == "call_count":
+        return [{"call_count": int((snapshot.get("metrics") or {}).get("total_calls") or 0)}]
+    mapping = {
+        "calls_by_nature": "incident_types",
+        "calls_by_hour": "hourly_volume",
+        "calls_by_agency": "agency_mix",
+    }
+    if intent.metric in mapping:
+        return [dict(row) for row in (snapshot.get(mapping[intent.metric]) or [])[:100]]
+    if intent.metric == "average_response_seconds":
+        return [{"average_response": (snapshot.get("metrics") or {}).get("average_response", "")}]
+    if intent.metric == "unit_commitment_minutes":
+        return [dict(row) for row in (snapshot.get("busiest_units") or [])[:100]]
+    return []
+
+
+def _current_cad_report_rows(intent: ReportIntent) -> list[dict]:
+    calls = tuple(cloud_cad_runtime.state.calls)
+    if intent.metric == "call_count":
+        return [{"call_count": len(calls)}]
+    field = {"calls_by_nature": "incident_description", "calls_by_agency": "agency"}.get(intent.metric)
+    if not field:
+        return []
+    counts: dict[str, int] = {}
+    for call in calls:
+        label = str(call.get(field) or "Unspecified")[:100]
+        counts[label] = counts.get(label, 0) + 1
+    return [{"label": label, "count": count} for label, count in sorted(counts.items())]
+
+
+def _report_preview_payload(intent: ReportIntent, context: TenantContext) -> dict:
+    snapshot = get_analytics_overview(period=intent.period, tenant_context=context)
+    rows = _analytics_report_rows(snapshot, intent)
+    source = "analytics-database"
+    freshness = str(snapshot.get("latest_data_at") or snapshot.get("generated_at") or "unavailable")
+    disclaimer = "Historical analytics database; verify the displayed refresh time."
+    if not rows and intent.current_cad_fallback:
+        rows = _current_cad_report_rows(intent)
+        source = "current-cad-read-only"
+        status = cloud_cad_runtime.status()
+        freshness = str(status.get("age_seconds") or "current poll")
+        disclaimer = "Current read-only CAD aggregate; not a historical or authoritative report."
+    return {
+        "intent": {
+            "metric": intent.metric, "dimensions": list(intent.dimensions),
+            "period": intent.period, "current_cad_fallback": intent.current_cad_fallback,
+        },
+        "rows": rows[:500], "source": source, "freshness": freshness,
+        "disclaimer": disclaimer, "save_requires_user_action": True,
+        "export_requires_user_action": True,
+    }
+
+
+def _suggest_report_preview(question: str, context: TenantContext | None) -> dict | None:
+    if context is None or not re.search(r"\b(report|trend|breakdown|how many)\b", question, re.I):
+        return None
+    lowered = question.lower()
+    metric, dimensions = "call_count", ("day",)
+    if "nature" in lowered or "incident type" in lowered:
+        metric, dimensions = "calls_by_nature", ("nature",)
+    elif "hour" in lowered or "time of day" in lowered:
+        metric, dimensions = "calls_by_hour", ("hour",)
+    elif "agency" in lowered:
+        metric, dimensions = "calls_by_agency", ("agency",)
+    elif "response" in lowered:
+        metric, dimensions = "average_response_seconds", ("day",)
+    period = next((value for value in ("365d", "90d", "30d", "7d", "24h") if value in lowered), "30d")
+    return _report_preview_payload(
+        ReportIntent(metric, dimensions, period, current_cad_fallback="current" in lowered),
+        context,
+    )
+
+
+@app.post("/api/cloud-ai/reports/preview")
+def cloud_report_preview_api(
+    payload: CloudReportIntentRequest,
+    tenant_context: Annotated[TenantContext | None, Depends(get_trusted_tenant_context)] = None,
+):
+    context = _require_cloud_report_identity(tenant_context)
+    intent = _cloud_report_intent(payload)
+    return _report_preview_payload(intent, context)
+
+
+@app.post("/api/cloud-ai/reports/templates")
+def cloud_report_template_save_api(
+    payload: CloudReportTemplateRequest,
+    request: Request,
+    tenant_context: Annotated[TenantContext | None, Depends(get_trusted_tenant_context)] = None,
+):
+    context = _require_cloud_report_identity(tenant_context, write=True)
+    template = create_report_template(
+        tenant_id=context.tenant_id, title=payload.title,
+        intent=_cloud_report_intent(payload.intent),
+        author_subject=_authenticated_user_email(request) or context.subject,
+        visible_to_roles=tuple(payload.visible_to_roles),
+    )
+    PostgresReportTemplateStore(settings.database_url).save(template)
+    return safe_template_record(template)
+
+
+@app.get("/api/cloud-ai/reports/templates")
+def cloud_report_template_list_api(
+    tenant_context: Annotated[TenantContext | None, Depends(get_trusted_tenant_context)] = None,
+):
+    context = _require_cloud_report_identity(tenant_context)
+    templates = PostgresReportTemplateStore(settings.database_url).list_visible(
+        tenant_id=context.tenant_id, roles=context.roles,
+    )
+    return {"templates": [safe_template_record(item) for item in templates]}
+
+
+@app.post("/api/cloud-ai/reports/export")
+def cloud_report_export_api(
+    payload: CloudReportExportRequest,
+    tenant_context: Annotated[TenantContext | None, Depends(get_trusted_tenant_context)] = None,
+):
+    context = _require_cloud_report_identity(tenant_context, write=True)
+    intent = _cloud_report_intent(payload.intent)
+    snapshot = get_analytics_overview(period=intent.period, tenant_context=context)
+    if not snapshot.get("available"):
+        raise HTTPException(status_code=503, detail="Historical analytics are unavailable.")
+    report = build_analytics_report(snapshot, "")
+    return Response(
+        content=report, media_type="application/pdf",
+        headers={"Cache-Control": "no-store", "Content-Disposition": "attachment; filename=mae-report.pdf"},
+    )
     if not job:
         raise HTTPException(status_code=404, detail="Monthly report job not found.")
     return job
@@ -1777,7 +1955,7 @@ def cloud_ai_advisory_api(
 ):
     if not cloud_mode_enabled(settings):
         raise HTTPException(status_code=404, detail="Cloud AI is not configured here.")
-    return answer_cloud_advisory(
+    result = answer_cloud_advisory(
         cloud_ai_runtime,
         cloud_ai_config,
         request_id=f"cloud-advisory-{secrets.token_hex(12)}",
@@ -1785,6 +1963,10 @@ def cloud_ai_advisory_api(
         persona=payload.persona,
         roles=_cloud_advisory_roles(tenant_context),
     )
+    report_preview = _suggest_report_preview(payload.question, tenant_context)
+    if report_preview is not None:
+        result["report_preview"] = report_preview
+    return result
 
 
 @app.post("/api/voice/speech")
@@ -1917,6 +2099,9 @@ def mindshare_chat_api(
         )
         result["interaction_id"] = ""
         result["audit_saved"] = False
+        report_preview = _suggest_report_preview(chat_request.question, tenant_context)
+        if report_preview is not None:
+            result["report_preview"] = report_preview
         return result
     _deny_unscoped_cloud_advisory_state()
     try:
@@ -1956,6 +2141,9 @@ def mindshare_chat_stream_api(
         )
         result["interaction_id"] = ""
         result["audit_saved"] = False
+        report_preview = _suggest_report_preview(chat_request.question, tenant_context)
+        if report_preview is not None:
+            result["report_preview"] = report_preview
         body = "".join(
             json.dumps(event, separators=(",", ":")) + "\n"
             for event in (

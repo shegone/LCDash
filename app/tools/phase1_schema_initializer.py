@@ -28,6 +28,7 @@ APPROVED_OBJECTS = frozenset(
         "lcdash_analytics.mae_memory",
         "lcdash_analytics.jack_memory",
         "lcdash_analytics.saved_analytics_widgets",
+        "lcdash_analytics.report_templates",
         "lcdash_analytics.unit_response_metrics",
         "lcdash_analytics.call_response_metrics",
         "lcdash_knowledge.documents",

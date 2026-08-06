@@ -583,6 +583,29 @@
         }
         addEvidence(bubble, payload && payload.evidence);
 
+        if (role === "assistant" && payload && payload.report_preview) {
+            const preview = payload.report_preview;
+            const panel = document.createElement("div");
+            panel.className = "mae-report-preview";
+            const notice = document.createElement("p");
+            notice.textContent = `${preview.source || "approved source"} · ${preview.freshness || "freshness unavailable"}. ${preview.disclaimer || "Review before saving or exporting."}`;
+            const save = document.createElement("button");
+            save.type = "button";
+            save.textContent = "Save as Template";
+            save.addEventListener("click", async function () {
+                const title = window.prompt("Template name", "JACK report");
+                if (!title) return;
+                const result = await fetch("/api/cloud-ai/reports/templates", {
+                    method: "POST", headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({title: title, intent: preview.intent, visible_to_roles: ["supervisor"]})
+                });
+                if (!result.ok) window.alert("The report template could not be saved.");
+                else save.disabled = true;
+            });
+            panel.append(notice, save);
+            bubble.appendChild(panel);
+        }
+
         const citations = payload && Array.isArray(payload.citations)
             ? payload.citations
             : [];
