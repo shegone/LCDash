@@ -3,6 +3,17 @@ from datetime import date, datetime, time, timedelta, timezone
 import re
 from zoneinfo import ZoneInfo
 
+from app.core.county_profiles import resolve_county_profile
+from app.core.county_presentation import (
+    INHERITED_AGENCY_DISPLAY_LABELS as AGENCY_DISPLAY_LABELS,
+    agency_display_label,
+)
+from app.core.tenancy import CountyProfile, TenantContext
+from app.core.tenant_authorization import (
+    TenantAuthorizationDenied,
+    authorize_tenant_action,
+)
+from app.integrations.contracts import ModuleCapability
 from app.services.analytics_database import (
     AnalyticsDatabaseError,
     AnalyticsRepository,
@@ -24,18 +35,17 @@ MAX_CUSTOM_DAYS = 366
 # Keep the historical call records, but exclude the exact normalized identity
 # from Dispatcher / CAD Entry workload and processing-time reporting.
 EXCLUDED_DISPATCHER_IDENTITY = "KIM MAYNARD"
-AGENCY_DISPLAY_LABELS = {
-    "LCEOC": "911 Center / Administrative",
-}
 
 
 class AnalyticsRangeError(ValueError):
     """Raised when an analytics date range is invalid."""
 
 
-def _agency_display_label(value: object) -> str:
-    label = str(value or "Unknown").strip() or "Unknown"
-    return AGENCY_DISPLAY_LABELS.get(label.upper(), label)
+def _agency_display_label(
+    value: object,
+    county_profile: CountyProfile | None = None,
+) -> str:
+    return agency_display_label(value, county_profile)
 
 
 @dataclass(frozen=True)
@@ -175,7 +185,11 @@ def _empty_overview(window: AnalyticsWindow, message: str) -> dict:
     }
 
 
-def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) -> dict:
+def _query_overview(
+    repository: AnalyticsRepository,
+    window: AnalyticsWindow,
+    county_profile: CountyProfile | None = None,
+) -> dict:
     params = {
         "window_start": window.start_at,
         "window_end": window.end_at,
@@ -540,7 +554,7 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
     )
     agency_mix = [
         {
-            "label": _agency_display_label(row[0]),
+            "label": _agency_display_label(row[0], county_profile),
             "count": int(row[1]),
             "percent": round((int(row[1]) / total_calls) * 100, 1)
             if total_calls
@@ -863,7 +877,22 @@ def get_analytics_overview(
     period: str = DEFAULT_PERIOD,
     start: str = "",
     end: str = "",
+    county_profile: CountyProfile | None = None,
+    tenant_context: TenantContext | None = None,
 ) -> dict:
+    if tenant_context is not None:
+        if county_profile is not None:
+            raise TenantAuthorizationDenied(
+                "Trusted context and direct county profile cannot be combined."
+            )
+        county_profile = resolve_county_profile(tenant_context)
+        authorize_tenant_action(
+            tenant_context,
+            county_profile,
+            ModuleCapability.ANALYTICS,
+            "read",
+        )
+
     window = resolve_analytics_window(period=period, start=start, end=end)
 
     if not analytics_database_is_configured():
@@ -875,7 +904,7 @@ def get_analytics_overview(
     try:
         with AnalyticsRepository() as repository:
             repository.initialize_schema()
-            return _query_overview(repository, window)
+            return _query_overview(repository, window, county_profile)
     except AnalyticsDatabaseError:
         return _empty_overview(
             window,

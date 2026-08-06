@@ -62,6 +62,7 @@ class CountyProfile:
     agencies: tuple[Mapping[str, Any], ...] = ()
     unit_status_mappings: Mapping[str, str] = field(default_factory=dict)
     gis_sources: tuple[Mapping[str, Any], ...] = ()
+    heatmap_configuration: Mapping[str, Any] = field(default_factory=dict)
     identity_federation: Mapping[str, Any] = field(default_factory=dict)
     retention: Mapping[str, Any] = field(default_factory=dict)
     ai_policy: Mapping[str, Any] = field(default_factory=dict)
@@ -80,6 +81,7 @@ class CountyProfile:
         for name in (
             "branding",
             "unit_status_mappings",
+            "heatmap_configuration",
             "identity_federation",
             "retention",
             "ai_policy",

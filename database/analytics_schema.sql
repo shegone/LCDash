@@ -233,6 +233,7 @@ CREATE TABLE IF NOT EXISTS lcdash_analytics.jack_memory (
 
 CREATE TABLE IF NOT EXISTS lcdash_analytics.saved_analytics_widgets (
     widget_id BIGSERIAL PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     created_by TEXT NOT NULL DEFAULT '',
@@ -247,6 +248,12 @@ CREATE TABLE IF NOT EXISTS lcdash_analytics.saved_analytics_widgets (
     status TEXT NOT NULL DEFAULT 'active'
         CHECK (status IN ('active', 'retired'))
 );
+
+ALTER TABLE lcdash_analytics.saved_analytics_widgets
+    ADD COLUMN IF NOT EXISTS tenant_id TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_saved_analytics_widgets_tenant_status
+    ON lcdash_analytics.saved_analytics_widgets(tenant_id, status, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_analytics_calls_received
     ON lcdash_analytics.calls(call_received_at);

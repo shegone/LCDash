@@ -1,0 +1,48 @@
+{
+  "schema_version": "lcdash.phase1-gate-evidence.v1",
+  "decision": "AUTHORIZED_TO_BEGIN_PHASE1_PREWRITE",
+  "verification_time": "2026-08-04T18:20:07-04:00",
+  "approval_window_start": "2026-08-04T18:20:07-04:00",
+  "approval_window_expiration": "2026-09-03T18:20:07-04:00",
+  "account": "862772137583",
+  "region": "us-east-1",
+  "stacks": [
+    "lcdash-p1-logan-use1-certificate",
+    "lcdash-p1-logan-use1-foundation"
+  ],
+  "authorization_scope": [
+    "reviewed_iam_boundary_and_deployment_access_setup",
+    "usd_200_budget_alerts",
+    "cdk_bootstrap",
+    "certificate_request_stack",
+    "manual_hostinger_certificate_validation_hold",
+    "foundation_stack_desired_count_0_not_published"
+  ],
+  "explicitly_not_authorized": [
+    "image_build_or_push",
+    "pilot_service_desired_count_1",
+    "live_cad_or_phase_2",
+    "production_227_or_pc_15",
+    "credentials_or_protected_operational_outputs"
+  ],
+  "post_action_status": "PENDING",
+  "approver_reference": "operator://ted-sparks-direct-user-direction",
+  "approval_decision_reference": "codex-task://current/yes-build-cloud-version-leave-227-and-15-alone",
+  "source_commit_reference": null,
+  "offline_test_reference": null,
+  "identity_center_assignment_reference": null,
+  "mfa_reference": null,
+  "deployment_role_reference": null,
+  "permissions_boundary_reference": null,
+  "iam_access_analyzer_reference": null,
+  "billing_visibility_reference": null,
+  "budget_subscription_reference": null,
+  "pricing_estimate_reference": null,
+  "quota_review_reference": null,
+  "cloudtrail_decision_reference": null,
+  "authentication_review_reference": null,
+  "hostinger_dns_operator_reference": null,
+  "foundation_parameters_reference": null,
+  "teardown_review_reference": null,
+  "limitations_acceptance_reference": null
+}

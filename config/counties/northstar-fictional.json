@@ -89,6 +89,13 @@
       "layers": ["fictional_roads", "fictional_facilities", "fictional_districts"]
     }
   ],
+  "heatmap_configuration": {
+    "min_latitude": 44.50,
+    "max_latitude": 45.50,
+    "min_longitude": -94.50,
+    "max_longitude": -93.00,
+    "grid_degrees": 0.02
+  },
   "identity_federation": {
     "provider": "synthetic-oidc",
     "trusted_tenant_claim": "lcdash_tenant",

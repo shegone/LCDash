@@ -1,5 +1,10 @@
 from datetime import datetime, timezone
 
+from app.config.settings import settings
+from app.core.county_profiles import resolve_county_profile
+from app.core.tenancy import CountyProfile, TenantContext
+from app.core.tenant_authorization import authorize_tenant_action
+from app.integrations.contracts import ModuleCapability
 from app.services.cad_service import get_active_calls
 from app.integrations.cad.centralsquare import (
     CentralSquareCadAdapter as CentralSquareClient,
@@ -242,7 +247,128 @@ def build_empty_operations_snapshot() -> dict:
     }
 
 
+def _cloud_display_text(value) -> str:
+    if isinstance(value, (str, int, float)) and not isinstance(value, bool):
+        return str(value)[:256]
+    return ""
+
+
+def _cloud_command_logs(item) -> list[dict[str, str]]:
+    value = item.get("command_logs")
+    logs = value if isinstance(value, (list, tuple)) else ()
+    normalized = []
+    for entry in logs[:500]:
+        if not hasattr(entry, "get"):
+            continue
+        normalized.append(
+            {
+                "timestamp": _cloud_display_text(entry.get("timestamp")),
+                "unit_number": _cloud_display_text(entry.get("unit_number")),
+                "text": str(entry.get("text") or "")[:2000],
+                "status": _cloud_display_text(entry.get("status")),
+                "creator": _cloud_display_text(entry.get("creator")),
+            }
+        )
+    return normalized
+
+
+def build_cloud_operations_snapshot(state) -> dict:
+    """Project minimized in-memory CAD state into the existing display model."""
+    calls = []
+    for item in state.calls:
+        assigned_value = item.get("assigned_units")
+        assigned = assigned_value if isinstance(assigned_value, (list, tuple)) else ()
+        assigned_units = []
+        command_logs = _cloud_command_logs(item)
+        for unit in assigned:
+            if not hasattr(unit, "get"):
+                continue
+            unit_number = _cloud_display_text(unit.get("unit_number"))
+            if not unit_number:
+                continue
+            assigned_units.append(
+                {
+                    "unit_number": unit_number,
+                    "unit_type": _cloud_display_text(unit.get("unit_type")),
+                    "agency": _cloud_display_text(unit.get("agency")),
+                    "status": _cloud_display_text(unit.get("status")) or "Assigned",
+                }
+            )
+        calls.append(
+            {
+                "cfs_number": _cloud_display_text(item.get("cfs_number")),
+                "incident_code": _cloud_display_text(item.get("incident_code")),
+                "incident_description": _cloud_display_text(item.get("incident_description")),
+                "priority": _cloud_display_text(item.get("priority")),
+                "agency": _cloud_display_text(item.get("agency")),
+                "status": _cloud_display_text(item.get("status")),
+                "call_datetime": _cloud_display_text(item.get("call_datetime")),
+                "location": _cloud_display_text(item.get("location_label")),
+                "city": _cloud_display_text(item.get("city")),
+                "units": ", ".join(unit["unit_number"] for unit in assigned_units),
+                "assigned_units": assigned_units,
+                "command_log_count": len(command_logs),
+                "latest_command_log_timestamp": (
+                    command_logs[-1]["timestamp"] if command_logs else ""
+                ),
+            }
+        )
+    calls = sort_dashboard_calls(calls)
+    unit_rows = build_unit_board(calls)
+    return {
+        "last_updated": (
+            state.last_success_at.isoformat()
+            if state.last_success_at is not None
+            else datetime.now(timezone.utc).isoformat()
+        ),
+        "calls": calls,
+        "dashboard_stats": build_dashboard_stats(calls),
+        "unit_rows": unit_rows,
+        "unit_stats": build_unit_board_stats(unit_rows),
+    }
+
+
+def build_cloud_call_detail(state, cfs_number: str) -> dict | None:
+    """Return one incident using only the normalized cloud display whitelist."""
+    requested_number = _cloud_display_text(cfs_number)
+    if not requested_number:
+        return None
+
+    snapshot = build_cloud_operations_snapshot(state)
+    for call in snapshot["calls"]:
+        if call["cfs_number"] != requested_number:
+            continue
+        source = next(
+            (
+                item
+                for item in state.calls
+                if _cloud_display_text(item.get("cfs_number")) == requested_number
+            ),
+            {},
+        )
+        return {
+            "cfs_number": call["cfs_number"],
+            "incident_code": call["incident_code"],
+            "priority": call["priority"],
+            "agency": call["agency"],
+            "status": call["status"],
+            "call_datetime": call["call_datetime"],
+            "incident_description": call["incident_description"],
+            "location": call["location"],
+            "city": call["city"],
+            "units": call["units"],
+            "assigned_units": [dict(unit) for unit in call["assigned_units"]],
+            "command_logs": _cloud_command_logs(source),
+            "latitude": source.get("latitude"),
+            "longitude": source.get("longitude"),
+        }
+    return None
+
+
 def get_live_operations_snapshot() -> dict:
+    if settings.deployment_mode == "synthetic-disconnected":
+        return build_empty_operations_snapshot()
+
     calls = sort_dashboard_calls(get_active_calls())
     unit_rows = build_unit_board(calls)
 
@@ -401,13 +527,75 @@ def build_empty_unit_snapshot() -> dict:
     }
 
 
-def get_live_unit_snapshot() -> dict:
+def build_cloud_unit_snapshot(state) -> dict:
+    """Project only reviewed normalized unit fields into the roster display."""
+    roster_units = []
+    active_rows = []
+    for item in state.units:
+        unit_number = _cloud_display_text(item.get("unit_number"))
+        if not unit_number:
+            continue
+        unit = {
+            "unit_number": unit_number,
+            "agency": _cloud_display_text(item.get("agency")),
+            "unit_type": _cloud_display_text(item.get("unit_type")),
+            "status": _cloud_display_text(item.get("status")),
+            "station": _cloud_display_text(item.get("station")),
+        }
+        roster_units.append(unit)
+        assignment = _cloud_display_text(item.get("assignment_cfs_number"))
+        if assignment:
+            active_rows.append(
+                {
+                    **unit,
+                    "cfs_number": assignment,
+                    "location": "",
+                    "incident_description": "",
+                }
+            )
+    groups = build_full_unit_roster(roster_units, active_rows)
+    return {
+        "last_updated": (
+            state.last_success_at.isoformat()
+            if state.last_success_at is not None
+            else datetime.now(timezone.utc).isoformat()
+        ),
+        "calls": [],
+        "roster_connected": state.last_success_at is not None,
+        "roster_warning": "" if state.last_success_at is not None else "Cloud CAD snapshot awaiting first poll.",
+        "active_stats": build_unit_board_stats(groups["active_units"]),
+        **groups,
+    }
+
+
+def get_live_unit_snapshot(
+    tenant_context: TenantContext | None = None,
+) -> dict:
+    if settings.deployment_mode == "synthetic-disconnected":
+        return build_empty_unit_snapshot()
+
+    county_profile: CountyProfile | None = None
+    if tenant_context is not None:
+        county_profile = resolve_county_profile(tenant_context)
+        authorize_tenant_action(
+            tenant_context,
+            county_profile,
+            ModuleCapability.UNITS,
+            "read",
+        )
+
     client = CentralSquareClient()
     calls = sort_dashboard_calls(get_active_calls(client=client))
     active_unit_rows = build_unit_board(calls)
 
     try:
-        roster_units = get_all_units(client=client)
+        if county_profile is None:
+            roster_units = get_all_units(client=client)
+        else:
+            roster_units = get_all_units(
+                client=client,
+                county_profile=county_profile,
+            )
         roster_connected = True
         roster_warning = ""
     except CentralSquareAPIError:

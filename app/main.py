@@ -1,22 +1,29 @@
 import asyncio
 import base64
 import binascii
+from contextlib import asynccontextmanager
 import json
 from queue import Queue
 from threading import Thread
 import secrets
-from typing import Literal
+from datetime import datetime, timezone
+from typing import Annotated, Literal
 
-from fastapi import FastAPI, File, HTTPException, Query, Request, Response, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from pydantic import BaseModel, Field
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
 from app.config.settings import settings
+from app.core.county_branding import branding_for_tenant_context
+from app.core.tenancy import TenantContext
 from app.auth.oauth import get_access_token, CentralSquareAuthError
 from app.services.cad_service import get_call_detail
 from app.services.operations_service import (
+    build_cloud_call_detail,
+    build_cloud_operations_snapshot,
+    build_cloud_unit_snapshot,
     build_empty_unit_snapshot,
     build_empty_operations_snapshot,
     get_live_unit_snapshot,
@@ -27,7 +34,7 @@ from app.services.map_service import (
     get_live_map_snapshot,
 )
 from app.services.gis_reference_service import (
-    available_reference_layers,
+    get_reference_catalog,
     get_reference_layer,
 )
 from app.services.heatmap_service import (
@@ -38,9 +45,12 @@ from app.services.heatmap_service import (
 )
 from app.services.station_alert_service import (
     build_empty_station_alert_snapshot,
+    build_station_alert_snapshot,
     get_live_station_alert_snapshot,
 )
 from app.services.analytics_database import get_analytics_database_status
+from app.services.cloud_pilot_readiness_service import get_cloud_pilot_readiness
+from app.services.cloud_presentation_status import build_cloud_presentation_status
 from app.services.analytics_reporting import (
     AnalyticsRangeError,
     PERIOD_OPTIONS,
@@ -54,6 +64,7 @@ from app.services.county_commission_report_service import (
     start_county_commission_job,
 )
 from app.services.mae_analytics_visualization_service import (
+    TenantWidgetIsolationError,
     list_saved_widgets,
     retire_widget,
     save_widget,
@@ -112,12 +123,23 @@ from app.services.voice_service import (
     synthesize_speech,
     transcribe_audio,
 )
+from app.services.cloud_ai_service import (
+    CLOUD_POLLY_VOICES,
+    answer_cloud_advisory,
+    build_cloud_ai_config,
+    build_cloud_ai_runtime,
+    cloud_ai_status,
+    cloud_mode_enabled,
+    synthesize_cloud_speech,
+)
+from app.integrations.cloud_ai import CloudAiRuntimeUnavailable
 from app.services.centralsquare import (
     CentralSquareAPIError,
 )
 from app.integrations.cad.centralsquare import (
     CentralSquareCadAdapter as CentralSquareClient,
 )
+from app.integrations.cad.cloud_read_runtime import build_cloud_cad_runtime
 from app.services.realtime_service import (
     browser_event,
     event_broker,
@@ -138,10 +160,55 @@ from app.services.nga911_nova_service import (
     get_nova_status,
 )
 
+cloud_cad_runtime = build_cloud_cad_runtime(settings)
+cloud_ai_config = build_cloud_ai_config(settings)
+cloud_ai_runtime = build_cloud_ai_runtime(settings)
+
+
+def _cloud_presentation_status(knowledge_status: dict | None = None):
+    return build_cloud_presentation_status(
+        cad_status=cloud_cad_runtime.status(),
+        ai_status=cloud_ai_status(cloud_ai_config, cloud_ai_runtime),
+        knowledge_status=knowledge_status or {},
+    )
+
+
+def _cloud_cad_bridge_enabled() -> bool:
+    status = cloud_cad_runtime.status()
+    return bool(status["enabled"]) and status["mode"] == "centralsquare-read-poll"
+
+
+def _current_operations_snapshot() -> dict:
+    if _cloud_cad_bridge_enabled():
+        return build_cloud_operations_snapshot(cloud_cad_runtime.state)
+    if settings.deployment_mode == "synthetic-disconnected":
+        return build_empty_operations_snapshot()
+    return get_live_operations_snapshot()
+
+
+def _current_unit_snapshot(tenant_context: TenantContext | None = None) -> dict:
+    if _cloud_cad_bridge_enabled():
+        return build_cloud_unit_snapshot(cloud_cad_runtime.state)
+    if settings.deployment_mode == "synthetic-disconnected":
+        return build_empty_unit_snapshot()
+    return get_live_unit_snapshot(tenant_context=tenant_context)
+
+
+@asynccontextmanager
+async def application_lifespan(application: FastAPI):
+    application.state.cloud_cad_runtime = cloud_cad_runtime
+    cloud_cad_runtime.start()
+    try:
+        yield
+    finally:
+        await cloud_cad_runtime.stop()
+
+
 app = FastAPI(
     title="LCDash",
     description="Logan County 911 Operations Dashboard",
     version="0.3.0",
+    lifespan=application_lifespan,
 )
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -202,6 +269,10 @@ class VoiceSpeechRequest(BaseModel):
     voice: str = Field(default="", max_length=40)
     speed: float = Field(default=1.0, ge=0.7, le=1.3)
     response_format: str = Field(default="mp3", pattern="^(mp3|wav)$")
+
+
+class CloudAdvisoryRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=4000)
 
 
 class MAEFeedbackRequest(BaseModel):
@@ -336,6 +407,20 @@ def health():
     }
 
 
+@app.get("/api/pilot/readiness")
+def cloud_pilot_readiness():
+    """Return the static, presentation-safe readiness view for the cloud pilot."""
+
+    return get_cloud_pilot_readiness().to_dict()
+
+
+@app.get("/api/pilot/cad-read-status")
+def cloud_cad_read_status(response: Response):
+    """Return only presentation-safe polling health behind ALB authentication."""
+    response.headers["Cache-Control"] = "no-store"
+    return dict(cloud_cad_runtime.status())
+
+
 @app.get("/config-test")
 def config_test():
     return {
@@ -389,7 +474,7 @@ def system_test():
 @app.get("/active-calls-test")
 def active_calls_test():
     try:
-        snapshot = get_live_operations_snapshot()
+        snapshot = _current_operations_snapshot()
         calls = snapshot["calls"]
 
         return {
@@ -412,12 +497,16 @@ def operations_snapshot_api(response: Response):
     response.headers["Cache-Control"] = "no-store"
 
     try:
-        snapshot = get_live_operations_snapshot()
+        snapshot = _current_operations_snapshot()
+        presentation = _cloud_presentation_status()
+        source = presentation["source"]
 
         return {
-            "connected": True,
-            "system_status": "Connected",
-            "cad_status": "Connected",
+            "connected": source["connected"],
+            "system_status": source["label"],
+            "cad_status": "Connected" if source["connected"] else "Disconnected",
+            "cloud_presentation_status": presentation,
+            "cloud_presentation": settings.deployment_mode == "synthetic-disconnected",
             **snapshot,
         }
 
@@ -441,6 +530,11 @@ async def receive_centralsquare_webhook(
     source: Literal["cfs", "units"],
     request: Request,
 ):
+    if settings.deployment_mode == "synthetic-disconnected":
+        raise HTTPException(
+            status_code=403,
+            detail="Webhook ingestion is disabled in the cloud read-only deployment.",
+        )
     _authorize_centralsquare_webhook(request)
 
     content_length = request.headers.get("content-length")
@@ -538,10 +632,13 @@ def centralsquare_realtime_health_api(response: Response):
 @app.get("/api/operations/active-calls")
 def active_calls_api():
     try:
-        snapshot = get_live_operations_snapshot()
+        snapshot = _current_operations_snapshot()
+        source = _cloud_presentation_status()["source"]
 
         return {
-            "connected": True,
+            "connected": source["connected"],
+            "source_status": source["state"],
+            "source_label": source["label"],
             "last_updated": snapshot["last_updated"],
             "stats": snapshot["dashboard_stats"],
             "calls": snapshot["calls"],
@@ -559,15 +656,49 @@ def active_calls_api():
         }
 
 
+def get_trusted_tenant_context() -> TenantContext | None:
+    """Deployment/identity composition seam; never derives tenant from a request."""
+    if settings.deployment_mode != "synthetic-disconnected" or not settings.tenant_id:
+        return None
+    try:
+        return TenantContext(
+            tenant_id=settings.tenant_id,
+            subject="deployment-cell",
+            identity_source="deployment-configuration",
+            roles=frozenset({"viewer"}),
+            request_id="deployment-cell",
+            authenticated_at=datetime.now(timezone.utc),
+        )
+    except ValueError:
+        return None
+
+
+def _deny_unscoped_cloud_advisory_state() -> None:
+    if settings.deployment_mode == "synthetic-disconnected":
+        raise HTTPException(
+            status_code=403,
+            detail="This legacy advisory state route is unavailable in the tenant-isolated cloud deployment.",
+        )
+
+
 @app.get("/api/operations/units")
-def units_api(response: Response):
+def units_api(
+    response: Response,
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
+):
     response.headers["Cache-Control"] = "no-store"
 
     try:
-        snapshot = get_live_unit_snapshot()
+        snapshot = _current_unit_snapshot(tenant_context=tenant_context)
+        source = _cloud_presentation_status()["source"]
 
         return {
-            "connected": True,
+            "connected": source["connected"],
+            "source_status": source["state"],
+            "source_label": source["label"],
             "roster_connected": snapshot["roster_connected"],
             "roster_warning": snapshot["roster_warning"],
             "last_updated": snapshot["last_updated"],
@@ -603,26 +734,48 @@ def units_api(response: Response):
 
 
 @app.get("/api/operations/map")
-def map_api(response: Response):
+def map_api(
+    response: Response,
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
+):
     response.headers["Cache-Control"] = "no-store"
 
     try:
-        return get_live_map_snapshot()
+        return get_live_map_snapshot(tenant_context=tenant_context)
     except CentralSquareAPIError as exc:
         return build_empty_map_snapshot(str(exc))
 
 
 @app.get("/api/operations/map/reference")
-def map_reference_catalog_api(response: Response):
+def map_reference_catalog_api(
+    response: Response,
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
+):
     """List only reviewed, locally mounted GIS reference layers."""
     response.headers["Cache-Control"] = "private, max-age=3600"
-    return {"layers": available_reference_layers()}
+    return get_reference_catalog(tenant_context)
 
 
 @app.get("/api/operations/map/reference/{layer}")
-def map_reference_layer_api(layer: str, response: Response):
+def map_reference_layer_api(
+    layer: str,
+    response: Response,
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
+):
     """Serve one minimized static GIS layer; source archives remain private."""
-    reference_layer = get_reference_layer(layer)
+    reference_layer = get_reference_layer(
+        layer,
+        tenant_context=tenant_context,
+    )
     if reference_layer is None:
         raise HTTPException(status_code=404, detail="GIS reference layer not available")
 
@@ -638,12 +791,22 @@ def _validated_heatmap_hours(hours: int) -> int:
 
 
 @app.get("/api/operations/map/heatmap")
-def heatmap_api(response: Response, hours: int = 8):
+def heatmap_api(
+    response: Response,
+    hours: int = 8,
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
+):
     selected_hours = _validated_heatmap_hours(hours)
     response.headers["Cache-Control"] = "no-store"
 
     try:
-        return get_live_heatmap_snapshot(selected_hours)
+        return get_live_heatmap_snapshot(
+            selected_hours,
+            tenant_context=tenant_context,
+        )
     except CentralSquareAPIError:
         return build_empty_heatmap_snapshot(selected_hours)
 
@@ -652,8 +815,24 @@ def heatmap_api(response: Response, hours: int = 8):
 def station_alerts_api(
     response: Response,
     station: list[str] = Query(default=[]),
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
 ):
     response.headers["Cache-Control"] = "no-store"
+
+    if settings.deployment_mode == "synthetic-disconnected":
+        if not _cloud_cad_bridge_enabled():
+            return build_empty_station_alert_snapshot(
+                station,
+                "Approved cloud assignment source unavailable.",
+            )
+        snapshot = build_cloud_unit_snapshot(cloud_cad_runtime.state)
+        alert_data = build_station_alert_snapshot(snapshot, station)
+        for alert in alert_data["alerts"]:
+            alert.pop("announcement", None)
+        return alert_data
 
     try:
         return get_live_station_alert_snapshot(station)
@@ -663,14 +842,12 @@ def station_alerts_api(
 
 @app.get("/dashboard")
 def dashboard(request: Request):
+    presentation = _cloud_presentation_status()
+    source = presentation["source"]
     try:
-        snapshot = get_live_operations_snapshot()
-        cad_status = "Connected"
-        system_status = "Connected"
+        snapshot = _current_operations_snapshot()
     except CentralSquareAPIError:
         snapshot = build_empty_operations_snapshot()
-        cad_status = "Disconnected"
-        system_status = "Unknown"
 
     stats = snapshot["dashboard_stats"]
 
@@ -678,8 +855,10 @@ def dashboard(request: Request):
         request=request,
         name="dashboard.html",
         context={
-            "system_status": system_status,
-            "cad_status": cad_status,
+            "system_status": source["label"],
+            "cad_status": "Connected" if source["connected"] else "Disconnected",
+            "cloud_presentation_status": presentation,
+            "cloud_presentation": settings.deployment_mode == "synthetic-disconnected",
             "active_calls": stats["active_calls"],
             "assigned_units": stats["assigned_units"],
             "on_scene_calls": stats.get("on_scene_calls", 0),
@@ -695,15 +874,13 @@ def dashboard(request: Request):
 
 @app.get("/active-calls")
 def active_calls_page(request: Request):
+    presentation = _cloud_presentation_status()
+    source = presentation["source"]
     try:
-        snapshot = get_live_operations_snapshot()
-        cad_status = "Connected"
-        system_status = "Connected"
+        snapshot = _current_operations_snapshot()
         error = None
     except CentralSquareAPIError as exc:
         snapshot = build_empty_operations_snapshot()
-        cad_status = "Disconnected"
-        system_status = "Unknown"
         error = str(exc)
 
     calls = snapshot["calls"]
@@ -728,14 +905,16 @@ def active_calls_page(request: Request):
         request=request,
         name="active_calls.html",
         context={
-            "system_status": system_status,
-            "cad_status": cad_status,
+            "system_status": source["label"],
+            "cad_status": "Connected" if source["connected"] else "Disconnected",
+            "cloud_presentation_status": presentation,
             "error": error,
             "calls": calls,
             "active_calls": stats["active_calls"],
             "high_priority_calls": stats["high_priority_calls"],
             "agency_options": agency_options,
             "status_options": status_options,
+            "cloud_presentation": settings.deployment_mode == "synthetic-disconnected",
             "last_updated": snapshot["last_updated"],
             "version": "0.3.0",
         },
@@ -743,22 +922,28 @@ def active_calls_page(request: Request):
 
 
 @app.get("/units")
-def units_board(request: Request):
+def units_board(
+    request: Request,
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
+):
+    presentation = _cloud_presentation_status()
+    source = presentation["source"]
     try:
-        snapshot = get_live_unit_snapshot()
-        cad_status = "Connected"
-        system_status = "Connected"
+        snapshot = _current_unit_snapshot(tenant_context=tenant_context)
     except CentralSquareAPIError:
         snapshot = build_empty_unit_snapshot()
-        cad_status = "Disconnected"
-        system_status = "Unknown"
 
     return templates.TemplateResponse(
         request=request,
         name="units.html",
         context={
-            "system_status": system_status,
-            "cad_status": cad_status,
+            "system_status": source["label"],
+            "cad_status": source["label"],
+            "cloud_presentation_status": presentation,
+            "cloud_presentation": settings.deployment_mode == "synthetic-disconnected",
             "calls": snapshot["calls"],
             "roster_connected": snapshot["roster_connected"],
             "roster_warning": snapshot["roster_warning"],
@@ -776,18 +961,24 @@ def units_board(request: Request):
 
 @app.get("/calls/{cfs_number}")
 def call_detail(request: Request, cfs_number: str):
-    try:
-        call = get_call_detail(cfs_number)
-        connected = True
-        error = None
-    except CentralSquareAPIError as exc:
-        call = None
-        connected = False
-        error = str(exc)
+    cloud_normalized_detail = _cloud_cad_bridge_enabled()
+    if cloud_normalized_detail:
+        call = build_cloud_call_detail(cloud_cad_runtime.state, cfs_number)
+        connected = cloud_cad_runtime.state.last_success_at is not None
+        error = None if call else "Incident is not available in the current read-only snapshot."
+    else:
+        try:
+            call = get_call_detail(cfs_number)
+            connected = True
+            error = None
+        except CentralSquareAPIError as exc:
+            call = None
+            connected = False
+            error = str(exc)
 
     return templates.TemplateResponse(
         request=request,
-        name="call_detail.html",
+        name=("call_detail_cloud.html" if cloud_normalized_detail else "call_detail.html"),
         context={
             "call": call,
             "connected": connected,
@@ -798,9 +989,15 @@ def call_detail(request: Request, cfs_number: str):
 
 
 @app.get("/map")
-def gis_map(request: Request):
+def gis_map(
+    request: Request,
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
+):
     try:
-        map_data = get_live_map_snapshot()
+        map_data = get_live_map_snapshot(tenant_context=tenant_context)
     except CentralSquareAPIError as exc:
         map_data = build_empty_map_snapshot(str(exc))
 
@@ -834,11 +1031,21 @@ def gis_map(request: Request):
 
 
 @app.get("/map/heatmap")
-def heatmap_page(request: Request, hours: int = 8):
+def heatmap_page(
+    request: Request,
+    hours: int = 8,
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
+):
     selected_hours = _validated_heatmap_hours(hours)
 
     try:
-        heatmap_data = get_live_heatmap_snapshot(selected_hours)
+        heatmap_data = get_live_heatmap_snapshot(
+            selected_hours,
+            tenant_context=tenant_context,
+        )
     except CentralSquareAPIError:
         heatmap_data = build_empty_heatmap_snapshot(selected_hours)
 
@@ -863,18 +1070,36 @@ def heatmap_page(request: Request, hours: int = 8):
 def station_alerts_page(
     request: Request,
     station: list[str] = Query(default=[]),
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
 ):
-    try:
-        alert_data = get_live_station_alert_snapshot(station)
-    except CentralSquareAPIError as exc:
-        alert_data = build_empty_station_alert_snapshot(station, str(exc))
+    cloud_station_alerts = settings.deployment_mode == "synthetic-disconnected"
+    if cloud_station_alerts:
+        if _cloud_cad_bridge_enabled():
+            snapshot = build_cloud_unit_snapshot(cloud_cad_runtime.state)
+            alert_data = build_station_alert_snapshot(snapshot, station)
+            for alert in alert_data["alerts"]:
+                alert.pop("announcement", None)
+        else:
+            alert_data = build_empty_station_alert_snapshot(
+                station,
+                "Approved cloud assignment source unavailable.",
+            )
+    else:
+        try:
+            alert_data = get_live_station_alert_snapshot(station)
+        except CentralSquareAPIError as exc:
+            alert_data = build_empty_station_alert_snapshot(station, str(exc))
 
     return templates.TemplateResponse(
         request=request,
-        name="station_alerts.html",
+        name=("station_alerts_cloud.html" if cloud_station_alerts else "station_alerts.html"),
         context={
             "alert_data": alert_data,
             "selected_stations": alert_data.get("selected_stations", station),
+            "cloud_station_alerts": cloud_station_alerts,
             "cad_status": "Connected" if alert_data["connected"] else "Disconnected",
             "system_status": "Connected" if alert_data["connected"] else "Unknown",
             "last_updated": alert_data["generated_at"],
@@ -896,19 +1121,37 @@ def analytics_overview_api(
     period: str = "30d",
     start: str = "",
     end: str = "",
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
 ):
     response.headers["Cache-Control"] = "no-store"
     try:
-        return get_analytics_overview(period=period, start=start, end=end)
+        return get_analytics_overview(
+            period=period,
+            start=start,
+            end=end,
+            tenant_context=tenant_context,
+        )
     except AnalyticsRangeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/mae/analytics-report")
-def mae_analytics_report_api(report_request: MAEAnalyticsReportRequest):
+def mae_analytics_report_api(
+    report_request: MAEAnalyticsReportRequest,
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
+):
     """Create an aggregate-only supervisor download from verified analytics."""
     try:
-        snapshot = get_analytics_overview(period=report_request.period)
+        snapshot = get_analytics_overview(
+            period=report_request.period,
+            tenant_context=tenant_context,
+        )
     except AnalyticsRangeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -933,19 +1176,38 @@ def mae_analytics_report_api(report_request: MAEAnalyticsReportRequest):
 
 
 @app.get("/api/analytics/widgets")
-def analytics_widgets_api(response: Response):
+def analytics_widgets_api(
+    response: Response,
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
+):
     response.headers["Cache-Control"] = "no-store"
-    return {"items": list_saved_widgets()}
+    try:
+        return {"items": list_saved_widgets(tenant_context=tenant_context)}
+    except TenantWidgetIsolationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.post("/api/analytics/widgets")
-def analytics_widget_save_api(widget: AnalyticsWidgetRequest, request: Request):
+def analytics_widget_save_api(
+    widget: AnalyticsWidgetRequest,
+    request: Request,
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
+):
     try:
         result = save_widget(
             title=widget.title,
             view_key=widget.view_key,
             created_by=_authenticated_user_email(request),
+            tenant_context=tenant_context,
         )
+    except TenantWidgetIsolationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not result.get("saved"):
@@ -954,8 +1216,17 @@ def analytics_widget_save_api(widget: AnalyticsWidgetRequest, request: Request):
 
 
 @app.post("/api/analytics/widgets/retire")
-def analytics_widget_retire_api(widget: AnalyticsWidgetRetireRequest):
-    result = retire_widget(widget_id=widget.widget_id)
+def analytics_widget_retire_api(
+    widget: AnalyticsWidgetRetireRequest,
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
+):
+    try:
+        result = retire_widget(widget_id=widget.widget_id, tenant_context=tenant_context)
+    except TenantWidgetIsolationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     if not result.get("saved"):
         raise HTTPException(status_code=404, detail=result.get("message") or "Widget not found.")
     return result
@@ -967,6 +1238,10 @@ def analytics_page(
     period: str = "30d",
     start: str = "",
     end: str = "",
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
 ):
     database_status = get_analytics_database_status()
     range_error = ""
@@ -975,6 +1250,7 @@ def analytics_page(
             period=period,
             start=start,
             end=end,
+            tenant_context=tenant_context,
         )
     except AnalyticsRangeError as exc:
         range_error = str(exc)
@@ -982,6 +1258,7 @@ def analytics_page(
             period="30d",
             start="",
             end="",
+            tenant_context=tenant_context,
         )
 
     return templates.TemplateResponse(
@@ -990,11 +1267,21 @@ def analytics_page(
         context={
             "database_status": database_status,
             "analytics_snapshot": analytics_snapshot,
-            "saved_widgets": list_saved_widgets(),
+            "county_branding": branding_for_tenant_context(tenant_context),
+            "saved_widgets": (
+                list_saved_widgets(tenant_context=tenant_context)
+                if tenant_context is not None
+                else []
+            ),
+            "saved_widgets_isolated": tenant_context is not None,
             "period_options": [
                 (key, value[0]) for key, value in PERIOD_OPTIONS.items()
             ],
             "range_error": range_error,
+            "cloud_analytics_unpopulated": (
+                settings.deployment_mode == "synthetic-disconnected"
+                and analytics_snapshot.get("metrics", {}).get("total_calls", 0) == 0
+            ),
             "version": "0.3.0",
         },
         headers={"Cache-Control": "no-store"},
@@ -1003,10 +1290,14 @@ def analytics_page(
 
 @app.get("/reports")
 def reports_page(request: Request):
+    cloud_reporting_available = settings.deployment_mode != "synthetic-disconnected"
     return templates.TemplateResponse(
         request=request,
         name="reports.html",
-        context={"version": "0.4.0"},
+        context={
+            "cloud_reporting_available": cloud_reporting_available,
+            "version": "0.4.0",
+        },
         headers={"Cache-Control": "no-store"},
     )
 
@@ -1014,9 +1305,24 @@ def reports_page(request: Request):
 @app.post("/api/reports/county-commission/jobs")
 def county_commission_job_start_api(
     report_request: CountyCommissionReportRequest,
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
 ):
+    if settings.deployment_mode == "synthetic-disconnected":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "County Commission reporting is unavailable until an approved "
+                "historical analytics import and cloud report source are configured."
+            ),
+        )
     try:
-        return start_county_commission_job(report_request.month)
+        return start_county_commission_job(
+            report_request.month,
+            tenant_context=tenant_context,
+        )
     except CountyCommissionReportBusyError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
@@ -1024,17 +1330,36 @@ def county_commission_job_start_api(
 
 
 @app.get("/api/reports/county-commission/jobs/{job_id}")
-def county_commission_job_api(job_id: str, response: Response):
+def county_commission_job_api(
+    job_id: str,
+    response: Response,
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
+):
     response.headers["Cache-Control"] = "no-store"
-    job = get_county_commission_job(job_id)
+    job = get_county_commission_job(
+        job_id,
+        tenant_context=tenant_context,
+    )
     if not job:
         raise HTTPException(status_code=404, detail="Monthly report job not found.")
     return job
 
 
 @app.get("/api/reports/county-commission/jobs/{job_id}/pdf")
-def county_commission_job_pdf_api(job_id: str):
-    job = get_county_commission_job(job_id)
+def county_commission_job_pdf_api(
+    job_id: str,
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
+):
+    job = get_county_commission_job(
+        job_id,
+        tenant_context=tenant_context,
+    )
     if not job:
         raise HTTPException(status_code=404, detail="Monthly report job not found.")
     if job.get("status") != "complete" or not job.get("result"):
@@ -1055,11 +1380,14 @@ def county_commission_job_pdf_api(job_id: str):
 
 @app.get("/mae")
 def mae_page(request: Request):
+    presentation = _cloud_presentation_status(get_knowledge_status())
     return templates.TemplateResponse(
         request=request,
         name="mae.html",
         context={
             "version": "0.3.0",
+            "cloud_mode": cloud_mode_enabled(settings),
+            "cloud_presentation_status": presentation,
         },
         headers={"Cache-Control": "no-store"},
     )
@@ -1067,11 +1395,13 @@ def mae_page(request: Request):
 
 @app.get("/integrations/health")
 def integrations_health_page(request: Request):
+    presentation = _cloud_presentation_status()
     return templates.TemplateResponse(
         request=request,
         name="integrations_health.html",
         context={
             "health": get_realtime_health(),
+            "cloud_presentation_status": presentation,
             "version": "0.3.0",
         },
         headers={"Cache-Control": "no-store"},
@@ -1080,14 +1410,15 @@ def integrations_health_page(request: Request):
 
 @app.get("/mae/reliability")
 def mae_reliability_page(request: Request):
+    cloud_isolated = settings.deployment_mode == "synthetic-disconnected"
     return templates.TemplateResponse(
         request=request,
         name="mae_reliability.html",
         context={
-            "evaluation_cases": list_evaluation_cases(),
-            "evaluation_summary": get_evaluation_summary(),
-            "feedback_items": list_feedback_review(),
-            "memory_items": list_memory_items(),
+            "evaluation_cases": [] if cloud_isolated else list_evaluation_cases(),
+            "evaluation_summary": ({"total_runs": 0, "pass_rate": 0, "average_duration_ms": 0} if cloud_isolated else get_evaluation_summary()),
+            "feedback_items": [] if cloud_isolated else list_feedback_review(),
+            "memory_items": [] if cloud_isolated else list_memory_items(),
             "version": "0.4.0",
         },
         headers={"Cache-Control": "no-store"},
@@ -1096,12 +1427,15 @@ def mae_reliability_page(request: Request):
 
 @app.get("/knowledge")
 def knowledge_page(request: Request):
+    knowledge_status = get_knowledge_status()
+    presentation = _cloud_presentation_status(knowledge_status)
     return templates.TemplateResponse(
         request=request,
         name="knowledge.html",
         context={
-            "knowledge_status": get_knowledge_status(),
+            "knowledge_status": knowledge_status,
             "documents": list_knowledge_documents(),
+            "cloud_presentation_status": presentation,
             "version": "0.3.0",
         },
         headers={"Cache-Control": "no-store"},
@@ -1337,14 +1671,15 @@ def mindshare_library_page(request: Request):
 
 @app.get("/mindshare/reliability")
 def mindshare_reliability_page(request: Request):
+    cloud_isolated = settings.deployment_mode == "synthetic-disconnected"
     return templates.TemplateResponse(
         request=request,
         name="mindshare_reliability.html",
         context={
-            "evaluation_cases": list_mindshare_evaluation_cases(),
-            "evaluation_summary": get_mindshare_evaluation_summary(),
-            "feedback_items": list_jack_feedback(),
-            "memory_items": list_jack_memory_items(),
+            "evaluation_cases": [] if cloud_isolated else list_mindshare_evaluation_cases(),
+            "evaluation_summary": ({"total_runs": 0, "pass_rate": 0, "average_duration_ms": 0, "recent_runs": []} if cloud_isolated else get_mindshare_evaluation_summary()),
+            "feedback_items": [] if cloud_isolated else list_jack_feedback(),
+            "memory_items": [] if cloud_isolated else list_jack_memory_items(),
             "version": "0.4.0",
         },
         headers={"Cache-Control": "no-store"},
@@ -1381,12 +1716,27 @@ def mindshare_radio_page(request: Request):
 
 @app.get("/voice")
 def voice_lab_page(request: Request):
+    cloud_voice = cloud_mode_enabled(settings)
+    status = cloud_ai_status(cloud_ai_config, cloud_ai_runtime) if cloud_voice else None
+    presentation = _cloud_presentation_status(get_knowledge_status()) if cloud_voice else None
     return templates.TemplateResponse(
         request=request,
         name="voice_lab.html",
         context={
-            "voices": VOICE_CHOICES,
-            "default_voice": settings.voice_tts_voice,
+            "voices": CLOUD_POLLY_VOICES if cloud_voice else VOICE_CHOICES,
+            "default_voice": (
+                cloud_ai_config.polly_voice.value
+                if cloud_voice
+                else settings.voice_tts_voice
+            ),
+            "cloud_voice": cloud_voice,
+            "voice_enabled": bool(status and status["voice_enabled"]),
+            "tts_enabled": bool(status and status["tts"]["ready"]),
+            "stt_enabled": bool(status and status["stt"]["ready"]),
+            "voice_disabled_reason": (
+                status["tts"]["disabled_reason"] if status else ""
+            ),
+            "cloud_presentation_status": presentation,
             "version": "0.1.0",
         },
         headers={"Cache-Control": "no-store"},
@@ -1396,17 +1746,68 @@ def voice_lab_page(request: Request):
 @app.get("/api/voice/status")
 def voice_status_api(response: Response):
     response.headers["Cache-Control"] = "no-store"
+    if cloud_mode_enabled(settings):
+        return cloud_ai_status(cloud_ai_config, cloud_ai_runtime)
     return get_voice_status()
 
 
+@app.get("/api/cloud-ai/status")
+def cloud_ai_status_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    if not cloud_mode_enabled(settings):
+        raise HTTPException(status_code=404, detail="Cloud AI is not configured here.")
+    return cloud_ai_status(cloud_ai_config, cloud_ai_runtime)
+
+
+@app.post("/api/cloud-ai/advisory")
+def cloud_ai_advisory_api(payload: CloudAdvisoryRequest):
+    if not cloud_mode_enabled(settings):
+        raise HTTPException(status_code=404, detail="Cloud AI is not configured here.")
+    return answer_cloud_advisory(
+        cloud_ai_runtime,
+        cloud_ai_config,
+        request_id=f"cloud-advisory-{secrets.token_hex(12)}",
+        question=payload.question.strip(),
+    )
+
+
 @app.post("/api/voice/speech")
-def voice_speech_api(payload: VoiceSpeechRequest):
+def voice_speech_api(
+    payload: VoiceSpeechRequest,
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
+):
+    if cloud_mode_enabled(settings):
+        if payload.response_format != "mp3":
+            raise HTTPException(status_code=400, detail="Cloud voice supports MP3 only.")
+        try:
+            audio = synthesize_cloud_speech(
+                cloud_ai_runtime,
+                cloud_ai_config,
+                request_id=f"cloud-polly-{secrets.token_hex(12)}",
+                text=payload.text.strip(),
+                voice=payload.voice or cloud_ai_config.polly_voice.value,
+            )
+        except CloudAiRuntimeUnavailable as exc:
+            status = cloud_ai_status(cloud_ai_config, cloud_ai_runtime)
+            raise HTTPException(
+                status_code=503,
+                detail=status["tts"]["disabled_reason"] or str(exc),
+            ) from exc
+        return Response(
+            content=audio,
+            media_type="audio/mpeg",
+            headers={"Cache-Control": "no-store"},
+        )
     try:
         audio, media_type = synthesize_speech(
             payload.text.strip(),
             voice=payload.voice,
             speed=payload.speed,
             response_format=payload.response_format,
+            tenant_context=tenant_context,
         )
     except VoiceServiceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -1432,6 +1833,13 @@ async def voice_transcribe_api(file: UploadFile = File(...)):
         raise HTTPException(
             status_code=413,
             detail="The recording exceeds the 20 MB beta limit.",
+        )
+
+    if cloud_mode_enabled(settings):
+        status = cloud_ai_status(cloud_ai_config, cloud_ai_runtime)
+        raise HTTPException(
+            status_code=503,
+            detail=status["disabled_reason"] or "Cloud transcription is unavailable.",
         )
 
     try:
@@ -1477,6 +1885,7 @@ def mindshare_chat_api(
     request: Request,
     response: Response,
 ):
+    _deny_unscoped_cloud_advisory_state()
     response.headers["Cache-Control"] = "no-store"
     try:
         result = ask_mindshare(
@@ -1497,6 +1906,7 @@ def mindshare_chat_api(
 
 @app.post("/api/mindshare/chat/stream")
 def mindshare_chat_stream_api(chat_request: MindshareChatRequest, request: Request):
+    _deny_unscoped_cloud_advisory_state()
     events: Queue[dict] = Queue()
     history = [message.model_dump() for message in chat_request.history]
     user_email = _authenticated_user_email(request)
@@ -1543,6 +1953,7 @@ def mindshare_feedback_api(
     request: Request,
     response: Response,
 ):
+    _deny_unscoped_cloud_advisory_state()
     response.headers["Cache-Control"] = "no-store"
     try:
         result = record_jack_feedback(
@@ -1564,6 +1975,8 @@ def mindshare_feedback_api(
 @app.get("/api/mindshare/memory")
 def jack_memory_api(response: Response):
     response.headers["Cache-Control"] = "no-store"
+    if settings.deployment_mode == "synthetic-disconnected":
+        return {"items": [], "available": False}
     return {"items": list_jack_memory_items()}
 
 
@@ -1573,6 +1986,7 @@ def jack_memory_create_api(
     request: Request,
     response: Response,
 ):
+    _deny_unscoped_cloud_advisory_state()
     response.headers["Cache-Control"] = "no-store"
     try:
         result = create_jack_memory_candidate(
@@ -1598,6 +2012,7 @@ def jack_memory_review_api(
     request: Request,
     response: Response,
 ):
+    _deny_unscoped_cloud_advisory_state()
     response.headers["Cache-Control"] = "no-store"
     try:
         result = review_jack_memory(
@@ -1618,6 +2033,8 @@ def jack_memory_review_api(
 @app.get("/api/mindshare/evaluations")
 def mindshare_evaluations_api(response: Response):
     response.headers["Cache-Control"] = "no-store"
+    if settings.deployment_mode == "synthetic-disconnected":
+        return {"cases": [], "summary": {}, "available": False}
     return {
         "cases": list_mindshare_evaluation_cases(),
         "summary": get_mindshare_evaluation_summary(),
@@ -1630,6 +2047,7 @@ def mindshare_evaluation_run_api(
     request: Request,
     response: Response,
 ):
+    _deny_unscoped_cloud_advisory_state()
     response.headers["Cache-Control"] = "no-store"
     try:
         return run_mindshare_evaluation_case(
@@ -1654,6 +2072,29 @@ def mindshare_coverage_api(response: Response):
 @app.get("/api/mae/status")
 def mae_status_api(response: Response):
     response.headers["Cache-Control"] = "no-store"
+    if cloud_mode_enabled(settings):
+        presentation = _cloud_presentation_status(get_knowledge_status())
+        return {
+            "mae": "Mission Assistance Engine",
+            "mode": "Inquiry only",
+            "write_access": False,
+            "local_ai": {
+                "connected": presentation["advisory"]["ready"],
+                "model": "Citation-only cloud advisory",
+                "installed_models": [],
+                "error": presentation["advisory"]["notice"],
+            },
+            "database": get_analytics_database_status(),
+            "centralsquare": {
+                "configured": presentation["source"]["provider_selected"],
+                "connected": presentation["source"]["connected"],
+                "mode": presentation["source"]["label"],
+                "notice": presentation["source"]["notice"],
+            },
+            "knowledge": dict(presentation["knowledge"]),
+            "voice": dict(presentation["voice"]),
+            "tools": get_mae_tool_catalog(),
+        }
     return get_mae_status()
 
 
@@ -1668,14 +2109,21 @@ def mae_chat_api(
     chat_request: MAEChatRequest,
     request: Request,
     response: Response,
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
 ):
+    _deny_unscoped_cloud_advisory_state()
     response.headers["Cache-Control"] = "no-store"
     try:
         result = ask_mae(
             chat_request.question,
             [message.model_dump() for message in chat_request.history],
             chat_request.entities.model_dump(),
+            tenant_context=tenant_context,
         )
+
         audit = record_mae_interaction(
             user_email=_authenticated_user_email(request),
             question=chat_request.question,
@@ -1689,7 +2137,15 @@ def mae_chat_api(
 
 
 @app.post("/api/mae/chat/stream")
-def mae_chat_stream_api(chat_request: MAEChatRequest, request: Request):
+def mae_chat_stream_api(
+    chat_request: MAEChatRequest,
+    request: Request,
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
+):
+    _deny_unscoped_cloud_advisory_state()
     events: Queue[dict] = Queue()
     history = [message.model_dump() for message in chat_request.history]
     entities = chat_request.entities.model_dump()
@@ -1702,6 +2158,7 @@ def mae_chat_stream_api(chat_request: MAEChatRequest, request: Request):
                 history,
                 entities,
                 token_callback=lambda token: events.put({"type": "token", "text": token}),
+                tenant_context=tenant_context,
             )
             audit = record_mae_interaction(
                 user_email=user_email,
@@ -1738,6 +2195,7 @@ def mae_feedback_api(
     request: Request,
     response: Response,
 ):
+    _deny_unscoped_cloud_advisory_state()
     response.headers["Cache-Control"] = "no-store"
     try:
         result = record_mae_feedback(
@@ -1759,6 +2217,8 @@ def mae_feedback_api(
 @app.get("/api/mae/evaluations")
 def mae_evaluations_api(response: Response):
     response.headers["Cache-Control"] = "no-store"
+    if settings.deployment_mode == "synthetic-disconnected":
+        return {"cases": [], "summary": {}, "available": False}
     return {
         "cases": list_evaluation_cases(),
         "summary": get_evaluation_summary(),
@@ -1770,12 +2230,18 @@ def mae_evaluation_run_api(
     evaluation_request: MAEEvaluationRunRequest,
     request: Request,
     response: Response,
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
 ):
+    _deny_unscoped_cloud_advisory_state()
     response.headers["Cache-Control"] = "no-store"
     try:
         return run_evaluation_case(
             evaluation_request.case_id,
             requested_by=_authenticated_user_email(request),
+            tenant_context=tenant_context,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -1784,12 +2250,16 @@ def mae_evaluation_run_api(
 @app.get("/api/mae/feedback/review")
 def mae_feedback_review_api(response: Response):
     response.headers["Cache-Control"] = "no-store"
+    if settings.deployment_mode == "synthetic-disconnected":
+        return {"feedback": [], "available": False}
     return {"feedback": list_feedback_review()}
 
 
 @app.get("/api/mae/memory")
 def mae_memory_api(response: Response):
     response.headers["Cache-Control"] = "no-store"
+    if settings.deployment_mode == "synthetic-disconnected":
+        return {"items": [], "available": False}
     return {"items": list_memory_items()}
 
 
@@ -1799,6 +2269,7 @@ def mae_memory_create_api(
     request: Request,
     response: Response,
 ):
+    _deny_unscoped_cloud_advisory_state()
     response.headers["Cache-Control"] = "no-store"
     try:
         result = create_memory_candidate(
@@ -1824,6 +2295,7 @@ def mae_memory_review_api(
     request: Request,
     response: Response,
 ):
+    _deny_unscoped_cloud_advisory_state()
     response.headers["Cache-Control"] = "no-store"
     try:
         result = review_memory(

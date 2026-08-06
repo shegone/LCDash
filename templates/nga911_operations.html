@@ -1,12 +1,13 @@
 {% extends "layouts/nga911_base.html" if standalone else "layouts/base.html" %}
-{% block title %}Logan Live Network | NGA911 Intelligence{% endblock %}
+{% block title %}Logan Network Simulation | NGA911 Intelligence{% endblock %}
 {% block page_styles %}<link rel="stylesheet" href="/static/css/lcdash-nga911.css?v=0.3.1">{% endblock %}
 {% block content %}
+<div class="command-safety-banner mb-4" role="note">Browser-only synthetic simulation. No ESInet, NGCS, call-routing, dispatch, alerting, paging, tone, CAD, or operational acknowledgment action is available.</div>
 <section class="nga-ops-header glass">
-  <div><div class="nga-kicker">DIRECTOR OPERATIONS VIEW</div><h1>Logan 911 Live Network</h1><p>Five diverse paths protecting six cloud call-handling positions.</p></div>
-  <div class="nga-ops-actions"><span class="nga-demo-pill">{{ operations.environment_label }}</span><button id="nga-enable-alerts" class="btn btn-outline-info"><i class="bi bi-bell-fill"></i> Enable alerts</button><button id="nga-test-disruption" class="btn btn-warning fw-bold"><i class="bi bi-lightning-charge-fill"></i> Run disruption test</button></div>
+  <div><div class="nga-kicker">DIRECTOR SIMULATION VIEW</div><h1>Logan Nine One One Network Simulation</h1><p>Browser-only demonstration of five conceptual paths and six simulated positions.</p></div>
+  <div class="nga-ops-actions"><span class="nga-demo-pill">{{ operations.environment_label }}</span><button id="nga-test-disruption" class="btn btn-warning fw-bold"><i class="bi bi-lightning-charge-fill"></i> Run visual simulation</button></div>
 </section>
-<div id="nga-push-alert" class="nga-push-alert" role="alert" aria-live="assertive" hidden><div class="nga-alert-icon"><i class="bi bi-exclamation-triangle-fill"></i></div><div><span>SIMULATED CRITICAL NETWORK ALERT</span><strong id="nga-alert-title">Verizon Fiber connection lost</strong><p id="nga-alert-message">Four alternate paths continue protecting Logan County 911.</p></div><a id="nga-alert-detail" href="{{ '/nga911/events/evt-logan-test-verizon-fiber' if standalone else '/nga911-intelligence/events/evt-logan-test-verizon-fiber' }}">View details <i class="bi bi-arrow-right"></i></a><button id="nga-dismiss-alert" aria-label="Dismiss alert"><i class="bi bi-x-lg"></i></button></div>
+<div id="nga-push-alert" class="nga-push-alert" role="alert" aria-live="assertive" hidden><div class="nga-alert-icon"><i class="bi bi-exclamation-triangle-fill"></i></div><div><span>SIMULATED CRITICAL NETWORK ALERT</span><strong id="nga-alert-title">Verizon Fiber connection lost</strong><p id="nga-alert-message">Four alternate paths continue protecting Logan County 911.</p></div><a id="nga-alert-detail" href="{{ '/nga911/events/evt-logan-test-verizon-fiber' if standalone else '/nga911-intelligence/events/evt-logan-test-verizon-fiber' }}">View simulation details <i class="bi bi-arrow-right"></i></a><button id="nga-dismiss-alert" aria-label="Dismiss simulated alert"><i class="bi bi-x-lg"></i></button></div>
 
 <section class="nga-network-map glass">
   <div class="nga-network-node core"><img class="nga-nexis-connect-mark" src="/static/img/nexis-connect-official-logo.png" alt="NEXiS Connect"><span>NG911 CORE</span><strong>{{ operations.core.name }}</strong><small>{{ operations.core.region }}</small></div>

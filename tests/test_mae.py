@@ -107,7 +107,7 @@ class MAEPageTests(unittest.TestCase):
         self.assertEqual(response.headers["content-type"], "application/pdf")
         self.assertEqual(response.headers["cache-control"], "no-store")
         self.assertIn("attachment", response.headers["content-disposition"])
-        analytics_mock.assert_called_once_with(period="7d")
+        analytics_mock.assert_called_once_with(period="7d", tenant_context=None)
         report_mock.assert_called_once_with(analytics_mock.return_value, "")
 
     @patch("app.main.get_analytics_overview", return_value={"available": False})
@@ -119,7 +119,7 @@ class MAEPageTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.headers["content-type"], "application/json")
-        analytics_mock.assert_called_once_with(period="7d")
+        analytics_mock.assert_called_once_with(period="7d", tenant_context=None)
 
     @patch("app.main.record_mae_interaction")
     @patch("app.main.ask_mae")
@@ -167,7 +167,13 @@ class MAEPageTests(unittest.TestCase):
     @patch("app.main.record_mae_interaction")
     @patch("app.main.ask_mae")
     def test_stream_endpoint_emits_tokens_and_final_payload(self, ask_mock, audit_mock):
-        def streamed(question, history, entities, token_callback=None):
+        def streamed(
+            question,
+            history,
+            entities,
+            token_callback=None,
+            tenant_context=None,
+        ):
             token_callback("Three active calls.")
             return {"answer": "Three active calls.", "sources": [], "write_access": False}
 

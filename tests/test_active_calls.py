@@ -9,6 +9,17 @@ from app.services.centralsquare import CentralSquareAPIError
 from app.services.operations_service import build_dashboard_stats
 
 
+CONNECTED_PRESENTATION = {
+    "source": {
+        "connected": True,
+        "label": "VERIFIED READ-ONLY",
+        "notice": "Synthetic test fixture for a verified read.",
+        "may_display_snapshot": True,
+        "age_seconds": 0,
+    }
+}
+
+
 class ActiveCallsPageTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
@@ -39,8 +50,9 @@ class ActiveCallsPageTests(unittest.TestCase):
             "unit_stats": {},
         }
 
-    @patch("app.main.get_live_operations_snapshot")
-    def test_active_calls_page_renders_normalized_call(self, snapshot_mock):
+    @patch("app.main._cloud_presentation_status", return_value=CONNECTED_PRESENTATION)
+    @patch("app.main._current_operations_snapshot")
+    def test_active_calls_page_renders_normalized_call(self, snapshot_mock, _presentation_mock):
         snapshot_mock.return_value = self.snapshot
 
         response = self.client.get("/active-calls")
@@ -53,26 +65,27 @@ class ActiveCallsPageTests(unittest.TestCase):
         self.assertIn('data-agency="leasa"', response.text)
         self.assertIn('href="/calls/CFS26-10001"', response.text)
 
-    @patch("app.main.get_live_operations_snapshot")
+    @patch("app.main._current_operations_snapshot")
     def test_active_calls_page_has_disconnected_state(self, snapshot_mock):
         snapshot_mock.side_effect = CentralSquareAPIError("test outage")
 
         response = self.client.get("/active-calls")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Disconnected", response.text)
+        self.assertIn("SYNTHETIC / DISCONNECTED", response.text)
         self.assertIn("active-call list could not be loaded", response.text)
         self.assertNotIn("test outage", response.text)
 
     def test_sidebar_links_to_active_calls_page(self):
-        with patch("app.main.get_live_operations_snapshot", return_value=self.snapshot):
+        with patch("app.main._current_operations_snapshot", return_value=self.snapshot):
             response = self.client.get("/dashboard")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn('href="/active-calls"', response.text)
 
-    @patch("app.main.get_live_operations_snapshot")
-    def test_dashboard_uses_background_snapshot_refresh(self, snapshot_mock):
+    @patch("app.main._cloud_presentation_status", return_value=CONNECTED_PRESENTATION)
+    @patch("app.main._current_operations_snapshot")
+    def test_dashboard_uses_background_snapshot_refresh(self, snapshot_mock, _presentation_mock):
         snapshot_mock.return_value = self.snapshot
 
         response = self.client.get("/dashboard")
@@ -90,8 +103,9 @@ class ActiveCallsPageTests(unittest.TestCase):
         self.assertIn('rel="noopener"', response.text)
         self.assertNotIn("window.location.reload()", response.text)
 
-    @patch("app.main.get_live_operations_snapshot")
-    def test_operations_snapshot_is_no_store(self, snapshot_mock):
+    @patch("app.main._cloud_presentation_status", return_value=CONNECTED_PRESENTATION)
+    @patch("app.main._current_operations_snapshot")
+    def test_operations_snapshot_is_no_store(self, snapshot_mock, _presentation_mock):
         snapshot_mock.return_value = self.snapshot
 
         response = self.client.get("/api/operations/snapshot")
@@ -114,7 +128,7 @@ class ActiveCallsPageTests(unittest.TestCase):
         self.assertIn("existing?.dataset.callFingerprint === fingerprint", response.text)
         self.assertIn("grid.insertBefore(column, cursor)", response.text)
         self.assertIn("last known data", response.text)
-        self.assertIn('"STREAMING"', response.text)
+        self.assertIn('"UPDATE CHANNEL"', response.text)
         self.assertIn('"30S BACKUP"', response.text)
         self.assertIn("handleRealtimeEvent", response.text)
         self.assertIn("refreshPending = true", response.text)
@@ -123,8 +137,9 @@ class ActiveCallsPageTests(unittest.TestCase):
         self.assertIn('element("dashboard-refresh-button")?.addEventListener', response.text)
         self.assertNotIn("window.location.reload", response.text)
 
-    @patch("app.main.get_live_operations_snapshot")
-    def test_active_calls_page_distinguishes_connected_empty_state(self, snapshot_mock):
+    @patch("app.main._cloud_presentation_status", return_value=CONNECTED_PRESENTATION)
+    @patch("app.main._current_operations_snapshot")
+    def test_active_calls_page_distinguishes_connected_empty_state(self, snapshot_mock, _presentation_mock):
         empty_snapshot = {
             **self.snapshot,
             "calls": [],
@@ -144,8 +159,9 @@ class ActiveCallsPageTests(unittest.TestCase):
         self.assertIn("No active calls returned from CAD", response.text)
         self.assertNotIn("active-call list could not be loaded", response.text)
 
-    @patch("app.main.get_live_operations_snapshot")
-    def test_active_calls_page_escapes_cad_text(self, snapshot_mock):
+    @patch("app.main._cloud_presentation_status", return_value=CONNECTED_PRESENTATION)
+    @patch("app.main._current_operations_snapshot")
+    def test_active_calls_page_escapes_cad_text(self, snapshot_mock, _presentation_mock):
         unsafe_snapshot = {
             **self.snapshot,
             "calls": [

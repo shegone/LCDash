@@ -98,6 +98,13 @@
       "layers": ["roads", "stations", "response_zones"]
     }
   ],
+  "heatmap_configuration": {
+    "min_latitude": 37.40,
+    "max_latitude": 38.40,
+    "min_longitude": -82.60,
+    "max_longitude": -81.40,
+    "grid_degrees": 0.01
+  },
   "identity_federation": {
     "provider": "synthetic-cognito",
     "trusted_tenant_claim": "custom:tenant_id",

@@ -1,8 +1,16 @@
 from datetime import datetime, timezone
+from typing import Mapping
 
+from app.core.county_profiles import resolve_county_profile
+from app.core.tenancy import CountyProfile, TenantContext
+from app.core.tenant_authorization import (
+    TenantAuthorizationDenied,
+    authorize_tenant_action,
+)
 from app.integrations.cad.centralsquare import (
     CentralSquareCadAdapter as CentralSquareClient,
 )
+from app.integrations.contracts import ModuleCapability
 from app.services.centralsquare import CentralSquareAPIError
 
 
@@ -176,7 +184,34 @@ def _extract_unit_position(unit: dict) -> dict:
     selected_position.pop("source_rank", None)
     return selected_position
 
-def normalize_unit(unit: dict) -> dict:
+def _configured_unit_status(
+    status: dict,
+    status_mappings: Mapping[str, str] | None,
+) -> str:
+    inherited_status = _dropdown_text(status, "Description", "Abbreviation") or "Unknown"
+    if not status_mappings:
+        return inherited_status
+
+    for source_value in (
+        _dropdown_text(status, "Abbreviation"),
+        _dropdown_text(status, "Code"),
+        _dropdown_text(status, "Description"),
+    ):
+        if not source_value:
+            continue
+        configured = status_mappings.get(source_value)
+        if configured is None:
+            configured = status_mappings.get(source_value.upper())
+        if configured:
+            return configured
+
+    return inherited_status
+
+
+def normalize_unit(
+    unit: dict,
+    status_mappings: Mapping[str, str] | None = None,
+) -> dict:
     status = unit.get("Status") or unit.get("CurrentStatus") or unit.get("UnitStatus") or {}
     agency = unit.get("Agency") or {}
     unit_type = unit.get("UnitType") or {}
@@ -209,7 +244,7 @@ def normalize_unit(unit: dict) -> dict:
         ),
         "responder_username": _safe_text(responder.get("Username")),
         "responder_call_sign": _safe_text(responder.get("CallSign")),
-        "status": _dropdown_text(status, "Description", "Abbreviation") or "Unknown",
+        "status": _configured_unit_status(status, status_mappings),
         "status_abbreviation": _dropdown_text(status, "Abbreviation"),
         "last_status_time": _safe_text(unit.get("LastStatusTime")),
         "last_assigned_time": _safe_text(unit.get("LastAssignedTime")),
@@ -256,7 +291,25 @@ def classify_unit(unit: dict) -> str:
     return "unknown"
 
 
-def get_all_units(client: CentralSquareClient | None = None) -> list:
+def get_all_units(
+    client: CentralSquareClient | None = None,
+    county_profile: CountyProfile | None = None,
+    *,
+    tenant_context: TenantContext | None = None,
+) -> list:
+    if tenant_context is not None:
+        if county_profile is not None:
+            raise TenantAuthorizationDenied(
+                "Trusted context and direct county profile cannot be combined."
+            )
+        county_profile = resolve_county_profile(tenant_context)
+        authorize_tenant_action(
+            tenant_context,
+            county_profile,
+            ModuleCapability.UNITS,
+            "read",
+        )
+
     client = client or CentralSquareClient()
     raw_units = []
     skip = 0
@@ -286,7 +339,14 @@ def get_all_units(client: CentralSquareClient | None = None) -> list:
     units_by_number = {}
 
     for raw_unit in raw_units:
-        unit = normalize_unit(raw_unit)
+        unit = normalize_unit(
+            raw_unit,
+            status_mappings=(
+                county_profile.unit_status_mappings
+                if county_profile is not None
+                else None
+            ),
+        )
         unit_number = unit.get("unit_number") or ""
 
         if not unit_number:

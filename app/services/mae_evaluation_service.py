@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import json
 from time import perf_counter
 
+from app.core.tenancy import TenantContext
 from app.services.analytics_database import (
     AnalyticsDatabaseError,
     AnalyticsRepository,
@@ -199,7 +200,11 @@ def _save_run(
         return False
 
 
-def run_evaluation_case(case_id: str, requested_by: str = "") -> dict:
+def run_evaluation_case(
+    case_id: str,
+    requested_by: str = "",
+    tenant_context: TenantContext | None = None,
+) -> dict:
     case = get_evaluation_case(case_id)
     if not case:
         raise ValueError("Unknown MAE evaluation case.")
@@ -209,7 +214,15 @@ def run_evaluation_case(case_id: str, requested_by: str = "") -> dict:
     started = perf_counter()
     error_summary = ""
     try:
-        result = ask_mae(case["question"], [], {})
+        if tenant_context is None:
+            result = ask_mae(case["question"], [], {})
+        else:
+            result = ask_mae(
+                case["question"],
+                [],
+                {},
+                tenant_context=tenant_context,
+            )
     except Exception as exc:
         result = {
             "answer": "",

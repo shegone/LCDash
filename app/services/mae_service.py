@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 import httpx
 
 from app.config.settings import settings
+from app.core.tenancy import TenantContext
 from app.services.analytics_database import (
     AnalyticsDatabaseError,
     AnalyticsRepository,
@@ -991,7 +992,10 @@ def _append_live_operations_context(
         )
 
 
-def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
+def _build_read_context(
+    question: str,
+    tenant_context: TenantContext | None = None,
+) -> tuple[list[dict], list[dict]]:
     context: list[dict] = []
     sources: list[dict] = []
     analytics_for_comparison: dict | None = None
@@ -1332,7 +1336,13 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
             )
     elif wants_analytics:
         period = _period_from_question(question)
-        analytics = get_analytics_overview(period=period)
+        if tenant_context is None:
+            analytics = get_analytics_overview(period=period)
+        else:
+            analytics = get_analytics_overview(
+                period=period,
+                tenant_context=tenant_context,
+            )
         analytics_for_comparison = analytics
         analytics_context = _trim_rows(analytics)
         analytics_context["daily_volume"] = _trim_rows(
@@ -3133,6 +3143,7 @@ def ask_mae(
     history: list[dict] | None = None,
     conversation_entities: dict | None = None,
     token_callback: Callable[[str], None] | None = None,
+    tenant_context: TenantContext | None = None,
 ) -> dict:
     request_started = perf_counter()
     clean_question = (question or "").strip()
@@ -3177,7 +3188,10 @@ def ask_mae(
         conversation_entities,
     )
     retrieval_started = perf_counter()
-    context, sources = _build_read_context(routing_question)
+    context, sources = _build_read_context(
+        routing_question,
+        tenant_context=tenant_context,
+    )
     retrieval_ms = max(int((perf_counter() - retrieval_started) * 1000), 0)
     verified_answer = (
         _verified_ambiguous_call_answer(

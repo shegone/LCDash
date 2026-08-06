@@ -121,7 +121,7 @@
             );
             setText(
                 "integration-stream-detail",
-                "Browser event streaming is unavailable"
+                "Browser update channel is unavailable"
             );
             return;
         }
@@ -130,18 +130,18 @@
         source.addEventListener("open", function () {
             setStatusValue(
                 "integration-stream-status",
-                "STREAMING",
+                "UPDATE CHANNEL",
                 "is-good"
             );
             setText(
                 "integration-stream-detail",
-                "Protected browser stream connected"
+                "Application update channel open; CAD availability is shown separately"
             );
         });
         source.addEventListener("operations_changed", function () {
             setText(
                 "integration-stream-detail",
-                "CAD event received " + new Date().toLocaleTimeString()
+                "Application update received " + new Date().toLocaleTimeString()
             );
             window.setTimeout(refreshHealth, 350);
         });
@@ -153,7 +153,7 @@
             );
             setText(
                 "integration-stream-detail",
-                "Stream reconnecting automatically"
+                "Update channel reconnecting automatically"
             );
         });
     }

@@ -12,6 +12,13 @@ from pathlib import Path
 from typing import Any
 
 from app.config.settings import settings
+from app.core.county_profiles import resolve_county_profile
+from app.core.tenancy import CountyProfile, TenantContext
+from app.core.tenant_authorization import (
+    TenantAuthorizationDenied,
+    authorize_tenant_action,
+)
+from app.integrations.contracts import ModuleCapability
 
 
 REFERENCE_LAYERS: dict[str, dict[str, Any]] = {
@@ -70,10 +77,31 @@ def _reference_path(layer: str) -> Path:
     return Path(settings.gis_reference_dir) / REFERENCE_LAYERS[layer]["file"]
 
 
-def available_reference_layers() -> list[dict[str, str | bool]]:
+def _profile_reference_layers(county_profile: CountyProfile) -> frozenset[str]:
+    return frozenset(
+        str(layer)
+        for source in county_profile.gis_sources
+        if source.get("source_type") in {
+            "synthetic_geojson",
+            "authoritative_reference",
+        }
+        for layer in source.get("layers", ())
+    )
+
+
+def available_reference_layers(
+    county_profile: CountyProfile | None = None,
+) -> list[dict[str, str | bool]]:
     """Return a catalog only; no geometry or raw GIS metadata is exposed."""
+    configured_layers = (
+        _profile_reference_layers(county_profile)
+        if county_profile is not None
+        else None
+    )
     available = []
     for layer, definition in REFERENCE_LAYERS.items():
+        if configured_layers is not None and layer not in configured_layers:
+            continue
         if _reference_path(layer).is_file():
             available.append(
                 {
@@ -83,6 +111,22 @@ def available_reference_layers() -> list[dict[str, str | bool]]:
                 }
             )
     return available
+
+
+def get_reference_catalog(
+    tenant_context: TenantContext | None = None,
+) -> dict[str, list[dict[str, str | bool]]]:
+    """Build the read-only catalog from a trusted context or legacy default."""
+    county_profile = None
+    if tenant_context is not None:
+        county_profile = resolve_county_profile(tenant_context)
+        authorize_tenant_action(
+            tenant_context,
+            county_profile,
+            ModuleCapability.GIS,
+            "read",
+        )
+    return {"layers": available_reference_layers(county_profile)}
 
 
 def _minimized_feature(feature: dict, definition: dict[str, Any]) -> dict | None:
@@ -104,9 +148,31 @@ def _minimized_feature(feature: dict, definition: dict[str, Any]) -> dict | None
     }
 
 
-def get_reference_layer(layer: str) -> dict | None:
+def get_reference_layer(
+    layer: str,
+    county_profile: CountyProfile | None = None,
+    *,
+    tenant_context: TenantContext | None = None,
+) -> dict | None:
     """Load a reviewed static layer, removing all unapproved source fields."""
+    if tenant_context is not None:
+        if county_profile is not None:
+            raise TenantAuthorizationDenied(
+                "Trusted context and direct county profile cannot be combined."
+            )
+        county_profile = resolve_county_profile(tenant_context)
+        authorize_tenant_action(
+            tenant_context,
+            county_profile,
+            ModuleCapability.GIS,
+            "read",
+        )
     if layer not in REFERENCE_LAYERS:
+        return None
+    if (
+        county_profile is not None
+        and layer not in _profile_reference_layers(county_profile)
+    ):
         return None
 
     path = _reference_path(layer)

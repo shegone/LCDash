@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lcdash.local/schema/cloud-ai-provider-v1.json",
+  "title": "LCDash dormant cloud AI provider configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["mode", "tenant_id", "action_tools"],
+  "properties": {
+    "mode": {"enum": ["disabled", "advisory-rag"]},
+    "tenant_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"},
+    "knowledge_base_id": {"type": "string", "pattern": "^$|^[A-Z0-9]{10}$"},
+    "documents_ingested": {"type": "boolean", "default": false},
+    "generation_model_id": {
+      "enum": ["amazon.nova-micro-v1:0", "amazon.nova-lite-v1:0"]
+    },
+    "max_output_tokens": {"type": "integer", "minimum": 64, "maximum": 1024},
+    "retrieval_result_limit": {"type": "integer", "minimum": 1, "maximum": 10},
+    "retrieval_score_threshold": {"type": "number", "minimum": 0, "maximum": 1},
+    "allowed_s3_prefixes": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^s3://[^/]+/.+/$"},
+      "uniqueItems": true
+    },
+    "polly_voice": {"enum": ["Matthew", "Joanna"]},
+    "transcribe_language_code": {"const": "en-US"},
+    "voice_enabled": {"type": "boolean", "default": false},
+    "max_input_audio_bytes": {"type": "integer", "minimum": 1, "maximum": 2000000},
+    "max_transcript_characters": {"type": "integer", "minimum": 1, "maximum": 4000},
+    "max_synthesized_audio_bytes": {"type": "integer", "minimum": 1, "maximum": 5000000},
+    "action_tools": {"type": "array", "maxItems": 0}
+  }
+}

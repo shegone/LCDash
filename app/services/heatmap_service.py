@@ -1,6 +1,14 @@
 from datetime import datetime, timedelta, timezone
 from math import floor
 
+from app.config.settings import settings
+from app.core.county_profiles import (
+    resolve_county_profile,
+    validate_heatmap_configuration,
+)
+from app.core.tenancy import CountyProfile, TenantContext
+from app.core.tenant_authorization import authorize_tenant_action
+from app.integrations.contracts import ModuleCapability
 from app.services.cad_service import simplify_call
 from app.integrations.cad.centralsquare import (
     CentralSquareCadAdapter as CentralSquareClient,
@@ -45,25 +53,52 @@ def _parse_datetime(value: str) -> datetime | None:
         return None
 
 
-def _within_operating_extent(latitude: float, longitude: float) -> bool:
+def _heatmap_geometry(
+    county_profile: CountyProfile | None = None,
+) -> dict[str, float]:
+    if county_profile is None:
+        return {
+            "min_latitude": MIN_LATITUDE,
+            "max_latitude": MAX_LATITUDE,
+            "min_longitude": MIN_LONGITUDE,
+            "max_longitude": MAX_LONGITUDE,
+            "grid_degrees": HEATMAP_GRID_DEGREES,
+        }
+    if not isinstance(county_profile, CountyProfile):
+        raise ValueError("CountyProfile is required for configured heatmap geometry.")
+    return dict(validate_heatmap_configuration(county_profile.heatmap_configuration))
+
+
+def _within_operating_extent(
+    latitude: float,
+    longitude: float,
+    geometry: dict[str, float],
+) -> bool:
     return (
-        MIN_LATITUDE <= latitude <= MAX_LATITUDE
-        and MIN_LONGITUDE <= longitude <= MAX_LONGITUDE
+        geometry["min_latitude"] <= latitude <= geometry["max_latitude"]
+        and geometry["min_longitude"] <= longitude <= geometry["max_longitude"]
     )
 
 
-def _grid_cell(latitude: float, longitude: float) -> tuple[int, int]:
+def _grid_cell(
+    latitude: float,
+    longitude: float,
+    grid_degrees: float,
+) -> tuple[int, int]:
     return (
-        floor(latitude / HEATMAP_GRID_DEGREES),
-        floor(longitude / HEATMAP_GRID_DEGREES),
+        floor(latitude / grid_degrees),
+        floor(longitude / grid_degrees),
     )
 
 
-def _grid_center(cell: tuple[int, int]) -> tuple[float, float]:
+def _grid_center(
+    cell: tuple[int, int],
+    grid_degrees: float,
+) -> tuple[float, float]:
     latitude_index, longitude_index = cell
     return (
-        round((latitude_index + 0.5) * HEATMAP_GRID_DEGREES, 5),
-        round((longitude_index + 0.5) * HEATMAP_GRID_DEGREES, 5),
+        round((latitude_index + 0.5) * grid_degrees, 5),
+        round((longitude_index + 0.5) * grid_degrees, 5),
     )
 
 
@@ -120,7 +155,10 @@ def build_heatmap_snapshot(
     raw_calls: list,
     hours: int,
     now: datetime | None = None,
+    county_profile: CountyProfile | None = None,
 ) -> dict:
+    geometry = _heatmap_geometry(county_profile)
+    grid_degrees = geometry["grid_degrees"]
     hours = validate_heatmap_hours(hours)
     current_time = now or datetime.now(timezone.utc)
     if current_time.tzinfo is None:
@@ -154,11 +192,15 @@ def build_heatmap_snapshot(
 
         latitude_value = float(latitude)
         longitude_value = float(longitude)
-        if not _within_operating_extent(latitude_value, longitude_value):
+        if not _within_operating_extent(
+            latitude_value,
+            longitude_value,
+            geometry,
+        ):
             outside_extent_calls += 1
             continue
 
-        cell_key = _grid_cell(latitude_value, longitude_value)
+        cell_key = _grid_cell(latitude_value, longitude_value, grid_degrees)
         cell = cells.setdefault(
             cell_key,
             {
@@ -177,7 +219,10 @@ def build_heatmap_snapshot(
 
     features = []
     for cell_key, cell in sorted(cells.items()):
-        latitude_center, longitude_center = _grid_center(cell_key)
+        latitude_center, longitude_center = _grid_center(
+            cell_key,
+            grid_degrees,
+        )
         features.append(
             {
                 "type": "Feature",
@@ -262,7 +307,27 @@ def get_live_heatmap_snapshot(
     hours: int,
     client: CentralSquareClient | None = None,
     now: datetime | None = None,
+    tenant_context: TenantContext | None = None,
 ) -> dict:
+    if settings.deployment_mode == "synthetic-disconnected":
+        return build_empty_heatmap_snapshot(hours)
+
+    county_profile: CountyProfile | None = None
+    if tenant_context is not None:
+        county_profile = resolve_county_profile(tenant_context)
+        authorize_tenant_action(
+            tenant_context,
+            county_profile,
+            ModuleCapability.HEATMAP,
+            "read",
+        )
+        authorize_tenant_action(
+            tenant_context,
+            county_profile,
+            ModuleCapability.ACTIVE_CALLS,
+            "read",
+        )
+
     hours = validate_heatmap_hours(hours)
     current_time = now or datetime.now(timezone.utc)
     if current_time.tzinfo is None:
@@ -271,4 +336,11 @@ def get_live_heatmap_snapshot(
     client = client or CentralSquareClient()
     _start_time, _end_time, search_body = _build_search_window(hours, current_time)
     raw_calls = _get_historical_calls(client, search_body)
-    return build_heatmap_snapshot(raw_calls, hours=hours, now=current_time)
+    if county_profile is None:
+        return build_heatmap_snapshot(raw_calls, hours=hours, now=current_time)
+    return build_heatmap_snapshot(
+        raw_calls,
+        hours=hours,
+        now=current_time,
+        county_profile=county_profile,
+    )

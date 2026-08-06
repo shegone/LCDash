@@ -20,6 +20,7 @@
     "agencies",
     "unit_status_mappings",
     "gis_sources",
+    "heatmap_configuration",
     "identity_federation",
     "retention",
     "ai_policy",
@@ -67,6 +68,7 @@
       "minItems": 1,
       "items": {"$ref": "#/$defs/gisSource"}
     },
+    "heatmap_configuration": {"$ref": "#/$defs/heatmapConfiguration"},
     "identity_federation": {"$ref": "#/$defs/identityFederation"},
     "retention": {"$ref": "#/$defs/retention"},
     "ai_policy": {"$ref": "#/$defs/aiPolicy"},
@@ -162,6 +164,18 @@
           "uniqueItems": true,
           "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{1,62}$"}
         }
+      }
+    },
+    "heatmapConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min_latitude", "max_latitude", "min_longitude", "max_longitude", "grid_degrees"],
+      "properties": {
+        "min_latitude": {"type": "number", "minimum": -90, "maximum": 90},
+        "max_latitude": {"type": "number", "minimum": -90, "maximum": 90},
+        "min_longitude": {"type": "number", "minimum": -180, "maximum": 180},
+        "max_longitude": {"type": "number", "minimum": -180, "maximum": 180},
+        "grid_degrees": {"type": "number", "minimum": 0.001, "maximum": 1.0}
       }
     },
     "identityFederation": {

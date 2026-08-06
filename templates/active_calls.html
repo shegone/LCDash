@@ -18,6 +18,10 @@
         font-size: 1rem;
     }
 
+    .active-calls-page-heading {
+        align-items: center;
+    }
+
     .active-calls-status {
         padding: 18px 22px;
         border: 1px solid rgba(76, 201, 255, .30);
@@ -88,41 +92,196 @@
         box-shadow: 0 0 30px rgba(255, 76, 76, .14);
     }
 
+    .active-calls-status-cloud {
+        padding: 10px 14px;
+        border-radius: 16px;
+    }
+
+    .active-calls-status-cloud .active-calls-status-layout {
+        display: grid;
+        grid-template-columns: minmax(190px, .82fr) minmax(540px, 2.45fr);
+        align-items: center;
+        gap: 12px;
+    }
+
+    .active-calls-source-summary {
+        min-width: 0;
+    }
+
+    .active-calls-source-summary .text-secondary {
+        margin-top: 2px;
+        font-size: .78rem;
+        line-height: 1.25;
+    }
+
+    .active-calls-status-cloud h3 {
+        margin-top: 1px;
+        font-size: 1.05rem;
+        line-height: 1.15;
+    }
+
+    .active-calls-status-kpis {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(105px, 1fr));
+        gap: 8px;
+    }
+
+    .active-calls-status-cloud .active-calls-status-item {
+        min-width: 0;
+        padding: 6px 8px;
+        border-radius: 12px;
+    }
+
+    .active-calls-status-cloud .active-calls-status-item .label {
+        font-size: clamp(.58rem, .62vw, .68rem);
+        letter-spacing: .75px;
+        line-height: 1.15;
+        white-space: nowrap;
+    }
+
+    .active-calls-status-cloud .active-calls-status-item .value {
+        margin-top: 2px;
+        font-size: clamp(.78rem, .88vw, .95rem);
+        line-height: 1.15;
+        white-space: nowrap;
+    }
+
+    .cloud-call-facts {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .cloud-call-fact {
+        min-height: 58px;
+        padding: 9px 10px;
+        border: 1px solid rgba(76, 201, 255, .14);
+        border-radius: 12px;
+        background: rgba(5, 18, 33, .55);
+    }
+
+    .cloud-call-fact .value {
+        overflow-wrap: anywhere;
+    }
+
+    .cloud-unit-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+    }
+
+    .cloud-unit-chip {
+        padding: 5px 9px;
+        border: 1px solid rgba(76, 201, 255, .28);
+        border-radius: 999px;
+        color: #dbeeff;
+        background: rgba(76, 201, 255, .10);
+        font-size: .78rem;
+        font-weight: 850;
+    }
+
+    @media (max-width: 1199px) {
+        .active-calls-status-cloud .active-calls-status-layout {
+            grid-template-columns: 1fr;
+            gap: 9px;
+        }
+
+        .active-calls-status-cloud {
+            padding: 10px 12px;
+        }
+
+        .active-calls-source-summary {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr);
+            column-gap: 10px;
+            align-items: baseline;
+        }
+
+        .active-calls-source-summary .text-info {
+            grid-row: 1 / span 2;
+        }
+
+        .active-calls-source-summary .text-secondary {
+            margin-top: 0;
+        }
+    }
+
     @media (max-width: 767px) {
+        .active-calls-page-heading {
+            align-items: flex-start;
+            gap: 8px !important;
+        }
+
+        .active-calls-view-label {
+            width: 100%;
+            text-align: left !important;
+        }
+
+        .active-calls-status-kpis {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 7px;
+        }
+
+        .active-calls-status-kpis .active-calls-status-item:last-child {
+            grid-column: 1 / -1;
+        }
+
         .active-calls-status-item {
-            min-width: 120px;
+            min-width: 0;
             flex: 1 1 120px;
+        }
+
+        .cloud-call-facts {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @media (max-width: 479px) {
+        .active-calls-title {
+            font-size: 1.65rem;
+        }
+
+        .active-calls-source-summary {
+            display: block;
+        }
+
+        .active-calls-status-kpis {
+            grid-template-columns: 1fr;
+        }
+
+        .active-calls-status-kpis .active-calls-status-item:last-child {
+            grid-column: auto;
         }
     }
 </style>
 
-<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+<div class="active-calls-page-heading d-flex justify-content-between flex-wrap gap-3 mb-4">
     <div>
         <div class="active-calls-title">Active Calls</div>
         <div class="active-calls-subtitle">
-            Search and filter the current CentralSquare CAD incident list
+            Search and filter the latest verified read-only incident snapshot
         </div>
     </div>
 
-    <div class="text-end">
-        <div class="text-info fw-bold">OPERATIONAL VIEW</div>
-        <div class="text-secondary">Priority and age order</div>
+    <div class="active-calls-view-label text-end">
+        <div class="text-info fw-bold">{% if cloud_presentation %}READ-ONLY CLOUD VIEW{% else %}OPERATIONAL VIEW{% endif %}</div>
+        <div class="text-secondary">{% if cloud_presentation %}Normalized approved fields only{% else %}Priority and age order{% endif %}</div>
     </div>
 </div>
 
-<div class="active-calls-status {% if cad_status != 'Connected' %}active-calls-disconnected{% endif %} mb-4">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-        <div>
+<div class="active-calls-status {% if cloud_presentation %}active-calls-status-cloud{% endif %} {% if not cloud_presentation_status.source.connected %}active-calls-disconnected{% endif %} mb-4">
+    <div class="active-calls-status-layout {% if not cloud_presentation %}d-flex justify-content-between align-items-center flex-wrap gap-3{% endif %}">
+        <div class="active-calls-source-summary">
             <div class="text-info fw-bold">CENTRALSQUARE CAD</div>
-            {% if cad_status == "Connected" %}
-                <h3 class="text-success mb-0">Connected</h3>
+            {% if cloud_presentation_status.source.connected %}
+                <h3 class="text-success mb-0">{{ cloud_presentation_status.source.label }}</h3>
             {% else %}
-                <h3 class="text-danger mb-0">Disconnected</h3>
-                <div class="text-secondary">Active-call information is currently unavailable.</div>
+                <h3 class="text-warning mb-0">{{ cloud_presentation_status.source.label }}</h3>
             {% endif %}
+            <div class="text-secondary">{{ cloud_presentation_status.source.notice }}</div>
         </div>
 
-        <div class="d-flex gap-3 flex-wrap justify-content-end">
+        <div class="active-calls-status-kpis {% if not cloud_presentation %}d-flex gap-3 flex-wrap justify-content-end{% endif %}">
             <div class="active-calls-status-item">
                 <div class="label">TOTAL ACTIVE</div>
                 <div class="value">{{ active_calls }}</div>
@@ -161,7 +320,7 @@
                 id="call-search"
                 class="form-control active-calls-filter"
                 type="search"
-                placeholder="CFS, incident, address, or unit"
+                placeholder="{% if cloud_presentation %}CFS, incident, agency, area, or unit{% else %}CFS, incident, address, or unit{% endif %}"
                 autocomplete="off"
             >
         </div>
@@ -239,14 +398,14 @@
             <h4 class="text-warning mb-0">ACTIVE INCIDENTS</h4>
             <div class="text-secondary">Open a card to view the complete Incident Command View</div>
         </div>
-        {% if cad_status == "Connected" %}
-            <span class="badge text-bg-success p-2">LIVE CAD DATA</span>
+        {% if cloud_presentation_status.source.may_display_snapshot %}
+            <span class="badge {% if cloud_presentation_status.source.connected %}text-bg-success{% else %}text-bg-warning{% endif %} p-2">NORMALIZED READ-ONLY DATA</span>
         {% else %}
             <span class="badge text-bg-danger p-2">CAD DISCONNECTED</span>
         {% endif %}
     </div>
 
-    {% if cad_status != "Connected" %}
+    {% if not cloud_presentation_status.source.may_display_snapshot %}
         <div class="text-center text-danger py-5">
             The active-call list could not be loaded from CentralSquare CAD.
             <div class="text-secondary mt-2">Please contact the LCDash administrator if the connection does not recover.</div>
@@ -263,7 +422,7 @@
                     data-call-time="{{ call.call_datetime }}"
                     data-cfs="{{ call.cfs_number|lower }}"
                     data-incident="{{ call.incident_description|lower }}"
-                    data-search="{{ (call.cfs_number ~ ' ' ~ call.incident_code ~ ' ' ~ call.incident_description ~ ' ' ~ call.location ~ ' ' ~ call.units ~ ' ' ~ call.agency ~ ' ' ~ call.status)|lower }}"
+                    data-search="{{ (call.cfs_number ~ ' ' ~ call.incident_code ~ ' ' ~ call.incident_description ~ ' ' ~ (call.location if not cloud_presentation else '') ~ ' ' ~ call.units ~ ' ' ~ call.agency ~ ' ' ~ call.status ~ ' ' ~ ((call.beat ~ ' ' ~ call.zone) if not cloud_presentation else '') ~ ' ' ~ call.city)|lower }}"
                 >
                     {% include "components/incident_card.html" %}
                 </div>

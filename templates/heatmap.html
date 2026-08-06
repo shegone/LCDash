@@ -287,6 +287,11 @@
     </div>
 </div>
 
+<div class="command-safety-banner p-3 mb-4" role="note">
+    <strong class="text-success">Read-only cloud history boundary.</strong>
+    This view cannot query an unapproved source, update CAD, or trigger operational outputs.
+</div>
+
 <section
     class="glass p-3 mb-4 d-flex justify-content-between align-items-center flex-wrap gap-3"
     aria-labelledby="heatmap-window-heading"
@@ -309,8 +314,10 @@
 </section>
 
 {% if not heatmap_data.cad_connected %}
-    <div class="alert alert-danger" role="alert">
-        Historical CAD activity is unavailable. No heat-map data is being displayed.
+    <div class="command-unavailable-state mb-4" role="status" aria-live="polite">
+        <strong><i class="bi bi-fire me-2" aria-hidden="true"></i>Historical activity source unavailable</strong>
+        No approved imported historical dataset is configured for this cloud environment. No direct historical
+        CAD query runs from this page, and no heat-map data is displayed.
     </div>
 {% endif %}
 

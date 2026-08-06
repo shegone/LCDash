@@ -1,0 +1,24 @@
+{
+  "schema_version": "lcdash.document-preparation.v1",
+  "source_root": "docs",
+  "documents": [
+    {
+      "path": "MINDSHARE_LIBRARY.md",
+      "scope": "mindshare-current",
+      "approved": true,
+      "approval_id": "user-approved-existing-onprem-project-documents-2026-08-05"
+    },
+    {
+      "path": "MINDSHARE_RADIO_CHECKLIST.md",
+      "scope": "mindshare-current",
+      "approved": true,
+      "approval_id": "user-approved-existing-onprem-project-documents-2026-08-05"
+    },
+    {
+      "path": "MINDSHARE_SOFTWARE_CATALOG.md",
+      "scope": "mindshare-current",
+      "approved": true,
+      "approval_id": "user-approved-existing-onprem-project-documents-2026-08-05"
+    }
+  ]
+}

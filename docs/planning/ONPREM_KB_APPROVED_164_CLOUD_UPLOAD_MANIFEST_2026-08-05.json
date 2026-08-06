@@ -1,0 +1,1654 @@
+{
+  "schema_version": "lcdash.approved-document-cloud-upload.v1",
+  "status": "READY_FOR_AUTHORIZED_UPLOAD",
+  "bucket": "lcdash-p1-logan-use1-862772137583-document-library",
+  "region": "us-east-1",
+  "manifest_id": "onprem-approved-164-2026-08-05",
+  "object_count": 164,
+  "total_bytes": 251295872,
+  "source_archive_sha256": "206e640648db476da1f15fca1cb7025f1b471511a775889d6d42dcdabf31e671",
+  "chunk_manifest_sha256": "4d27dee58f0f2c62889ac7de2087ac129a0dea2b13541cdfd5bb57c7ca74230b",
+  "objects": [
+    {
+      "source_path": "centralsquare/Garmin GPS 2.6 Installation Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Garmin GPS 2.6 Installation Guide.pdf",
+      "bytes": 660049,
+      "sha256": "fb63ac931a2697e774aaf2a339a8aae1787365940757a873e779088c8f4ae527",
+      "checksum_sha256_base64": "+2Oskxoml+d0qvKjOaiq4XhzZZQHV6hz53kIjI9K5Sc=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 2
+    },
+    {
+      "source_path": "centralsquare/Integrated GPS 2.6 Configuration Guide for Administrators.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Integrated GPS 2.6 Configuration Guide for Administrators.pdf",
+      "bytes": 758750,
+      "sha256": "05c9a3eb1404a5a457558ba2a261d42cd1b3441da7435535edbcdf7083949cf5",
+      "checksum_sha256_base64": "Bcmj6xQEpaRXVYuiomHULNGzRB2nQ1U17bzfcIOUnPU=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 3
+    },
+    {
+      "source_path": "centralsquare/L-Tron 4910 Scanner Installation Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/L-Tron 4910 Scanner Installation Guide.pdf",
+      "bytes": 655449,
+      "sha256": "8b1ef7377c9bff66e04eefafcab8881a76616f18da076bbd5cc3dbc69e6f5d26",
+      "checksum_sha256_base64": "ix73N3yb/2bgTu+vyriIGnZhbxjaB2u9XMPbxp5vXSY=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 2
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro Adding Master Records from Returns Quick Reference Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro Adding Master Records from Returns Quick Reference Guide.pdf",
+      "bytes": 344943,
+      "sha256": "d71267ecf5eb762cb6c4ea05d3e5988d17118bc630895caf83eed314415c7958",
+      "checksum_sha256_base64": "1xJn7PXrdiy2xOoF0+WYjRcRi8YwiVyvg+7TFEFceVg=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 2
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro Addressing and Mapping Quick Reference Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro Addressing and Mapping Quick Reference Guide.pdf",
+      "bytes": 247753,
+      "sha256": "f9fcfd12dace1c2cca242495557138f3270e37c378def09319fe4423db9b8b84",
+      "checksum_sha256_base64": "+fz9EtrOHCzKJCSVVXE48ycON8N43vCTGf5EI9ubi4Q=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 2
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro Agency Administration Configuration Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro Agency Administration Configuration Guide.pdf",
+      "bytes": 394361,
+      "sha256": "64b2b6d1cd8723f5475e89e82041fc866d9f3989aa6f85176dd47371de8aad6a",
+      "checksum_sha256_base64": "ZLK20c2HI/VHXonoIEH8hm2fOYmqb4UXbdRzcd6KrWo=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 13
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro Agency Administration End User Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro Agency Administration End User Guide.pdf",
+      "bytes": 623349,
+      "sha256": "c2b967d7ab0ab4be152f60f2c44dd0c0521007dd18b184d915da53af4634539f",
+      "checksum_sha256_base64": "wrln16sKtL4VL2DyxE3QwFIQB90YsYTZFdpTr0Y0U58=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 27
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro API User Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro API User Guide.pdf",
+      "bytes": 406033,
+      "sha256": "c319dc0099a5ffc4aadb7816b5c3084f6d5ca056bac46f189e34b3b2f86db37d",
+      "checksum_sha256_base64": "wxncAJml/8Sq23gWtcMIT21coFa6xG8YnjSzsvhts30=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 12
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro Basics Configuration Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro Basics Configuration Guide.pdf",
+      "bytes": 7956146,
+      "sha256": "861713934a2f4107b5ad7674bf659298ef69988d75b56e68c2463497b265cea6",
+      "checksum_sha256_base64": "hhcTk0ovQQe1rXZ0v2WSmO9pmI11tW5owkY0l7JlzqY=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 74
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro Basics End User Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro Basics End User Guide.pdf",
+      "bytes": 4188288,
+      "sha256": "441bcd0145ea452a176c04cd9094d4eb43e6f9cdef4087f996e2374fa4b13585",
+      "checksum_sha256_base64": "RBvNAUXqRSoXbATNkJTU60Pm+c3vQIf5luI3T6SxNYU=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 74
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro CAD and Mapping Configuration Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro CAD and Mapping Configuration Guide.pdf",
+      "bytes": 6488008,
+      "sha256": "538b400d118b53ec3527cc0ff1ba1be9fe380e09802e25dae973773f09f174a1",
+      "checksum_sha256_base64": "U4tADRGLU+w1J8wP8bob6f44DgmALiXa6XN3PwnxdKE=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 70
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro CAD and Mapping End User Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro CAD and Mapping End User Guide.pdf",
+      "bytes": 8944922,
+      "sha256": "35186f5c873ccc1817783bd815c84a83350eb5e3154ea7527ecd048a97f2309e",
+      "checksum_sha256_base64": "NRhvXIc8zBgXeDvYFchKgzUOteMVTqdSfs0EipfyMJ4=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 61
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro CAD CFS Screen and Tow Calls Quick Reference Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro CAD CFS Screen and Tow Calls Quick Reference Guide.pdf",
+      "bytes": 347411,
+      "sha256": "0123e62fa6dc574826457ab1fcf1e270db7079a4d82981837c5b6559913fe3fb",
+      "checksum_sha256_base64": "ASPmL6bcV0gmRXqx/PHicNtweaTYKYGDfFtlWZE/4/s=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 1
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro CFS Log and CAD Windows Quick Reference Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro CFS Log and CAD Windows Quick Reference Guide.pdf",
+      "bytes": 431078,
+      "sha256": "c7877d77cc714d4a546b7c0e1fb7638df0d11b5a414ef14b39f7058afe8f8eae",
+      "checksum_sha256_base64": "x4d9d8xxTUpUa3wOH7djjfDRG1pBTvFLOfcFiv6Pjq4=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 2
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro Civil Configuration Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro Civil Configuration Guide.pdf",
+      "bytes": 777150,
+      "sha256": "cdbd29ce32bb8d106b76dd1a06844ebaca7d1987795e37cdfa465950819d789e",
+      "checksum_sha256_base64": "zb0pzjK7jRBrdt0aBoROusp9GYd5XjfN+kZZUIGdeJ4=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 17
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro Civil End User Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro Civil End User Guide.pdf",
+      "bytes": 660467,
+      "sha256": "499662f6ef6909fa24ffe1dc79bf398be5542ddca80b7e1038114ec6316a6818",
+      "checksum_sha256_base64": "SZZi9u9pCfok/+Hceb85i+VULdyoC34QOBFOxjFqaBg=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 39
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro Custom Fields Configuration Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro Custom Fields Configuration Guide.pdf",
+      "bytes": 508106,
+      "sha256": "5b77c685bf2ba64b6d874f4314aeb785b057e40930b7519dce6d3a9fb33e2c75",
+      "checksum_sha256_base64": "W3fGhb8rpktth09DFK63hbBX5Akwt1Gdzm06n7M+LHU=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 8
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro Custom Forms Configuration Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro Custom Forms Configuration Guide.pdf",
+      "bytes": 386631,
+      "sha256": "069c10a59f10ffb8df46b14eef65cbab91e0288af9ecf4f4f6b1313bcff3b807",
+      "checksum_sha256_base64": "BpwQpZ8Q/7jfRrFO72XLq5HgKIr57PT09rExO8/zuAc=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 9
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro Custom Modules Configuration Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro Custom Modules Configuration Guide.pdf",
+      "bytes": 605803,
+      "sha256": "73d3a7c304b209f4453e7d51bcc308d6fb54fff620463961a2c2a842b3d14374",
+      "checksum_sha256_base64": "c9OnwwSyCfRFPn1RvMMI1vtU//YgRjlhosKoQrPRQ3Q=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 9
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro Extend and eCitations Configuration Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro Extend and eCitations Configuration Guide.pdf",
+      "bytes": 808503,
+      "sha256": "a0ed0cbdf17bffc0fabb22b2b6d3a3056ffb4c89580974cd97bb5d6691034454",
+      "checksum_sha256_base64": "oO0MvfF7/8D6uyKyttOjBW/7TIlYCXTNl7tdZpEDRFQ=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 14
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro Extend and eCitations End User Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro Extend and eCitations End User Guide.pdf",
+      "bytes": 1663181,
+      "sha256": "fee8bb90927a699fdcde24c478f1dd56b6396dcbef9f9e37a272ba2b113e6bf7",
+      "checksum_sha256_base64": "/ui7kJJ6aZ/c3iTEePHdVrY5bcvvn543onK6KxE+a/c=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 37
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro Mobile CAD Configuration Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro Mobile CAD Configuration Guide.pdf",
+      "bytes": 1177890,
+      "sha256": "b40893e5835a03394319ba6593995becfd96e78bc646301b6b782a6f40901b77",
+      "checksum_sha256_base64": "tAiT5YNaAzlDGbplk5lb7P2W54vGRjAba3gqb0CQG3c=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 10
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro NCIC Configuration Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro NCIC Configuration Guide.pdf",
+      "bytes": 1058830,
+      "sha256": "44671f8152c44e9fc04f0504b05ae31ab9960bee67609ac4307eb91b6cd0b3df",
+      "checksum_sha256_base64": "RGcfgVLETp/ATwUEsFrjGrmWC+5nYJrEMH65G2zQs98=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 14
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro NCIC End User Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro NCIC End User Guide.pdf",
+      "bytes": 2018698,
+      "sha256": "35a93925c26e77ca3b0e01359291ffb773b627b6aa76c6ba4574b63d3491b956",
+      "checksum_sha256_base64": "Nak5JcJud8o7DgE1kpH/t3O2J7aqdsa6RXS2PTSRuVY=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 35
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro Personnel End User Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro Personnel End User Guide.pdf",
+      "bytes": 2832979,
+      "sha256": "ccf63975219d87080805c6d063dcaa5d0ba7f4a108fed5571cdea87afb5fbb66",
+      "checksum_sha256_base64": "zPY5dSGdhwgIBcbQY9yqXQun9KEI/tVXHN6oevtfu2Y=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 39
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro Portal Configuration Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro Portal Configuration Guide.pdf",
+      "bytes": 298457,
+      "sha256": "84f5b180587cb447faabea3b56f586a4e49fad8cff2af0d467e19595eb4847d8",
+      "checksum_sha256_base64": "hPWxgFh8tEf6q+o7VvWGpOSfrYz/KvDUZ+GVletIR9g=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 14
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro Prosecution End User Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro Prosecution End User Guide.pdf",
+      "bytes": 332904,
+      "sha256": "d5c4244246776b2c8c7ee08f1a7944db1dfa4b65300e923bbca988082c9541bc",
+      "checksum_sha256_base64": "1cQkQkZ3ayyMfuCPGnlE2x36S2UwDpI7vKmICCyVQbw=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 10
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro Records Configuration Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro Records Configuration Guide.pdf",
+      "bytes": 4513504,
+      "sha256": "1af05c959b6825b4add5f3ae1fe22f4e956769fc79ee064f02f04cb7b57118d0",
+      "checksum_sha256_base64": "GvBclZtoJbSt1fOuH+IvTpVnafx57gZPAvBMt7VxGNA=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 68
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro Records End User Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro Records End User Guide.pdf",
+      "bytes": 10263927,
+      "sha256": "4825985ab3bc96530623c339934aba8abc2489c297c75db8397a6004ebe4f1c2",
+      "checksum_sha256_base64": "SCWYWrO8llMGI8M5k0q6irwkicKXx124OXpgBOvk8cI=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 88
+    },
+    {
+      "source_path": "centralsquare/Public Safety Suite Pro Reporting End User Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Public Safety Suite Pro Reporting End User Guide.pdf",
+      "bytes": 1134811,
+      "sha256": "fcbfeb49dba112bdb0d78f1d2e9eefcce043ad7684ad536ef5ce8308530b00ac",
+      "checksum_sha256_base64": "/L/rSduhEr2w148dLp7vzOBDrXaErVNu9c6DCFMLAKw=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 16
+    },
+    {
+      "source_path": "centralsquare/Topaz Signature Pad Installation Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Topaz Signature Pad Installation Guide.pdf",
+      "bytes": 390470,
+      "sha256": "4a7705eb6073c06dba0b9640be996094b953d2713707589476bc30dc39eaf8a9",
+      "checksum_sha256_base64": "SncF62BzwG26C5ZAvplglLlT0nE3B1iUdrww3Dnq+Kk=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 1
+    },
+    {
+      "source_path": "centralsquare/Zebra RW-420 Installation Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Zebra RW-420 Installation Guide.pdf",
+      "bytes": 797800,
+      "sha256": "5cfe747636659347b2f303e4fd431f389003ba8235bb85e0850bbf16cbc293dc",
+      "checksum_sha256_base64": "XP50djZlk0ey8wPk/UMfOJADuoI1u4XghQu/FsvCk9w=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 3
+    },
+    {
+      "source_path": "centralsquare/Zebra ZQ-520 Installation Guide.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/centralsquare/current/onprem-approved-164-2026-08-05/Zebra ZQ-520 Installation Guide.pdf",
+      "bytes": 1214479,
+      "sha256": "d29e09a47e318159d0e001d48f579f54367d8dc3daaa25c04c26a2a5e31f0168",
+      "checksum_sha256_base64": "0p4JpH4xgVnQ4AHUj1efVDZ9jcPaqiXATCaipeMfAWg=",
+      "classification": "centralsquare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 3
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/DMR/AIS/MS1019_AN_ConsoleToTaitDmrTrunkingAppNote_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/IP Gateways/DMR/AIS/MS1019_AN_ConsoleToTaitDmrTrunkingAppNote_v100.pdf",
+      "bytes": 6944835,
+      "sha256": "b0872719a0ca36e8f57c79b6967e4c6b6f20cc80156bab10a3b73b36475cc5b4",
+      "checksum_sha256_base64": "sIcnGaDKNuj1fHm2ln5Ma28gzIAVa6sQo7c7NkdcxbQ=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 7
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/DMR/AIS/MS1020_AN_ConsoleToSelexDmrTrunkingAppNote_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/IP Gateways/DMR/AIS/MS1020_AN_ConsoleToSelexDmrTrunkingAppNote_v101.pdf",
+      "bytes": 925076,
+      "sha256": "d6832452a9b6793094f928d2cc488d88d2afdcd762928678650aa956aba5faf3",
+      "checksum_sha256_base64": "1oMkUqm2eTCU+SjSzEiNiNKv3NdikoZ4ZQqpVqul+vM=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 7
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/DMR/AIS/MS1021_AN_ConsoleToKenwoodDmrConventionalAppNote_v102.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/IP Gateways/DMR/AIS/MS1021_AN_ConsoleToKenwoodDmrConventionalAppNote_v102.pdf",
+      "bytes": 2288945,
+      "sha256": "31fb6541790b360140dac76b28bb46e4dad07e69d567e7da3c49143274c81123",
+      "checksum_sha256_base64": "MftlQXkLNgFA2sdrKLtG5NrQfmnVZ+faPEkUMnTIESM=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 11
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/DMR/AIS/MS1066_AN_ConsoleToKenwoodDmrTrunking25AppNote_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/IP Gateways/DMR/AIS/MS1066_AN_ConsoleToKenwoodDmrTrunking25AppNote_v100.pdf",
+      "bytes": 2466037,
+      "sha256": "cc6efa33ce6ca1fbd18323a28207d38fb70d0e8008d2c4840c005f3df1d9200b",
+      "checksum_sha256_base64": "zG76M85sofvRgyOiggfTj7cNDoAI0sSEDABfPfHZIAs=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 12
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/DMR/HDAP/MS1068_AN_ConsoleToHyteraHR1062AppNote_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/IP Gateways/DMR/HDAP/MS1068_AN_ConsoleToHyteraHR1062AppNote_v101.pdf",
+      "bytes": 1083640,
+      "sha256": "3a0c77613cc206005284979d7a680558e9bd272a59c4e5ac033165da84242fff",
+      "checksum_sha256_base64": "Ogx3YTzCBgBShJedemgFWOm9JypZxOWsAzFl2oQkL/8=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 10
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/CSSI/MS1069_AN_ConsoleToTaitP25TrunkingAppNote_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/CSSI/MS1069_AN_ConsoleToTaitP25TrunkingAppNote_v100.pdf",
+      "bytes": 2228413,
+      "sha256": "ec008cddad8874c55c932e71d77bf56dc95aa13a3d4e0017fc7d0f1c0643492a",
+      "checksum_sha256_base64": "7ACM3a2IdMVcky5x13v1bclaoTo9TgAX/H0PHAZDSSo=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 16
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/CSSI/MS1072_AN_ConsoleToEFJAtlasP25RFSSAppNote_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/CSSI/MS1072_AN_ConsoleToEFJAtlasP25RFSSAppNote_v100.pdf",
+      "bytes": 2576122,
+      "sha256": "e91f1bc32094e67343c591d361f696adc591039c1124492431381b7b9b8757bf",
+      "checksum_sha256_base64": "6R8bwyCU5nNDxZHTYfaWrcWRA5wRJEkkMTgbe5uHV78=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 10
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/CSSI/MS1073_AN_ConsoleToMotorolaAstro25AppNote_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/CSSI/MS1073_AN_ConsoleToMotorolaAstro25AppNote_v100.pdf",
+      "bytes": 2025373,
+      "sha256": "6438d80f82910e3aeaa6c9553cda6ef58118db361812c07c6c6bf36b724a6563",
+      "checksum_sha256_base64": "ZDjYD4KRDjrqpslVPNpu9YEY2zYYEsB8bGvza3JKZWM=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 13
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/DFSI/MS1009_AN_ConsoleToIcomEclipse2AppNote_rev1.02.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/DFSI/MS1009_AN_ConsoleToIcomEclipse2AppNote_rev1.02.pdf",
+      "bytes": 1204605,
+      "sha256": "33d9208b0b218a4699ad01694a95cdceb9b6831484ccb99363b60c142af08260",
+      "checksum_sha256_base64": "M9kgiwshikaZrQFpSpXNzrm2gxSEzLmTY7YMFCrwgmA=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 13
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/DFSI/MS1025_AN_ConsoleToTaitP25ConventionalAppNote_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/DFSI/MS1025_AN_ConsoleToTaitP25ConventionalAppNote_v101.pdf",
+      "bytes": 1640166,
+      "sha256": "1df054f67a4dc47cd6e91c70667ca693a48bb6ab1584158b81970879103e0990",
+      "checksum_sha256_base64": "HfBU9npNxHzW6RxwZnymk6SLtqsVhBWLgZcIeRA+CZA=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 15
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/DFSI/MS1046_AN_ConsoleToCodanSimulcastSystemAppNote_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/DFSI/MS1046_AN_ConsoleToCodanSimulcastSystemAppNote_v101.pdf",
+      "bytes": 2151600,
+      "sha256": "5fbc557b10cdf8cae0d35277a676a92d152c795a0a4950a4f56c5d1642d1109a",
+      "checksum_sha256_base64": "X7xVexDN+Mrg01J3pnapLRUseVoKSVCk9WxdFkLREJo=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 14
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/DFSI/MS1049_AN_ConsoleToEFJAtlas1200AppNote_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/DFSI/MS1049_AN_ConsoleToEFJAtlas1200AppNote_v100.pdf",
+      "bytes": 2594231,
+      "sha256": "f89563235c3082d3c1a5369d391fe598a1f43dd2d737b16bc17d8ab4d33ebb10",
+      "checksum_sha256_base64": "+JVjI1wwgtPBpTadOR/lmKH0PdLXN7FrwX2KtNM+uxA=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 13
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/PoC/MS1029_AN_ConsoleToAdvancedEsChatGatewayAppNote_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/IP Gateways/PoC/MS1029_AN_ConsoleToAdvancedEsChatGatewayAppNote_v101.pdf",
+      "bytes": 1538543,
+      "sha256": "11a2cc9242023707f3114fb6fcc0d980808569e985d5444f725bf98cd62048fe",
+      "checksum_sha256_base64": "EaLMkkICNwfzEU+2/MDZgICFaemF1URPclv5jNYgSP4=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 7
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/PoC/MS1065_AN_RTPGatewayToESChatAppNote_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/IP Gateways/PoC/MS1065_AN_RTPGatewayToESChatAppNote_v100.pdf",
+      "bytes": 1654208,
+      "sha256": "aad45ea6de89e7d6581f8c7c014874d783082c384013b4fd7a1c8a5715d8f8ea",
+      "checksum_sha256_base64": "qtRept6J59ZYH4x8AUh014MILDhAE7T9ehyKVxXY+Oo=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 3
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Harris/MS1013_AN_MRIToHarrisM7200AppNote_v102.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI/Harris/MS1013_AN_MRIToHarrisM7200AppNote_v102.pdf",
+      "bytes": 185937,
+      "sha256": "e7553b3fac5e10d449451265b316310e4857950eef00bc5dd085049aeeed92b9",
+      "checksum_sha256_base64": "51U7P6xeENRJRRJlsxYxDkhXlQ7vALxd0IUEmu7tkrk=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 1
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Harris/MS1026_AN_MRIToHarrisXLSeriesAppNote_v102.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI/Harris/MS1026_AN_MRIToHarrisXLSeriesAppNote_v102.pdf",
+      "bytes": 209873,
+      "sha256": "d117d59fa875c25b894a249defe6e45e650010cd71782a175b7dad59c37818ce",
+      "checksum_sha256_base64": "0RfVn6h1wluJSiSd7+bkXmUAEM1xeCoXW32tWcN4GM4=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 2
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Hytera/MS1014_AN_MRIToHyteraMD78XAppNote_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI/Hytera/MS1014_AN_MRIToHyteraMD78XAppNote_v101.pdf",
+      "bytes": 547147,
+      "sha256": "79a3d2510cfd7af818caa2c8ec1f681c28b41a994727d96583bb4f498456b9c3",
+      "checksum_sha256_base64": "eaPSUQz9evgYyqLI7B9oHCi0GplHJ9llg7tPSYRWucM=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 11
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Hytera/MS1014_AN_MRIToHyteraMD78XAppNote_v102.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI/Hytera/MS1014_AN_MRIToHyteraMD78XAppNote_v102.pdf",
+      "bytes": 596972,
+      "sha256": "872826fa4a5ebd6095f38d6a4954859e6abec3cc796badbd380b6718af00271d",
+      "checksum_sha256_base64": "hygm+kpevWCV841qSVSFnmq+w8x5a629OAtnGK8AJx0=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 11
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Hytera/MS1040_AN_MRIToHyteraHM78XAppNote_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI/Hytera/MS1040_AN_MRIToHyteraHM78XAppNote_v100.pdf",
+      "bytes": 597681,
+      "sha256": "7da28c731447e9bd722f3b7e642e4cd9826b1aa71f58f192558d679c4795fda6",
+      "checksum_sha256_base64": "faKMcxRH6b1yLzt+ZC5M2YJrGqcfWPGSVY1nnEeV/aY=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 11
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Icom/MS1007_AN_MRIToIcomF5060AppNote_rev1.01.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI/Icom/MS1007_AN_MRIToIcomF5060AppNote_rev1.01.pdf",
+      "bytes": 2703719,
+      "sha256": "8321ae156af28fae355f06427f5a3e67dbff48f4d6bf352b78092b3a8443fdd9",
+      "checksum_sha256_base64": "gyGuFWryj641XwZCf1o+Z9v/SPTWvzUreAkrOoRD/dk=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 11
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Icom/MS1007_AN_MRIToIcomF5060AppNote_rev102.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI/Icom/MS1007_AN_MRIToIcomF5060AppNote_rev102.pdf",
+      "bytes": 963211,
+      "sha256": "293d13e74f1d584bd1361fa7aee52582abf71dd08dbfbd24c337ba6979204ec7",
+      "checksum_sha256_base64": "KT0T508dWEvRNh+nruUlgqv3HdCNv70kwze6aXkgTsc=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 11
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/JPS/MS1006_AN_MRIToJPSSNV12AppNote_rev101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI/JPS/MS1006_AN_MRIToJPSSNV12AppNote_rev101.pdf",
+      "bytes": 467308,
+      "sha256": "dbfc7c9bca47ee729c4ad7525f3c0f6b5650603921eb1dc0868428ae9f2c7c9e",
+      "checksum_sha256_base64": "2/x8m8pH7nKcStdSXzwPa1ZQYDkh6x3AhoQorp8sfJ4=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 8
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1005_AN_MRIToEFJ5300AppNote_rev1.00.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1005_AN_MRIToEFJ5300AppNote_rev1.00.pdf",
+      "bytes": 517608,
+      "sha256": "f40389479275e31127ef66723263b58be6f7aa88a39d0856a05d88cd84da1fc2",
+      "checksum_sha256_base64": "9AOJR5J14xEn72ZyMmO1i+b3qoijnQhWoF2IzYTaH8I=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 5
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1010_AN_MRIToEFJVikingAppNote_v110.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1010_AN_MRIToEFJVikingAppNote_v110.pdf",
+      "bytes": 1108805,
+      "sha256": "6d471caabc173b3f51594d24263803032220112c71fe0da6fc3d8522fdcbf3a1",
+      "checksum_sha256_base64": "bUccqrwXOz9RWU0kJjgDAyIgESxx/g2m/D2FIv3L86E=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 11
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1015_AN_MRIToKenwoodRepeaterAppNote_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1015_AN_MRIToKenwoodRepeaterAppNote_v101.pdf",
+      "bytes": 471470,
+      "sha256": "222c0c521cf22fa77e5dd748f3424311e81ab95065863d07a8cfc5712ad0dbf2",
+      "checksum_sha256_base64": "IiwMUhzyL6d+XddI80JDEegauVBlhj0HqM/FcSrQ2/I=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 4
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1027_AN_MRIToKenwoodNx3000SeriesAppNote_v104.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1027_AN_MRIToKenwoodNx3000SeriesAppNote_v104.pdf",
+      "bytes": 767132,
+      "sha256": "2cfd10b4f5788c92c461deef4391b39c0f0684b0394fa43581236aba6efc524b",
+      "checksum_sha256_base64": "LP0QtPV4jJLEYd7vQ5GznA8GhLA5T6Q1gSNqum78Uks=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 10
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1033_AN_MRIToKenwoodTK5x10SeriesAppNote_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1033_AN_MRIToKenwoodTK5x10SeriesAppNote_v101.pdf",
+      "bytes": 647219,
+      "sha256": "cdf540bf8c906b550ef40b617cd0cd0abdc221c7944b6724c95c2fc0d4896f57",
+      "checksum_sha256_base64": "zfVAv4yQa1UO9AthfNDNCr3CIceUS2ckyVwvwNSJb1c=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 9
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1034_AN_MRIToKenwoodNXx00SeriesAppNote_v103.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1034_AN_MRIToKenwoodNXx00SeriesAppNote_v103.pdf",
+      "bytes": 829886,
+      "sha256": "8b23e3aa6e6574bdad261cecdcf8dd9bd532399f6068a762e309bd19e94e345f",
+      "checksum_sha256_base64": "iyPjqm5ldL2tJhzs3Pjdm9UyOZ9gaKdi4wm9GelONF8=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 10
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1035_AN_MRIToKenwoodNX5x00-TK5x30SeriesAppNote_v103.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1035_AN_MRIToKenwoodNX5x00-TK5x30SeriesAppNote_v103.pdf",
+      "bytes": 769745,
+      "sha256": "c60025a5875f584b87d7b4550771f54e7f7f86f228ecffee5a5054756cd9cdc1",
+      "checksum_sha256_base64": "xgAlpYdfWEuH17RVB3H1Tn9/hvIo7P/uWlBUdWzZzcE=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 12
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1036_AN_MRIToKenwoodTK880RadioAppNote_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1036_AN_MRIToKenwoodTK880RadioAppNote_v101.pdf",
+      "bytes": 287417,
+      "sha256": "c6e6004912e9d4640eb74b9a4a05e7ca6a4c19ea93e1fe234ef4b156a0603982",
+      "checksum_sha256_base64": "xuYASRLp1GQOt0uaSgXnympMGeqT4f4jTvSxVqBgOYI=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 3
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1037_AN_MRIToKenwoodTKx62RadioAppNote_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1037_AN_MRIToKenwoodTKx62RadioAppNote_v101.pdf",
+      "bytes": 228369,
+      "sha256": "6e6c8e4fe861873cdf2d06217e9cc4f45b25f56f83caee13923e4e7b7a1f14a4",
+      "checksum_sha256_base64": "bmyOT+hhhzzfLQYhfpzE9Fsl9W+Dyu4Tkj5Oe3ofFKQ=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 2
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1038_AN_MRIToKenwoodTKx360RadioAppNote_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1038_AN_MRIToKenwoodTKx360RadioAppNote_v101.pdf",
+      "bytes": 617428,
+      "sha256": "28c08cdc7d0ed8ae4a249f7b12458a1379dde1441153d8b2d040cde812363407",
+      "checksum_sha256_base64": "KMCM3H0O2K5KJJ97EkWKE3nd4UQRU9iy0EDN6BI2NAc=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 8
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1050_AN_MRIToKenwoodNxr-x10RepeaterAppNote_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1050_AN_MRIToKenwoodNxr-x10RepeaterAppNote_v101.pdf",
+      "bytes": 505653,
+      "sha256": "bad5f2fadab405e81bc7764ec2aca6def446f756a7bc0cac6a0ad91e65c9051f",
+      "checksum_sha256_base64": "utXy+tq0Begbx3ZOwqym3vRG91anvAysagrZHmXJBR8=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 9
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Motorola/MS1003_AN_MRIToCDMAppNote_rev1.01.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI/Motorola/MS1003_AN_MRIToCDMAppNote_rev1.01.pdf",
+      "bytes": 971560,
+      "sha256": "02f13ab76a5df205e057c96d34f47a8256e6abcdd5ad79863e2f8f5026d4825c",
+      "checksum_sha256_base64": "AvE6t2pd8gXgV8ltNPR6glbmq83VrXmGPi+PUCbUglw=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 6
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Motorola/MS1004_AN_MRIToMotoDMRAppNote_rev106.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI/Motorola/MS1004_AN_MRIToMotoDMRAppNote_rev106.pdf",
+      "bytes": 882522,
+      "sha256": "4054037ddcb3b7f848b6a249e17650fdee2142ec99366327173c6d3785baad6b",
+      "checksum_sha256_base64": "QFQDfdyzt/hItqJJ4XZQ/e4hQuyZNmMnFzxtN4W6rWs=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 9
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Tait/MS1011_AN_MRIToTaitMobileAppNote_v109.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI/Tait/MS1011_AN_MRIToTaitMobileAppNote_v109.pdf",
+      "bytes": 1881449,
+      "sha256": "ffc4346d84ec34ffac37096ee8d7d96270d80eea29fcc26b8fbad8e588dacf17",
+      "checksum_sha256_base64": "/8Q0bYTsNP+sNwlu6NfZYnDYDuop/MJrj7rY5Yjazxc=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 19
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Hytera/MS1042_AN_MRI2ToHyteraMD782AppNote_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI2/Hytera/MS1042_AN_MRI2ToHyteraMD782AppNote_v101.pdf",
+      "bytes": 1824568,
+      "sha256": "ce2717f68ab242819a30dcc425b798fa78b87ec82419c63081a606280c491752",
+      "checksum_sha256_base64": "zicX9oqyQoGaMNzEJbeY+ni4fsgkGcYwgaYGKAxJF1I=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 13
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Hytera/MS1063_AN_MRI2ToHyteraMNC360AppNote_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI2/Hytera/MS1063_AN_MRI2ToHyteraMNC360AppNote_v101.pdf",
+      "bytes": 735833,
+      "sha256": "167f2e142924b68e078b0f95daea78a6c4331c9c187c8f650ee4dfacfca31157",
+      "checksum_sha256_base64": "Fn8uFCkkto4Hiw+V2up4psQzHJwYfI9lDuTfrPyjEVc=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 7
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Icom/MS1054_AN_MRI2ToIcomFx061_v102.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI2/Icom/MS1054_AN_MRI2ToIcomFx061_v102.pdf",
+      "bytes": 1088213,
+      "sha256": "2b7dc47ee42baed89de45501870bd1ebc5305639bcba5735ce1617c663932d35",
+      "checksum_sha256_base64": "K33EfuQrrtid5FUBhwvR68UwVjm8ulc1zhYXxmOTLTU=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 13
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Icom/MS1056_AN_MRI2ToIcomF75x0_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI2/Icom/MS1056_AN_MRI2ToIcomF75x0_v101.pdf",
+      "bytes": 1837736,
+      "sha256": "b831a0cc4c9924771f823ed3bcaae040a5006b62188c826ad6ae349ff65e1794",
+      "checksum_sha256_base64": "uDGgzEyZJHcfgj7TvKrgQKUAa2IYjIJq1q40n/ZeF5Q=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 12
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/JPS/MS1055_AN_MRI2ToJPSSNV12_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI2/JPS/MS1055_AN_MRI2ToJPSSNV12_v101.pdf",
+      "bytes": 1698617,
+      "sha256": "57dee7aaf1e1098ebe217b6b6fb079dd727a02cab02712a7395cf839aa1447f9",
+      "checksum_sha256_base64": "V97nqvHhCY6+IXtrb7B53XJ6AsqwJxKnOVz4OaoUR/k=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 10
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1041_AN_MRI2ToEFJVikingAppNote_v103.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1041_AN_MRI2ToEFJVikingAppNote_v103.pdf",
+      "bytes": 949039,
+      "sha256": "290d682fa11f157e3ec1156405f9b505eac6367881aaa3c5404fbd887e76e8d3",
+      "checksum_sha256_base64": "KQ1oL6EfFX4+wRVkBfm1BerGNniBqqPFQE+9iH526NM=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 10
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1048_AN_MRI2ToKenwoodNx5x00SeriesAppNote_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1048_AN_MRI2ToKenwoodNx5x00SeriesAppNote_v101.pdf",
+      "bytes": 2015113,
+      "sha256": "10915d18242df40df8fe8259bb73dff19f5fc43f74877c4412286d1f3b56f795",
+      "checksum_sha256_base64": "EJFdGCQt9A34/oJZu3Pf8Z9fxD90h3xEEihtHztW95U=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 15
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1057_AN_MRI2ToKenwoodTk5x20SeriesAppNote_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1057_AN_MRI2ToKenwoodTk5x20SeriesAppNote_v101.pdf",
+      "bytes": 1885609,
+      "sha256": "ba96bf587a7ca8ccef6eefdd93e71725fab1862e1fc01dea42f33b49c863743c",
+      "checksum_sha256_base64": "upa/WHp8qMzvbu/dk+cXJfqxhi4fwB3qQvM7SchjdDw=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 13
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1058_AN_MRI2ToKenwoodTk5x10SeriesAppNote_v102.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1058_AN_MRI2ToKenwoodTk5x10SeriesAppNote_v102.pdf",
+      "bytes": 775827,
+      "sha256": "b7e5ba24b60dee335827a0bac10e2ca022763e32983ff97ea4a82239e0945efa",
+      "checksum_sha256_base64": "t+W6JLYN7jNYJ6C6wQ4soCJ2PjKYP/l+pKgiOeCUXvo=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 12
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1059_AN_MRI2ToKenwoodNXx00SeriesAppNote_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1059_AN_MRI2ToKenwoodNXx00SeriesAppNote_v101.pdf",
+      "bytes": 1983065,
+      "sha256": "48f415b9b48549b19f60c9565c727ebba6f8abb57edec271bdffb4cee70cef0a",
+      "checksum_sha256_base64": "SPQVubSFSbGfYMlWXHJ+u6b4q7V+3sJxvf+0zucM7wo=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 14
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1060_AN_MRI2ToKenwoodNX3x20SeriesAppNote_v102.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1060_AN_MRI2ToKenwoodNX3x20SeriesAppNote_v102.pdf",
+      "bytes": 895805,
+      "sha256": "9ea1af60cf7a93f08591817184fd76cd462a14b1b235d326f8dbec8dd82ef677",
+      "checksum_sha256_base64": "nqGvYM96k/CFkYFxhP12zUYqFLGyNdMm+Nvsjdgu9nc=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 14
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1061_AN_MRI2ToKenwoodTKx180SeriesAppNote_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1061_AN_MRI2ToKenwoodTKx180SeriesAppNote_v101.pdf",
+      "bytes": 1853581,
+      "sha256": "2daca04797b886235f63d807f28847ee881eb91c3f4a7fb095c5a6dc0b9ec0dc",
+      "checksum_sha256_base64": "LaygR5e4hiNfY9gH8ohH7ogeuRw/Sn+wlcWm3AuewNw=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 13
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1064_AN_MRI2ToKenwoodNXRx10RepeaterAppNote_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1064_AN_MRI2ToKenwoodNXRx10RepeaterAppNote_v100.pdf",
+      "bytes": 1846918,
+      "sha256": "2eeb02c1d532d158b18413f166f74bec4a14eae964c99b2b86baacda25123e95",
+      "checksum_sha256_base64": "LusCwdUy0VixhBPxZvdL7EoU6ulkyZsrhrqs2iUSPpU=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 15
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Motorola/MS1051-01_AN_MRI2ToMotoTrboXpr4xxxAppNote_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI2/Motorola/MS1051-01_AN_MRI2ToMotoTrboXpr4xxxAppNote_v100.pdf",
+      "bytes": 1870294,
+      "sha256": "c0d8f4db42746915a70cd87bf61a37be813cb6986c516340840eb2e191625782",
+      "checksum_sha256_base64": "wNj020J0aRWnDNh79ho3voE8tphsUWNAhA6y4ZFiV4I=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 12
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Motorola/MS1051-02_AN_MRI2ToMotoTrboXpr5xxxAppNote_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI2/Motorola/MS1051-02_AN_MRI2ToMotoTrboXpr5xxxAppNote_v100.pdf",
+      "bytes": 1922495,
+      "sha256": "95ca6f67001f23a3ebe0a6718374a7d07366bec6872b9eb85420e5e2403469b3",
+      "checksum_sha256_base64": "lcpvZwAfI6Pr4KZxg3Sn0HNmvsaHK564VCDl4kA0abM=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 12
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Motorola/MS1051-03_AN_MRI2ToMotoTrboXpr5xxxDirectEMAppNote_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI2/Motorola/MS1051-03_AN_MRI2ToMotoTrboXpr5xxxDirectEMAppNote_v101.pdf",
+      "bytes": 488510,
+      "sha256": "66469931dacc49594cfd8227de736d4c7e70ae80af44d1d756926221160d9eb2",
+      "checksum_sha256_base64": "ZkaZMdrMSVlM/YIn3nNtTH5wroCvRNHXVpJiIRYNnrI=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 7
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Motorola/MS1067_AN_MRI2ToMotorolaAPXAppNote.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI2/Motorola/MS1067_AN_MRI2ToMotorolaAPXAppNote.pdf",
+      "bytes": 336130,
+      "sha256": "cadedaa8689b8db04ca7f48f721b3d161283b868c3cbf10e1f23d33f6446cb9a",
+      "checksum_sha256_base64": "yt7aqGibjbBMp/SPchs9FhKDuGjDy/EOHyPTP2RGy5o=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 5
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Motorola/MS1071_AN_MRI2ToCDM1550AppNote_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI2/Motorola/MS1071_AN_MRI2ToCDM1550AppNote_v100.pdf",
+      "bytes": 406685,
+      "sha256": "9ce3c83ecdf0f653cb1ddf7261c191877dc9752cdb06cf303a2f713d05fb864b",
+      "checksum_sha256_base64": "nOPIPs3w9lPLHd9yYcGRh33JdSzbBs8wOi9xPQX7hks=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 6
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Tait/MS1052-01_AN_MRI2ToTaitTM9300ConventionalAppNote_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI2/Tait/MS1052-01_AN_MRI2ToTaitTM9300ConventionalAppNote_v101.pdf",
+      "bytes": 2037168,
+      "sha256": "7677a91f106d7c26f068be4ffe66350b2f11d9382adb6f3efc6a14cef7a83373",
+      "checksum_sha256_base64": "dnepHxBtfCbwaL5P/mY1Cy8R2Tgq228+/GoUzveoM3M=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 16
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Tait/MS1052-02_AN_MRI2ToTaitTM9300TrunkingAppNote_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI2/Tait/MS1052-02_AN_MRI2ToTaitTM9300TrunkingAppNote_v101.pdf",
+      "bytes": 1907905,
+      "sha256": "20327c8866ccc27e9acf83426793a3d255ac6340fb6487384a44cf7990d50718",
+      "checksum_sha256_base64": "IDJ8iGbMwn6az4NCZ5Oj0lWsY0D7ZIc4SkTPeZDVBxg=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 13
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Tait/MS1053_AN_MRI2ToTaitTM9400AppNote_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MRI2/Tait/MS1053_AN_MRI2ToTaitTM9400AppNote_v101.pdf",
+      "bytes": 2028001,
+      "sha256": "56a5d529a5ec040e27d979f45e171a2bebc5019971910f92dd85765e94bdb8d3",
+      "checksum_sha256_base64": "VqXVKaXsBA4n2Xn0XhcaK+vFAZlxkQ+S3YV2XpS9uNM=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 16
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MS1017_AN_ConsoleToCiscoCallManagerAppNote_v111.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MS1017_AN_ConsoleToCiscoCallManagerAppNote_v111.pdf",
+      "bytes": 1405502,
+      "sha256": "392084eb17ff0dc7ba785112f54696238772843df15ac2a99deab89d4f50feff",
+      "checksum_sha256_base64": "OSCE6xf/Dce6eFES9UaWI4dyhD3xWsKpneq4nU9Q/v8=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 9
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Application Notes/MS1028_AN_AuxIoSystemBridgeAppNote_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Application Notes/MS1028_AN_AuxIoSystemBridgeAppNote_v100.pdf",
+      "bytes": 360780,
+      "sha256": "066c849acbd4baa1b3985ec8bc4598fc71e03a520117f4ac0f193d14466112f1",
+      "checksum_sha256_base64": "BmyEmsvUuqGzmF7IvEWY/HHgOlIBF/SsDxk9FEZhEvE=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 4
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0603_PR_MRIConfigurationCopyingForReplacement_v104.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Procedures/MS0603_PR_MRIConfigurationCopyingForReplacement_v104.pdf",
+      "bytes": 361207,
+      "sha256": "ace05964b784f18d3d3487f0f49e6acb17a3f706647525402bfcb61df9f5c1cf",
+      "checksum_sha256_base64": "rOBZZLeE8Y09NIfw9J5qyxej9wZkdSVAK/y2Hfn1wc8=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 4
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0604_PR_Removing-Fuse-for-Speaker-DC-Voltage_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Procedures/MS0604_PR_Removing-Fuse-for-Speaker-DC-Voltage_v100.pdf",
+      "bytes": 1632440,
+      "sha256": "b68a813296e063cd9ee216b1cb86f2d1dc5c5fd16d3199aafff45aeeb82e5ce8",
+      "checksum_sha256_base64": "toqBMpbgY82e4haxy4by0dxcX9FtMZmq//Ra7rguXOg=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 1
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0614_PR_ConsoleExecEnablePhoneBookSharing_v106.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Procedures/MS0614_PR_ConsoleExecEnablePhoneBookSharing_v106.pdf",
+      "bytes": 250743,
+      "sha256": "3c5584b2efda6f9268d7a844219f60a400ec022b813dbc59006dee4ab891c040",
+      "checksum_sha256_base64": "PFWEsu/ab5Jo16hEIZ9gpADsAiuBPbxZAG3uSriRwEA=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 3
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0618_PR_PackageDependenciesUpdate_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Procedures/MS0618_PR_PackageDependenciesUpdate_v101.pdf",
+      "bytes": 378732,
+      "sha256": "fe2a890b973c74e816d7d8b8000fe1cb4b93fe21647f60912bcb1e8ec52d185e",
+      "checksum_sha256_base64": "/iqJC5c8dOgW19i4AA/hy0uT/iFkf2CRK8sejsUtGF4=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 2
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0619_PR_InstallPackagesOffline_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Procedures/MS0619_PR_InstallPackagesOffline_v100.pdf",
+      "bytes": 228466,
+      "sha256": "7a55fa992df90237eaabbe965bdf2cabebbb2ee09625f1907be47cad37d2c4b4",
+      "checksum_sha256_base64": "elX6mS35Ajfqq76WW98sq+u7LuCWJfGQe+R8rTfSxLQ=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 3
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0625_PR_Enable_Black_Box_Glide_and_Switch_v102.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Procedures/MS0625_PR_Enable_Black_Box_Glide_and_Switch_v102.pdf",
+      "bytes": 631764,
+      "sha256": "0e72684576d217b5145b71498c8e68a8465af20d8458a8a8857afe6d2bad2ed7",
+      "checksum_sha256_base64": "DnJoRXbSF7UUW3FJjI5oqEZa8g2EWKiohXr+bSutLtc=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 3
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0631_PR_ChangeTouchscreenOrientation_v102.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Procedures/MS0631_PR_ChangeTouchscreenOrientation_v102.pdf",
+      "bytes": 191161,
+      "sha256": "fe070039f130f92491630ac6830ff916af62f4de739e445a2464729ee3cb4d9a",
+      "checksum_sha256_base64": "/gcAOfEw+SSRYwrGgw/5Fq9i9N5znkRaJGRynuPLTZo=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 3
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0634_PR_DistributeConsoleBuilderFilesviaSecureCopy_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Procedures/MS0634_PR_DistributeConsoleBuilderFilesviaSecureCopy_v100.pdf",
+      "bytes": 212772,
+      "sha256": "3abf08c0f0e1b938b76f85a709dcfcd4930f9ce9afb760afa4b38303406b0113",
+      "checksum_sha256_base64": "Or8IwPDhuTi3b4WnCdz81JMPnOmvt2CvpLODA0BrARM=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 1
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0635_PR_AddDisplayResolution_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Procedures/MS0635_PR_AddDisplayResolution_v101.pdf",
+      "bytes": 268922,
+      "sha256": "b9e76f5df74e4e140db431e4b9a08cb939a0028a94063800192c434f31b985bd",
+      "checksum_sha256_base64": "uedvXfdOThQNtDHkuaCMuTmgAoqUBjgAGSxDTzG5hb0=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 2
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0638_PR_DeleteSystemLogFilesviaTerminal_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Procedures/MS0638_PR_DeleteSystemLogFilesviaTerminal_v100.pdf",
+      "bytes": 312422,
+      "sha256": "38dca4f1164e8b128b00b0958fc5512790e3729c8f36699e7064c6c60825ab1b",
+      "checksum_sha256_base64": "ONyk8RZOixKLALCVj8VRJ5DjcpyPNmmecGTGxgglqxs=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 2
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0641_PR_RemoveChromiumSingletonLockFiles_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Procedures/MS0641_PR_RemoveChromiumSingletonLockFiles_v100.pdf",
+      "bytes": 153440,
+      "sha256": "fb56562e2ab010bbca3545db2f3d460ff60cc9ca27598e39da7c5a654a33a262",
+      "checksum_sha256_base64": "+1ZWLiqwELvKNUXbLz1GD/YMyconWY452nxaZUozomI=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 1
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0642_PR_TouchscreenMapping_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Procedures/MS0642_PR_TouchscreenMapping_v100.pdf",
+      "bytes": 205409,
+      "sha256": "51f1e5ecf8925f57dc8e913282709dae9a9a8634dc864cf3d15f430ba2a92d28",
+      "checksum_sha256_base64": "UfHl7PiSX1fcjpEygnCdrpqahjTchkzz0V9DC6KpLSg=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 2
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0643_PR_AddWifiDriverOnRSDS_G2_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Procedures/MS0643_PR_AddWifiDriverOnRSDS_G2_v100.pdf",
+      "bytes": 249504,
+      "sha256": "2d0698a5a35302933cb2e1fae5451894539c7235daa3dd05f4cc1f7082e00f8c",
+      "checksum_sha256_base64": "LQaYpaNTApM8suH65UUYlFOccjXao90F9MwfcILgD4w=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 1
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0644_PR_MRI2ManualSoftwareUpdate_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Procedures/MS0644_PR_MRI2ManualSoftwareUpdate_v100.pdf",
+      "bytes": 177813,
+      "sha256": "d1a8b7ee30e164361a01fbf73c274b0af8363f1078aa8fa7eba07347fe3e30b6",
+      "checksum_sha256_base64": "0ai37jDhZDYaAfv3PCdLCvg2PxB4qo+n66BzR/4+MLY=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 2
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0645_PR_SHG_S_D200_WirelessHeadsetAdapterConfiguration_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Procedures/MS0645_PR_SHG_S_D200_WirelessHeadsetAdapterConfiguration_v101.pdf",
+      "bytes": 306504,
+      "sha256": "74621c1d6bcf9fde51b898d31720b7e6985d1dd4aa3a7c9e51b85d441522fc34",
+      "checksum_sha256_base64": "dGIcHWvPn95RuJjTFyC35phdHdSqOnyeUbhdRBUi/DQ=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 3
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0201_RN_ConsoleApplicationReleaseNotes_v3.43.0.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Release Notes/MS0201_RN_ConsoleApplicationReleaseNotes_v3.43.0.pdf",
+      "bytes": 1514031,
+      "sha256": "dd7472eacef413574eddbcd0b1e4c81b94b28ecd90da192bb13f88a12192c060",
+      "checksum_sha256_base64": "3XRy6s70E1dO3bzQseTIG5Syjs2Q2hkrsT+IoSGSwGA=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 41
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0202_RN_MindshareRadioIntefaceReleaseNotes_v3.4.0.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Release Notes/MS0202_RN_MindshareRadioIntefaceReleaseNotes_v3.4.0.pdf",
+      "bytes": 1446145,
+      "sha256": "270729fac1edc4c50d822a58f9a91a78a7659cd982b6aef490433c33cc8d3067",
+      "checksum_sha256_base64": "Jwcp+sHtxMUNgipY+akaeKdlnNmCtq70kEM8M8yNMGc=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 13
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0203_RN_MindshareAudioInterfaceReleaseNotes_v3.1.1.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Release Notes/MS0203_RN_MindshareAudioInterfaceReleaseNotes_v3.1.1.pdf",
+      "bytes": 139053,
+      "sha256": "2c9fed196bddbcd5927a8414fad0f4e9634dc2b2324ff99a774eef847174ca9f",
+      "checksum_sha256_base64": "LJ/tGWvdvNWSeoQU+tD06WNNwrIyT/mad07vhHF0yp8=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 2
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0204_RN_NxipConventionalGatewayReleaseNotes_v3.3.0.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Release Notes/MS0204_RN_NxipConventionalGatewayReleaseNotes_v3.3.0.pdf",
+      "bytes": 1395454,
+      "sha256": "3a43a9b4d8711727873b903945e49dc79c29f5b0b2ead002d30aeb45ad732383",
+      "checksum_sha256_base64": "OkOptNhxFyeHO5A5ReSdx5wp9bCy6tAC0wrrRa1zI4M=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 5
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0205_RN_NxipTrunkingGatewayReleaseNotes_v3.4.0.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Release Notes/MS0205_RN_NxipTrunkingGatewayReleaseNotes_v3.4.0.pdf",
+      "bytes": 1411680,
+      "sha256": "09c27e1392a0310c1aa1200b4a9fbd8c50e159d8029913ca6c2d0234a8133235",
+      "checksum_sha256_base64": "CcJ+E5KgMQwaoSALSp+9jFDhWdgCmRPKbC0CNKgTMjU=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 11
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0206_RN_VoterReleaseNotes_v3.0.23.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Release Notes/MS0206_RN_VoterReleaseNotes_v3.0.23.pdf",
+      "bytes": 85928,
+      "sha256": "53e6ab5c17f9f7056b5929bb0169c7b302a641cc8e5465420a0d16a596bd9086",
+      "checksum_sha256_base64": "U+arXBf59wVrWSm7AWnHswKmQcyOVGVCCg0WpZa9kIY=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 2
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0207_RN_RTPGatewayReleaseNotes_v2.0.0.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Release Notes/MS0207_RN_RTPGatewayReleaseNotes_v2.0.0.pdf",
+      "bytes": 1382943,
+      "sha256": "70ee9c1d1ed8f6f09fc2a939ccf17b3d62a8b1491e0eb188a678b433e16aa2dc",
+      "checksum_sha256_base64": "cO6cHR7Y9vCfwqk5zPF7PWKosUkeDrGIpni0M+Fqotw=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 1
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0208_RN_BootMonitorReleaseNotes_v1.1.1.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Release Notes/MS0208_RN_BootMonitorReleaseNotes_v1.1.1.pdf",
+      "bytes": 246472,
+      "sha256": "f5dc0ed0f170288ae0e867d60a58de0419ff1ab5e831b596491eabbe1d7818b0",
+      "checksum_sha256_base64": "9dwO0PFwKIrg6GfWCljeBBn/GrXoMbWWSR6rvh14GLA=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 1
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0208_RN_CADPagingEncoderReleaseNotes_v1.4.1.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Release Notes/MS0208_RN_CADPagingEncoderReleaseNotes_v1.4.1.pdf",
+      "bytes": 1380761,
+      "sha256": "1b0e6133fc16cea5a7d20777e9ce864c4b3c4adbd2ee1174c6b7b9aefb4536d5",
+      "checksum_sha256_base64": "Gw5hM/wWzqWn0gd36c6GTEs8StvS7hF0xre5rvtFNtU=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 1
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0210_RN_SystemBridgeReleaseNotes_v2.0.0.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Release Notes/MS0210_RN_SystemBridgeReleaseNotes_v2.0.0.pdf",
+      "bytes": 1381316,
+      "sha256": "6fc86b00847a821e0d680176cfa01471838b7b359ea62c84f6907a53845d557e",
+      "checksum_sha256_base64": "b8hrAIR6gh4NaAF2z6AUcYOLezWepiyE9pB6U4RdVX4=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 1
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0211_RN_ConsoleClientReleaseNotes_v1.0.1.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Release Notes/MS0211_RN_ConsoleClientReleaseNotes_v1.0.1.pdf",
+      "bytes": 129697,
+      "sha256": "da8cc6f96b56320cf8d1429c7021d998baf019c5f40d4b9ad8bb92b6d540b603",
+      "checksum_sha256_base64": "2ozG+WtWMgz40UKccCHZmLrwGcX0DUua2LuSttVAtgM=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 1
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0212_RN_EssentialConsoleReleaseNotes_v1.11.0.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Release Notes/MS0212_RN_EssentialConsoleReleaseNotes_v1.11.0.pdf",
+      "bytes": 1395233,
+      "sha256": "10e04166c08b20001e946011e157d3126cefbb05974bcbe85163268f39205f53",
+      "checksum_sha256_base64": "EOBBZsCLIAAelGAR4VfTEmzvuwWXS8voUWMmjzkgX1M=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 6
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0213_RN_DmrAisTrunkingReleaseNotes_v2.3.0.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Release Notes/MS0213_RN_DmrAisTrunkingReleaseNotes_v2.3.0.pdf",
+      "bytes": 1399670,
+      "sha256": "77592b8c5792392825b905cffc410fdfd7a37d31b4d9e3e063416358802be166",
+      "checksum_sha256_base64": "d1krjFeSOSgluQXP/EEP39ejfTG02ePgY0FjWIAr4WY=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 7
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0214_RN_P25DfsiGatewayReleaseNotes_v2.4.0.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Release Notes/MS0214_RN_P25DfsiGatewayReleaseNotes_v2.4.0.pdf",
+      "bytes": 1398080,
+      "sha256": "7c8a3d71c0cfa2e84eaee8294be04d63a1604ee125a457d671157e5fb09091f3",
+      "checksum_sha256_base64": "fIo9ccDPouhOrugpS+BNY6FgTuElpFfWcRV+X7CQkfM=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 7
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0215_RN_AuxiliaryIoUnitReleaseNotes_v1.5.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Release Notes/MS0215_RN_AuxiliaryIoUnitReleaseNotes_v1.5.pdf",
+      "bytes": 1372426,
+      "sha256": "28f9f4f16d2385692a69fa9a34e19fa3b70de35d84916d664c13c26eae58f00c",
+      "checksum_sha256_base64": "KPn08W0jhWkqafqaNOGfo7cN412EkW1mTBPCbq5Y8Aw=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 1
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0216_RN_ServicePanelReleaseNotes_v3.3.0.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Release Notes/MS0216_RN_ServicePanelReleaseNotes_v3.3.0.pdf",
+      "bytes": 1387024,
+      "sha256": "d6d401aee3ca3534cc6b7fa615ff5045158f4039feeb5757c1e3ffeb33233812",
+      "checksum_sha256_base64": "1tQBruPKNTTMa3+mFf9QRRWPQDn+61dXweP/6zMjOBI=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 4
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0217_RN_AdvancedESChatGatewayReleaseNotes_v3.1.0.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Release Notes/MS0217_RN_AdvancedESChatGatewayReleaseNotes_v3.1.0.pdf",
+      "bytes": 1388562,
+      "sha256": "6342e368ea0e30c6af530de953f5399256513cc31cbc9832b15e4ed90397edc2",
+      "checksum_sha256_base64": "Y0LjaOoOMMavUw3pU/U5klZRPMMcvJgysV5O2QOX7cI=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 3
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0218_RN_CadAlertingGatewayReleaseNotes_v1.1.0.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Release Notes/MS0218_RN_CadAlertingGatewayReleaseNotes_v1.1.0.pdf",
+      "bytes": 1377103,
+      "sha256": "551e21346977c4bd5d67a8f3d14306e34577d7ca7e6a62f4cf1853edb02e6a85",
+      "checksum_sha256_base64": "VR4hNGl3xL1dZ6jz0UMG40V318p+amL0zxhT7bAuaoU=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 1
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0219_RN_DmrAisConventionalGatewayReleaseNotes_v2.3.1.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Release Notes/MS0219_RN_DmrAisConventionalGatewayReleaseNotes_v2.3.1.pdf",
+      "bytes": 129181,
+      "sha256": "58e951a510d327ed886e54868f0b8ad4ee344d355b2cecb1ffb6bd6c58786904",
+      "checksum_sha256_base64": "WOlRpRDTJ+2IblSGjwuK1O40TTVbLOyx/7a9bFh4aQQ=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 4
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0220_RN_NxipToolReleaseNotes_v1.0.0.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Release Notes/MS0220_RN_NxipToolReleaseNotes_v1.0.0.pdf",
+      "bytes": 1369607,
+      "sha256": "268183ee5041728a875bf38770184c7bbb8ad542076c5454e2ad37955143513b",
+      "checksum_sha256_base64": "JoGD7lBBcoqHW/OHcBhMe7uK1UIHbFRU4q03lVFDUTs=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 1
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0221_RN_MultiSpeakGatewayReleaseNotes_v1.1.0.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Release Notes/MS0221_RN_MultiSpeakGatewayReleaseNotes_v1.1.0.pdf",
+      "bytes": 1379615,
+      "sha256": "1b8b1f5a6d4b083de1f8d02f48c62c826e4c5e6052dd2564425fa5298facc31f",
+      "checksum_sha256_base64": "G4sfWm1LCD3h+NAvSMYsgm5MXmBS3SVkQl+lKY+swx8=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 1
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0222_RN_MindshareRadioInterface2ReleaseNotes_v1.4.0.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Release Notes/MS0222_RN_MindshareRadioInterface2ReleaseNotes_v1.4.0.pdf",
+      "bytes": 261400,
+      "sha256": "4379512d526c66e302469a9abd5e3f50a20e7c30a8a83fc2332aec108c51e224",
+      "checksum_sha256_base64": "Q3lRLVJsZuMCRpqavV4/UKIOfDCoqD/CMyrsEIxR4iQ=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 5
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0223_RN_P25CssiGatewayReleaseNotes_v1.1.0.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Release Notes/MS0223_RN_P25CssiGatewayReleaseNotes_v1.1.0.pdf",
+      "bytes": 1384406,
+      "sha256": "ccc7358982a5ae4d0ea32c7b6401a1ca6fb213adfb390731fcc8d7d8e288b884",
+      "checksum_sha256_base64": "zMc1iYKlrk0Ooyx7ZAGhym+yE637OQcx/MjX2OKIuIQ=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 2
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0225_RN_DmrHdapConventionalGatewayReleaseNotes_v1.1.0.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Release Notes/MS0225_RN_DmrHdapConventionalGatewayReleaseNotes_v1.1.0.pdf",
+      "bytes": 1379243,
+      "sha256": "53c59d5da342ba5a07df328f7b2b563466e2f6cebe45cd3a6bd14f85e927d08b",
+      "checksum_sha256_base64": "U8WdXaNCuloH3zKPeytWNGbi9s6+Rc06a9FPhekn0Is=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 1
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0226_RN_RoipPlusGatewayReleaseNotes_v1.0.2.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/Release Notes/MS0226_RN_RoipPlusGatewayReleaseNotes_v1.0.2.pdf",
+      "bytes": 1376801,
+      "sha256": "d65777b7f3a554833654e1d0b0ac7a0f2ba773e9c980386ded05d893463350a1",
+      "checksum_sha256_base64": "1ld3t/OlVIM2VOHQsKx6Dyunc+nJgDht7QXYk0YzUKE=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 1
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0101_UM_ConsoleApplicationManual_v130.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0101_UM_ConsoleApplicationManual_v130.pdf",
+      "bytes": 2910589,
+      "sha256": "d2c3f30ed4dd255d09194d90cc9b6f0adc07b534d2dda875f32d660a9326b0c6",
+      "checksum_sha256_base64": "0sPzDtTdJV0JGU2QzJtvCtwHtTTS3ah18y1mCpMmsMY=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 111
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0102_UM_MindshareRadioInterfaceManual_v114.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0102_UM_MindshareRadioInterfaceManual_v114.pdf",
+      "bytes": 1182037,
+      "sha256": "d0066960c1c0047eb136240917ad4ab34a44291adf92c856930c096d8b1de6d6",
+      "checksum_sha256_base64": "0AZpYMHABH6xNiQJF61Ks0pEKRrfkshWkwwJbYsd5tY=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 37
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0104_UM_MasterAuxiliaryInputOutputManual_v103.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0104_UM_MasterAuxiliaryInputOutputManual_v103.pdf",
+      "bytes": 479388,
+      "sha256": "a1402cf85c719d4fe96aef8af06c40a713f451ed45c3b40f2409752559ebc383",
+      "checksum_sha256_base64": "oUAs+FxxnU/pau+K8GxApxP0Ue1Fw7QPJAl1JVnrw4M=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 13
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0109_UM_IntercomInterfaceManual_rev1.00.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0109_UM_IntercomInterfaceManual_rev1.00.pdf",
+      "bytes": 471274,
+      "sha256": "016983c728fff66bbe30badb776ae94ea4ece3b1a4c61b5d6c83eb7fec5cd4ed",
+      "checksum_sha256_base64": "AWmDxyj/9mu+MLrbd2rpTqTs47GkxhtdbIPrf+xc1O0=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 3
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0110_UM_CardCageManual_rev1.00.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0110_UM_CardCageManual_rev1.00.pdf",
+      "bytes": 331474,
+      "sha256": "2f1ed1bbbd73d72f0d3b2338af4c448a72d2453be9944b7f0afebaee6e401f21",
+      "checksum_sha256_base64": "Lx7Ru71z1y8NOyM4r0xEinLSRTvplEt/Cv667m5AHyE=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 5
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0111_UM_HeadsetAdapter_rev1.00.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0111_UM_HeadsetAdapter_rev1.00.pdf",
+      "bytes": 235579,
+      "sha256": "dd4c0ec7237abe8198138b3ced4a703cbc741628e504e52e97ef47006952161c",
+      "checksum_sha256_base64": "3UwOxyN6voGYE4s87UpwPLx0FijlBOUul+9HAGlSFhw=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 3
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0113_UM_NxipConventionalGatewayManual_v204.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0113_UM_NxipConventionalGatewayManual_v204.pdf",
+      "bytes": 5791049,
+      "sha256": "a17d4f4e936f89bf4aef9ebe9a858404cef0f329397e26c41c2676ba863b3580",
+      "checksum_sha256_base64": "oX1PTpNvib9K756+moWEBM7w8yk5fibEHCZ2uoY7NYA=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 21
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0114_UM_NxipTrunkingGatewayManual_v204.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0114_UM_NxipTrunkingGatewayManual_v204.pdf",
+      "bytes": 5995649,
+      "sha256": "54066721358d9ffff479b72da4ce4214b4ad778e0a88fc515855b0a2ebd752ba",
+      "checksum_sha256_base64": "VAZnITWNn//0ebctpM5CFLStd44KiPxRWFWwouvXUro=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 20
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0115_UM_RTPGatewayManual_v106.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0115_UM_RTPGatewayManual_v106.pdf",
+      "bytes": 2068221,
+      "sha256": "c633203a55eb352b58a714ef58ba8ab388ead2a18fa575c33e285d04093f477f",
+      "checksum_sha256_base64": "xjMgOlXrNStYpxTvWLqKs4jq0qGPpXXDPihdBAk/R38=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 13
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0116_UM_CADPagingEncoderManual_v104.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0116_UM_CADPagingEncoderManual_v104.pdf",
+      "bytes": 624275,
+      "sha256": "e8b50926b2f1b2c8bfdd0b0559be3383ed8260ee11f639e8f3bd00048141e208",
+      "checksum_sha256_base64": "6LUJJrLxssi/3QsFWb4zg+2CYO4R9jno870ABIFB4gg=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 15
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0117_UM_100500MAXplusG2Manual_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0117_UM_100500MAXplusG2Manual_v101.pdf",
+      "bytes": 1188509,
+      "sha256": "0c2a49d8de09f28c26adbfafdc5ce4e5d74df20dcd180133692b7e758954e2fe",
+      "checksum_sha256_base64": "DCpJ2N4J8owmrb+v3Fzk5ddN8g3NGAEzaSt+dYlU4v4=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 28
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0118_UM_SystemBridgeManual_v200.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0118_UM_SystemBridgeManual_v200.pdf",
+      "bytes": 2083577,
+      "sha256": "054681621c04135b16cb5701375c73b088ded4d161e0764ae9ae0292ada6afbb",
+      "checksum_sha256_base64": "BUaBYhwEE1sWy1cBN1xzsIje1NFh4HZK6a4Ckq2mr7s=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 14
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0119_UM_ConsoleClientManual_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0119_UM_ConsoleClientManual_v100.pdf",
+      "bytes": 644137,
+      "sha256": "f477572bcaa5b19e2c86974b4cd5bdd4bdcb01d4097d978beaf370430965fd90",
+      "checksum_sha256_base64": "9HdXK8qlsZ4shpdLTNW91L3LAdQJfZeL6vNwQwll/ZA=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 6
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0120_UM_EssentialConsoleTechnicalUserManual_v109.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0120_UM_EssentialConsoleTechnicalUserManual_v109.pdf",
+      "bytes": 1513605,
+      "sha256": "07de42e1f2d88f0e1cb951b0948daff0c7145d081f6f74f2a4ddfe0bb3509709",
+      "checksum_sha256_base64": "B95C4fLYjw4cuVGwlI2v8McUXQgfb3TypN3+C7NQlwk=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 21
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0121_UM_EssentialConsoleUserManual_v105.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0121_UM_EssentialConsoleUserManual_v105.pdf",
+      "bytes": 2436322,
+      "sha256": "e17757f185103eb6f1a6286c59152c10268f598b163a6692f2b9e06898811d3b",
+      "checksum_sha256_base64": "4XdX8YUQPrbxpihsWRUsECaPWYsWOmaS8rngaJiBHTs=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 15
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0122_UM_DmrAisTrunkingGatewayManual_v204.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0122_UM_DmrAisTrunkingGatewayManual_v204.pdf",
+      "bytes": 5825905,
+      "sha256": "3e6826e79d14cb0bfee6937028bfc15e4101f8574d68d15438ca79e828361332",
+      "checksum_sha256_base64": "Pmgm550Uywv+5pNwKL/BXkEB+FdNaNFUOMp56Cg2EzI=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 19
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0123_UM_DmrAisConventionalGatewayManual_v204.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0123_UM_DmrAisConventionalGatewayManual_v204.pdf",
+      "bytes": 5757577,
+      "sha256": "0ef82155d788bcc64899c3695d7b94c050439d7aabd95a0db1f8d5ad65754ea2",
+      "checksum_sha256_base64": "DvghVdeIvMZImcNpXXuUwFBDnXqr2VoNsfjVrWV1TqI=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 18
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0124_UM_AdvancedESChatGatewayManual_v106.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0124_UM_AdvancedESChatGatewayManual_v106.pdf",
+      "bytes": 2554223,
+      "sha256": "aa87e17d19ae8faa0af284107da01dd9f2cf08015afde02fde98308aa90890a3",
+      "checksum_sha256_base64": "qofhfRmuj6oK8oQQfaAd2fLPCAFa/eAv3pgwiqkIkKM=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 21
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0125_UM_P25DfsiGatewayManual_v205.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0125_UM_P25DfsiGatewayManual_v205.pdf",
+      "bytes": 5700843,
+      "sha256": "712945ffce3c11ba2f776cf67fe68226b6fa8098289907c66f64862791a18909",
+      "checksum_sha256_base64": "cSlF/848Ebovd2z2f+aCJrb6gJgomQfGb2SGJ5GhiQk=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 22
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0126_UM_ServicePanelManual_v107.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0126_UM_ServicePanelManual_v107.pdf",
+      "bytes": 2399388,
+      "sha256": "83129ef77e136a34059607759bf8ac84b596f1beaf383fca941aada90e2e6b83",
+      "checksum_sha256_base64": "gxKe934TajQFlgd1m/ishLWW8b6vOD/KlBqtqQ4ua4M=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 27
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0127_UM_MindshareRadioInterface2Manual_v105.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0127_UM_MindshareRadioInterface2Manual_v105.pdf",
+      "bytes": 2379213,
+      "sha256": "de2f084989b17ac7bd3d80f937bc35f82d47d9f02bac1401d8a13b5536a6c68c",
+      "checksum_sha256_base64": "3i8ISYmxese9PYD5N7w1+C1H2fArrBQB2KE7VTamxow=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 45
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0128_UM_CadAlertingGatewayManual_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0128_UM_CadAlertingGatewayManual_v101.pdf",
+      "bytes": 1688973,
+      "sha256": "c4b8f55d76f6f489d0ca96b7ad2baed1c387e93f4c5eabe0228464cac43e07af",
+      "checksum_sha256_base64": "xLj1XXb29InQypa3rSuu0cOH6T9MXqvgIoRkysQ+B68=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 11
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0130_UM_NxipToolManual_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0130_UM_NxipToolManual_v100.pdf",
+      "bytes": 5615933,
+      "sha256": "e9e83dde66be115f58763f4440179f5056c63181593a14272c556915c467ade1",
+      "checksum_sha256_base64": "6eg93ma+EV9Ydj9EQBefUFbGMYFZOhQnLFVpFcRnreE=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 4
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0131_UM_RemoteSupportandDiagnosticServerUserManual_v104.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0131_UM_RemoteSupportandDiagnosticServerUserManual_v104.pdf",
+      "bytes": 729058,
+      "sha256": "9c6d4ba2238d951f5cb59ff09390684023cd3b0119c9d6dc2881159ddcba221f",
+      "checksum_sha256_base64": "nG1LoiONlR9ctZ/wk5BoQCPNOwEZydbcKIEVndy6Ih8=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 8
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0132_UM_MultiSpeakGatewayManual_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0132_UM_MultiSpeakGatewayManual_v101.pdf",
+      "bytes": 1725950,
+      "sha256": "cfb595e9898f4a292e848a296311c4fc7724d8e50639155fc1394654ccf50594",
+      "checksum_sha256_base64": "z7WV6YmPSikuhIopYxHE/Hck2OUGORVfwTlGVMz1BZQ=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 11
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0133_UM_8LineTelcoPanelManual_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0133_UM_8LineTelcoPanelManual_v100.pdf",
+      "bytes": 1618966,
+      "sha256": "9790f1586145dcb1541a45e1c9d21f346921ed3d491c55850d04cabe54edd56e",
+      "checksum_sha256_base64": "l5DxWGFF3LFUGkXhydIfNGkh7T1JHFWFDQTKvlTt1W4=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 4
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0134_UM_DmrHdapConventionalGatewayManual_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0134_UM_DmrHdapConventionalGatewayManual_v101.pdf",
+      "bytes": 2095924,
+      "sha256": "e21eacb2698084871375ef36c5067b9fc69aa0ea1e6293b89ade6c8b3ff21223",
+      "checksum_sha256_base64": "4h6ssmmAhIcTde82xQZ7n8aaoOoeYpO4mt5siz/yEiM=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 14
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0135_UM_P25CssiGatewayManual_v101.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0135_UM_P25CssiGatewayManual_v101.pdf",
+      "bytes": 5580301,
+      "sha256": "d10cae86327bf08714006fbc331290402fb11fe7bfae9bd25da0b7f8bd5f5672",
+      "checksum_sha256_base64": "0QyuhjJ78IcUAG+8MxKQQC+xH+e/rpvSXaC3+L1fVnI=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 18
+    },
+    {
+      "source_path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0137_UM_RoipPlusGatewayManual_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Current Documentation/Technical Documents/User Manuals/MS0137_UM_RoipPlusGatewayManual_v100.pdf",
+      "bytes": 2287655,
+      "sha256": "d78a4b1f656fd033a24d703d113ea4da68531668aeab8c5b8fd5eeb38d01e37c",
+      "checksum_sha256_base64": "14pLH2Vv0DOiTXA9ET6k2mhTFmiuq4xbj9Xus40B43w=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 17
+    },
+    {
+      "source_path": "mindshare/MS0644_PR_MRI2ManualSoftwareUpdate_v100.pdf",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/MS0644_PR_MRI2ManualSoftwareUpdate_v100.pdf",
+      "bytes": 177813,
+      "sha256": "d1a8b7ee30e164361a01fbf73c274b0af8363f1078aa8fa7eba07347fe3e30b6",
+      "checksum_sha256_base64": "0ai37jDhZDYaAfv3PCdLCvg2PxB4qo+n66BzR/4+MLY=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 2
+    },
+    {
+      "source_path": "mindshare/README - Mindshare Library.md",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/README - Mindshare Library.md",
+      "bytes": 2329,
+      "sha256": "f2b17b7093b7cd1f0a2ac519e2f20a5bb2757c81931dbf840489cd37abeb2bc0",
+      "checksum_sha256_base64": "8rF7cJO3zR8KKsUZ4vIKW7J1fIGTHb+EBInNN6vrK8A=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 1
+    },
+    {
+      "source_path": "mindshare/Software Catalog/Mindshare Software Catalog 2026-07-26.md",
+      "destination_key": "tenants/logan-synthetic/document-library/mindshare/current/onprem-approved-164-2026-08-05/Software Catalog/Mindshare Software Catalog 2026-07-26.md",
+      "bytes": 2577,
+      "sha256": "7b058f0f6fc0dff4dd0719e21decf6a6321e8b848ea1a20cb82f36813e617d0c",
+      "checksum_sha256_base64": "ewWPD2/A3/TdBxniHez2pjIei4SOoaIMuC82gT5hfQw=",
+      "classification": "mindshare-current",
+      "approval_id": "user-approved-all-existing-onprem-project-documents-2026-08-05",
+      "chunk_count": 2
+    }
+  ],
+  "kb_vector_rag_authorized": false
+}

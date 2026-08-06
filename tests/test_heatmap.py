@@ -259,9 +259,9 @@ class HeatmapPageTests(unittest.TestCase):
 
         response = self.client.get("/map/heatmap?hours=8")
 
-        self.assertIn("CAD DISCONNECTED", response.text)
-        self.assertIn("Historical CAD activity is unavailable", response.text)
-        self.assertIn('role="alert"', response.text)
+        self.assertIn("Historical activity source unavailable", response.text)
+        self.assertIn("No approved imported historical dataset", response.text)
+        self.assertIn('role="status"', response.text)
 
     @patch("app.main.get_live_map_snapshot")
     def test_live_map_links_to_recent_activity(self, map_snapshot_mock):

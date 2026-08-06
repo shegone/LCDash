@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lcdash.local/schema/analytics-import-admission-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "manifest_id", "source", "target", "window", "tables", "derived_views", "export_evidence"],
+  "properties": {
+    "schema_version": {"const": "lcdash.analytics-import-admission.v1"},
+    "manifest_id": {"type": "string"},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "transaction", "identity_reference", "authoritative", "preservation_required"],
+      "properties": {
+        "mode": {"const": "database-enforced-read-only"},
+        "transaction": {"const": "repeatable-read-read-only"},
+        "identity_reference": {"type": "string"},
+        "authoritative": {"const": true},
+        "preservation_required": {"const": true}
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["account_id", "region", "tenant_id", "database", "schema", "identity_arn", "encrypted", "tls_required"],
+      "properties": {
+        "account_id": {"const": "862772137583"},
+        "region": {"const": "us-east-1"},
+        "tenant_id": {"const": "logan-synthetic"},
+        "database": {"const": "lcdash"},
+        "schema": {"const": "lcdash_analytics"},
+        "identity_arn": {"type": "string"},
+        "encrypted": {"const": true},
+        "tls_required": {"const": true}
+      }
+    },
+    "window": {"type": "object"},
+    "tables": {"type": "array", "minItems": 5, "maxItems": 5},
+    "derived_views": {"type": "array", "minItems": 2, "maxItems": 2},
+    "export_evidence": {"type": "object"}
+  }
+}

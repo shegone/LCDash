@@ -221,7 +221,12 @@ class AnalyticsOverviewRouteTests(unittest.TestCase):
         self.assertIn("/static/js/chart.umd.min.js", response.text)
         self.assertNotIn("cdn.jsdelivr.net/npm/chart.js", response.text)
         self.assertIn("/static/js/lcdash-analytics.js", response.text)
-        overview_mock.assert_called_once_with(period="30d", start="", end="")
+        overview_mock.assert_called_once_with(
+            period="30d",
+            start="",
+            end="",
+            tenant_context=None,
+        )
 
     @patch("app.main.get_analytics_overview")
     def test_analytics_overview_api_is_no_store(self, overview_mock):
@@ -232,7 +237,12 @@ class AnalyticsOverviewRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["cache-control"], "no-store")
         self.assertEqual(response.json()["metrics"]["total_calls"], 42)
-        overview_mock.assert_called_once_with(period="7d", start="", end="")
+        overview_mock.assert_called_once_with(
+            period="7d",
+            start="",
+            end="",
+            tenant_context=None,
+        )
 
     def test_analytics_overview_api_rejects_invalid_custom_range(self):
         response = self.client.get("/api/analytics/overview?start=2026-07-20")

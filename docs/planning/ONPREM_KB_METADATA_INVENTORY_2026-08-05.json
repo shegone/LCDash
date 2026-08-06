@@ -1,0 +1,115 @@
+{
+  "schema_version": "lcdash.onprem-kb-metadata-inventory.v1",
+  "status": "SUPERSEDED_PARTIAL_TRANSCRIPT",
+  "superseded_by": "ONPREM_KB_COMPLETE_METADATA_MANIFEST_2026-08-05.json",
+  "source": {
+    "host": "lcdash-server",
+    "root": "/srv/lcdash-data/documents",
+    "inspection_mode": "forced-command metadata only",
+    "fields_returned": ["relative_path", "bytes", "mtime_epoch"],
+    "content_read": false,
+    "source_changed": false,
+    "ssh_sessions_used": 1
+  },
+  "counts": {
+    "total_files": 333,
+    "mindshare": 297,
+    "centralsquare": 36
+  },
+  "observed_classifications": [
+    {
+      "source_pattern": "mindshare/Current Documentation/Technical Documents/**/*.pdf",
+      "classification": "mindshare-current-candidate",
+      "destination": "tenants/logan-synthetic/document-library/mindshare/current/<manifest-id>/",
+      "disposition": "candidate subject to per-file hash, size, duplicate, current-version, and exclusion review"
+    },
+    {
+      "source_pattern": "mindshare/User Manuals/*.pdf",
+      "classification": "mindshare-manual-candidate",
+      "destination": "tenants/logan-synthetic/document-library/mindshare/current/<manifest-id>/",
+      "disposition": "candidate; compare against Current Documentation before transfer"
+    },
+    {
+      "source_pattern": "mindshare/Software Catalog/*.md",
+      "classification": "mindshare-software-catalog-source",
+      "destination": "tenants/logan-synthetic/document-library/mindshare/current/<manifest-id>/",
+      "disposition": "candidate; markdown is not admitted to software-catalog prefix by current intake contract"
+    },
+    {
+      "source_pattern": "mindshare/Public CSS Mindshare Website/**",
+      "classification": "public-site-copy",
+      "destination": null,
+      "disposition": "exclude from direct copy; separately refetch only from reviewed public allowlist"
+    },
+    {
+      "source_pattern": "mindshare/download*/**",
+      "classification": "download-or-archive-copy",
+      "destination": null,
+      "disposition": "exclude by default pending current-version and duplicate reconciliation"
+    },
+    {
+      "source_pattern": "mindshare/Current Documentation/**/Discontinued/**",
+      "classification": "discontinued-document",
+      "destination": null,
+      "disposition": "exclude from current library"
+    },
+    {
+      "source_pattern": "mindshare/**/*Backup*|**/*Firmware*|**/.drive-sync-status|**/Readme.md",
+      "classification": "mandatory-or-generated-exclusion",
+      "destination": null,
+      "disposition": "exclude before any content transfer"
+    },
+    {
+      "source_pattern": "mindshare/MS3042_SI_LoganCountyWVSystemInformation_v113.pdf",
+      "classification": "logan-county-system-information",
+      "destination": "tenants/logan-synthetic/document-library/mindshare/sanitized-system/<manifest-id>/",
+      "disposition": "requires separate content-level sanitization and approval; metadata alone is insufficient"
+    },
+    {
+      "source_pattern": "centralsquare/*.pdf",
+      "classification": "centralsquare-current-candidate",
+      "destination": "tenants/logan-synthetic/document-library/centralsquare/current/<manifest-id>/",
+      "disposition": "candidate subject to per-file hash, 25 MiB limit, duplicate, ownership, and human review"
+    },
+    {
+      "source_pattern": "centralsquare/911 central square combined files 1pdf.pdf",
+      "classification": "oversize-combined-document",
+      "observed_bytes": 49035668,
+      "destination": null,
+      "disposition": "excluded by current 25 MiB per-file admission limit; split/review requires a later authorized preparation step"
+    },
+    {
+      "source_pattern": "centralsquare/.drive-sync-status|centralsquare/desktop.ini",
+      "classification": "generated-or-system-metadata",
+      "destination": null,
+      "disposition": "exclude"
+    }
+  ],
+  "transfer_plan": {
+    "status": "NO_TRANSFER_AUTHORIZED_OR_PERFORMED",
+    "next_required_step": "Run a newly authorized forced metadata export that writes its complete output to a local capture file, then produce a per-file candidate manifest with SHA-256 gathered in a separately authorized read-only hashing pass.",
+    "sequence": [
+      "capture every metadata row without transcript truncation",
+      "apply mandatory path, type, size, discontinued, generated-metadata, and archive exclusions",
+      "reconcile duplicate/current versions by filename, version, size, and later SHA-256",
+      "separately sanitize and approve Logan County system-information material",
+      "record per-file owner, sensitivity, copyright basis, retention, malware scan, secret scan, and human approval",
+      "stage only signed-manifest files under a new manifest-scoped destination prefix",
+      "verify exact count, SHA-256, encryption, metadata, and non-public posture before any ingestion review"
+    ]
+  },
+  "source_gaps": [
+    "The one-time SSH command completed, but the client tool truncated part of the 333-line transcript; a complete per-file manifest and subgroup byte totals cannot be reconstructed without another explicitly authorized metadata capture.",
+    "Metadata cannot establish document contents, sensitivity, copyright/license basis, malware status, secrets, current-versus-duplicate status, or sanitization sufficiency.",
+    "No hashes were returned by the forced command, so source integrity and duplicate identity remain unverified.",
+    "No CentralSquare subdirectory or manifest asserted current/superseded status; 33 size-eligible PDFs remain candidates, not admitted objects."
+  ],
+  "safety": {
+    "document_content_read": false,
+    "documents_uploaded": 0,
+    "aws_changes": false,
+    "rag_enabled": false,
+    "source_changes": false,
+    "additional_ssh_access_attempted": false
+  }
+}

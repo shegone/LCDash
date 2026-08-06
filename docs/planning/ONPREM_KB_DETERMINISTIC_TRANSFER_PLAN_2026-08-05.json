@@ -1,0 +1,30 @@
+{
+  "schema_version": "lcdash.onprem-kb-deterministic-transfer-plan.v1",
+  "status": "PLAN_ONLY_KEY_NOT_AUTHORIZED_ON_SERVER",
+  "source_root": "/srv/lcdash-data/documents",
+  "allowlist_file": "ONPREM_KB_TRANSFER_ALLOWLIST_2026-08-05.txt",
+  "allowlist_sha256": "91ce127538d0ab80931e2b5bfb11fe4d9155ed8ab5336a41194dc47e7ff638e3",
+  "candidate_count": 164,
+  "candidate_library_counts": {
+    "mindshare": 131,
+    "centralsquare": 33
+  },
+  "excluded_count": 176,
+  "sanitization_hold_count": 1,
+  "excluded_reason_counts": {
+    "discontinued": 4,
+    "download-or-aggregate-copy": 102,
+    "duplicate-specialty-copy": 12,
+    "generated-or-empty-placeholder": 6,
+    "hard-exclusion-path-term": 8,
+    "legacy-copy-superseded-by-current-documentation": 15,
+    "over-25-mib": 2,
+    "public-site-copy-do-not-copy": 27
+  },
+  "forced_transfer": "GNU tar stdout stream from the root-owned exact allowlist only",
+  "content_read_during_planning": false,
+  "server_contacted_during_planning": false,
+  "upload_authorized": false,
+  "aws_changes_authorized": false,
+  "kb_vector_rag_authorized": false
+}

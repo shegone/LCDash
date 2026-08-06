@@ -5,16 +5,27 @@
 {% block content %}
 <link rel="stylesheet" href="/static/css/lcdash-voice.css?v=20260726">
 
-<section class="voice-shell">
+<section class="voice-shell command-page">
+    {% if cloud_voice %}
+    <div class="alert alert-info" role="status">
+        <strong>{{ cloud_presentation_status.voice.label }}</strong>
+        {{ cloud_presentation_status.voice.notice }}
+    </div>
+    <div class="command-safety-banner" role="note">
+        Advisory only. Voice cannot write to CAD, dispatch, alerts, paging, station tones,
+        radio, ESInet, or any operational control. Text-to-speech does not require the
+        document-ingestion gate; document-grounded answers do.
+    </div>
+    {% endif %}
     <header class="voice-hero glass">
         <div class="voice-identity">
             <div class="voice-orb" aria-hidden="true">
                 <i class="bi bi-soundwave"></i>
             </div>
             <div>
-                <div class="voice-eyebrow">LOCAL SPEECH INTELLIGENCE</div>
+                <div class="voice-eyebrow">{% if cloud_voice %}CLOUD ADVISORY VOICE{% else %}LOCAL SPEECH INTELLIGENCE{% endif %}</div>
                 <h1>Voice Lab</h1>
-                <p>Private speech for MAE, JACK, and future radio transcription.</p>
+                <p>{% if cloud_voice %}Optional advisory voice; no CAD actions, audio storage, or transcript storage.{% else %}Private speech for MAE, JACK, and future radio transcription.{% endif %}</p>
             </div>
         </div>
         <div class="voice-status" id="voice-status">
@@ -60,29 +71,30 @@
                 </label>
             </div>
 
-            <button class="voice-primary-button" id="voice-speak" type="button">
+            <button class="voice-primary-button" id="voice-speak" type="button" {% if cloud_voice and not tts_enabled %}disabled{% endif %}>
                 <i class="bi bi-play-fill"></i>
                 Generate and play
             </button>
             <audio id="voice-player" controls hidden></audio>
             <div class="voice-message" id="voice-tts-message" aria-live="polite"></div>
+            {% if cloud_voice and not tts_enabled %}<div class="voice-message is-error">{{ voice_disabled_reason }}</div>{% endif %}
         </section>
 
         <section class="voice-panel glass">
             <div class="voice-panel-heading">
                 <div>
                     <div class="voice-panel-kicker">SPEECH TO TEXT</div>
-                    <h2>Test local transcription</h2>
+                    <h2>{% if cloud_voice %}Test managed transcription{% else %}Test local transcription{% endif %}</h2>
                 </div>
                 <i class="bi bi-mic-fill"></i>
             </div>
 
             <p class="voice-copy">
-                Record a short test. The browser sends it directly to the local
-                speech service; this beta test does not save the recording.
+                {% if cloud_voice %}Record a short push-to-talk test. Audio and transcript are bounded and are not persisted by LCDash.{% else %}Record a short test. The browser sends it directly to the local
+                speech service; this beta test does not save the recording.{% endif %}
             </p>
 
-            <button class="voice-record-button" id="voice-record" type="button">
+            <button class="voice-record-button" id="voice-record" type="button" {% if cloud_voice and not stt_enabled %}disabled{% endif %}>
                 <span class="voice-record-dot"></span>
                 Start recording
             </button>
@@ -93,14 +105,15 @@
                 <p id="voice-transcript">Your transcription will appear here.</p>
             </div>
             <div class="voice-message" id="voice-stt-message" aria-live="polite"></div>
+            {% if cloud_voice and not stt_enabled %}<div class="voice-message is-error">Cloud transcription remains disabled pending a separate implementation and activation review.</div>{% endif %}
         </section>
     </div>
 
     <section class="voice-roadmap glass">
         <div>
             <i class="bi bi-gpu-card"></i>
-            <strong>RTX 3090 local engine</strong>
-            <span>Kokoro speech and Faster-Whisper transcription</span>
+                <strong>{% if cloud_voice %}AWS managed voice boundary{% else %}RTX 3090 local engine{% endif %}</strong>
+                <span>{% if cloud_voice %}Matthew and Joanna are enabled; document-grounded answers remain unavailable until approved ingestion{% else %}Kokoro speech and Faster-Whisper transcription{% endif %}</span>
         </div>
         <div>
             <i class="bi bi-soundwave"></i>
@@ -109,8 +122,8 @@
         </div>
         <div>
             <i class="bi bi-shield-lock-fill"></i>
-            <strong>Private by design</strong>
-            <span>Speech stays inside the LCDash server network</span>
+                <strong>{% if cloud_voice %}Advisory and action-free{% else %}Private by design{% endif %}</strong>
+                <span>{% if cloud_voice %}No CAD, dispatch, paging, alert, radio, or ESInet tools{% else %}Speech stays inside the LCDash server network{% endif %}</span>
         </div>
     </section>
 </section>

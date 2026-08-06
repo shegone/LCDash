@@ -40,6 +40,36 @@
     let activeSpeechController = null;
     let activeSpeechRequest = 0;
 
+    const maeShell = document.querySelector(".mae-shell");
+    const cloudMode = maeShell?.dataset.cloudMode === "true";
+    const advisoryReady = maeShell?.dataset.advisoryReady === "true";
+    if (cloudMode) {
+        document.querySelectorAll("[data-mae-prompt], .mae-prompt-folder").forEach(function (control) {
+            control.hidden = true;
+        });
+    }
+    if (cloudMode && !advisoryReady) {
+        questionInput.disabled = true;
+        questionInput.placeholder = "Approved citation source unavailable";
+        sendButton.disabled = true;
+        voiceToggle.disabled = true;
+        document.querySelectorAll("[data-mae-prompt]").forEach(function (button) {
+            button.disabled = true;
+        });
+        setStatusUnavailable();
+        return;
+    }
+
+    function setStatusUnavailable() {
+        ["mae-ai-status", "mae-db-status", "mae-cad-status"].forEach(function (cardId) {
+            const card = document.getElementById(cardId);
+            if (!card) return;
+            card.classList.add("is-offline");
+            const value = card.querySelector("strong");
+            if (value) value.textContent = "Unavailable";
+        });
+    }
+
     function setStatus(cardId, online, text) {
         const card = document.getElementById(cardId);
         if (!card) return;
@@ -70,10 +100,8 @@
             );
             setStatus(
                 "mae-cad-status",
-                status.centralsquare.configured,
-                status.centralsquare.configured
-                    ? "Read-only ready"
-                    : "Not configured"
+                status.centralsquare.connected,
+                status.centralsquare.mode || "Unavailable"
             );
         } catch (error) {
             setStatus("mae-ai-status", false, "Unavailable");
@@ -102,9 +130,9 @@
         voiceToggle.disabled = !voiceReady;
         voiceToggle.title = voiceReady
             ? "Start a private voice conversation with MAE"
-            : "The local speech models are not ready";
+            : "Conversational voice is disabled until speech synthesis and transcription are both ready";
         if (!voiceReady) {
-            voiceToggle.querySelector("small").textContent = "Voice service unavailable";
+            voiceToggle.querySelector("small").textContent = "Unavailable - transcription gate not complete";
         }
     }
 
@@ -687,6 +715,32 @@
         text.textContent = content;
         bubble.append(name, text);
 
+        if (role === "assistant" && cloudMode) {
+            const citations = Array.isArray(responsePayload.citations)
+                ? responsePayload.citations
+                : [];
+            if (citations.length) {
+                const citationBlock = document.createElement("div");
+                citationBlock.className = "mae-sources mae-cloud-citations";
+                citationBlock.setAttribute("aria-label", "Approved document citations");
+                citations.forEach(function (citation) {
+                    const chip = document.createElement("span");
+                    chip.className = "mae-source-chip";
+                    const location = citation.page
+                        ? `page ${citation.page}`
+                        : (citation.section ? `section ${citation.section}` : "approved source");
+                    const revision = citation.revision ? ` · revision ${citation.revision}` : "";
+                    chip.textContent = `${citation.title || "Approved document"} · ${location}${revision}`;
+                    citationBlock.appendChild(chip);
+                });
+                bubble.appendChild(citationBlock);
+            }
+            article.append(avatar, bubble);
+            messages.appendChild(article);
+            messages.scrollTop = messages.scrollHeight;
+            return;
+        }
+
         const sources = responsePayload.sources;
         if (Array.isArray(sources) && sources.length) {
             const sourceList = document.createElement("div");
@@ -814,12 +868,16 @@
     }
 
     async function fetchCompleteAnswer(question, requestHistory, signal) {
-        const response = await fetch("/api/mae/chat", {
+        const endpoint = cloudMode ? "/api/cloud-ai/advisory" : "/api/mae/chat";
+        const requestBody = cloudMode
+            ? {question: question}
+            : {question: question, history: requestHistory, entities: entities};
+        const response = await fetch(endpoint, {
             method: "POST",
             headers: {"Content-Type": "application/json"},
             cache: "no-store",
             signal: signal,
-            body: JSON.stringify({question: question, history: requestHistory, entities: entities})
+            body: JSON.stringify(requestBody)
         });
         const responseText = await response.text();
         let payload = {};
@@ -828,7 +886,27 @@
         } catch (parseError) {
             throw new Error("MAE's secure connection returned an invalid response. Please try the question again.");
         }
-        if (!response.ok) throw new Error(payload.detail || "MAE could not complete the inquiry.");
+        if (!response.ok) {
+            throw new Error(cloudMode
+                ? "The approved citation service is not ready. No advisory answer was produced."
+                : (payload.detail || "MAE could not complete the inquiry."));
+        }
+        if (cloudMode) {
+            if (payload.denied === true) {
+                return {
+                    answer: "No advisory answer was produced because approved citation support was unavailable.",
+                    citations: [],
+                    denied: true
+                };
+            }
+            if (!payload.answer || !Array.isArray(payload.citations) || !payload.citations.length) {
+                return {
+                    answer: "No advisory answer was displayed because mandatory approved citations were missing.",
+                    citations: [],
+                    denied: true
+                };
+            }
+        }
         return payload;
     }
 
@@ -946,7 +1024,7 @@
             } else {
                 payload = await fetchCompleteAnswer(question, requestHistory, controller.signal);
             }
-            mergeEntities(payload.entities);
+            if (!cloudMode) mergeEntities(payload.entities);
             addMessage("assistant", payload.answer, payload);
             history.push({role: "assistant", content: payload.answer});
             answerToSpeak = payload.answer;
@@ -1013,6 +1091,12 @@
     voiceStop.addEventListener("click", endVoiceMode);
     window.addEventListener("beforeunload", endVoiceMode);
 
-    loadStatus();
-    loadVoiceStatus();
+    if (cloudMode) {
+        setStatus("mae-ai-status", true, "Citation-only advisory");
+        setStatus("mae-db-status", false, "Not used in cloud advisory");
+        setStatus("mae-cad-status", false, "No CAD access");
+    } else {
+        loadStatus();
+        loadVoiceStatus();
+    }
 })();

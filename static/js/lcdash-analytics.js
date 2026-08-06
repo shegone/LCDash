@@ -353,8 +353,8 @@
         const subtitle = document.createElement("div");
         subtitle.className = "print-report-subtitle";
         const generatedAt = snapshot.generated_at
-            ? new Date(snapshot.generated_at).toLocaleString()
-            : new Date().toLocaleString();
+            ? new Date(snapshot.generated_at).toLocaleString("en-US", {timeZone: "America/New_York", timeZoneName: "short"})
+            : new Date().toLocaleString("en-US", {timeZone: "America/New_York", timeZoneName: "short"});
         subtitle.textContent =
             `Logan County 911 Operations Analytics | ${snapshot.period_label} | Generated ${generatedAt}`;
         printShell.appendChild(subtitle);

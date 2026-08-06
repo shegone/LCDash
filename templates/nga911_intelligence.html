@@ -7,6 +7,10 @@
 {% endblock %}
 
 {% block content %}
+<div class="command-safety-banner mb-4" role="note">
+    Synthetic planning simulation only. It cannot route or transfer calls, control ESInet or NGCS,
+    acknowledge operational alarms, dispatch, page, activate tones, release alerts, or write to CAD.
+</div>
 <section class="nga-hero glass">
     <div class="nga-hero-copy">
         <div class="nga-kicker">NGA911 SPONSORED INTELLIGENCE CONCEPT</div>
@@ -17,7 +21,7 @@
         </p>
         <div class="nga-hero-actions">
             <a class="btn btn-success fw-bold nga-live-network-cta" href="{{ '/nga911/operations' if standalone else '/nga911-intelligence/operations' }}">
-                <i class="bi bi-activity"></i> Open Live Network
+                <i class="bi bi-activity"></i> Open Network Simulation
             </a>
             <a class="btn btn-outline-info fw-bold" href="{{ '/nga911/nova' if standalone else '/nga911-intelligence/nova' }}">
                 <i class="bi bi-stars"></i> Ask NOVA

@@ -5,7 +5,15 @@
 {% block content %}
 <link rel="stylesheet" href="/static/css/lcdash-mindshare.css?v=20260726">
 
-<section class="mindshare-hero glass">
+<div class="command-safety-banner mb-4" role="note">
+    Advisory reference only. JACK cannot transmit radio traffic, change console or gateway configuration,
+    dispatch, acknowledge events, activate alerts or tones, alter CAD, or control emergency-call routing.
+</div>
+<div class="command-unavailable-state mb-4" role="status" aria-live="polite">
+    <strong><i class="bi bi-journal-x me-2" aria-hidden="true"></i>Approved Mindshare cloud library unavailable</strong>
+    <span>The on-prem experience is represented for parity review. Cloud questions remain disabled until approved manuals are ingested and verified.</span>
+</div>
+<section class="mindshare-hero glass command-page">
     <div>
         <div class="mindshare-eyebrow">LOGAN COUNTY RADIO TECHNOLOGY</div>
         <h1>Mindshare Operations</h1>
@@ -23,7 +31,7 @@
 <div class="mindshare-module-grid">
     <a class="mindshare-module glass" href="/mindshare/technical">
         <div class="mindshare-module-icon"><i class="bi bi-cpu-fill"></i></div>
-        <div class="mindshare-module-state is-ready">AVAILABLE</div>
+        <div class="mindshare-module-state">SOURCE REQUIRED</div>
         <h2>JACK Technical Assistant</h2>
         <p>
             Ask questions grounded in Mindshare manuals, application notes,
@@ -35,7 +43,7 @@
 
     <a class="mindshare-module glass" href="/mindshare/library">
         <div class="mindshare-module-icon"><i class="bi bi-journals"></i></div>
-        <div class="mindshare-module-state is-ready">SYNCHRONIZED</div>
+        <div class="mindshare-module-state">NOT INGESTED</div>
         <h2>Technical Library</h2>
         <p>
             Review indexed documents, synchronization health, page counts, and
@@ -57,7 +65,7 @@
 
     <a class="mindshare-module glass" href="/mindshare/reliability">
         <div class="mindshare-module-icon"><i class="bi bi-shield-check"></i></div>
-        <div class="mindshare-module-state is-ready">30 TEST QUESTIONS</div>
+        <div class="mindshare-module-state">SOURCE REQUIRED</div>
         <h2>JACK Reliability Center</h2>
         <p>
             Test JACK with realistic console, MRI, gateway, service, release,
@@ -68,7 +76,7 @@
 
     <a class="mindshare-module glass" href="/mindshare/coverage">
         <div class="mindshare-module-icon"><i class="bi bi-clipboard2-data-fill"></i></div>
-        <div class="mindshare-module-state is-ready">READ-ONLY REVIEW</div>
+        <div class="mindshare-module-state">NOT INGESTED</div>
         <h2>Library Coverage</h2>
         <p>
             See product coverage, document types, empty index items, and

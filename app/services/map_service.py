@@ -1,6 +1,11 @@
 from datetime import datetime, timezone
 from math import isfinite
 
+from app.config.settings import settings
+from app.core.county_profiles import resolve_county_profile
+from app.core.tenancy import TenantContext
+from app.core.tenant_authorization import authorize_tenant_action
+from app.integrations.contracts import ModuleCapability
 from app.services.operations_service import get_live_unit_snapshot
 from app.services.unit_service import classify_unit
 
@@ -239,5 +244,28 @@ def build_empty_map_snapshot(error: str = "") -> dict:
     }
 
 
-def get_live_map_snapshot() -> dict:
-    return build_map_snapshot(get_live_unit_snapshot())
+def get_live_map_snapshot(
+    tenant_context: TenantContext | None = None,
+) -> dict:
+    if settings.deployment_mode == "synthetic-disconnected":
+        return build_empty_map_snapshot()
+
+    if tenant_context is None:
+        return build_map_snapshot(get_live_unit_snapshot())
+
+    county_profile = resolve_county_profile(tenant_context)
+    authorize_tenant_action(
+        tenant_context,
+        county_profile,
+        ModuleCapability.GIS,
+        "read",
+    )
+    authorize_tenant_action(
+        tenant_context,
+        county_profile,
+        ModuleCapability.ACTIVE_CALLS,
+        "read",
+    )
+    return build_map_snapshot(
+        get_live_unit_snapshot(tenant_context=tenant_context)
+    )

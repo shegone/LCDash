@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any, Mapping
 
-from app.core.tenancy import CountyProfile, TENANCY_CONTRACT_VERSION
+from app.core.tenancy import CountyProfile, TenantContext, TENANCY_CONTRACT_VERSION
 from app.integrations.contracts import ModuleCapability
 
 
@@ -43,6 +44,7 @@ _REQUIRED_FIELDS = frozenset(
         "agencies",
         "unit_status_mappings",
         "gis_sources",
+        "heatmap_configuration",
         "identity_federation",
         "retention",
         "ai_policy",
@@ -73,6 +75,66 @@ _AI_TOOLS = frozenset(
 
 class CountyProfileValidationError(ValueError):
     """Raised when a county profile violates the non-secret version 1 contract."""
+
+
+_HEATMAP_CONFIGURATION_KEYS = frozenset(
+    {
+        "min_latitude",
+        "max_latitude",
+        "min_longitude",
+        "max_longitude",
+        "grid_degrees",
+    }
+)
+_MIN_HEATMAP_GRID_DEGREES = 0.001
+_MAX_HEATMAP_GRID_DEGREES = 1.0
+_MAX_HEATMAP_CELLS = 1_000_000
+
+
+def validate_heatmap_configuration(value: Any) -> Mapping[str, float]:
+    """Validate bounded rectangular heatmap geometry without external access."""
+    configuration = _exact_keys(
+        value,
+        _HEATMAP_CONFIGURATION_KEYS,
+        "profile.heatmap_configuration",
+    )
+    normalized: dict[str, float] = {}
+    for key in _HEATMAP_CONFIGURATION_KEYS:
+        item = configuration[key]
+        if (
+            isinstance(item, bool)
+            or not isinstance(item, (int, float))
+            or not math.isfinite(item)
+        ):
+            raise CountyProfileValidationError(
+                f"profile.heatmap_configuration.{key} must be a finite number."
+            )
+        normalized[key] = float(item)
+
+    min_latitude = normalized["min_latitude"]
+    max_latitude = normalized["max_latitude"]
+    min_longitude = normalized["min_longitude"]
+    max_longitude = normalized["max_longitude"]
+    grid_degrees = normalized["grid_degrees"]
+    if not (-90 <= min_latitude <= 90 and -90 <= max_latitude <= 90):
+        raise CountyProfileValidationError("Heatmap latitude bounds are invalid.")
+    if not (-180 <= min_longitude <= 180 and -180 <= max_longitude <= 180):
+        raise CountyProfileValidationError("Heatmap longitude bounds are invalid.")
+    if min_latitude >= max_latitude or min_longitude >= max_longitude:
+        raise CountyProfileValidationError("Heatmap minimum bounds must precede maximums.")
+    if not _MIN_HEATMAP_GRID_DEGREES <= grid_degrees <= _MAX_HEATMAP_GRID_DEGREES:
+        raise CountyProfileValidationError("Heatmap grid size is outside safe bounds.")
+
+    latitude_span = max_latitude - min_latitude
+    longitude_span = max_longitude - min_longitude
+    if grid_degrees > min(latitude_span, longitude_span):
+        raise CountyProfileValidationError("Heatmap grid exceeds the configured extent.")
+    potential_cells = math.ceil(latitude_span / grid_degrees) * math.ceil(
+        longitude_span / grid_degrees
+    )
+    if potential_cells > _MAX_HEATMAP_CELLS:
+        raise CountyProfileValidationError("Heatmap configuration exceeds the safe cell limit.")
+    return normalized
 
 
 def _reject_secret_keys(value: Any, path: str = "profile") -> None:
@@ -173,6 +235,7 @@ def validate_county_profile_data(data: Any) -> Mapping[str, Any]:
     agencies = profile["agencies"]
     if not isinstance(agencies, list) or not agencies:
         raise CountyProfileValidationError("profile.agencies must be a non-empty array.")
+    agency_abbreviations: set[str] = set()
     for index, agency_value in enumerate(agencies):
         agency = _exact_keys(
             agency_value,
@@ -190,6 +253,12 @@ def validate_county_profile_data(data: Any) -> Mapping[str, Any]:
         )
         if not _ABBREVIATION.fullmatch(abbreviation):
             raise CountyProfileValidationError("Agency abbreviation is invalid.")
+        normalized_abbreviation = abbreviation.casefold()
+        if normalized_abbreviation in agency_abbreviations:
+            raise CountyProfileValidationError(
+                "Agency abbreviations must be unique without regard to case."
+            )
+        agency_abbreviations.add(normalized_abbreviation)
         disciplines = frozenset(_unique_strings(
             agency["disciplines"],
             f"profile.agencies[{index}].disciplines",
@@ -203,11 +272,18 @@ def validate_county_profile_data(data: Any) -> Mapping[str, Any]:
         raise CountyProfileValidationError(
             "profile.unit_status_mappings must be a non-empty object."
         )
+    normalized_mappings: dict[str, str] = {}
     for source, normalized in mappings.items():
         source_text = _string(source, "profile.unit_status_mappings key")
         normalized_text = _string(normalized, f"profile.unit_status_mappings.{source}")
         if not _UNIT_STATUS_KEY.fullmatch(source_text) or len(normalized_text) > 80:
             raise CountyProfileValidationError("Unit status mapping is invalid.")
+        canonical_source = source_text.upper()
+        if canonical_source in normalized_mappings:
+            raise CountyProfileValidationError(
+                "Unit status mapping keys must be unique without regard to case."
+            )
+        normalized_mappings[canonical_source] = normalized_text
 
     gis_sources = profile["gis_sources"]
     if not isinstance(gis_sources, list) or not gis_sources:
@@ -237,6 +313,10 @@ def validate_county_profile_data(data: Any) -> Mapping[str, Any]:
             or any(not _LAYER.fullmatch(layer) for layer in layers)
         ):
             raise CountyProfileValidationError("GIS source metadata is invalid.")
+
+    heatmap_configuration = validate_heatmap_configuration(
+        profile["heatmap_configuration"]
+    )
 
     identity = _exact_keys(
         profile["identity_federation"],
@@ -319,7 +399,10 @@ def validate_county_profile_data(data: Any) -> Mapping[str, Any]:
     if not permissions <= _ALERT_PERMISSIONS:
         raise CountyProfileValidationError("County profile contains an unsafe alert permission.")
 
-    return profile
+    normalized_profile = dict(profile)
+    normalized_profile["unit_status_mappings"] = normalized_mappings
+    normalized_profile["heatmap_configuration"] = heatmap_configuration
+    return normalized_profile
 
 
 def county_profile_from_data(data: Any) -> CountyProfile:
@@ -336,6 +419,7 @@ def county_profile_from_data(data: Any) -> CountyProfile:
         agencies=tuple(profile["agencies"]),
         unit_status_mappings=profile["unit_status_mappings"],
         gis_sources=tuple(profile["gis_sources"]),
+        heatmap_configuration=profile["heatmap_configuration"],
         identity_federation=profile["identity_federation"],
         retention=profile["retention"],
         ai_policy=profile["ai_policy"],
@@ -359,3 +443,16 @@ def load_builtin_county_profile(name: str) -> CountyProfile:
     if not _IDENTIFIER.fullmatch(name):
         raise CountyProfileValidationError("Built-in county profile name is invalid.")
     return load_county_profile(COUNTY_PROFILE_DIRECTORY / f"{name}.json")
+
+
+def resolve_county_profile(context: TenantContext) -> CountyProfile:
+    """Resolve only the profile bound to an immutable trusted tenant context."""
+    if not isinstance(context, TenantContext):
+        raise CountyProfileValidationError("Trusted tenant context is required.")
+    if context.contract_version != TENANCY_CONTRACT_VERSION:
+        raise CountyProfileValidationError("Tenant context contract version mismatch.")
+
+    profile = load_builtin_county_profile(context.tenant_id)
+    if profile.tenant_id != context.tenant_id:
+        raise CountyProfileValidationError("County profile tenant binding mismatch.")
+    return profile

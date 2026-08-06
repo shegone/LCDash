@@ -6,6 +6,13 @@ from typing import Any
 import httpx
 
 from app.config.settings import settings
+from app.core.county_profiles import resolve_county_profile
+from app.core.tenancy import CountyProfile, TenantContext
+from app.core.tenant_authorization import (
+    TenantAuthorizationDenied,
+    authorize_tenant_action,
+)
+from app.integrations.contracts import ModuleCapability
 
 
 class VoiceServiceError(Exception):
@@ -109,8 +116,22 @@ def _expand_time_match(match: re.Match) -> str:
     )
 
 
-def prepare_text_for_speech(text: str) -> str:
+def _pronunciation_911(county_profile: CountyProfile | None) -> str:
+    if county_profile is None:
+        return "nine one one"
+
+    pronunciation = county_profile.voice_profile.get("pronunciation_911")
+    if pronunciation != "nine one one":
+        raise ValueError("County profile must pronounce 911 as nine one one.")
+    return pronunciation
+
+
+def prepare_text_for_speech(
+    text: str,
+    county_profile: CountyProfile | None = None,
+) -> str:
     """Apply LCDash pronunciation rules without changing displayed text."""
+    pronunciation_911 = _pronunciation_911(county_profile)
     prepared = str(text or "")
     prepared = re.sub(r"(?m)^\s{0,3}#{1,6}\s*", "", prepared)
     prepared = re.sub(r"(?m)^\s*[-*+]\s+", "", prepared)
@@ -123,11 +144,15 @@ def prepare_text_for_speech(text: str) -> str:
     prepared = re.sub(r"\bMAE\b", "May", prepared, flags=re.IGNORECASE)
     prepared = re.sub(
         r"\bNGA[\s-]*9[\s-]*1[\s-]*1\b",
-        "N G A nine one one",
+        f"N G A {pronunciation_911}",
         prepared,
         flags=re.IGNORECASE,
     )
-    prepared = re.sub(r"\b9[\s-]*1[\s-]*1\b", "nine one one", prepared)
+    prepared = re.sub(
+        r"\b9[\s-]*1[\s-]*1\b",
+        pronunciation_911,
+        prepared,
+    )
     prepared = _PREFIXED_TIME_PATTERN.sub(_expand_time_match, prepared)
     prepared = _COLON_TIME_PATTERN.sub(
         lambda match: spoken_24_hour_time(
@@ -215,7 +240,22 @@ def synthesize_speech(
     voice: str = "",
     speed: float = 1.0,
     response_format: str = "mp3",
+    county_profile: CountyProfile | None = None,
+    tenant_context: TenantContext | None = None,
 ) -> tuple[bytes, str]:
+    if tenant_context is not None:
+        if county_profile is not None:
+            raise TenantAuthorizationDenied(
+                "Trusted context and direct county profile cannot be combined."
+            )
+        county_profile = resolve_county_profile(tenant_context)
+        authorize_tenant_action(
+            tenant_context,
+            county_profile,
+            ModuleCapability.VOICE,
+            "read",
+        )
+
     selected_voice = voice or settings.voice_tts_voice
     allowed_voices = {item["id"] for item in VOICE_CHOICES}
     if selected_voice not in allowed_voices:
@@ -231,7 +271,7 @@ def synthesize_speech(
                 json={
                     "model": _tts_model(selected_voice),
                     "voice": selected_voice,
-                    "input": prepare_text_for_speech(text),
+                    "input": prepare_text_for_speech(text, county_profile),
                     "response_format": response_format,
                     "speed": speed,
                 },

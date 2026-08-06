@@ -90,7 +90,7 @@ class NGA911IntelligencePageTests(unittest.TestCase):
         self.assertIn("Human-authorized operations", response.text)
         self.assertIn("/static/css/lcdash-nga911.css?v=0.3.2", response.text)
         self.assertIn("/static/js/lcdash-nga911.js?v=0.1.1", response.text)
-        self.assertIn("Open Live Network", response.text)
+        self.assertIn("Open Network Simulation", response.text)
         self.assertIn('href="/nga911-intelligence/operations"', response.text)
 
     def test_versioned_api_returns_synthetic_contract(self):
@@ -145,14 +145,14 @@ class NGA911IntelligencePageTests(unittest.TestCase):
         self.assertEqual(detail.json()["county"]["id"], "demo-valley")
         self.assertEqual(missing.status_code, 404)
 
-    def test_live_network_page_includes_alert_test_and_all_positions(self):
+    def test_network_simulation_page_includes_visual_test_and_all_positions(self):
         response = self.client.get("/nga911/operations?days=14")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["cache-control"], "no-store")
-        self.assertIn("Logan 911 Live Network", response.text)
-        self.assertIn("Run disruption test", response.text)
-        self.assertIn("Enable alerts", response.text)
+        self.assertIn("Logan Nine One One Network Simulation", response.text)
+        self.assertIn("Run visual simulation", response.text)
+        self.assertNotIn("Enable alerts", response.text)
         self.assertIn("Verizon Fiber", response.text)
         self.assertIn("Starlink", response.text)
         self.assertIn("Position 6", response.text)
@@ -183,8 +183,9 @@ class NGA911IntelligencePageTests(unittest.TestCase):
         self.assertIn("What happened", response.text)
         self.assertIn("Calls affected", response.text)
         self.assertIn("Interruption timeline", response.text)
-        self.assertIn("Acknowledge alert", response.text)
-        self.assertIn("Return to live network", response.text)
+        self.assertIn("Mark simulation reviewed", response.text)
+        self.assertIn("Return to simulated network", response.text)
+        self.assertIn("not an operational acknowledgment", response.text)
         self.assertIn('data-event-id="evt-logan-2387"', response.text)
         self.assertIn("synthetic", response.text.lower())
 

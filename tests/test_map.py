@@ -272,9 +272,9 @@ class MapPageTests(unittest.TestCase):
         response = self.client.get("/map")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("CAD DISCONNECTED", response.text)
+        self.assertIn("Operational map source unavailable", response.text)
         self.assertIn("operations-map", response.text)
-        self.assertIn('role="alert"', response.text)
+        self.assertIn('role="status"', response.text)
 
     @patch("app.main.get_live_map_snapshot")
     def test_sidebar_links_to_gis_map(self, snapshot_mock):

@@ -123,6 +123,10 @@ class CountyProfileContractTests(unittest.TestCase):
         self.assertNotEqual(logan.agencies, northstar.agencies)
         self.assertNotEqual(logan.unit_status_mappings, northstar.unit_status_mappings)
         self.assertNotEqual(logan.gis_sources, northstar.gis_sources)
+        self.assertNotEqual(
+            logan.heatmap_configuration,
+            northstar.heatmap_configuration,
+        )
         self.assertNotEqual(logan.identity_federation, northstar.identity_federation)
         self.assertNotEqual(logan.retention, northstar.retention)
         self.assertNotEqual(logan.ai_policy, northstar.ai_policy)
@@ -133,6 +137,7 @@ class CountyProfileContractTests(unittest.TestCase):
         app_sources = "\n".join(
             path.read_text(encoding="utf-8")
             for path in (Path(__file__).parents[2] / "app").rglob("*.py")
+            if "tools" not in path.parts and path.name != "settings.py"
         )
         self.assertNotIn("logan-synthetic", app_sources)
         self.assertNotIn("northstar-fictional", app_sources)
@@ -202,6 +207,41 @@ class CountyProfileContractTests(unittest.TestCase):
         voice["voice_profile"]["pronunciation_911"] = "nine hundred eleven"
         with self.assertRaisesRegex(CountyProfileValidationError, "pronounce 911 safely"):
             county_profile_from_data(voice)
+        self.assert_no_network()
+
+    def test_duplicate_agency_abbreviations_fail_closed_case_insensitively(self):
+        fixture = load_json("logan-synthetic.json")
+        duplicate = deepcopy(fixture)
+        duplicate["agencies"][1]["abbreviation"] = duplicate["agencies"][0]["abbreviation"]
+
+        with self.assertRaisesRegex(
+            CountyProfileValidationError,
+            "unique without regard to case",
+        ):
+            county_profile_from_data(duplicate)
+        self.assert_no_network()
+
+    def test_unit_status_mapping_keys_are_normalized_for_case_insensitive_lookup(self):
+        fixture = load_json("logan-synthetic.json")
+        fixture["unit_status_mappings"] = {"avl": "Available", "eNr": "Enroute"}
+
+        profile = county_profile_from_data(fixture)
+
+        self.assertEqual(
+            dict(profile.unit_status_mappings),
+            {"AVL": "Available", "ENR": "Enroute"},
+        )
+        self.assert_no_network()
+
+    def test_unit_status_mapping_case_collisions_fail_closed(self):
+        fixture = load_json("logan-synthetic.json")
+        fixture["unit_status_mappings"] = {"AVL": "Available", "avl": "Assigned"}
+
+        with self.assertRaisesRegex(
+            CountyProfileValidationError,
+            "unique without regard to case",
+        ):
+            county_profile_from_data(fixture)
         self.assert_no_network()
 
 

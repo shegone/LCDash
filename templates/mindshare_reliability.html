@@ -31,6 +31,9 @@
     @media(max-width:900px){.jack-memory-form{grid-template-columns:1fr}.jack-memory-form .wide{grid-column:1}}
 </style>
 
+<div class="command-safety-banner mb-4" role="note">Advisory quality review only. This screen cannot control radio, CAD, dispatch, alerts, pages, tones, ESInet, or emergency-call routing.</div>
+<div class="command-unavailable-state mb-4" id="jack-reliability-unavailable" role="status"><strong>Reliability runs unavailable</strong><span>Reviewed Mindshare cloud sources are not ingested. Test and memory controls are disabled.</span></div>
+
 <section class="mindshare-hero glass">
     <div>
         <div class="mindshare-eyebrow">MANUAL-GROUNDED QUALITY TESTING</div>
@@ -60,7 +63,7 @@
             <h3 class="mb-1">Real-world question laboratory</h3>
             <div class="text-secondary">Run one question at a time. A normal local-model response may take 15–30 seconds.</div>
         </div>
-        <button id="run-visible-jack-tests" class="btn btn-outline-info"><i class="bi bi-play-circle"></i> Run all 30</button>
+        <button id="run-visible-jack-tests" class="btn btn-outline-info" disabled><i class="bi bi-play-circle"></i> Source required</button>
     </div>
     <div class="table-responsive">
         <table class="table jack-lab-table">
@@ -80,7 +83,7 @@
                     <td>{{ case.question }}</td>
                     <td>{{ case.expected_documents|join(" or ") if case.expected_documents else "Refusal / safety boundary" }}</td>
                     <td class="jack-case-result">Not run</td>
-                    <td><button class="btn btn-sm btn-info fw-bold" data-run-jack="{{ case.case_id }}">Run</button></td>
+                    <td><button class="btn btn-sm btn-info fw-bold" data-run-jack="{{ case.case_id }}" disabled>Source required</button></td>
                 </tr>
             {% endfor %}
             </tbody>
@@ -116,11 +119,11 @@
         New guidance starts as pending and cannot affect JACK's answers until a supervisor approves it.
         Approved items remain separate from vendor manuals and never grant equipment or CAD write access.
     </p>
-    <form id="jack-memory-form" class="jack-memory-form mb-4">
+    <form id="jack-memory-form" class="jack-memory-form mb-4" inert>
         <input name="title" placeholder="Short knowledge title" required>
         <input name="trigger_text" placeholder="Words or questions that should recall it" required>
         <textarea class="wide" name="guidance" rows="3" placeholder="The local guidance JACK should remember" required></textarea>
-        <button class="btn btn-info fw-bold" type="submit">Create pending knowledge</button>
+        <button class="btn btn-info fw-bold" type="submit" disabled>Source required</button>
         <div id="jack-memory-form-status" class="text-secondary align-self-center"></div>
     </form>
     <div class="table-responsive">
@@ -136,10 +139,10 @@
                     <td>{{ item.use_count }}</td>
                     <td>
                         {% if item.status == "pending" %}
-                        <button class="btn btn-sm btn-success" data-review-jack-memory="{{ item.memory_id }}" data-decision="approved">Approve</button>
-                        <button class="btn btn-sm btn-outline-danger" data-review-jack-memory="{{ item.memory_id }}" data-decision="rejected">Reject</button>
+                        <button class="btn btn-sm btn-success" data-review-jack-memory="{{ item.memory_id }}" data-decision="approved" disabled>Approve</button>
+                        <button class="btn btn-sm btn-outline-danger" data-review-jack-memory="{{ item.memory_id }}" data-decision="rejected" disabled>Reject</button>
                         {% elif item.status == "approved" %}
-                        <button class="btn btn-sm btn-outline-warning" data-review-jack-memory="{{ item.memory_id }}" data-decision="retired">Retire</button>
+                        <button class="btn btn-sm btn-outline-warning" data-review-jack-memory="{{ item.memory_id }}" data-decision="retired" disabled>Retire</button>
                         {% endif %}
                     </td>
                 </tr>

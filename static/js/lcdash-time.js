@@ -1,4 +1,5 @@
 window.LCDashTime = (function () {
+    const PRESENTATION_TIME_ZONE = "America/New_York";
     function parseCadDateTime(value) {
         if (!value) {
             return null;
@@ -51,7 +52,8 @@ window.LCDashTime = (function () {
             return value || "-";
         }
 
-        const timePart = date.toLocaleTimeString([], {
+        const timePart = date.toLocaleTimeString("en-US", {
+            timeZone: PRESENTATION_TIME_ZONE,
             hour: "2-digit",
             minute: "2-digit",
             second: "2-digit",
@@ -62,7 +64,8 @@ window.LCDashTime = (function () {
             return timePart;
         }
 
-        const datePart = date.toLocaleDateString([], {
+        const datePart = date.toLocaleDateString("en-US", {
+            timeZone: PRESENTATION_TIME_ZONE,
             year: "numeric",
             month: "2-digit",
             day: "2-digit"
@@ -155,7 +158,10 @@ window.LCDashTime = (function () {
             return;
         }
 
-        localTimeElement.textContent = new Date().toLocaleTimeString();
+        localTimeElement.textContent = new Date().toLocaleTimeString("en-US", {
+            timeZone: PRESENTATION_TIME_ZONE,
+            timeZoneName: "short"
+        });
     }
 
     function startClock(elementId) {
@@ -166,7 +172,10 @@ window.LCDashTime = (function () {
         }
 
         function tick() {
-            clockElement.innerHTML = new Date().toLocaleString();
+            clockElement.textContent = new Date().toLocaleString("en-US", {
+                timeZone: PRESENTATION_TIME_ZONE,
+                timeZoneName: "short"
+            });
         }
 
         tick();

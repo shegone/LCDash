@@ -1,0 +1,37 @@
+version: 0.2
+
+env:
+  shell: bash
+  exported-variables:
+    - IMAGE_DIGEST
+    - IMMUTABLE_IMAGE_REFERENCE
+
+phases:
+  pre_build:
+    commands:
+      - set +x
+      - set -euo pipefail
+      - test "${IMAGE_TAG:-}" != ""
+      - '[[ "$IMAGE_TAG" =~ ^release-[a-f0-9]{12}$ ]]'
+      - '[[ "$SOURCE_ASSET_HASH" =~ ^[a-f0-9]{64}$ ]]'
+      - test "$AWS_ACCOUNT_ID" = "862772137583"
+      - test "$AWS_DEFAULT_REGION" = "us-east-1"
+      - test "$DOCKERFILE_PATH" = "Dockerfile.aws-pilot"
+      - test "$ECR_REPOSITORY_NAME" = "lcdash-p1-logan-use1-web"
+      - 'EXPECTED_REPOSITORY_URI="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_REPOSITORY_NAME"'
+      - test "$REPOSITORY_URI" = "$EXPECTED_REPOSITORY_URI"
+      - 'REGISTRY_URI="${REPOSITORY_URI%/*}"'
+      - 'aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "$REGISTRY_URI" >/dev/null'
+  build:
+    commands:
+      - set +x
+      - 'docker build --pull --file "$DOCKERFILE_PATH" --tag "$REPOSITORY_URI:$IMAGE_TAG" .'
+      - 'docker push "$REPOSITORY_URI:$IMAGE_TAG" >/dev/null'
+  post_build:
+    commands:
+      - set +x
+      - 'IMAGE_DIGEST=$(aws ecr describe-images --repository-name "$ECR_REPOSITORY_NAME" --image-ids imageTag="$IMAGE_TAG" --query "imageDetails[0].imageDigest" --output text)'
+      - '[[ "$IMAGE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]'
+      - 'IMMUTABLE_IMAGE_REFERENCE="$REPOSITORY_URI@$IMAGE_DIGEST"'
+      - 'printf ''{"repository":"%s","tag":"%s","digest":"%s","immutable_reference":"%s","source_asset_sha256":"%s"}\n'' "$ECR_REPOSITORY_NAME" "$IMAGE_TAG" "$IMAGE_DIGEST" "$IMMUTABLE_IMAGE_REFERENCE" "$SOURCE_ASSET_HASH" | tee image-digest-report.json'
+      - 'printf ''IMMUTABLE_IMAGE_REFERENCE=%s\n'' "$IMMUTABLE_IMAGE_REFERENCE"'

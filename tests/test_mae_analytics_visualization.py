@@ -1,13 +1,18 @@
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.core.tenancy import TenantContext
+from app.main import app, get_trusted_tenant_context
 from app.services.mae_analytics_visualization_service import (
+    TenantWidgetIsolationError,
     build_requested_visualization,
     build_visualization,
     infer_view_key,
+    list_saved_widgets,
+    retire_widget,
     save_widget,
 )
 
@@ -22,6 +27,17 @@ def _snapshot():
         "weekday_volume": [{"label": "Sunday", "count": 20}],
         "agency_mix": [{"label": "LEASA", "count": 8}],
     }
+
+
+def _tenant(tenant_id: str = "logan-synthetic") -> TenantContext:
+    return TenantContext(
+        tenant_id=tenant_id,
+        subject="analytics-reviewer",
+        identity_source="test-trusted-context",
+        roles=frozenset({"lcdash-pilot-reviewer"}),
+        request_id=f"{tenant_id}-widgets",
+        authenticated_at=datetime(2026, 8, 5, tzinfo=timezone.utc),
+    )
 
 
 def test_view_inference_requires_explicit_visual_request():
@@ -64,31 +80,92 @@ def test_saved_widget_stores_only_safe_configuration(repository_class):
         title="Busiest day",
         view_key="weekday_volume",
         created_by="supervisor@example.com",
+        tenant_context=_tenant(),
     )
 
     assert result == {"saved": True, "widget_id": 17}
     params = repository.fetchone.call_args.args[1]
-    assert params == ("Busiest day", "weekday_volume", "supervisor@example.com")
+    assert params == (
+        "logan-synthetic",
+        "Busiest day",
+        "weekday_volume",
+        "supervisor@example.com",
+    )
 
 
 @patch("app.main.save_widget", return_value={"saved": True, "widget_id": 9})
 def test_widget_endpoint_uses_authenticated_creator(save_mock):
-    response = TestClient(app).post(
-        "/api/analytics/widgets",
-        headers={"cf-access-authenticated-user-email": "chief@example.com"},
-        json={"title": "Calls by weekday", "view_key": "weekday_volume"},
-    )
+    tenant = _tenant()
+    app.dependency_overrides[get_trusted_tenant_context] = lambda: tenant
+    try:
+        response = TestClient(app).post(
+            "/api/analytics/widgets",
+            headers={"cf-access-authenticated-user-email": "chief@example.com"},
+            json={"title": "Calls by weekday", "view_key": "weekday_volume"},
+        )
+    finally:
+        app.dependency_overrides.pop(get_trusted_tenant_context, None)
     assert response.status_code == 200
     save_mock.assert_called_once_with(
         title="Calls by weekday",
         view_key="weekday_volume",
         created_by="chief@example.com",
+        tenant_context=tenant,
     )
 
 
 def test_widget_endpoint_rejects_unapproved_view():
-    response = TestClient(app).post(
-        "/api/analytics/widgets",
-        json={"title": "Unsafe", "view_key": "arbitrary_sql"},
-    )
+    app.dependency_overrides[get_trusted_tenant_context] = _tenant
+    try:
+        response = TestClient(app).post(
+            "/api/analytics/widgets",
+            json={"title": "Unsafe", "view_key": "arbitrary_sql"},
+        )
+    finally:
+        app.dependency_overrides.pop(get_trusted_tenant_context, None)
     assert response.status_code == 400
+
+
+def test_widget_endpoints_fail_closed_without_trusted_tenant():
+    client = TestClient(app)
+    assert client.get("/api/analytics/widgets").status_code == 503
+    assert client.post(
+        "/api/analytics/widgets",
+        json={"title": "Calls", "view_key": "daily_volume"},
+    ).status_code == 503
+    assert client.post(
+        "/api/analytics/widgets/retire",
+        json={"widget_id": 1},
+    ).status_code == 503
+
+
+@patch("app.services.mae_analytics_visualization_service.AnalyticsRepository")
+def test_widget_list_is_scoped_to_trusted_tenant(repository_class):
+    repository = MagicMock()
+    repository.__enter__.return_value = repository
+    repository.fetchall.return_value = []
+    repository_class.return_value = repository
+
+    assert list_saved_widgets(tenant_context=_tenant("northstar-fictional")) == []
+    query, params = repository.fetchall.call_args.args
+    assert "WHERE tenant_id = %s" in query
+    assert params == ("northstar-fictional",)
+
+
+@patch("app.services.mae_analytics_visualization_service.AnalyticsRepository")
+def test_widget_retire_cannot_cross_tenant_boundary(repository_class):
+    repository = MagicMock()
+    repository.__enter__.return_value = repository
+    repository.fetchone.return_value = None
+    repository_class.return_value = repository
+
+    result = retire_widget(widget_id=17, tenant_context=_tenant("northstar-fictional"))
+    assert result == {"saved": False, "widget_id": 17}
+    query, params = repository.fetchone.call_args.args
+    assert "widget_id = %s AND tenant_id = %s" in query
+    assert params == (17, "northstar-fictional")
+
+
+def test_widget_service_rejects_missing_tenant_before_database_access():
+    with pytest.raises(TenantWidgetIsolationError, match="Trusted tenant context"):
+        list_saved_widgets(tenant_context=None)

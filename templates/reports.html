@@ -5,6 +5,7 @@
 {% block content %}
 <link rel="stylesheet" href="/static/css/lcdash-reports.css?v=20260803-county-commission">
 
+<div class="command-page">
 <section class="reports-hero glass">
     <div>
         <div class="reports-eyebrow">SUPERVISOR REPORT LIBRARY</div>
@@ -17,6 +18,11 @@
     </div>
 </section>
 
+<div class="command-safety-banner p-3 mt-4" role="note">
+    <strong class="text-success">Read-only cloud reporting boundary.</strong>
+    Reports never update CAD or trigger dispatch, alerts, pages, tones, or other operational outputs.
+</div>
+
 <div class="report-catalog mt-4">
     <article class="report-catalog-card glass is-active">
         <div class="report-card-icon"><i class="bi bi-building-check"></i></div>
@@ -25,7 +31,11 @@
             <h3>County Commission Report</h3>
             <p>Fire, law-enforcement, and LEASA assigned-unit run totals.</p>
         </div>
+        {% if cloud_reporting_available %}
         <span class="report-ready-chip">READY</span>
+        {% else %}
+        <span class="report-ready-chip">HISTORICAL DATA REQUIRED</span>
+        {% endif %}
     </article>
     <article class="report-catalog-card glass is-placeholder">
         <div class="report-card-icon"><i class="bi bi-plus-lg"></i></div>
@@ -44,6 +54,7 @@
             <h2 id="county-report-title">Monthly CAD Run Report</h2>
             <p>Counts every assigned unit by its responding agency for the selected month.</p>
         </div>
+        {% if cloud_reporting_available %}
         <form id="county-report-form" class="report-controls">
             <label for="county-report-month">Report month</label>
             <div class="report-control-row">
@@ -53,17 +64,26 @@
                 </button>
             </div>
         </form>
+        {% endif %}
     </div>
 
     <div class="report-definition">
         <i class="bi bi-info-circle-fill"></i>
         <div>
             <strong>Report definition</strong>
+            {% if cloud_reporting_available %}
             <span>
                 Direct CentralSquare CFS query using the selected month’s record-created window.
                 Run totals count assigned units, matching the established county report. Phone totals
                 are excluded because they come from the separate phone system.
             </span>
+            {% else %}
+            <span>
+                This pilot has no imported historical analytics. Report generation remains unavailable
+                until a separately approved import and cloud-native report source are configured.
+                No direct CAD report query will run from this cloud page.
+            </span>
+            {% endif %}
         </div>
     </div>
 
@@ -127,5 +147,8 @@
     </article>
 </section>
 
+{% if cloud_reporting_available %}
 <script src="/static/js/lcdash-reports.js?v=20260803-county-commission"></script>
+{% endif %}
+</div>
 {% endblock %}

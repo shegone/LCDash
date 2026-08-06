@@ -7,6 +7,16 @@
 {% set index_state = knowledge_status.index_state or {} %}
 {% set drive_sync = knowledge_status.drive_sync or {} %}
 
+<div class="command-safety-banner mb-4" role="note">
+    Read-only reference library. Documents cannot control radio, CAD, alerting, tones, dispatch, or emergency-call routing.
+</div>
+{% if not knowledge_status.connected or not knowledge_status.documents %}
+<div class="command-unavailable-state mb-4" role="status" aria-live="polite">
+    <strong><i class="bi bi-journal-x me-2" aria-hidden="true"></i>Approved Mindshare documents unavailable</strong>
+    <span>No verified cloud library is available. JACK remains disabled and no provider request will be attempted from this screen.</span>
+</div>
+{% endif %}
+
 <section class="mindshare-hero glass">
     <div>
         <div class="mindshare-eyebrow">CONTROLLED TECHNICAL REFERENCE</div>

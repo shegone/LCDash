@@ -13,9 +13,9 @@
             ? "This event was reviewed"
             : `Reviewed ${reviewedAt.toLocaleString()}`;
         state.classList.add("acknowledged");
-        state.innerHTML = `<i class="bi bi-check-circle-fill"></i><div><strong>Alert acknowledged</strong><span>${displayTime}. This acknowledgment applies only to the demonstration.</span></div>`;
+        state.innerHTML = `<i class="bi bi-check-circle-fill"></i><div><strong>Simulation marked reviewed</strong><span>${displayTime}. This browser marker is not an operational acknowledgment.</span></div>`;
         button.disabled = true;
-        button.innerHTML = '<i class="bi bi-check2-circle"></i> Acknowledged';
+        button.innerHTML = '<i class="bi bi-check2-circle"></i> Simulation reviewed';
     }
 
     const priorAcknowledgment = localStorage.getItem(storageKey);

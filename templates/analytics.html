@@ -1,6 +1,6 @@
 {% extends "layouts/base.html" %}
 
-{% block title %}Analytics | LCDash{% endblock %}
+{% block title %}Analytics | {{ county_branding.short_name if county_branding else "LCDash" }}{% endblock %}
 
 {% block content %}
 <style>
@@ -434,7 +434,11 @@
             </div>
         </div>
         <div>
-            {% if database_status.connected and analytics_snapshot.available %}
+            {% if cloud_analytics_unpopulated %}
+                <span class="analytics-status pending">
+                    <i class="bi bi-database-check"></i> WAREHOUSE READY — NO IMPORTED HISTORY
+                </span>
+            {% elif database_status.connected and analytics_snapshot.available %}
                 <span class="analytics-status ready">
                     <i class="bi bi-database-check"></i> POSTGRESQL CONNECTED
                 </span>
@@ -461,6 +465,17 @@
                 </span>
             </span>
         {% endif %}
+    </div>
+</div>
+
+<div class="command-safety-banner mb-4" role="note">
+    <i class="bi bi-shield-lock-fill" aria-hidden="true"></i>
+    <div>
+        <strong>Read-only historical review</strong>
+        <div class="small mt-1">
+            Aggregate analytics cannot dispatch, update CAD, or create operational outputs.
+            Saved display preferences are isolated to the authenticated county.
+        </div>
     </div>
 </div>
 
@@ -512,6 +527,18 @@
 
 {% if analytics_snapshot.available %}
     {% set metrics = analytics_snapshot.metrics %}
+
+    {% if cloud_analytics_unpopulated %}
+    <div class="glass analytics-empty mb-4">
+        <i class="bi bi-cloud-check text-info" style="font-size: 2.3rem;"></i>
+        <h3 class="mt-3">Cloud analytics is ready for approved historical data</h3>
+        <p class="text-secondary mb-0">
+            No historical analytics has been imported into this pilot. The zero totals below
+            describe the current cloud warehouse only; no synchronization or import is running.
+        </p>
+    </div>
+
+    {% endif %}
 
     <div class="row g-3 mb-4">
         <div class="col-6 col-xl">
@@ -920,8 +947,13 @@
     {% else %}
         <div class="glass analytics-empty">
             <i class="bi bi-bar-chart-line fs-1 text-info"></i>
-            <h3 class="mt-3">No completed calls in this reporting window</h3>
-            <div class="text-secondary">Choose a wider date range or wait for the next analytics synchronization.</div>
+            {% if cloud_analytics_unpopulated %}
+                <h3 class="mt-3">No historical analytics imported</h3>
+                <div class="text-secondary">Date filters will become useful after a separately approved cloud data import.</div>
+            {% else %}
+                <h3 class="mt-3">No completed calls in this reporting window</h3>
+                <div class="text-secondary">Choose a wider date range or wait for the next analytics synchronization.</div>
+            {% endif %}
         </div>
     {% endif %}
 {% else %}
@@ -967,6 +999,16 @@
     to the earliest valid on-scene time. No caller names, phone numbers, narratives, command logs,
     or street addresses are stored in the analytics warehouse.
 </div>
+
+{% if not saved_widgets_isolated %}
+<div class="command-source-banner mb-4" role="status">
+    <i class="bi bi-person-lock" aria-hidden="true"></i>
+    <div>
+        <strong>Saved widgets unavailable</strong>
+        <div class="small">A trusted county identity is required before saved widgets can be listed or changed.</div>
+    </div>
+</div>
+{% endif %}
 
 <script id="analytics-snapshot" type="application/json">{{ analytics_snapshot|tojson }}</script>
 <script src="/static/js/chart.umd.min.js?v=4.4.7"></script>

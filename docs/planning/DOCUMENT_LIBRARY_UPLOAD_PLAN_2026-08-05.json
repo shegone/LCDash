@@ -1,0 +1,76 @@
+{
+  "schema_version": "lcdash.document-library-upload-plan.v1",
+  "status": "PLAN_ONLY_NOT_AUTHORIZED",
+  "source_manifest": "ONPREM_DOCUMENT_LIBRARY_MANIFEST_2026-08-05.json",
+  "bucket_name_pattern": "lcdash-p1-logan-use1-${AWS::AccountId}-document-library",
+  "tenant_root": "tenants/logan-synthetic/document-library/",
+  "versioning": {
+    "enabled": false,
+    "reason": "The initial pilot explicitly has no backup, restore, or recovery capability. Enabling object versions would create an undeclared recovery mechanism and extra retained storage cost."
+  },
+  "encryption": "SSE-S3",
+  "approved_destination_prefixes": [
+    "tenants/logan-synthetic/document-library/centralsquare/current/",
+    "tenants/logan-synthetic/document-library/mindshare/current/",
+    "tenants/logan-synthetic/document-library/mindshare/sanitized-system/",
+    "tenants/logan-synthetic/document-library/mindshare/software-catalog/",
+    "tenants/logan-synthetic/document-library/manifests/approved/"
+  ],
+  "staging_prefix": "tenants/logan-synthetic/document-library/staging/",
+  "staging_expiration_days": 7,
+  "application_access": {
+    "list": "approved destination prefixes only",
+    "read": "approved destination prefixes only",
+    "write": false,
+    "delete": false,
+    "staging_access": false
+  },
+  "source_dispositions": {
+    "centralsquare": "individual reviewed PDFs only -> centralsquare/current/",
+    "mindshare_current": "approved current documents only -> mindshare/current/",
+    "mindshare_logan_county_system": "approved sanitized documents only -> mindshare/sanitized-system/",
+    "mindshare_software_catalog": "approved secret-free metadata only -> mindshare/software-catalog/",
+    "mindshare_vendor_archives": "EXCLUDE_BY_DEFAULT",
+    "mindshare_public_site": "DO_NOT_COPY; separately re-fetch from a reviewed public allowlist",
+    "gis_reference": "EXCLUDE; separate GIS/data workflow"
+  },
+  "required_per_object_manifest_fields": [
+    "source_library",
+    "source_relative_path",
+    "destination_key",
+    "bytes",
+    "sha256",
+    "modified_time",
+    "document_owner",
+    "publication_or_revision_date",
+    "sensitivity",
+    "copyright_or_license_basis",
+    "retention_class",
+    "supersedes",
+    "malware_scan_result",
+    "secret_scan_result",
+    "human_approval"
+  ],
+  "admission_gates": [
+    "authorized read-only enumeration of the exact approved source",
+    "size and SHA-256 recorded without uploading",
+    "data-owner and security classification approved",
+    "malware scan passed",
+    "content-level secret scan passed",
+    "no mandatory exclusion matched",
+    "destination key is under exactly one approved prefix",
+    "human-approved upload manifest signed off",
+    "separate AWS resource and document-upload authorization completed"
+  ],
+  "explicit_exclusions": [
+    "credential, password, secret, token, API-key, private-key, license-secret, or environment files",
+    "backups, database dumps, recovery bundles, and vendor archive packages",
+    "raw CAD exports, raw CAD payloads, webhook bodies, incident records, unit records, and protected operational data",
+    "recordings, audio, transcripts derived from operational audio, and voice benchmark media",
+    "EMS, paging, station-alert, public-warning, radio, ESInet, acknowledgement, or other operational-output records",
+    "executables, installers, firmware, disk images, model files, and binary software packages",
+    "GIS geometry and structured tenant datasets, which require a separate GIS/data workflow",
+    "empty placeholders and generated sync-status metadata"
+  ],
+  "upload_execution": "NOT_IMPLEMENTED_AND_NOT_AUTHORIZED"
+}

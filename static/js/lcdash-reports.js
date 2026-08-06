@@ -47,7 +47,7 @@
         document.getElementById("county-report-period").textContent = report.month_label || report.month;
         document.getElementById("county-report-source").textContent = "Source: CentralSquare read-only assigned-unit runs";
         document.getElementById("county-report-generated").textContent = report.generated_at
-            ? `Generated ${new Date(report.generated_at).toLocaleString()}`
+            ? `Generated ${new Date(report.generated_at).toLocaleString("en-US", {timeZone: "America/New_York", timeZoneName: "short"})}`
             : "";
         pdfLink.href = `/api/reports/county-commission/jobs/${encodeURIComponent(jobId)}/pdf`;
         output.hidden = false;

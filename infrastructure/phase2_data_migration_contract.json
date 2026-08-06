@@ -1,0 +1,120 @@
+{
+  "schema_version": "lcdash.phase2-preactivation-migration.v1",
+  "phase": "PHASE_2_PRE_ACTIVATION",
+  "authorization_status": "NOT_AUTHORIZED",
+  "source_mode": "READ_ONLY_REPEATABLE_SNAPSHOT",
+  "source_preservation_required": true,
+  "live_cad_ingestion_authorized": false,
+  "service_activation_authorized": false,
+  "historic_snapshot": {
+    "consistent_watermark_required": true,
+    "source_transaction_read_only": true,
+    "target_write_mode": "IDEMPOTENT_UPSERT",
+    "resume_from_manifest_only": true
+  },
+  "final_delta_catchup": {
+    "required": true,
+    "source_remains_read_only": true,
+    "repeat_until_stable": true,
+    "maximum_activation_lag_minutes": 15,
+    "activation_requires_freshness_evidence": true
+  },
+  "approved_target_tables": [
+    "lcdash_analytics.calls",
+    "lcdash_analytics.units",
+    "lcdash_analytics.call_agency_times",
+    "lcdash_analytics.unit_responses",
+    "lcdash_analytics.saved_analytics_widgets"
+  ],
+  "derived_not_copied": [
+    "lcdash_analytics.unit_response_metrics",
+    "lcdash_analytics.call_response_metrics"
+  ],
+  "excluded_objects": [
+    "lcdash_analytics.sync_state",
+    "lcdash_analytics.sync_runs",
+    "lcdash_analytics.mae_interactions",
+    "lcdash_analytics.mae_feedback",
+    "lcdash_analytics.mae_evaluation_runs",
+    "lcdash_analytics.mae_memory",
+    "lcdash_analytics.jack_interactions",
+    "lcdash_analytics.jack_feedback",
+    "lcdash_analytics.jack_evaluation_runs",
+    "lcdash_analytics.jack_memory",
+    "lcdash_realtime",
+    "lcdash_alerting",
+    "webhook_events",
+    "ems_delay_alerts",
+    "ems_delay_attempts",
+    "cad_messages",
+    "acknowledgements",
+    "subscriptions",
+    "paging",
+    "station_alerts",
+    "public_warning"
+  ],
+  "field_scope": {
+    "policy": "FULL_APPROVED_ANALYTICS_PARITY",
+    "prohibited_source_fields": [
+      "caller_name",
+      "caller_phone",
+      "street_address",
+      "incident_narrative",
+      "medical_details",
+      "recording",
+      "raw_cad_payload",
+      "credentials",
+      "secrets",
+      "operational_output_records"
+    ],
+    "calls": {
+      "cfs_number": "preserve for exact call/timeline joins",
+      "call_taker": "preserve for dispatcher workload parity",
+      "call_taker_unique_identifier": "preserve for stable dispatcher grouping",
+      "latitude": "preserve for approved analytics and map parity",
+      "longitude": "preserve for approved analytics and map parity"
+    },
+    "units": {
+      "unit_number": "preserve for exact unit/timeline joins"
+    },
+    "free_text_allowed": false,
+    "identifiers_and_coordinates_are_sensitive": true,
+    "private_encrypted_target_required": true,
+    "least_privilege_and_audit_required": true
+  },
+  "idempotency_keys": {
+    "lcdash_analytics.calls": ["cfs_number"],
+    "lcdash_analytics.units": ["unit_number"],
+    "lcdash_analytics.call_agency_times": ["cfs_number", "agency_ori"],
+    "lcdash_analytics.unit_responses": ["cfs_number", "unit_number"],
+    "lcdash_analytics.saved_analytics_widgets": ["widget_id"]
+  },
+  "integrity_evidence": [
+    "per-table source and target row counts",
+    "per-table primary-key distinct counts",
+    "null and timestamp range checks",
+    "foreign-key orphan counts equal zero",
+    "deterministic per-batch manifest hashes",
+    "duplicate-key counts equal zero",
+    "final source watermark and target maximum source_collected_at",
+    "sanitized rejected-row count and reason classes"
+  ],
+  "transport": {
+    "encryption_in_transit_required": true,
+    "plaintext_transfer_prohibited": true,
+    "temporary_artifact_encryption_required": true,
+    "temporary_artifact_secure_deletion_required": true
+  },
+  "secrets": {
+    "entry_by_authorized_human_only": true,
+    "agent_access_allowed": false,
+    "repository_storage_allowed": false,
+    "logs_or_manifest_values_allowed": false
+  },
+  "rollback": {
+    "source_changes_allowed": false,
+    "delete_cloud_copy_only": true,
+    "cloud_delete_requires_separate_authorization": true,
+    "source_database_remains_authoritative": true
+  }
+}

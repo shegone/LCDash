@@ -1,6 +1,8 @@
 (function () {
     "use strict";
 
+    if (document.getElementById("jack-reliability-unavailable")) return;
+
     async function runCase(button) {
         const caseId = button.dataset.runJack;
         const row = document.querySelector(`[data-jack-case="${caseId}"]`);

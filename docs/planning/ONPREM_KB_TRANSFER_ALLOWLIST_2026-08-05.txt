@@ -1,0 +1,164 @@
+centralsquare/Garmin GPS 2.6 Installation Guide.pdf
+centralsquare/Integrated GPS 2.6 Configuration Guide for Administrators.pdf
+centralsquare/L-Tron 4910 Scanner Installation Guide.pdf
+centralsquare/Public Safety Suite Pro Adding Master Records from Returns Quick Reference Guide.pdf
+centralsquare/Public Safety Suite Pro Addressing and Mapping Quick Reference Guide.pdf
+centralsquare/Public Safety Suite Pro Agency Administration Configuration Guide.pdf
+centralsquare/Public Safety Suite Pro Agency Administration End User Guide.pdf
+centralsquare/Public Safety Suite Pro API User Guide.pdf
+centralsquare/Public Safety Suite Pro Basics Configuration Guide.pdf
+centralsquare/Public Safety Suite Pro Basics End User Guide.pdf
+centralsquare/Public Safety Suite Pro CAD and Mapping Configuration Guide.pdf
+centralsquare/Public Safety Suite Pro CAD and Mapping End User Guide.pdf
+centralsquare/Public Safety Suite Pro CAD CFS Screen and Tow Calls Quick Reference Guide.pdf
+centralsquare/Public Safety Suite Pro CFS Log and CAD Windows Quick Reference Guide.pdf
+centralsquare/Public Safety Suite Pro Civil Configuration Guide.pdf
+centralsquare/Public Safety Suite Pro Civil End User Guide.pdf
+centralsquare/Public Safety Suite Pro Custom Fields Configuration Guide.pdf
+centralsquare/Public Safety Suite Pro Custom Forms Configuration Guide.pdf
+centralsquare/Public Safety Suite Pro Custom Modules Configuration Guide.pdf
+centralsquare/Public Safety Suite Pro Extend and eCitations Configuration Guide.pdf
+centralsquare/Public Safety Suite Pro Extend and eCitations End User Guide.pdf
+centralsquare/Public Safety Suite Pro Mobile CAD Configuration Guide.pdf
+centralsquare/Public Safety Suite Pro NCIC Configuration Guide.pdf
+centralsquare/Public Safety Suite Pro NCIC End User Guide.pdf
+centralsquare/Public Safety Suite Pro Personnel End User Guide.pdf
+centralsquare/Public Safety Suite Pro Portal Configuration Guide.pdf
+centralsquare/Public Safety Suite Pro Prosecution End User Guide.pdf
+centralsquare/Public Safety Suite Pro Records Configuration Guide.pdf
+centralsquare/Public Safety Suite Pro Records End User Guide.pdf
+centralsquare/Public Safety Suite Pro Reporting End User Guide.pdf
+centralsquare/Topaz Signature Pad Installation Guide.pdf
+centralsquare/Zebra RW-420 Installation Guide.pdf
+centralsquare/Zebra ZQ-520 Installation Guide.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/DMR/AIS/MS1019_AN_ConsoleToTaitDmrTrunkingAppNote_v100.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/DMR/AIS/MS1020_AN_ConsoleToSelexDmrTrunkingAppNote_v101.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/DMR/AIS/MS1021_AN_ConsoleToKenwoodDmrConventionalAppNote_v102.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/DMR/AIS/MS1066_AN_ConsoleToKenwoodDmrTrunking25AppNote_v100.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/DMR/HDAP/MS1068_AN_ConsoleToHyteraHR1062AppNote_v101.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/CSSI/MS1069_AN_ConsoleToTaitP25TrunkingAppNote_v100.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/CSSI/MS1072_AN_ConsoleToEFJAtlasP25RFSSAppNote_v100.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/CSSI/MS1073_AN_ConsoleToMotorolaAstro25AppNote_v100.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/DFSI/MS1009_AN_ConsoleToIcomEclipse2AppNote_rev1.02.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/DFSI/MS1025_AN_ConsoleToTaitP25ConventionalAppNote_v101.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/DFSI/MS1046_AN_ConsoleToCodanSimulcastSystemAppNote_v101.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/DFSI/MS1049_AN_ConsoleToEFJAtlas1200AppNote_v100.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/PoC/MS1029_AN_ConsoleToAdvancedEsChatGatewayAppNote_v101.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/PoC/MS1065_AN_RTPGatewayToESChatAppNote_v100.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Harris/MS1013_AN_MRIToHarrisM7200AppNote_v102.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Harris/MS1026_AN_MRIToHarrisXLSeriesAppNote_v102.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Hytera/MS1014_AN_MRIToHyteraMD78XAppNote_v101.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Hytera/MS1014_AN_MRIToHyteraMD78XAppNote_v102.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Hytera/MS1040_AN_MRIToHyteraHM78XAppNote_v100.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Icom/MS1007_AN_MRIToIcomF5060AppNote_rev1.01.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Icom/MS1007_AN_MRIToIcomF5060AppNote_rev102.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI/JPS/MS1006_AN_MRIToJPSSNV12AppNote_rev101.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1005_AN_MRIToEFJ5300AppNote_rev1.00.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1010_AN_MRIToEFJVikingAppNote_v110.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1015_AN_MRIToKenwoodRepeaterAppNote_v101.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1027_AN_MRIToKenwoodNx3000SeriesAppNote_v104.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1033_AN_MRIToKenwoodTK5x10SeriesAppNote_v101.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1034_AN_MRIToKenwoodNXx00SeriesAppNote_v103.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1035_AN_MRIToKenwoodNX5x00-TK5x30SeriesAppNote_v103.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1036_AN_MRIToKenwoodTK880RadioAppNote_v101.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1037_AN_MRIToKenwoodTKx62RadioAppNote_v101.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1038_AN_MRIToKenwoodTKx360RadioAppNote_v101.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1050_AN_MRIToKenwoodNxr-x10RepeaterAppNote_v101.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Motorola/MS1003_AN_MRIToCDMAppNote_rev1.01.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Motorola/MS1004_AN_MRIToMotoDMRAppNote_rev106.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Tait/MS1011_AN_MRIToTaitMobileAppNote_v109.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Hytera/MS1042_AN_MRI2ToHyteraMD782AppNote_v101.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Hytera/MS1063_AN_MRI2ToHyteraMNC360AppNote_v101.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Icom/MS1054_AN_MRI2ToIcomFx061_v102.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Icom/MS1056_AN_MRI2ToIcomF75x0_v101.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/JPS/MS1055_AN_MRI2ToJPSSNV12_v101.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1041_AN_MRI2ToEFJVikingAppNote_v103.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1048_AN_MRI2ToKenwoodNx5x00SeriesAppNote_v101.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1057_AN_MRI2ToKenwoodTk5x20SeriesAppNote_v101.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1058_AN_MRI2ToKenwoodTk5x10SeriesAppNote_v102.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1059_AN_MRI2ToKenwoodNXx00SeriesAppNote_v101.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1060_AN_MRI2ToKenwoodNX3x20SeriesAppNote_v102.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1061_AN_MRI2ToKenwoodTKx180SeriesAppNote_v101.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1064_AN_MRI2ToKenwoodNXRx10RepeaterAppNote_v100.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Motorola/MS1051-01_AN_MRI2ToMotoTrboXpr4xxxAppNote_v100.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Motorola/MS1051-02_AN_MRI2ToMotoTrboXpr5xxxAppNote_v100.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Motorola/MS1051-03_AN_MRI2ToMotoTrboXpr5xxxDirectEMAppNote_v101.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Motorola/MS1067_AN_MRI2ToMotorolaAPXAppNote.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Motorola/MS1071_AN_MRI2ToCDM1550AppNote_v100.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Tait/MS1052-01_AN_MRI2ToTaitTM9300ConventionalAppNote_v101.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Tait/MS1052-02_AN_MRI2ToTaitTM9300TrunkingAppNote_v101.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Tait/MS1053_AN_MRI2ToTaitTM9400AppNote_v101.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MS1017_AN_ConsoleToCiscoCallManagerAppNote_v111.pdf
+mindshare/Current Documentation/Technical Documents/Application Notes/MS1028_AN_AuxIoSystemBridgeAppNote_v100.pdf
+mindshare/Current Documentation/Technical Documents/Procedures/MS0603_PR_MRIConfigurationCopyingForReplacement_v104.pdf
+mindshare/Current Documentation/Technical Documents/Procedures/MS0604_PR_Removing-Fuse-for-Speaker-DC-Voltage_v100.pdf
+mindshare/Current Documentation/Technical Documents/Procedures/MS0614_PR_ConsoleExecEnablePhoneBookSharing_v106.pdf
+mindshare/Current Documentation/Technical Documents/Procedures/MS0618_PR_PackageDependenciesUpdate_v101.pdf
+mindshare/Current Documentation/Technical Documents/Procedures/MS0619_PR_InstallPackagesOffline_v100.pdf
+mindshare/Current Documentation/Technical Documents/Procedures/MS0625_PR_Enable_Black_Box_Glide_and_Switch_v102.pdf
+mindshare/Current Documentation/Technical Documents/Procedures/MS0631_PR_ChangeTouchscreenOrientation_v102.pdf
+mindshare/Current Documentation/Technical Documents/Procedures/MS0634_PR_DistributeConsoleBuilderFilesviaSecureCopy_v100.pdf
+mindshare/Current Documentation/Technical Documents/Procedures/MS0635_PR_AddDisplayResolution_v101.pdf
+mindshare/Current Documentation/Technical Documents/Procedures/MS0638_PR_DeleteSystemLogFilesviaTerminal_v100.pdf
+mindshare/Current Documentation/Technical Documents/Procedures/MS0641_PR_RemoveChromiumSingletonLockFiles_v100.pdf
+mindshare/Current Documentation/Technical Documents/Procedures/MS0642_PR_TouchscreenMapping_v100.pdf
+mindshare/Current Documentation/Technical Documents/Procedures/MS0643_PR_AddWifiDriverOnRSDS_G2_v100.pdf
+mindshare/Current Documentation/Technical Documents/Procedures/MS0644_PR_MRI2ManualSoftwareUpdate_v100.pdf
+mindshare/Current Documentation/Technical Documents/Procedures/MS0645_PR_SHG_S_D200_WirelessHeadsetAdapterConfiguration_v101.pdf
+mindshare/Current Documentation/Technical Documents/Release Notes/MS0201_RN_ConsoleApplicationReleaseNotes_v3.43.0.pdf
+mindshare/Current Documentation/Technical Documents/Release Notes/MS0202_RN_MindshareRadioIntefaceReleaseNotes_v3.4.0.pdf
+mindshare/Current Documentation/Technical Documents/Release Notes/MS0203_RN_MindshareAudioInterfaceReleaseNotes_v3.1.1.pdf
+mindshare/Current Documentation/Technical Documents/Release Notes/MS0204_RN_NxipConventionalGatewayReleaseNotes_v3.3.0.pdf
+mindshare/Current Documentation/Technical Documents/Release Notes/MS0205_RN_NxipTrunkingGatewayReleaseNotes_v3.4.0.pdf
+mindshare/Current Documentation/Technical Documents/Release Notes/MS0206_RN_VoterReleaseNotes_v3.0.23.pdf
+mindshare/Current Documentation/Technical Documents/Release Notes/MS0207_RN_RTPGatewayReleaseNotes_v2.0.0.pdf
+mindshare/Current Documentation/Technical Documents/Release Notes/MS0208_RN_BootMonitorReleaseNotes_v1.1.1.pdf
+mindshare/Current Documentation/Technical Documents/Release Notes/MS0208_RN_CADPagingEncoderReleaseNotes_v1.4.1.pdf
+mindshare/Current Documentation/Technical Documents/Release Notes/MS0210_RN_SystemBridgeReleaseNotes_v2.0.0.pdf
+mindshare/Current Documentation/Technical Documents/Release Notes/MS0211_RN_ConsoleClientReleaseNotes_v1.0.1.pdf
+mindshare/Current Documentation/Technical Documents/Release Notes/MS0212_RN_EssentialConsoleReleaseNotes_v1.11.0.pdf
+mindshare/Current Documentation/Technical Documents/Release Notes/MS0213_RN_DmrAisTrunkingReleaseNotes_v2.3.0.pdf
+mindshare/Current Documentation/Technical Documents/Release Notes/MS0214_RN_P25DfsiGatewayReleaseNotes_v2.4.0.pdf
+mindshare/Current Documentation/Technical Documents/Release Notes/MS0215_RN_AuxiliaryIoUnitReleaseNotes_v1.5.pdf
+mindshare/Current Documentation/Technical Documents/Release Notes/MS0216_RN_ServicePanelReleaseNotes_v3.3.0.pdf
+mindshare/Current Documentation/Technical Documents/Release Notes/MS0217_RN_AdvancedESChatGatewayReleaseNotes_v3.1.0.pdf
+mindshare/Current Documentation/Technical Documents/Release Notes/MS0218_RN_CadAlertingGatewayReleaseNotes_v1.1.0.pdf
+mindshare/Current Documentation/Technical Documents/Release Notes/MS0219_RN_DmrAisConventionalGatewayReleaseNotes_v2.3.1.pdf
+mindshare/Current Documentation/Technical Documents/Release Notes/MS0220_RN_NxipToolReleaseNotes_v1.0.0.pdf
+mindshare/Current Documentation/Technical Documents/Release Notes/MS0221_RN_MultiSpeakGatewayReleaseNotes_v1.1.0.pdf
+mindshare/Current Documentation/Technical Documents/Release Notes/MS0222_RN_MindshareRadioInterface2ReleaseNotes_v1.4.0.pdf
+mindshare/Current Documentation/Technical Documents/Release Notes/MS0223_RN_P25CssiGatewayReleaseNotes_v1.1.0.pdf
+mindshare/Current Documentation/Technical Documents/Release Notes/MS0225_RN_DmrHdapConventionalGatewayReleaseNotes_v1.1.0.pdf
+mindshare/Current Documentation/Technical Documents/Release Notes/MS0226_RN_RoipPlusGatewayReleaseNotes_v1.0.2.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0101_UM_ConsoleApplicationManual_v130.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0102_UM_MindshareRadioInterfaceManual_v114.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0104_UM_MasterAuxiliaryInputOutputManual_v103.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0109_UM_IntercomInterfaceManual_rev1.00.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0110_UM_CardCageManual_rev1.00.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0111_UM_HeadsetAdapter_rev1.00.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0113_UM_NxipConventionalGatewayManual_v204.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0114_UM_NxipTrunkingGatewayManual_v204.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0115_UM_RTPGatewayManual_v106.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0116_UM_CADPagingEncoderManual_v104.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0117_UM_100500MAXplusG2Manual_v101.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0118_UM_SystemBridgeManual_v200.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0119_UM_ConsoleClientManual_v100.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0120_UM_EssentialConsoleTechnicalUserManual_v109.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0121_UM_EssentialConsoleUserManual_v105.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0122_UM_DmrAisTrunkingGatewayManual_v204.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0123_UM_DmrAisConventionalGatewayManual_v204.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0124_UM_AdvancedESChatGatewayManual_v106.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0125_UM_P25DfsiGatewayManual_v205.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0126_UM_ServicePanelManual_v107.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0127_UM_MindshareRadioInterface2Manual_v105.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0128_UM_CadAlertingGatewayManual_v101.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0130_UM_NxipToolManual_v100.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0131_UM_RemoteSupportandDiagnosticServerUserManual_v104.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0132_UM_MultiSpeakGatewayManual_v101.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0133_UM_8LineTelcoPanelManual_v100.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0134_UM_DmrHdapConventionalGatewayManual_v101.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0135_UM_P25CssiGatewayManual_v101.pdf
+mindshare/Current Documentation/Technical Documents/User Manuals/MS0137_UM_RoipPlusGatewayManual_v100.pdf
+mindshare/MS0644_PR_MRI2ManualSoftwareUpdate_v100.pdf
+mindshare/README - Mindshare Library.md
+mindshare/Software Catalog/Mindshare Software Catalog 2026-07-26.md

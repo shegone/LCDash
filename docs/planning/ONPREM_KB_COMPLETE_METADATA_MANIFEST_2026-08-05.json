@@ -1,0 +1,2435 @@
+{
+  "schema_version": "lcdash.onprem-kb-complete-metadata-manifest.v1",
+  "source_root": "/srv/lcdash-data/documents",
+  "fields": [
+    "relative_path",
+    "bytes",
+    "mtime_epoch"
+  ],
+  "content_read": false,
+  "total_files": 341,
+  "library_counts": {
+    "centralsquare": 36,
+    "mindshare": 305
+  },
+  "result_counts": {
+    "candidate": 164,
+    "excluded": 176,
+    "hold": 1
+  },
+  "reason_counts": {
+    "centralsquare-current": 33,
+    "discontinued": 4,
+    "download-or-aggregate-copy": 102,
+    "duplicate-specialty-copy": 12,
+    "generated-or-empty-placeholder": 6,
+    "hard-exclusion-path-term": 8,
+    "legacy-copy-superseded-by-current-documentation": 15,
+    "mindshare-current": 131,
+    "over-25-mib": 2,
+    "public-site-copy-do-not-copy": 27,
+    "requires-sanitization-review": 1
+  },
+  "rules_version": "metadata-fail-closed-2026-08-05-boundary-matching",
+  "files": [
+    {
+      "path": "centralsquare/.drive-sync-status",
+      "bytes": 128,
+      "mtime_epoch": "1785968519.6500461170",
+      "result": "excluded",
+      "reason": "generated-or-empty-placeholder"
+    },
+    {
+      "path": "centralsquare/911 central square combined files 1pdf.pdf",
+      "bytes": 49035668,
+      "mtime_epoch": "1775742559.0000000000",
+      "result": "excluded",
+      "reason": "over-25-mib"
+    },
+    {
+      "path": "centralsquare/desktop.ini",
+      "bytes": 246,
+      "mtime_epoch": "1784731231.0000000000",
+      "result": "excluded",
+      "reason": "generated-or-empty-placeholder"
+    },
+    {
+      "path": "centralsquare/Garmin GPS 2.6 Installation Guide.pdf",
+      "bytes": 660049,
+      "mtime_epoch": "1767988349.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Integrated GPS 2.6 Configuration Guide for Administrators.pdf",
+      "bytes": 758750,
+      "mtime_epoch": "1767988359.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/L-Tron 4910 Scanner Installation Guide.pdf",
+      "bytes": 655449,
+      "mtime_epoch": "1767988415.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro Adding Master Records from Returns Quick Reference Guide.pdf",
+      "bytes": 344943,
+      "mtime_epoch": "1767991774.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro Addressing and Mapping Quick Reference Guide.pdf",
+      "bytes": 247753,
+      "mtime_epoch": "1767991790.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro Agency Administration Configuration Guide.pdf",
+      "bytes": 394361,
+      "mtime_epoch": "1767987951.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro Agency Administration End User Guide.pdf",
+      "bytes": 623349,
+      "mtime_epoch": "1767987999.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro API User Guide.pdf",
+      "bytes": 406033,
+      "mtime_epoch": "1767988012.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro Basics Configuration Guide.pdf",
+      "bytes": 7956146,
+      "mtime_epoch": "1767988035.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro Basics End User Guide.pdf",
+      "bytes": 4188288,
+      "mtime_epoch": "1767988047.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro CAD and Mapping Configuration Guide.pdf",
+      "bytes": 6488008,
+      "mtime_epoch": "1767988057.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro CAD and Mapping End User Guide.pdf",
+      "bytes": 8944922,
+      "mtime_epoch": "1767988069.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro CAD CFS Screen and Tow Calls Quick Reference Guide.pdf",
+      "bytes": 347411,
+      "mtime_epoch": "1767991832.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro CFS Log and CAD Windows Quick Reference Guide.pdf",
+      "bytes": 431078,
+      "mtime_epoch": "1767991849.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro Civil Configuration Guide.pdf",
+      "bytes": 777150,
+      "mtime_epoch": "1767988081.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro Civil End User Guide.pdf",
+      "bytes": 660467,
+      "mtime_epoch": "1767988095.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro Custom Fields Configuration Guide.pdf",
+      "bytes": 508106,
+      "mtime_epoch": "1767988106.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro Custom Forms Configuration Guide.pdf",
+      "bytes": 386631,
+      "mtime_epoch": "1767988118.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro Custom Modules Configuration Guide.pdf",
+      "bytes": 605803,
+      "mtime_epoch": "1767988128.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro Extend and eCitations Configuration Guide.pdf",
+      "bytes": 808503,
+      "mtime_epoch": "1767988143.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro Extend and eCitations End User Guide.pdf",
+      "bytes": 1663181,
+      "mtime_epoch": "1767988153.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro Mobile CAD Configuration Guide.pdf",
+      "bytes": 1177890,
+      "mtime_epoch": "1767988174.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro NCIC Configuration Guide.pdf",
+      "bytes": 1058830,
+      "mtime_epoch": "1767988187.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro NCIC End User Guide.pdf",
+      "bytes": 2018698,
+      "mtime_epoch": "1767988199.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro Personnel End User Guide.pdf",
+      "bytes": 2832979,
+      "mtime_epoch": "1767988212.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro Portal Configuration Guide.pdf",
+      "bytes": 298457,
+      "mtime_epoch": "1767988224.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro Prosecution End User Guide.pdf",
+      "bytes": 332904,
+      "mtime_epoch": "1767988293.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro Records Configuration Guide.pdf",
+      "bytes": 4513504,
+      "mtime_epoch": "1767988254.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro Records End User Guide.pdf",
+      "bytes": 10263927,
+      "mtime_epoch": "1767988265.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Public Safety Suite Pro Reporting End User Guide.pdf",
+      "bytes": 1134811,
+      "mtime_epoch": "1767988276.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Topaz Signature Pad Installation Guide.pdf",
+      "bytes": 390470,
+      "mtime_epoch": "1767988397.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Zebra RW-420 Installation Guide.pdf",
+      "bytes": 797800,
+      "mtime_epoch": "1767988373.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "centralsquare/Zebra ZQ-520 Installation Guide.pdf",
+      "bytes": 1214479,
+      "mtime_epoch": "1767988380.0000000000",
+      "result": "candidate",
+      "reason": "centralsquare-current"
+    },
+    {
+      "path": "mindshare/.drive-sync-status",
+      "bytes": 124,
+      "mtime_epoch": "1785968519.6520461190",
+      "result": "excluded",
+      "reason": "generated-or-empty-placeholder"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/DMR/AIS/MS1019_AN_ConsoleToTaitDmrTrunkingAppNote_v100.pdf",
+      "bytes": 6944835,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/DMR/AIS/MS1020_AN_ConsoleToSelexDmrTrunkingAppNote_v101.pdf",
+      "bytes": 925076,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/DMR/AIS/MS1021_AN_ConsoleToKenwoodDmrConventionalAppNote_v102.pdf",
+      "bytes": 2288945,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/DMR/AIS/MS1066_AN_ConsoleToKenwoodDmrTrunking25AppNote_v100.pdf",
+      "bytes": 2466037,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/DMR/HDAP/MS1068_AN_ConsoleToHyteraHR1062AppNote_v101.pdf",
+      "bytes": 1083640,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/CSSI/MS1069_AN_ConsoleToTaitP25TrunkingAppNote_v100.pdf",
+      "bytes": 2228413,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/CSSI/MS1072_AN_ConsoleToEFJAtlasP25RFSSAppNote_v100.pdf",
+      "bytes": 2576122,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/CSSI/MS1073_AN_ConsoleToMotorolaAstro25AppNote_v100.pdf",
+      "bytes": 2025373,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/DFSI/MS1009_AN_ConsoleToIcomEclipse2AppNote_rev1.02.pdf",
+      "bytes": 1204605,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/DFSI/MS1025_AN_ConsoleToTaitP25ConventionalAppNote_v101.pdf",
+      "bytes": 1640166,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/DFSI/MS1046_AN_ConsoleToCodanSimulcastSystemAppNote_v101.pdf",
+      "bytes": 2151600,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/P25/DFSI/MS1049_AN_ConsoleToEFJAtlas1200AppNote_v100.pdf",
+      "bytes": 2594231,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/PoC/MS1029_AN_ConsoleToAdvancedEsChatGatewayAppNote_v101.pdf",
+      "bytes": 1538543,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/IP Gateways/PoC/MS1065_AN_RTPGatewayToESChatAppNote_v100.pdf",
+      "bytes": 1654208,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Harris/MS1013_AN_MRIToHarrisM7200AppNote_v102.pdf",
+      "bytes": 185937,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Harris/MS1026_AN_MRIToHarrisXLSeriesAppNote_v102.pdf",
+      "bytes": 209873,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Hytera/MS1014_AN_MRIToHyteraMD78XAppNote_v101.pdf",
+      "bytes": 547147,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Hytera/MS1014_AN_MRIToHyteraMD78XAppNote_v102.pdf",
+      "bytes": 596972,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Hytera/MS1040_AN_MRIToHyteraHM78XAppNote_v100.pdf",
+      "bytes": 597681,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Icom/MS1007_AN_MRIToIcomF5060AppNote_rev1.01.pdf",
+      "bytes": 2703719,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Icom/MS1007_AN_MRIToIcomF5060AppNote_rev102.pdf",
+      "bytes": 963211,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/JPS/MS1006_AN_MRIToJPSSNV12AppNote_rev101.pdf",
+      "bytes": 467308,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1005_AN_MRIToEFJ5300AppNote_rev1.00.pdf",
+      "bytes": 517608,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1010_AN_MRIToEFJVikingAppNote_v110.pdf",
+      "bytes": 1108805,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1015_AN_MRIToKenwoodRepeaterAppNote_v101.pdf",
+      "bytes": 471470,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1027_AN_MRIToKenwoodNx3000SeriesAppNote_v104.pdf",
+      "bytes": 767132,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1033_AN_MRIToKenwoodTK5x10SeriesAppNote_v101.pdf",
+      "bytes": 647219,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1034_AN_MRIToKenwoodNXx00SeriesAppNote_v103.pdf",
+      "bytes": 829886,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1035_AN_MRIToKenwoodNX5x00-TK5x30SeriesAppNote_v103.pdf",
+      "bytes": 769745,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1036_AN_MRIToKenwoodTK880RadioAppNote_v101.pdf",
+      "bytes": 287417,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1037_AN_MRIToKenwoodTKx62RadioAppNote_v101.pdf",
+      "bytes": 228369,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1038_AN_MRIToKenwoodTKx360RadioAppNote_v101.pdf",
+      "bytes": 617428,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Kenwood-EFJ/MS1050_AN_MRIToKenwoodNxr-x10RepeaterAppNote_v101.pdf",
+      "bytes": 505653,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Motorola/MS1003_AN_MRIToCDMAppNote_rev1.01.pdf",
+      "bytes": 971560,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Motorola/MS1004_AN_MRIToMotoDMRAppNote_rev106.pdf",
+      "bytes": 882522,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI/Tait/MS1011_AN_MRIToTaitMobileAppNote_v109.pdf",
+      "bytes": 1881449,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Hytera/MS1042_AN_MRI2ToHyteraMD782AppNote_v101.pdf",
+      "bytes": 1824568,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Hytera/MS1063_AN_MRI2ToHyteraMNC360AppNote_v101.pdf",
+      "bytes": 735833,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Icom/MS1054_AN_MRI2ToIcomFx061_v102.pdf",
+      "bytes": 1088213,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Icom/MS1056_AN_MRI2ToIcomF75x0_v101.pdf",
+      "bytes": 1837736,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/JPS/MS1055_AN_MRI2ToJPSSNV12_v101.pdf",
+      "bytes": 1698617,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1041_AN_MRI2ToEFJVikingAppNote_v103.pdf",
+      "bytes": 949039,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1048_AN_MRI2ToKenwoodNx5x00SeriesAppNote_v101.pdf",
+      "bytes": 2015113,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1057_AN_MRI2ToKenwoodTk5x20SeriesAppNote_v101.pdf",
+      "bytes": 1885609,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1058_AN_MRI2ToKenwoodTk5x10SeriesAppNote_v102.pdf",
+      "bytes": 775827,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1059_AN_MRI2ToKenwoodNXx00SeriesAppNote_v101.pdf",
+      "bytes": 1983065,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1060_AN_MRI2ToKenwoodNX3x20SeriesAppNote_v102.pdf",
+      "bytes": 895805,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1061_AN_MRI2ToKenwoodTKx180SeriesAppNote_v101.pdf",
+      "bytes": 1853581,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Kenwood-EFJ/MS1064_AN_MRI2ToKenwoodNXRx10RepeaterAppNote_v100.pdf",
+      "bytes": 1846918,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Motorola/MS1051-01_AN_MRI2ToMotoTrboXpr4xxxAppNote_v100.pdf",
+      "bytes": 1870294,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Motorola/MS1051-02_AN_MRI2ToMotoTrboXpr5xxxAppNote_v100.pdf",
+      "bytes": 1922495,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Motorola/MS1051-03_AN_MRI2ToMotoTrboXpr5xxxDirectEMAppNote_v101.pdf",
+      "bytes": 488510,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Motorola/MS1067_AN_MRI2ToMotorolaAPXAppNote.pdf",
+      "bytes": 336130,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Motorola/MS1071_AN_MRI2ToCDM1550AppNote_v100.pdf",
+      "bytes": 406685,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Tait/MS1052-01_AN_MRI2ToTaitTM9300ConventionalAppNote_v101.pdf",
+      "bytes": 2037168,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Tait/MS1052-02_AN_MRI2ToTaitTM9300TrunkingAppNote_v101.pdf",
+      "bytes": 1907905,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MRI2/Tait/MS1053_AN_MRI2ToTaitTM9400AppNote_v101.pdf",
+      "bytes": 2028001,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MS1017_AN_ConsoleToCiscoCallManagerAppNote_v111.pdf",
+      "bytes": 1405502,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/MS1028_AN_AuxIoSystemBridgeAppNote_v100.pdf",
+      "bytes": 360780,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Application Notes/Readme.md",
+      "bytes": 1,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "excluded",
+      "reason": "generated-or-empty-placeholder"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0601_PR_MAIFirmwareUpdateViaTerminal_v103.pdf",
+      "bytes": 298757,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "excluded",
+      "reason": "hard-exclusion-path-term"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0602_PR_MRILACFirmwareUpdateViaTerminal_v105.pdf",
+      "bytes": 233309,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "excluded",
+      "reason": "hard-exclusion-path-term"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0603_PR_MRIConfigurationCopyingForReplacement_v104.pdf",
+      "bytes": 361207,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0604_PR_Removing-Fuse-for-Speaker-DC-Voltage_v100.pdf",
+      "bytes": 1632440,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0610_PR_ClonezillaBackupConsoleImaging_v102.pdf",
+      "bytes": 221024,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "excluded",
+      "reason": "hard-exclusion-path-term"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0614_PR_ConsoleExecEnablePhoneBookSharing_v106.pdf",
+      "bytes": 250743,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0618_PR_PackageDependenciesUpdate_v101.pdf",
+      "bytes": 378732,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0619_PR_InstallPackagesOffline_v100.pdf",
+      "bytes": 228466,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0625_PR_Enable_Black_Box_Glide_and_Switch_v102.pdf",
+      "bytes": 631764,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0630_PR_BIOSFirmwareUpdate_v100.pdf",
+      "bytes": 258504,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "excluded",
+      "reason": "hard-exclusion-path-term"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0631_PR_ChangeTouchscreenOrientation_v102.pdf",
+      "bytes": 191161,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0634_PR_DistributeConsoleBuilderFilesviaSecureCopy_v100.pdf",
+      "bytes": 212772,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0635_PR_AddDisplayResolution_v101.pdf",
+      "bytes": 268922,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0638_PR_DeleteSystemLogFilesviaTerminal_v100.pdf",
+      "bytes": 312422,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0641_PR_RemoveChromiumSingletonLockFiles_v100.pdf",
+      "bytes": 153440,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0642_PR_TouchscreenMapping_v100.pdf",
+      "bytes": 205409,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0643_PR_AddWifiDriverOnRSDS_G2_v100.pdf",
+      "bytes": 249504,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0644_PR_MRI2ManualSoftwareUpdate_v100.pdf",
+      "bytes": 177813,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Procedures/MS0645_PR_SHG_S_D200_WirelessHeadsetAdapterConfiguration_v101.pdf",
+      "bytes": 306504,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Readme.md",
+      "bytes": 1,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "excluded",
+      "reason": "generated-or-empty-placeholder"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0201_RN_ConsoleApplicationReleaseNotes_v3.43.0.pdf",
+      "bytes": 1514031,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0202_RN_MindshareRadioIntefaceReleaseNotes_v3.4.0.pdf",
+      "bytes": 1446145,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0203_RN_MindshareAudioInterfaceReleaseNotes_v3.1.1.pdf",
+      "bytes": 139053,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0204_RN_NxipConventionalGatewayReleaseNotes_v3.3.0.pdf",
+      "bytes": 1395454,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0205_RN_NxipTrunkingGatewayReleaseNotes_v3.4.0.pdf",
+      "bytes": 1411680,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0206_RN_VoterReleaseNotes_v3.0.23.pdf",
+      "bytes": 85928,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0207_RN_RTPGatewayReleaseNotes_v2.0.0.pdf",
+      "bytes": 1382943,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0208_RN_BootMonitorReleaseNotes_v1.1.1.pdf",
+      "bytes": 246472,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0208_RN_CADPagingEncoderReleaseNotes_v1.4.1.pdf",
+      "bytes": 1380761,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0210_RN_SystemBridgeReleaseNotes_v2.0.0.pdf",
+      "bytes": 1381316,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0211_RN_ConsoleClientReleaseNotes_v1.0.1.pdf",
+      "bytes": 129697,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0212_RN_EssentialConsoleReleaseNotes_v1.11.0.pdf",
+      "bytes": 1395233,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0213_RN_DmrAisTrunkingReleaseNotes_v2.3.0.pdf",
+      "bytes": 1399670,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0214_RN_P25DfsiGatewayReleaseNotes_v2.4.0.pdf",
+      "bytes": 1398080,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0215_RN_AuxiliaryIoUnitReleaseNotes_v1.5.pdf",
+      "bytes": 1372426,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0216_RN_ServicePanelReleaseNotes_v3.3.0.pdf",
+      "bytes": 1387024,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0217_RN_AdvancedESChatGatewayReleaseNotes_v3.1.0.pdf",
+      "bytes": 1388562,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0218_RN_CadAlertingGatewayReleaseNotes_v1.1.0.pdf",
+      "bytes": 1377103,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0219_RN_DmrAisConventionalGatewayReleaseNotes_v2.3.1.pdf",
+      "bytes": 129181,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0220_RN_NxipToolReleaseNotes_v1.0.0.pdf",
+      "bytes": 1369607,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0221_RN_MultiSpeakGatewayReleaseNotes_v1.1.0.pdf",
+      "bytes": 1379615,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0222_RN_MindshareRadioInterface2ReleaseNotes_v1.4.0.pdf",
+      "bytes": 261400,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0223_RN_P25CssiGatewayReleaseNotes_v1.1.0.pdf",
+      "bytes": 1384406,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0225_RN_DmrHdapConventionalGatewayReleaseNotes_v1.1.0.pdf",
+      "bytes": 1379243,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/MS0226_RN_RoipPlusGatewayReleaseNotes_v1.0.2.pdf",
+      "bytes": 1376801,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/Release Notes/Readme.md",
+      "bytes": 1,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "excluded",
+      "reason": "generated-or-empty-placeholder"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/Discontinued/MS0105_UM_100508SpeakerManual_rev1.00.pdf",
+      "bytes": 238587,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "excluded",
+      "reason": "discontinued"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/Discontinued/MS0106_UM_AuxiliaryInputOutputCardManual_rev1.02.pdf",
+      "bytes": 684017,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "excluded",
+      "reason": "discontinued"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/Discontinued/MS0107_UM_100500MAXplusManual_rev1.03.pdf",
+      "bytes": 1169124,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "excluded",
+      "reason": "discontinued"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/Discontinued/MS0112_UM_LegacyAudioCardManual_rev1.00.pdf",
+      "bytes": 997405,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "excluded",
+      "reason": "discontinued"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0101_UM_ConsoleApplicationManual_v130.pdf",
+      "bytes": 2910589,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0102_UM_MindshareRadioInterfaceManual_v114.pdf",
+      "bytes": 1182037,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0104_UM_MasterAuxiliaryInputOutputManual_v103.pdf",
+      "bytes": 479388,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0109_UM_IntercomInterfaceManual_rev1.00.pdf",
+      "bytes": 471274,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0110_UM_CardCageManual_rev1.00.pdf",
+      "bytes": 331474,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0111_UM_HeadsetAdapter_rev1.00.pdf",
+      "bytes": 235579,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0113_UM_NxipConventionalGatewayManual_v204.pdf",
+      "bytes": 5791049,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0114_UM_NxipTrunkingGatewayManual_v204.pdf",
+      "bytes": 5995649,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0115_UM_RTPGatewayManual_v106.pdf",
+      "bytes": 2068221,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0116_UM_CADPagingEncoderManual_v104.pdf",
+      "bytes": 624275,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0117_UM_100500MAXplusG2Manual_v101.pdf",
+      "bytes": 1188509,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0118_UM_SystemBridgeManual_v200.pdf",
+      "bytes": 2083577,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0119_UM_ConsoleClientManual_v100.pdf",
+      "bytes": 644137,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0120_UM_EssentialConsoleTechnicalUserManual_v109.pdf",
+      "bytes": 1513605,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0121_UM_EssentialConsoleUserManual_v105.pdf",
+      "bytes": 2436322,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0122_UM_DmrAisTrunkingGatewayManual_v204.pdf",
+      "bytes": 5825905,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0123_UM_DmrAisConventionalGatewayManual_v204.pdf",
+      "bytes": 5757577,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0124_UM_AdvancedESChatGatewayManual_v106.pdf",
+      "bytes": 2554223,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0125_UM_P25DfsiGatewayManual_v205.pdf",
+      "bytes": 5700843,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0126_UM_ServicePanelManual_v107.pdf",
+      "bytes": 2399388,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0127_UM_MindshareRadioInterface2Manual_v105.pdf",
+      "bytes": 2379213,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0128_UM_CadAlertingGatewayManual_v101.pdf",
+      "bytes": 1688973,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0130_UM_NxipToolManual_v100.pdf",
+      "bytes": 5615933,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0131_UM_RemoteSupportandDiagnosticServerUserManual_v104.pdf",
+      "bytes": 729058,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0132_UM_MultiSpeakGatewayManual_v101.pdf",
+      "bytes": 1725950,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0133_UM_8LineTelcoPanelManual_v100.pdf",
+      "bytes": 1618966,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0134_UM_DmrHdapConventionalGatewayManual_v101.pdf",
+      "bytes": 2095924,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0135_UM_P25CssiGatewayManual_v101.pdf",
+      "bytes": 5580301,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Current Documentation/Technical Documents/User Manuals/MS0137_UM_RoipPlusGatewayManual_v100.pdf",
+      "bytes": 2287655,
+      "mtime_epoch": "1785108606.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/DFSI/MS0125_UM_P25DfsiGatewayManual_v205.pdf",
+      "bytes": 5700843,
+      "mtime_epoch": "1785264107.0000000000",
+      "result": "excluded",
+      "reason": "duplicate-specialty-copy"
+    },
+    {
+      "path": "mindshare/DFSI/MS1009_AN_ConsoleToIcomEclipse2AppNote_rev1.02.pdf",
+      "bytes": 1204605,
+      "mtime_epoch": "1785264198.0000000000",
+      "result": "excluded",
+      "reason": "duplicate-specialty-copy"
+    },
+    {
+      "path": "mindshare/DFSI/MS1025_AN_ConsoleToTaitP25ConventionalAppNote_v101.pdf",
+      "bytes": 1640166,
+      "mtime_epoch": "1785264198.0000000000",
+      "result": "excluded",
+      "reason": "duplicate-specialty-copy"
+    },
+    {
+      "path": "mindshare/DFSI/MS1046_AN_ConsoleToCodanSimulcastSystemAppNote_v101.pdf",
+      "bytes": 2151600,
+      "mtime_epoch": "1785264198.0000000000",
+      "result": "excluded",
+      "reason": "duplicate-specialty-copy"
+    },
+    {
+      "path": "mindshare/DFSI/MS1049_AN_ConsoleToEFJAtlas1200AppNote_v100.pdf",
+      "bytes": 2594231,
+      "mtime_epoch": "1785264198.0000000000",
+      "result": "excluded",
+      "reason": "duplicate-specialty-copy"
+    },
+    {
+      "path": "mindshare/download (1)/MS0201_RN_ConsoleApplicationReleaseNotes_v3.40.0.pdf",
+      "bytes": 1509023,
+      "mtime_epoch": "1747442258.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (1)/MS0202_RN_MindshareRadioIntefaceReleaseNotes_v3.3.0.pdf",
+      "bytes": 1445093,
+      "mtime_epoch": "1728680858.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (1)/MS0203_RN_MindshareAudioInterfaceReleaseNotes_v3.1.1.pdf",
+      "bytes": 139053,
+      "mtime_epoch": "1611687070.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (1)/MS0204_RN_NxipConventionalGatewayReleaseNotes_v3.1.0.pdf",
+      "bytes": 132505,
+      "mtime_epoch": "1745473096.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (1)/MS0205_RN_NxipTrunkingGatewayReleaseNotes_v3.1.0.pdf",
+      "bytes": 1408540,
+      "mtime_epoch": "1748990122.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (1)/MS0206_RN_VoterReleaseNotes_v3.0.23.pdf",
+      "bytes": 85928,
+      "mtime_epoch": "1591095344.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (1)/MS0207_RN_RTPGatewayReleaseNotes_v2.0.0.pdf",
+      "bytes": 1382943,
+      "mtime_epoch": "1749603562.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (1)/MS0208_RN_BootMonitorReleaseNotes_v1.1.1.pdf",
+      "bytes": 246472,
+      "mtime_epoch": "1591095344.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (1)/MS0208_RN_CADPagingEncoderReleaseNotes_v1.4.1.pdf",
+      "bytes": 1380761,
+      "mtime_epoch": "1731783668.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (1)/MS0210_RN_SystemBridgeReleaseNotes_v2.0.0.pdf",
+      "bytes": 1381316,
+      "mtime_epoch": "1732652228.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (1)/MS0211_RN_ConsoleClientReleaseNotes_v1.0.1.pdf",
+      "bytes": 129697,
+      "mtime_epoch": "1602192636.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (1)/MS0212_RN_EssentialConsoleReleaseNotes_v1.9.0.pdf",
+      "bytes": 1394509,
+      "mtime_epoch": "1732735134.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (1)/MS0213_RN_DmrAisTrunkingReleaseNotes_v2.1.0.pdf",
+      "bytes": 1396945,
+      "mtime_epoch": "1749237616.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (1)/MS0214_RN_P25DfsiGatewayReleaseNotes_v2.1.0.pdf",
+      "bytes": 1395648,
+      "mtime_epoch": "1745023564.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (1)/MS0215_RN_AuxiliaryIoUnitReleaseNotes_v1.5.pdf",
+      "bytes": 1372426,
+      "mtime_epoch": "1678128722.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (1)/MS0216_RN_ServicePanelReleaseNotes_v3.1.1.pdf",
+      "bytes": 122527,
+      "mtime_epoch": "1745390118.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (1)/MS0217_RN_AdvancedESChatGatewayReleaseNotes_v3.0.3.pdf",
+      "bytes": 1386894,
+      "mtime_epoch": "1749174236.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (1)/MS0218_RN_CadAlertingGatewayReleaseNotes_v1.1.0.pdf",
+      "bytes": 1377103,
+      "mtime_epoch": "1708482186.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (1)/MS0219_RN_DmrAisConventionalGatewayReleaseNotes_v2.1.0.pdf",
+      "bytes": 1387430,
+      "mtime_epoch": "1745870530.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (1)/MS0220_RN_NxipToolReleaseNotes_v1.0.0.pdf",
+      "bytes": 1369607,
+      "mtime_epoch": "1718912432.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (1)/MS0221_RN_MultiSpeakGatewayReleaseNotes_v1.0.0.pdf",
+      "bytes": 1376647,
+      "mtime_epoch": "1731459166.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (1)/MS0222_RN_MindshareRadioInterface2ReleaseNotes_v1.1.0.pdf",
+      "bytes": 1386673,
+      "mtime_epoch": "1746563538.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/IP Gateways/MS1009_AN_ConsoleToIcomEclipse2AppNote_rev1.02.pdf",
+      "bytes": 1204605,
+      "mtime_epoch": "1591095176.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/IP Gateways/MS1019_AN_ConsoleToTaitDmrTrunkingAppNote_v100.pdf",
+      "bytes": 6944835,
+      "mtime_epoch": "1591095176.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/IP Gateways/MS1020_AN_ConsoleToSelexDmrTrunkingAppNote_v101.pdf",
+      "bytes": 925076,
+      "mtime_epoch": "1634693558.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/IP Gateways/MS1021_AN_ConsoleToKenwoodDmrConventionalAppNote_v102.pdf",
+      "bytes": 2288945,
+      "mtime_epoch": "1701911544.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/IP Gateways/MS1025_AN_ConsoleToTaitP25ConventionalAppNote_v101.pdf",
+      "bytes": 1640166,
+      "mtime_epoch": "1651793452.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/IP Gateways/MS1029_AN_ConsoleToAdvancedEsChatGatewayAppNote_v101.pdf",
+      "bytes": 1538543,
+      "mtime_epoch": "1653527994.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/IP Gateways/MS1046_AN_ConsoleToCodanSimulcastSystemAppNote_v101.pdf",
+      "bytes": 2151600,
+      "mtime_epoch": "1696642510.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/IP Gateways/MS1049_AN_ConsoleToEFJAtlas1200AppNote_v100.pdf",
+      "bytes": 2594231,
+      "mtime_epoch": "1696641832.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/IP Gateways/MS1065_AN_RTPGatewayToESChatAppNote_v100.pdf",
+      "bytes": 1654208,
+      "mtime_epoch": "1748642338.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI/Harris/MS1013_AN_MRIToHarrisM7200AppNote_v102.pdf",
+      "bytes": 185937,
+      "mtime_epoch": "1716313152.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI/Harris/MS1026_AN_MRIToHarrisXLSeriesAppNote_v102.pdf",
+      "bytes": 209873,
+      "mtime_epoch": "1716313928.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI/Hytera/MS1014_AN_MRIToHyteraMD78XAppNote_v101.pdf",
+      "bytes": 547147,
+      "mtime_epoch": "1591095176.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI/Hytera/MS1014_AN_MRIToHyteraMD78XAppNote_v102.pdf",
+      "bytes": 596972,
+      "mtime_epoch": "1716320892.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI/Hytera/MS1040_AN_MRIToHyteraHM78XAppNote_v100.pdf",
+      "bytes": 597681,
+      "mtime_epoch": "1695060488.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI/Icom/MS1007_AN_MRIToIcomF5060AppNote_rev1.01.pdf",
+      "bytes": 2703719,
+      "mtime_epoch": "1591095176.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI/Icom/MS1007_AN_MRIToIcomF5060AppNote_rev102.pdf",
+      "bytes": 963211,
+      "mtime_epoch": "1716321420.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI/JPS/MS1006_AN_MRIToJPSSNV12AppNote_rev101.pdf",
+      "bytes": 467308,
+      "mtime_epoch": "1716258790.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI/Kenwood-EFJ/MS1005_AN_MRIToEFJ5300AppNote_rev1.00.pdf",
+      "bytes": 517608,
+      "mtime_epoch": "1591095176.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI/Kenwood-EFJ/MS1010_AN_MRIToEFJVikingAppNote_v110.pdf",
+      "bytes": 1108805,
+      "mtime_epoch": "1716255418.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI/Kenwood-EFJ/MS1015_AN_MRIToKenwoodRepeaterAppNote_v101.pdf",
+      "bytes": 471470,
+      "mtime_epoch": "1716254548.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI/Kenwood-EFJ/MS1027_AN_MRIToKenwoodNx3000SeriesAppNote_v104.pdf",
+      "bytes": 767132,
+      "mtime_epoch": "1716254234.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI/Kenwood-EFJ/MS1033_AN_MRIToKenwoodTK5x10SeriesAppNote_v101.pdf",
+      "bytes": 647219,
+      "mtime_epoch": "1716319122.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI/Kenwood-EFJ/MS1034_AN_MRIToKenwoodNXx00SeriesAppNote_v103.pdf",
+      "bytes": 829886,
+      "mtime_epoch": "1732648856.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI/Kenwood-EFJ/MS1035_AN_MRIToKenwwodNX5x00-TK5x30SeriesAppNote_v102 (1).pdf",
+      "bytes": 750987,
+      "mtime_epoch": "1749148787.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI/Kenwood-EFJ/MS1035_AN_MRIToKenwwodNX5x00-TK5x30SeriesAppNote_v103.pdf",
+      "bytes": 769745,
+      "mtime_epoch": "1754692622.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI/Kenwood-EFJ/MS1036_AN_MRIToKenwoodTK880RadioAppNote_v101.pdf",
+      "bytes": 287417,
+      "mtime_epoch": "1716319356.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI/Kenwood-EFJ/MS1037_AN_MRIToKenwoodTKx62RadioAppNote_v101.pdf",
+      "bytes": 228369,
+      "mtime_epoch": "1716254440.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI/Kenwood-EFJ/MS1038_AN_MRIToKenwoodTKx360RadioAppNote_v101.pdf",
+      "bytes": 617428,
+      "mtime_epoch": "1716318916.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI/Kenwood-EFJ/MS1050_AN_MRIToKenwoodNxr-x10RepeaterAppNote_v101.pdf",
+      "bytes": 505653,
+      "mtime_epoch": "1716255714.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI/Motorola/MS1003_AN_MRIToCDMAppNote_rev1.01.pdf",
+      "bytes": 971560,
+      "mtime_epoch": "1591095176.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI/Motorola/MS1004_AN_MRIToMotoDMRAppNote_rev106.pdf",
+      "bytes": 882522,
+      "mtime_epoch": "1720037552.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI/Tait/MS1011_AN_MRIToTaitMobileAppNote_v109.pdf",
+      "bytes": 1881449,
+      "mtime_epoch": "1740614834.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI2/Hytera/MS1042_AN_MRI2ToHyteraMD782AppNote_v101.pdf",
+      "bytes": 1824568,
+      "mtime_epoch": "1738610116.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI2/Hytera/MS1063_AN_MRI2ToHyteraMNC360AppNote_v100.pdf",
+      "bytes": 2389916,
+      "mtime_epoch": "1734743320.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI2/Icom/MS1054_AN_MRI2ToIcomFx061_v101.pdf",
+      "bytes": 4366336,
+      "mtime_epoch": "1738617036.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI2/Icom/MS1056_AN_MRI2ToIcomF75x0_v101.pdf",
+      "bytes": 1837736,
+      "mtime_epoch": "1738617262.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI2/JPS/MS1055_AN_MRI2ToJPSSNV12_v101.pdf",
+      "bytes": 1698617,
+      "mtime_epoch": "1738617148.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI2/Kenwood-EFJ/MS1041_AN_MRI2ToEFJVikingAppNote_v103.pdf",
+      "bytes": 949039,
+      "mtime_epoch": "1755305948.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI2/Kenwood-EFJ/MS1048_AN_MRI2ToKenwoodNx5x00SeriesAppNote_v101.pdf",
+      "bytes": 2015113,
+      "mtime_epoch": "1738616288.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI2/Kenwood-EFJ/MS1057_AN_MRI2ToKenwoodTk5x20SeriesAppNote_v101.pdf",
+      "bytes": 1885609,
+      "mtime_epoch": "1738617372.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI2/Kenwood-EFJ/MS1058_AN_MRI2ToKenwoodTk5x10SeriesAppNote_v101.pdf",
+      "bytes": 1915201,
+      "mtime_epoch": "1738617458.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI2/Kenwood-EFJ/MS1059_AN_MRI2ToKenwoodNXx00SeriesAppNote_v101.pdf",
+      "bytes": 1983065,
+      "mtime_epoch": "1738617550.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI2/Kenwood-EFJ/MS1060_AN_MRI2ToKenwoodNX3x20SeriesAppNote_v101.pdf",
+      "bytes": 2043559,
+      "mtime_epoch": "1738617652.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI2/Kenwood-EFJ/MS1061_AN_MRI2ToKenwoodTKx180SeriesAppNote_v101.pdf",
+      "bytes": 1853581,
+      "mtime_epoch": "1738618268.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI2/Motorola/MS1051-01_AN_MRI2ToMotoTrboXpr4xxxAppNote_v100.pdf",
+      "bytes": 1870294,
+      "mtime_epoch": "1734726166.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI2/Motorola/MS1051-02_AN_MRI2ToMotoTrboXpr5xxxAppNote_v100.pdf",
+      "bytes": 1922495,
+      "mtime_epoch": "1734726158.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI2/Motorola/MS1051-03_AN_MRI2ToMotoTrboXpr5xxxDirectEMAppNote_v101.pdf",
+      "bytes": 488510,
+      "mtime_epoch": "1753724842.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI2/Tait/MS1052-01_AN_MRI2ToTaitTM9300ConventionalAppNote_v101.pdf",
+      "bytes": 2037168,
+      "mtime_epoch": "1738616450.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI2/Tait/MS1052-02_AN_MRI2ToTaitTM9300TrunkingAppNote_v101.pdf",
+      "bytes": 1907905,
+      "mtime_epoch": "1738616506.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MRI2/Tait/MS1053_AN_MRI2ToTaitTM9400AppNote_v101.pdf",
+      "bytes": 2028001,
+      "mtime_epoch": "1738616816.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MS1017_AN_ConsoleToCiscoCallManagerAppNote_v111.pdf",
+      "bytes": 1405502,
+      "mtime_epoch": "1699056454.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download (2)/MS1028_AN_AuxIoSystemBridgeAppNote_v100.pdf",
+      "bytes": 360780,
+      "mtime_epoch": "1623460890.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0101_UM_ConsoleApplicationManual_v127.pdf",
+      "bytes": 2885301,
+      "mtime_epoch": "1747439654.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0102_UM_MindshareRadioInterfaceManual_v113.pdf",
+      "bytes": 829490,
+      "mtime_epoch": "1751499288.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0104_UM_MasterAuxiliaryInputOutputManual_v103.pdf",
+      "bytes": 479388,
+      "mtime_epoch": "1623282884.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0109_UM_IntercomInterfaceManual_rev1.00.pdf",
+      "bytes": 471274,
+      "mtime_epoch": "1591095428.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0110_UM_CardCageManual_rev1.00.pdf",
+      "bytes": 331474,
+      "mtime_epoch": "1591095428.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0111_UM_HeadsetAdapter_rev1.00.pdf",
+      "bytes": 235579,
+      "mtime_epoch": "1591095428.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0113_UM_NxipConventionalGatewayManual_v202.pdf",
+      "bytes": 1709638,
+      "mtime_epoch": "1745475406.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0114_UM_NxipTrunkingGatewayManual_v202.pdf",
+      "bytes": 5984859,
+      "mtime_epoch": "1748989366.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0115_UM_RTPGatewayManual_v106.pdf",
+      "bytes": 2068221,
+      "mtime_epoch": "1748886848.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0116_UM_CADPagingEncoderManual_v104.pdf",
+      "bytes": 624275,
+      "mtime_epoch": "1626893286.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0117_UM_100500MAXplusG2Manual_v101.pdf",
+      "bytes": 1188509,
+      "mtime_epoch": "1594758302.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0118_UM_SystemBridgeManual_v200.pdf",
+      "bytes": 2083577,
+      "mtime_epoch": "1732654846.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0119_UM_ConsoleClientManual_v100.pdf",
+      "bytes": 644137,
+      "mtime_epoch": "1591095428.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0120_UM_EssentialConsoleTechnicalUserManual_v108.pdf",
+      "bytes": 3351451,
+      "mtime_epoch": "1674252340.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0121_UM_EssentialConsoleUserManual_v105.pdf",
+      "bytes": 2436322,
+      "mtime_epoch": "1732738878.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0122_UM_DmrAisTrunkingGatewayManual_v202.pdf",
+      "bytes": 5819591,
+      "mtime_epoch": "1749237838.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0123_UM_DmrAisConventionalGatewayManual_v202.pdf",
+      "bytes": 5749578,
+      "mtime_epoch": "1745874664.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0124_UM_AdvancedESChatGatewayManual_v105.pdf",
+      "bytes": 2550218,
+      "mtime_epoch": "1749173668.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0125_UM_P25DfsiGatewayManual_v202.pdf",
+      "bytes": 5657453,
+      "mtime_epoch": "1745019634.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0126_UM_ServicePanelManual_v105.pdf",
+      "bytes": 2391052,
+      "mtime_epoch": "1744664052.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0127_UM_MindshareRadioInterface2Manual_v102.pdf",
+      "bytes": 2869000,
+      "mtime_epoch": "1746562674.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0128_UM_CadAlertingGatewayManual_v101.pdf",
+      "bytes": 1688973,
+      "mtime_epoch": "1708458966.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0130_UM_NxipToolManual_v100.pdf",
+      "bytes": 5615933,
+      "mtime_epoch": "1718911170.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0131_UM_RemoteSupportandDiagnosticServerUserManual_v104.pdf",
+      "bytes": 729058,
+      "mtime_epoch": "1751567390.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0132_UM_MultiSpeakGatewayManual_v100.pdf",
+      "bytes": 1719760,
+      "mtime_epoch": "1729900874.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/download/MS0133_UM_8LineTelcoPanelManual_v100.pdf",
+      "bytes": 1618966,
+      "mtime_epoch": "1733172788.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/Kenwood-EFJ/Kenwood-EFJ/MS1041_AN_MRI2ToEFJVikingAppNote_v103.pdf",
+      "bytes": 949039,
+      "mtime_epoch": "1755305948.0000000000",
+      "result": "excluded",
+      "reason": "duplicate-specialty-copy"
+    },
+    {
+      "path": "mindshare/Kenwood-EFJ/Kenwood-EFJ/MS1048_AN_MRI2ToKenwoodNx5x00SeriesAppNote_v101.pdf",
+      "bytes": 2015113,
+      "mtime_epoch": "1738616288.0000000000",
+      "result": "excluded",
+      "reason": "duplicate-specialty-copy"
+    },
+    {
+      "path": "mindshare/Kenwood-EFJ/Kenwood-EFJ/MS1057_AN_MRI2ToKenwoodTk5x20SeriesAppNote_v101.pdf",
+      "bytes": 1885609,
+      "mtime_epoch": "1738617372.0000000000",
+      "result": "excluded",
+      "reason": "duplicate-specialty-copy"
+    },
+    {
+      "path": "mindshare/Kenwood-EFJ/Kenwood-EFJ/MS1058_AN_MRI2ToKenwoodTk5x10SeriesAppNote_v101.pdf",
+      "bytes": 1915201,
+      "mtime_epoch": "1738617458.0000000000",
+      "result": "excluded",
+      "reason": "duplicate-specialty-copy"
+    },
+    {
+      "path": "mindshare/Kenwood-EFJ/Kenwood-EFJ/MS1059_AN_MRI2ToKenwoodNXx00SeriesAppNote_v101.pdf",
+      "bytes": 1983065,
+      "mtime_epoch": "1738617550.0000000000",
+      "result": "excluded",
+      "reason": "duplicate-specialty-copy"
+    },
+    {
+      "path": "mindshare/Kenwood-EFJ/Kenwood-EFJ/MS1060_AN_MRI2ToKenwoodNX3x20SeriesAppNote_v101.pdf",
+      "bytes": 2043559,
+      "mtime_epoch": "1738617652.0000000000",
+      "result": "excluded",
+      "reason": "duplicate-specialty-copy"
+    },
+    {
+      "path": "mindshare/Kenwood-EFJ/Kenwood-EFJ/MS1061_AN_MRI2ToKenwoodTKx180SeriesAppNote_v101.pdf",
+      "bytes": 1853581,
+      "mtime_epoch": "1738618268.0000000000",
+      "result": "excluded",
+      "reason": "duplicate-specialty-copy"
+    },
+    {
+      "path": "mindshare/MS0644_PR_MRI2ManualSoftwareUpdate_v100.pdf",
+      "bytes": 177813,
+      "mtime_epoch": "1780604406.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/MS3042_SI_LoganCountyWVSystemInformation_v113.pdf",
+      "bytes": 112039,
+      "mtime_epoch": "1780604579.0000000000",
+      "result": "hold",
+      "reason": "requires-sanitization-review"
+    },
+    {
+      "path": "mindshare/Procedures/Download 2.pdf",
+      "bytes": 46380414,
+      "mtime_epoch": "1774629669.0000000000",
+      "result": "excluded",
+      "reason": "over-25-mib"
+    },
+    {
+      "path": "mindshare/Procedures/Download.pdf",
+      "bytes": 24787146,
+      "mtime_epoch": "1774629343.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/Procedures/Procedures.pdf",
+      "bytes": 5150003,
+      "mtime_epoch": "1774629226.0000000000",
+      "result": "excluded",
+      "reason": "download-or-aggregate-copy"
+    },
+    {
+      "path": "mindshare/Procedures/Procedures/MS0601_PR_MAIFirmwareUpdateViaTerminal_v103.pdf",
+      "bytes": 298757,
+      "mtime_epoch": "1717528070.0000000000",
+      "result": "excluded",
+      "reason": "hard-exclusion-path-term"
+    },
+    {
+      "path": "mindshare/Procedures/Procedures/MS0602_PR_MRILACFirmwareUpdateViaTerminal_v105.pdf",
+      "bytes": 233309,
+      "mtime_epoch": "1730509878.0000000000",
+      "result": "excluded",
+      "reason": "hard-exclusion-path-term"
+    },
+    {
+      "path": "mindshare/Procedures/Procedures/MS0603_PR_MRIConfigurationCopyingForReplacement_v104.pdf",
+      "bytes": 361207,
+      "mtime_epoch": "1731635428.0000000000",
+      "result": "excluded",
+      "reason": "legacy-copy-superseded-by-current-documentation"
+    },
+    {
+      "path": "mindshare/Procedures/Procedures/MS0604_PR_Removing-Fuse-for-Speaker-DC-Voltage_v100.pdf",
+      "bytes": 1632440,
+      "mtime_epoch": "1591095262.0000000000",
+      "result": "excluded",
+      "reason": "legacy-copy-superseded-by-current-documentation"
+    },
+    {
+      "path": "mindshare/Procedures/Procedures/MS0610_PR_ClonezillaBackupConsoleImaging_v102.pdf",
+      "bytes": 221024,
+      "mtime_epoch": "1680636108.0000000000",
+      "result": "excluded",
+      "reason": "hard-exclusion-path-term"
+    },
+    {
+      "path": "mindshare/Procedures/Procedures/MS0614_PR_ConsoleExecEnablePhoneBookSharing_v102.pdf",
+      "bytes": 359356,
+      "mtime_epoch": "1686173098.0000000000",
+      "result": "excluded",
+      "reason": "legacy-copy-superseded-by-current-documentation"
+    },
+    {
+      "path": "mindshare/Procedures/Procedures/MS0618_PR_PackageDependenciesUpdate_v101.pdf",
+      "bytes": 378732,
+      "mtime_epoch": "1620668154.0000000000",
+      "result": "excluded",
+      "reason": "legacy-copy-superseded-by-current-documentation"
+    },
+    {
+      "path": "mindshare/Procedures/Procedures/MS0619_PR_InstallPackagesOffline_v100.pdf",
+      "bytes": 228466,
+      "mtime_epoch": "1686168264.0000000000",
+      "result": "excluded",
+      "reason": "legacy-copy-superseded-by-current-documentation"
+    },
+    {
+      "path": "mindshare/Procedures/Procedures/MS0625_PR_Enable_Black_Box_Glide_and_Switch_v102.pdf",
+      "bytes": 631764,
+      "mtime_epoch": "1724807026.0000000000",
+      "result": "excluded",
+      "reason": "legacy-copy-superseded-by-current-documentation"
+    },
+    {
+      "path": "mindshare/Procedures/Procedures/MS0630_PR_BIOSFirmwareUpdate_v100.pdf",
+      "bytes": 258504,
+      "mtime_epoch": "1669082090.0000000000",
+      "result": "excluded",
+      "reason": "hard-exclusion-path-term"
+    },
+    {
+      "path": "mindshare/Procedures/Procedures/MS0631_PR_ChangeTouchscreenOrientation_v101.pdf",
+      "bytes": 418498,
+      "mtime_epoch": "1740088356.0000000000",
+      "result": "excluded",
+      "reason": "legacy-copy-superseded-by-current-documentation"
+    },
+    {
+      "path": "mindshare/Procedures/Procedures/MS0634_PR_DistributeConsoleBuilderFilesviaSecureCopy_v100.pdf",
+      "bytes": 212772,
+      "mtime_epoch": "1686181904.0000000000",
+      "result": "excluded",
+      "reason": "legacy-copy-superseded-by-current-documentation"
+    },
+    {
+      "path": "mindshare/Procedures/Procedures/MS0635_PR_AddDisplayResolution_v100.pdf",
+      "bytes": 245802,
+      "mtime_epoch": "1741998116.0000000000",
+      "result": "excluded",
+      "reason": "legacy-copy-superseded-by-current-documentation"
+    },
+    {
+      "path": "mindshare/Procedures/Procedures/MS0638_PR_DeleteLogFilesviaTerminal_v100.pdf",
+      "bytes": 312422,
+      "mtime_epoch": "1737139102.0000000000",
+      "result": "excluded",
+      "reason": "legacy-copy-superseded-by-current-documentation"
+    },
+    {
+      "path": "mindshare/Procedures/Procedures/MS0641_PR_RemoveChromiumSingletonLockFiles_v100.pdf",
+      "bytes": 153440,
+      "mtime_epoch": "1750969430.0000000000",
+      "result": "excluded",
+      "reason": "legacy-copy-superseded-by-current-documentation"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_01.txt",
+      "bytes": 163050,
+      "mtime_epoch": "1785895621.7223636380",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_02.txt",
+      "bytes": 112272,
+      "mtime_epoch": "1785895622.2743677880",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_03.txt",
+      "bytes": 129994,
+      "mtime_epoch": "1785895622.9173726190",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_04.txt",
+      "bytes": 125267,
+      "mtime_epoch": "1785895623.5913776770",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_05.txt",
+      "bytes": 127342,
+      "mtime_epoch": "1785895624.2183823790",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_06.txt",
+      "bytes": 116615,
+      "mtime_epoch": "1785895624.8243869190",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_07.txt",
+      "bytes": 141270,
+      "mtime_epoch": "1785895625.4063912750",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_public_AuxiliaryIoDatasheet_20241212-1.pdf",
+      "bytes": 387056,
+      "mtime_epoch": "1785895626.7564013690",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_public_CSS-Mindshare-Campus-2-pages-20210715_WEB.pdf",
+      "bytes": 1920051,
+      "mtime_epoch": "1785895626.0563961380",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_public_CSS-Mindshare-Total-Solution-2-pages_20210708_WEB.pdf",
+      "bytes": 2505903,
+      "mtime_epoch": "1785895626.2913978930",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_public_CSS-Mindshare-Utilities-2-pages-20210715_WEB.pdf",
+      "bytes": 2284500,
+      "mtime_epoch": "1785895626.5393997470",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_public_DmrAisGatewaysDatasheet_20241212-1.pdf",
+      "bytes": 459617,
+      "mtime_epoch": "1785895626.9704029670",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_public_EsChatGatewayDatasheet_20241212-1.pdf",
+      "bytes": 323986,
+      "mtime_epoch": "1785895627.1874045900",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_public_EssentialConsoleG2Datasheet_20250805.pdf",
+      "bytes": 635117,
+      "mtime_epoch": "1785895629.3124204260",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_public_filllmorecountyne_20241212-1.pdf",
+      "bytes": 872942,
+      "mtime_epoch": "1785895628.8404169120",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_public_JPS_RoIP_GatewayDatasheet_20260602.pdf",
+      "bytes": 455851,
+      "mtime_epoch": "1785895629.9544252040",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_public_LoganCountyWV_20241212-1.pdf",
+      "bytes": 1378814,
+      "mtime_epoch": "1785895627.4194063200",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_public_MaxPlusDatasheet_20241212-1.pdf",
+      "bytes": 1219365,
+      "mtime_epoch": "1785895627.6264078630",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_public_MindshareRadioInterfaceDatasheet_20241212-1.pdf",
+      "bytes": 561725,
+      "mtime_epoch": "1785895627.8374094370",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_public_MRI2-Datasheet_20251104.pdf",
+      "bytes": 753846,
+      "mtime_epoch": "1785895629.7414236180",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_public_NDOW_20241212-1.pdf",
+      "bytes": 600400,
+      "mtime_epoch": "1785895628.0524110400",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_public_NxipGatewayDatasheet_20241212.pdf",
+      "bytes": 462713,
+      "mtime_epoch": "1785895628.1544118000",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_public_Overview_20241010.pdf",
+      "bytes": 400021,
+      "mtime_epoch": "1785895628.3724134240",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_public_P25GatewaysDatasheet_20250918.pdf",
+      "bytes": 421875,
+      "mtime_epoch": "1785895629.5274220260",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_public_sanjuancountynm_20241212-1.pdf",
+      "bytes": 1468840,
+      "mtime_epoch": "1785895629.0894187670",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_public_SEPTA_20241212-1.pdf",
+      "bytes": 1053925,
+      "mtime_epoch": "1785895628.6084151830",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/Public CSS Mindshare Website/css_mindshare_public_TOTAL-SOLUTION-TRANSPORTATION.pdf",
+      "bytes": 1497163,
+      "mtime_epoch": "1785895630.2244272100",
+      "result": "excluded",
+      "reason": "public-site-copy-do-not-copy"
+    },
+    {
+      "path": "mindshare/README - Mindshare Library.md",
+      "bytes": 2329,
+      "mtime_epoch": "1785108620.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/Software Catalog/Mindshare Software Catalog 2026-07-26.md",
+      "bytes": 2577,
+      "mtime_epoch": "1785108620.0000000000",
+      "result": "candidate",
+      "reason": "mindshare-current"
+    },
+    {
+      "path": "mindshare/User Manuals/MS0101_UM_ConsoleApplicationManual_v127.pdf",
+      "bytes": 2772390,
+      "mtime_epoch": "1749149687.0000000000",
+      "result": "excluded",
+      "reason": "legacy-copy-superseded-by-current-documentation"
+    },
+    {
+      "path": "mindshare/User Manuals/MS0102_UM_MindshareRadioInterfaceManual_v112.pdf",
+      "bytes": 781426,
+      "mtime_epoch": "1749148449.0000000000",
+      "result": "excluded",
+      "reason": "legacy-copy-superseded-by-current-documentation"
+    },
+    {
+      "path": "mindshare/User Manuals/MS0110_UM_CardCageManual_rev1.00.pdf",
+      "bytes": 333200,
+      "mtime_epoch": "1749149457.0000000000",
+      "result": "excluded",
+      "reason": "legacy-copy-superseded-by-current-documentation"
+    },
+    {
+      "path": "mindshare/User Manuals/MS0111_UM_HeadsetAdapter_rev1.00.pdf",
+      "bytes": 238639,
+      "mtime_epoch": "1749149515.0000000000",
+      "result": "excluded",
+      "reason": "legacy-copy-superseded-by-current-documentation"
+    }
+  ],
+  "transfer_authorized": false,
+  "hashes_collected": false,
+  "uploads_performed": false,
+  "library_bytes": {
+    "centralsquare": 112927172,
+    "mindshare": 484698597
+  },
+  "result_bytes": {
+    "candidate": 251295872,
+    "excluded": 346217858,
+    "hold": 112039
+  }
+}

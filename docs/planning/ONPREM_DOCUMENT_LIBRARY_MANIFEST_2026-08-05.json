@@ -1,0 +1,182 @@
+{
+  "schema_version": "lcdash.onprem-document-inventory.v1",
+  "generated_date": "2026-08-05",
+  "inspection_scope": "read-only repository inspection of E:/Projects/LCDash",
+  "content_opened": false,
+  "remote_or_server_roots_accessed": false,
+  "upload_performed": false,
+  "source_roots": [
+    {
+      "library": "centralsquare",
+      "configured_host_root": "/srv/lcdash-data/documents/centralsquare",
+      "container_root": "/knowledge/centralsquare",
+      "configured_remote": "lcdash-knowledge:Central Squared CAD/pdf",
+      "repository_default": "knowledge/centralsquare",
+      "application_references": [
+        "app/config/settings.py:141",
+        "deploy/compose.yaml:39",
+        "deploy/compose.yaml:96",
+        "deploy/compose.yaml:225"
+      ],
+      "sync_formats": [".pdf"],
+      "inventory_state": "ROOT_REFERENCED_FILES_NOT_PRESENT_IN_INSPECTED_WORKTREE",
+      "candidate_disposition": "REVIEW_FOR_CLOUD_DOCUMENT_LIBRARY",
+      "required_gate": "Enumerate from an approved read-only source, classify ownership and sensitivity, malware-scan, and verify no credentials, raw CAD exports, payloads, or operational records before any copy."
+    },
+    {
+      "library": "mindshare",
+      "configured_host_root": "/srv/lcdash-data/documents/mindshare",
+      "container_root": "/knowledge/mindshare",
+      "configured_remote": "lcdash-knowledge:Mindshare Documents",
+      "repository_default": "knowledge/mindshare",
+      "application_references": [
+        "app/config/settings.py:145",
+        "deploy/compose.yaml:41",
+        "deploy/compose.yaml:97",
+        "deploy/compose.yaml:249",
+        "docs/MINDSHARE_LIBRARY.md:119"
+      ],
+      "sync_formats": [
+        ".pdf", ".docx", ".txt", ".md", ".cfg", ".ini", ".conf",
+        ".json", ".xml", ".csv", ".yaml", ".yml"
+      ],
+      "inventory_state": "ROOT_REFERENCED_FILES_NOT_PRESENT_IN_INSPECTED_WORKTREE",
+      "candidate_disposition": "REVIEW_FOR_CLOUD_DOCUMENT_LIBRARY",
+      "required_gate": "Retain only approved manuals, procedures, application notes, release notes, public literature, and sanitized system references; exclude archives and secret-bearing configuration."
+    },
+    {
+      "library": "mindshare_public_site",
+      "configured_host_root": "/srv/lcdash-data/documents/mindshare/Public CSS Mindshare Website",
+      "container_root": "/knowledge/mindshare/Public CSS Mindshare Website",
+      "configured_remote": null,
+      "repository_default": null,
+      "application_references": [
+        "scripts/sync_mindshare_public_site.py:12",
+        "scripts/sync_mindshare_public_site.py:90",
+        "deploy/compose.yaml:390"
+      ],
+      "sync_formats": [".txt", ".pdf"],
+      "inventory_state": "GENERATED_CONTENT_NOT_PRESENT_IN_INSPECTED_WORKTREE",
+      "candidate_disposition": "RE-FETCH_FROM_PUBLIC_ALLOWLIST_INSTEAD_OF_COPYING_ONPREM",
+      "required_gate": "Re-verify current public URLs, copyright and retention policy, content type, 25 MiB PDF limit, and public uploads-path restriction."
+    },
+    {
+      "library": "gis_reference",
+      "configured_host_root": "/srv/lcdash-data/gis-public",
+      "container_root": "/gis/reference",
+      "configured_remote": null,
+      "repository_default": "data/gis-public",
+      "application_references": [
+        "app/config/settings.py:149",
+        "app/services/gis_reference_service.py:18",
+        "deploy/compose.yaml:43",
+        "deploy/compose.yaml:98"
+      ],
+      "sync_formats": [".geojson"],
+      "inventory_state": "ROOT_REFERENCED_FILES_NOT_PRESENT_IN_INSPECTED_WORKTREE",
+      "candidate_disposition": "EXCLUDE_FROM_DOCUMENT_LIBRARY_AS_STRUCTURED_GIS_DATA",
+      "required_gate": "Handle under the separate reviewed GIS import and tenant-data classification process."
+    }
+  ],
+  "explicit_document_references": [
+    {
+      "library": "mindshare",
+      "relative_group": "Current Documentation or Vendor Archives",
+      "file_name": "MS1007_AN_MRIToIcomF5060AppNote_rev102.pdf",
+      "type": ".pdf",
+      "bytes": null,
+      "sha256": null,
+      "reference": "docs/MINDSHARE_LIBRARY.md:21",
+      "classification": "CANDIDATE_CURRENT_VENDOR_APPLICATION_NOTE",
+      "verification": "File absent from inspected worktree; size, hash, ownership, and content sensitivity remain unverified."
+    },
+    {
+      "library": "mindshare",
+      "relative_group": "Vendor Archives",
+      "file_name": "MS1007 MRI-to-Icom application note rev1.01 (exact source name not recorded)",
+      "type": ".pdf",
+      "bytes": null,
+      "sha256": null,
+      "reference": "docs/MINDSHARE_LIBRARY.md:22",
+      "classification": "EXCLUDE_ARCHIVE_CANDIDATE_PENDING_HUMAN_REVISION_REVIEW",
+      "verification": "The documentation records only the revision marker, not the exact filename."
+    },
+    {
+      "library": "mindshare",
+      "relative_group": "Current Documentation or Vendor Archives",
+      "file_name": "MS1014_AN_MRIToHyteraMD78XAppNote_v102.pdf",
+      "type": ".pdf",
+      "bytes": null,
+      "sha256": null,
+      "reference": "docs/MINDSHARE_LIBRARY.md:23",
+      "classification": "CANDIDATE_CURRENT_VENDOR_APPLICATION_NOTE",
+      "verification": "File absent from inspected worktree; size, hash, ownership, and content sensitivity remain unverified."
+    },
+    {
+      "library": "mindshare",
+      "relative_group": "Vendor Archives",
+      "file_name": "MS1014 MRI-to-Hytera application note v101 (exact source name not recorded)",
+      "type": ".pdf",
+      "bytes": null,
+      "sha256": null,
+      "reference": "docs/MINDSHARE_LIBRARY.md:24",
+      "classification": "EXCLUDE_ARCHIVE_CANDIDATE_PENDING_HUMAN_REVISION_REVIEW",
+      "verification": "The documentation records only the revision marker, not the exact filename."
+    },
+    {
+      "library": "mindshare",
+      "relative_group": "multiple folders",
+      "file_name": "Readme.md (three empty placeholders; exact paths not recorded)",
+      "type": ".md",
+      "bytes": 0,
+      "sha256": null,
+      "reference": "docs/MINDSHARE_LIBRARY.md:25",
+      "classification": "EXCLUDE_EMPTY_PLACEHOLDER",
+      "verification": "Count and empty state are documented, but exact paths and file metadata are not present in the worktree."
+    }
+  ],
+  "mindshare_document_groups": [
+    {
+      "path": "Mindshare Documents/Current Documentation",
+      "classification": "CANDIDATE",
+      "allowed_description": "Current vendor manuals, procedures, application notes, and release notes."
+    },
+    {
+      "path": "Mindshare Documents/Logan County System",
+      "classification": "CONDITIONAL_CANDIDATE",
+      "allowed_description": "Only approved and sanitized system-information documents with no credentials, protected operational details, or secret-bearing configuration."
+    },
+    {
+      "path": "Mindshare Documents/Software Catalog",
+      "classification": "CONDITIONAL_CANDIDATE",
+      "allowed_description": "Metadata catalog only after verifying it contains no license secrets, credentials, or unsafe operational configuration."
+    },
+    {
+      "path": "Mindshare Documents/Vendor Archives",
+      "classification": "EXCLUDE_BY_DEFAULT",
+      "allowed_description": "Recovery and provenance archives remain outside the searchable cloud document library unless individually reviewed and selected."
+    }
+  ],
+  "explicit_exclusions": [
+    "credential, password, secret, token, API-key, private-key, license-secret, or environment files",
+    "backups, database dumps, recovery bundles, and vendor archive packages",
+    "raw CAD exports, raw CAD payloads, webhook bodies, incident records, unit records, and protected operational data",
+    "recordings, audio, transcripts derived from operational audio, and voice benchmark media",
+    "EMS, paging, station-alert, public-warning, radio, ESInet, acknowledgement, or other operational-output records",
+    "executables, installers, firmware, disk images, model files, and binary software packages",
+    "GIS geometry and structured tenant datasets, which require a separate GIS/data workflow",
+    "empty placeholders and generated sync-status metadata"
+  ],
+  "reference_files": [
+    {"path":"app/config/settings.py","bytes":5973,"sha256":"ba1ff667e5c4ffac2122f002688c9ac61664f00c48961bf3a470b6c5e984e6f5"},
+    {"path":"app/services/knowledge_service.py","bytes":20108,"sha256":"25b6b02fcc23f04e5ca9b3895a9138a7c247f84e89b4e8f2b02d2abdae6669db"},
+    {"path":"app/services/gis_reference_service.py","bytes":4246,"sha256":"4199fe327db9712e0317fb7992d80a91abe9adee34839259b4965897f349256b"},
+    {"path":"scripts/index_knowledge.py","bytes":11657,"sha256":"8ff02f2d03827478836a0082a8f21ef2f18e2fe3c824df4db7ac3a3eed2fa616"},
+    {"path":"scripts/sync_knowledge_drive.sh","bytes":1084,"sha256":"ecc63f517e0428dccf1942796a5f024c503718365d823cd73db3cace08fd9946"},
+    {"path":"scripts/sync_mindshare_drive.sh","bytes":1601,"sha256":"023af7fca042942f8e26bfdb50a1902512ce0f945c233a93efa3000fc4991d75"},
+    {"path":"scripts/sync_mindshare_public_site.py","bytes":3617,"sha256":"7fe04d9a03671e67c9575e109ea135727a49ffa7e09224513da4cd558dbf56b3"},
+    {"path":"deploy/compose.yaml","bytes":22638,"sha256":"b2bfd16a0ca99d11016c03ef89bc2506bb0bf3c9193079ba1ffeef7623a614dd"},
+    {"path":"docs/MINDSHARE_LIBRARY.md","bytes":7801,"sha256":"29e673c31c60b9dd798852dac9ed1cb3edb40a243ea5c68aea1afa1c6f59f322"},
+    {"path":".env.example","bytes":3129,"sha256":"dc57e4dab3911994082da8e8579145dfe7740f58f44d3823cbe8f9a10e9a49bd"}
+  ]
+}

@@ -1,0 +1,119 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Cloud Station Alerts | LCDash{% endblock %}
+
+{% block content %}
+<style>
+    .station-picker { position: relative; }
+    .station-control { cursor: pointer; min-height: 44px; padding: .75rem 1rem; border: 1px solid rgba(76,201,255,.35); border-radius: .75rem; background: rgba(6,20,36,.75); }
+    .station-picker-menu { margin-top: .5rem; padding: .75rem; border: 1px solid rgba(76,201,255,.25); border-radius: .75rem; background: #0a1727; }
+    .station-picker-actions { display: flex; gap: .5rem; margin-bottom: .5rem; }
+    .station-choice { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: .65rem; min-height: 44px; padding: .45rem; }
+    .station-choice-count { color: var(--bs-secondary-color); font-size: .85rem; }
+    .cloud-station-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: .75rem; padding: .85rem 0; border-bottom: 1px solid rgba(255,255,255,.08); }
+    .dispatch-overlay { position: fixed; inset: 0; z-index: 2000; display: none; place-items: center; padding: 1rem; background: rgba(1,7,15,.92); }
+    .dispatch-overlay.visible { display: grid; }
+    .dispatch-alert-card { width: min(900px,100%); max-height: 94vh; overflow: auto; border: 1px solid rgba(76,201,255,.45); border-radius: 1rem; background: #081524; box-shadow: 0 0 60px rgba(76,201,255,.18); }
+    .dispatch-banner { padding: 1rem 1.25rem; background: #0b6b87; color: white; font-weight: 800; letter-spacing: .05em; }
+    .dispatch-content { padding: 1.5rem; }
+    .dispatch-incident { font-size: clamp(1.6rem,4vw,2.6rem); font-weight: 800; }
+    .dispatch-location { margin-top: .5rem; color: #d7e8f5; font-size: 1.2rem; }
+    .dispatch-meta-box { height: 100%; padding: 1rem; border: 1px solid rgba(255,255,255,.1); border-radius: .75rem; background: rgba(255,255,255,.035); }
+</style>
+<section class="command-page" data-cloud-station-alerts="true">
+    <div class="glass p-4 mb-4">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+            <div>
+                <div class="eyebrow">CLOUD READ-ONLY ALERT</div>
+                <h1 class="h2 mb-2">Station Assignment Alerts</h1>
+                <p class="text-secondary mb-0">
+                    Select stations to watch for assignment events visible in this browser.
+                    This page cannot acknowledge CAD, dispatch, page, play tones or speech,
+                    activate station hardware, or trigger any operational output.
+                </p>
+            </div>
+            <div class="text-end">
+                <div class="eyebrow">READ-ONLY SOURCE</div>
+                <div id="station-connection-status"
+                     class="fw-bold {% if alert_data.connected %}text-success{% else %}text-warning{% endif %}">
+                    {{ "AVAILABLE" if alert_data.connected else "UNAVAILABLE" }}
+                </div>
+                <div class="text-secondary small">
+                    Updated <span id="station-last-updated" data-cad-time="{{ alert_data.generated_at }}">{{ alert_data.generated_at }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3 mt-3 align-items-end">
+            <div class="col-lg-8">
+                <div class="eyebrow mb-2" id="station-selector-label">STATIONS DISPLAYED LOCALLY</div>
+                <details id="station-selector" class="station-picker">
+                    <summary id="station-selector-summary" class="station-control" aria-labelledby="station-selector-label">
+                        Choose one or more stations...
+                    </summary>
+                    <div class="station-picker-menu">
+                        <div class="station-picker-actions">
+                            <button id="station-select-all" type="button" class="btn btn-outline-info btn-sm">Select All</button>
+                            <button id="station-clear-all" type="button" class="btn btn-outline-secondary btn-sm">Clear</button>
+                        </div>
+                        {% for station in alert_data.stations %}
+                        <label class="station-choice">
+                            <input type="checkbox" class="station-selector-option" value="{{ station.name }}">
+                            <span>{{ station.name }}</span>
+                            <span class="station-choice-count">{{ station.unit_count }} unit{% if station.unit_count != 1 %}s{% endif %}</span>
+                        </label>
+                        {% else %}
+                        <div class="command-unavailable-state p-3">An approved read-only assignment source is still required before station choices can be populated.</div>
+                        {% endfor %}
+                    </div>
+                </details>
+                <div class="text-secondary small mt-2">
+                    Selection is stored only in this browser and does not configure CAD or station equipment.
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="command-unavailable-state p-3" role="note">
+                    <strong>Visual notification only.</strong><br>
+                    No audio, speech, tone, page, webhook acknowledgment, or external device output.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-md-4"><div class="glass p-4 h-100"><div class="eyebrow">SELECTED STATIONS</div><div id="station-name" class="fs-4 fw-bold">{{ selected_stations|join(", ") if selected_stations else "None selected" }}</div></div></div>
+        <div class="col-md-4"><div class="glass p-4 h-100"><div class="eyebrow">DISPLAYED UNITS</div><div id="station-unit-count" class="fs-2 fw-bold">{{ alert_data.station_units|length }}</div></div></div>
+        <div class="col-md-4"><div class="glass p-4 h-100"><div class="eyebrow">VISIBLE ASSIGNMENTS</div><div id="station-active-count" class="fs-2 fw-bold">{{ alert_data.alerts|length }}</div></div></div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-xl-5"><div class="glass p-4 h-100"><div class="eyebrow">READ-ONLY ROSTER</div><h2 class="h4">Station Units</h2><div id="station-units-list"></div></div></div>
+        <div class="col-xl-7"><div class="glass p-4 h-100"><div class="eyebrow">READ-ONLY ASSIGNMENTS</div><h2 class="h4">Current Assignments</h2><div id="station-current-alerts"></div></div></div>
+    </div>
+</section>
+
+<div id="cloud-station-alert-overlay" class="dispatch-overlay" role="dialog" aria-modal="true" aria-label="Cloud-visible station assignment alert">
+    <div class="dispatch-alert-card">
+        <div class="dispatch-banner">CLOUD-VISIBLE ALERT ONLY — <span id="alert-station-name">STATION</span></div>
+        <div class="dispatch-content">
+            <div id="alert-incident-code" class="eyebrow">ASSIGNMENT EVENT</div>
+            <div id="alert-incident-title" class="dispatch-incident">INCIDENT</div>
+            <div id="alert-location" class="dispatch-location">Location unavailable</div>
+            <div class="row g-3 mt-3">
+                <div class="col-md-4"><div class="dispatch-meta-box"><div class="eyebrow">UNITS</div><div id="alert-units" class="fs-4 fw-bold">—</div></div></div>
+                <div class="col-md-4"><div class="dispatch-meta-box"><div class="eyebrow">CFS NUMBER</div><div id="alert-cfs-number" class="fs-5 fw-bold">—</div></div></div>
+                <div class="col-md-4"><div class="dispatch-meta-box"><div class="eyebrow">ASSIGNMENT TIME</div><div id="alert-dispatch-time" class="fs-5 fw-bold">—</div></div></div>
+            </div>
+            <div class="command-unavailable-state p-3 mt-4">
+                Display only. Returning to Dashboard does not acknowledge or change the source event.
+            </div>
+            <a id="acknowledge-station-alert" class="btn btn-light btn-lg w-100 mt-4 py-3 fw-bold" href="/dashboard">
+                <i class="bi bi-arrow-left-circle-fill"></i> Return to Dashboard
+            </a>
+        </div>
+    </div>
+</div>
+
+<script id="station-alert-data" type="application/json">{{ alert_data|tojson }}</script>
+<script src="/static/js/lcdash-station-alerts-cloud.js?v=0.1.0"></script>
+{% endblock %}

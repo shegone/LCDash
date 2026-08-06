@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lcdash.local/schema/cloud-cad-read-preflight-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "manifest_id", "binding", "secret_reference", "endpoints", "polling", "vendor_evidence"],
+  "properties": {
+    "schema_version": {"const": "lcdash.cloud-cad-read-preflight.v1"},
+    "manifest_id": {"type": "string"},
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["account_id", "region", "tenant_id", "provider", "mode"]
+    },
+    "secret_reference": {"type": "string"},
+    "endpoints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["token", "cad", "system"]
+    },
+    "polling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["poll_seconds", "reconciliation_overlap_seconds", "webhooks_enabled"]
+    },
+    "vendor_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["approval_reference", "approved_at", "approved_hostnames", "commercial_aws_access_allowed", "concurrent_use_allowed", "polling_allowed", "source_ip_requirement", "rate_limit_requests_per_minute", "token_lifetime_seconds", "maximum_page_size", "evidence_owner"]
+    }
+  }
+}

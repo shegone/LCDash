@@ -1,0 +1,196 @@
+{
+  "schema_version": "lcdash.phase1-deployment-allowlist.v1",
+  "gate_status": "AUTHORIZED_TO_BEGIN_PHASE1_PREWRITE",
+  "account": "862772137583",
+  "partition": "aws",
+  "region": "us-east-1",
+  "cdk_context": {
+    "account": "862772137583",
+    "region": "us-east-1"
+  },
+  "deployment_sequence": [
+    {
+      "order": 1,
+      "stack": "lcdash-p1-logan-use1-certificate",
+      "purpose": "request ACM certificate for aws.logan911.com",
+      "human_hold": "add exact ACM validation CNAME in Hostinger and confirm certificate status ISSUED"
+    },
+    {
+      "order": 2,
+      "stack": "lcdash-p1-logan-use1-foundation",
+      "purpose": "create the synthetic disconnected pilot foundation",
+      "requires": "issued certificate ARN from stack 1",
+      "human_hold": "add Hostinger aws CNAME to HostingerApplicationCnameTarget and verify HTTPS and Cognito"
+    }
+  ],
+  "service_activation": {
+    "parameter": "PilotServiceDesiredCount",
+    "image_digest_parameter": "PilotImageDigest",
+    "initial_image_digest_value": "NOT_PUBLISHED",
+    "activation_image_digest_pattern": "^sha256:[a-f0-9]{64}$",
+    "allowed_values": [0, 1],
+    "initial_foundation_value": 0,
+    "later_reviewed_value": 1,
+    "separate_authorization_required": true,
+    "image_publication_required_before_activation": true,
+    "first_deployment_must_not_activate_service": true
+  },
+  "bootstrap": {
+    "stack_name": "CDKToolkit",
+    "allowed_only_if_missing_or_version_insufficient": true,
+    "separate_human_write_approval_required": true,
+    "target": "aws://862772137583/us-east-1",
+    "qualifier": "hnb659fds",
+    "custom_permissions_boundary_required": true,
+    "custom_permissions_boundary_policy_name": "LCDashPhase1Boundary",
+    "boundary_name_status": "LOCAL_TEMPLATE_ONLY_HUMAN_REVIEW_REQUIRED",
+    "cross_account_trust_allowed": false,
+    "termination_protection_required": true,
+    "bootstrap_deletion_allowed": false
+  },
+  "naming": {
+    "required_prefix": "lcdash-p1-logan-use1",
+    "exact_names": [
+      "lcdash-p1-logan-use1-certificate",
+      "lcdash-p1-logan-use1-foundation",
+      "lcdash-p1-logan-use1-vpc",
+      "lcdash-p1-logan-use1-web",
+      "lcdash-p1-logan-use1-cluster",
+      "lcdash-p1-logan-use1-task",
+      "lcdash-p1-logan-use1-db",
+      "lcdash-p1-logan-use1-alb",
+      "lcdash-p1-logan-use1-app",
+      "lcdash-p1-logan-use1-users",
+      "lcdash-p1-logan-use1-management",
+      "/lcdash/lcdash-p1-logan-use1/web",
+      "/aws/rds/instance/lcdash-p1-logan-use1-db/postgresql",
+      "lcdash-pilot-viewer",
+      "lcdash-pilot-reviewer"
+    ],
+    "account_qualified_names": [
+      "lcdash-p1-logan-use1-862772137583-content",
+      "lcdash-p1-logan-use1-862772137583-audit"
+    ]
+  },
+  "required_foundation_tags": {
+    "Project": "LCDash-AWS",
+    "Environment": "pilot",
+    "Phase": "1",
+    "Tenant": "logan-synthetic",
+    "Region": "us-east-1",
+    "DataScope": "synthetic-disconnected",
+    "Authority": "non-authoritative",
+    "ManagedBy": "CDK"
+  },
+  "required_parameter_tags": [
+    "Owner",
+    "BudgetOwner",
+    "CostCenter",
+    "Expiration"
+  ],
+  "certificate_stack_tags": {
+    "Project": "LCDash-AWS",
+    "Environment": "pilot",
+    "Phase": "1",
+    "Tenant": "logan-synthetic",
+    "Region": "us-east-1",
+    "DataScope": "synthetic-disconnected",
+    "Authority": "non-authoritative",
+    "ManagedBy": "CDK"
+  },
+  "resource_type_counts": {
+    "lcdash-p1-logan-use1-certificate": {
+      "AWS::CertificateManager::Certificate": 1
+    },
+    "lcdash-p1-logan-use1-foundation": {
+      "AWS::Budgets::Budget": 1,
+      "AWS::CloudTrail::Trail": 1,
+      "AWS::Cognito::UserPool": 1,
+      "AWS::Cognito::UserPoolClient": 1,
+      "AWS::Cognito::UserPoolDomain": 1,
+      "AWS::Cognito::UserPoolGroup": 2,
+      "AWS::EC2::InternetGateway": 1,
+      "AWS::EC2::Route": 2,
+      "AWS::EC2::RouteTable": 4,
+      "AWS::EC2::SecurityGroup": 3,
+      "AWS::EC2::SecurityGroupEgress": 2,
+      "AWS::EC2::SecurityGroupIngress": 2,
+      "AWS::EC2::Subnet": 4,
+      "AWS::EC2::SubnetRouteTableAssociation": 4,
+      "AWS::EC2::VPC": 1,
+      "AWS::EC2::VPCGatewayAttachment": 1,
+      "AWS::ECR::Repository": 1,
+      "AWS::ECS::Cluster": 1,
+      "AWS::ECS::Service": 1,
+      "AWS::ECS::TaskDefinition": 1,
+      "AWS::ElasticLoadBalancingV2::Listener": 2,
+      "AWS::ElasticLoadBalancingV2::LoadBalancer": 1,
+      "AWS::ElasticLoadBalancingV2::TargetGroup": 1,
+      "AWS::IAM::Policy": 2,
+      "AWS::IAM::Role": 3,
+      "AWS::Lambda::Function": 1,
+      "AWS::Logs::LogGroup": 2,
+      "AWS::RDS::DBInstance": 1,
+      "AWS::RDS::DBSubnetGroup": 1,
+      "AWS::S3::Bucket": 2,
+      "AWS::S3::BucketPolicy": 2,
+      "AWS::SecretsManager::Secret": 1,
+      "AWS::SecretsManager::SecretTargetAttachment": 1,
+      "Custom::S3AutoDeleteObjects": 2
+    }
+  },
+  "conditionally_created_resources": {
+    "CreatePilotCloudTrail": {
+      "default": "false",
+      "resources": [
+        "AWS::CloudTrail::Trail",
+        "lcdash-p1-logan-use1-862772137583-audit",
+        "associated bucket policy and auto-delete custom resource"
+      ],
+      "human_decision_required": true
+    }
+  },
+  "budget": {
+    "monthly_limit_usd": 200,
+    "forecast_alert_percent": 80,
+    "forecast_alert_usd": 160,
+    "actual_stop_alert_percent": 100,
+    "actual_stop_alert_usd": 200,
+    "human_review_percent": 50,
+    "human_review_usd": 100,
+    "automatic_spend_shutdown": false,
+    "subscriber": "tedsparks@911logan.com",
+    "owner": "Ted Sparks"
+  },
+  "prohibited_resource_types": [
+    "AWS::Cognito::IdentityPool",
+    "AWS::EC2::NatGateway",
+    "AWS::ElasticLoadBalancingV2::ListenerRule",
+    "AWS::Route53::HostedZone",
+    "AWS::Route53::RecordSet",
+    "AWS::SNS::Topic",
+    "AWS::SQS::Queue"
+  ],
+  "prohibited_scope": [
+    "resources outside 862772137583/us-east-1",
+    "any stack other than the two listed application stacks",
+    "live CAD endpoints or credentials",
+    "webhooks, subscriptions, acknowledgements, paging, station alerts, EMS delivery, public warning, or operational outputs",
+    "identity pools, guest access, browser AWS credentials, social login, or real users",
+    "Route 53 zones or records",
+    "NAT gateways, autoscaling, replicas, backups, or recovery resources",
+    "on-premises .227, PC .15, backups, or E:\\Projects\\LCDash"
+  ],
+  "human_console_steps": [
+    "verify temporary IAM Identity Center identity, MFA, account, role, region, and approval window",
+    "supply and approve task-specific deployment role and permissions-boundary policy name",
+    "confirm billing access and budget subscriber email",
+    "decide whether account-level CloudTrail coverage makes CreatePilotCloudTrail false or true",
+    "copy ACM validation CNAME into Hostinger and wait for ISSUED",
+    "supply issued CertificateArn and approved non-secret CloudFormation parameters",
+    "copy foundation ALB output into Hostinger aws CNAME",
+    "create no real user until separate login acceptance is approved",
+    "perform sanitized post-deploy auth, cost, health, and no-bypass checks",
+    "approve and supervise teardown"
+  ]
+}

@@ -116,6 +116,7 @@ class MAEReliabilityPageTests(unittest.TestCase):
         run_mock.assert_called_once_with(
             "live-01",
             requested_by="boss@example.com",
+            tenant_context=None,
         )
 
 

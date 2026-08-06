@@ -15,6 +15,9 @@
     let chunks = [];
     let timerId = null;
     let recordingStarted = 0;
+    let cloudMode = false;
+    let ttsReady = true;
+    let sttReady = true;
 
     function setMessage(element, message, isError) {
         element.textContent = message || "";
@@ -25,13 +28,24 @@
         try {
             const response = await fetch("/api/voice/status", {cache: "no-store"});
             const payload = await response.json();
-            const ready = payload.connected && payload.tts.ready && payload.stt.ready;
+            cloudMode = payload.cloud_mode === true;
+            ttsReady = !cloudMode || Boolean(payload.tts && payload.tts.ready);
+            sttReady = !cloudMode || Boolean(payload.stt && payload.stt.ready);
+            const ready = payload.connected && payload.tts.ready;
+            if (cloudMode) {
+                speakButton.disabled = !ttsReady;
+                recordButton.disabled = !sttReady;
+            }
             statusPanel.classList.toggle("is-online", ready);
             statusPanel.querySelector("strong").textContent = ready
-                ? "Ready"
+                ? (payload.availability_label || "Configured - verified on use")
                 : payload.connected
                     ? "Models loading"
-                    : "Offline";
+                    : payload.disabled_reason
+                        ? "Disabled pending documents"
+                        : payload.cloud_mode
+                            ? "Available - fails closed"
+                            : "Offline";
         } catch (error) {
             statusPanel.querySelector("strong").textContent = "Unavailable";
         }
@@ -70,11 +84,11 @@
             player.src = URL.createObjectURL(audioBlob);
             player.hidden = false;
             await player.play();
-            setMessage(ttsMessage, "Generated entirely on the local voice stack.", false);
+            setMessage(ttsMessage, cloudMode ? "Generated for this playback only; audio was not persisted." : "Generated entirely on the local voice stack.", false);
         } catch (error) {
             setMessage(ttsMessage, error.message, true);
         } finally {
-            speakButton.disabled = false;
+            speakButton.disabled = !ttsReady;
         }
     });
 
@@ -100,7 +114,7 @@
                 throw new Error(payload.detail || "Transcription failed.");
             }
             transcript.textContent = payload.text || "No speech was detected.";
-            setMessage(sttMessage, "Recording processed and discarded.", false);
+            setMessage(sttMessage, "Recording processed for this request and discarded.", false);
         } catch (error) {
             setMessage(sttMessage, error.message, true);
         }
@@ -138,6 +152,15 @@
             recordingStarted = Date.now();
             updateRecordTimer();
             timerId = setInterval(updateRecordTimer, 1000);
+            window.setTimeout(function () {
+                if (mediaRecorder && mediaRecorder.state === "recording") {
+                    mediaRecorder.stop();
+                    recordButton.classList.remove("is-recording");
+                    recordButton.innerHTML = '<span class="voice-record-dot"></span> Start recording';
+                    clearInterval(timerId);
+                    setMessage(sttMessage, "The 30-second recording limit was reached.", false);
+                }
+            }, 30000);
             recordButton.classList.add("is-recording");
             recordButton.innerHTML = '<span class="voice-record-dot"></span> Stop and transcribe';
             setMessage(sttMessage, "Listening…", false);

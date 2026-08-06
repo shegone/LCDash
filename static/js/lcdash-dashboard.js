@@ -67,8 +67,26 @@
             units: safeText(call?.units),
             status: safeText(call?.status),
             call_taker: safeText(call?.call_taker),
-            call_datetime: safeText(call?.call_datetime)
+            call_datetime: safeText(call?.call_datetime),
+            city: safeText(call?.city),
+            assigned_units: Array.isArray(call?.assigned_units) ? call.assigned_units : [],
+            command_log_count: safeCount(call?.command_log_count),
+            latest_command_log_timestamp: safeText(call?.latest_command_log_timestamp)
         });
+    }
+
+    function usesCloudPresentation() {
+        return element("dashboard-presentation-mode")?.dataset.cloudPresentation === "true";
+    }
+
+    function createCloudFact(label, value, timeValue) {
+        const fact = createElement("div", "cloud-call-fact");
+        const content = createElement("div", "value", safeText(value, "Not provided"));
+        if (timeValue) {
+            content.dataset.cadTime = safeText(value);
+        }
+        fact.append(createElement("div", "label", label), content);
+        return fact;
     }
 
     function replaceStatusHeading(text, stateClass, iconClass) {
@@ -108,10 +126,10 @@
         const statusBar = element("dashboard-status-bar");
         statusBar?.classList.remove("is-stale", "is-disconnected", "is-updating");
 
-        updateCadStatus("CONNECTED", "ops-good", "bi-circle-fill");
-        setFreshness("Live Supervisor View", "is-live");
+        updateCadStatus("VERIFIED READ-ONLY", "ops-good", "bi-circle-fill");
+        setFreshness("VERIFIED READ-ONLY", "is-live");
         replaceStatusHeading(
-            "Operations Normal",
+            "Verified Read-Only Snapshot",
             "ops-good",
             "bi-check-circle-fill"
         );
@@ -119,7 +137,7 @@
 
     function markUpdating() {
         element("dashboard-status-bar")?.classList.add("is-updating");
-        setFreshness("Updating live data", "is-updating");
+        setFreshness("Updating read-only data", "is-updating");
     }
 
     function markRequestFailed() {
@@ -175,13 +193,34 @@
         statusBar?.classList.remove("is-updating");
         statusBar?.classList.add("is-disconnected");
 
-        updateCadStatus("RECONNECTING", "ops-danger", "bi-arrow-repeat");
+        updateCadStatus("SOURCE UNAVAILABLE", "ops-danger", "bi-cloud-slash-fill");
         replaceStatusHeading(
-            "CAD Connection Issue",
+            "Source Unavailable",
             "ops-danger",
             "bi-cloud-slash-fill"
         );
-        setFreshness("Reconnecting - last known data", "is-reconnecting");
+        setFreshness("AWAITING VERIFIED READ", "is-reconnecting");
+    }
+
+    function applySourceStatus(source) {
+        const statusBar = element("dashboard-status-bar");
+        statusBar?.classList.remove("is-stale", "is-disconnected", "is-updating");
+
+        if (source.connected) {
+            markConnected();
+            return;
+        }
+
+        if (source.may_display_snapshot) {
+            statusBar?.classList.add("is-stale");
+            updateCadStatus(source.label || "LAST VERIFIED", "ops-warning", "bi-clock-history");
+            replaceStatusHeading("Last Verified Snapshot", "ops-warning", "bi-clock-history");
+            setFreshness(source.label || "LAST VERIFIED READ", "is-stale");
+            return;
+        }
+
+        markDisconnected();
+        setFreshness(source.label || "SOURCE UNAVAILABLE", "is-reconnecting");
     }
 
     function markStaleIfNeeded() {
@@ -322,17 +361,60 @@
             )
         );
 
-        const location = createElement("div", "incident-location mt-3");
-        location.append(
-            createIcon("bi-geo-alt-fill"),
-            document.createTextNode(safeText(call.location, "Location not returned"))
-        );
-
-        const units = createElement("div", "incident-units mt-3");
-        units.append(
-            createIcon("bi-truck-front-fill"),
-            document.createTextNode(safeText(call.units, "No units assigned"))
-        );
+        const content = [];
+        if (usesCloudPresentation()) {
+            const facts = createElement("div", "cloud-call-facts mt-3");
+            facts.append(
+                createCloudFact("CFS", call.cfs_number),
+                createCloudFact("AGENCY", call.agency),
+                createCloudFact("CALL RECEIVED", call.call_datetime, true),
+                createCloudFact("CITY", call.city),
+                createCloudFact("LOCATION", call.location)
+            );
+            const unitBlock = createElement("div", "mt-3");
+            unitBlock.append(createElement("div", "label mb-2", "ASSIGNED UNITS"));
+            const unitList = createElement("div", "cloud-unit-list");
+            const assignedUnits = Array.isArray(call.assigned_units) ? call.assigned_units : [];
+            if (assignedUnits.length) {
+                assignedUnits.forEach(function (unit) {
+                    const chip = createElement("span", "cloud-unit-chip");
+                    chip.append(
+                        createIcon("bi-truck-front-fill"),
+                        document.createTextNode(" " + safeText(unit.unit_number, "Unknown unit") +
+                            (unit.status ? " - " + safeText(unit.status) : ""))
+                    );
+                    unitList.append(chip);
+                });
+            } else {
+                unitList.append(createElement("span", "text-secondary", "No units assigned"));
+            }
+            unitBlock.append(unitList);
+            const logSummary = createElement("div", "mt-3 small text-secondary");
+            const logCount = safeCount(call.command_log_count);
+            logSummary.append(
+                createIcon("bi-clock-history"),
+                document.createTextNode(" " + logCount + " command-log " +
+                    (logCount === 1 ? "entry" : "entries"))
+            );
+            if (call.latest_command_log_timestamp) {
+                const latest = createElement("span", "", safeText(call.latest_command_log_timestamp));
+                latest.dataset.cadTime = safeText(call.latest_command_log_timestamp);
+                logSummary.append(document.createTextNode(" · latest "), latest);
+            }
+            content.push(facts, unitBlock, logSummary);
+        } else {
+            const location = createElement("div", "incident-location mt-3");
+            location.append(
+                createIcon("bi-geo-alt-fill"),
+                document.createTextNode(safeText(call.location, "Location not returned"))
+            );
+            const units = createElement("div", "incident-units mt-3");
+            units.append(
+                createIcon("bi-truck-front-fill"),
+                document.createTextNode(safeText(call.units, "No units assigned"))
+            );
+            content.push(location, units);
+        }
 
         const statusRow = createCallMetaRow(
             "STATUS",
@@ -346,11 +428,9 @@
             elapsed.dataset.callTime = safeText(call.call_datetime);
         }
 
-        const detailRow = createCallMetaRow(
-            "CALL TAKER",
-            safeText(call.call_taker, "-"),
-            "AGENCY",
-            safeText(call.agency, "Unknown")
+        const detailRow = usesCloudPresentation() ? null : createCallMetaRow(
+            "CALL TAKER", safeText(call.call_taker, "-"),
+            "AGENCY", safeText(call.agency, "Unknown")
         );
 
         const footer = createElement(
@@ -367,7 +447,11 @@
             commandView
         );
 
-        card.append(header, location, units, statusRow, detailRow, footer);
+        card.append(header, ...content, statusRow);
+        if (detailRow) {
+            card.append(detailRow);
+        }
+        card.append(footer);
         link.append(card);
         column.append(link);
         return column;
@@ -391,7 +475,7 @@
                 createElement(
                     "div",
                     "text-center text-secondary py-5",
-                    "No active calls returned from CAD."
+                    "No incidents are available in the displayed read-only snapshot."
                 )
             );
             return;
@@ -474,8 +558,12 @@
         }
 
         LCDashTime.updateCallElapsedTimers();
-        markConnected();
-        lastSuccessfulRefresh = Date.now();
+        const source = data.cloud_presentation_status?.source || {};
+        applySourceStatus(source);
+        if (source.may_display_snapshot) {
+            const ageMilliseconds = Math.max(0, Number(source.age_seconds || 0) * 1000);
+            lastSuccessfulRefresh = Date.now() - ageMilliseconds;
+        }
     }
 
     async function refreshDashboard() {
@@ -511,8 +599,9 @@
 
             const data = await response.json();
 
-            if (!data.connected) {
-                markDisconnected();
+            const source = data.cloud_presentation_status?.source || {};
+            if (!source.may_display_snapshot) {
+                applySourceStatus(source);
                 return;
             }
 
@@ -580,10 +669,10 @@
         }
 
         setRealtimeStatus(
-            "STREAMING",
+            "UPDATE RECEIVED",
             "ops-good",
             "bi-broadcast-pin",
-            "Last event " + receivedAt.toLocaleTimeString()
+            "Application update " + receivedAt.toLocaleTimeString()
         );
         scheduleRealtimeRefresh();
     }
@@ -594,7 +683,7 @@
                 "30S BACKUP",
                 "ops-warning",
                 "bi-clock-history",
-                "Live stream unavailable"
+                "Application update channel unavailable"
             );
             return;
         }
@@ -602,10 +691,10 @@
         realtimeSource = new EventSource("/api/operations/events");
         realtimeSource.addEventListener("open", function () {
             setRealtimeStatus(
-                "STREAMING",
+                "UPDATE CHANNEL",
                 "ops-good",
                 "bi-broadcast-pin",
-                "Waiting for CAD event"
+                "Waiting for application update"
             );
         });
         realtimeSource.addEventListener(
@@ -617,7 +706,7 @@
                 "30S BACKUP",
                 "ops-warning",
                 "bi-arrow-repeat",
-                "Stream reconnecting"
+                "Update channel reconnecting"
             );
         });
     }

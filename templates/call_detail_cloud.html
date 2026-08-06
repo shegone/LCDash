@@ -1,0 +1,155 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}{% if call %}Incident {{ call.cfs_number }}{% else %}Incident Detail{% endif %}{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+<style>
+    .cloud-command-detail { --command-cyan: #4cc9ff; --command-amber: #ffd66b; --command-green: #69ffb9; }
+    .cloud-command-detail .command-hero { position: relative; overflow: hidden; border-left: 8px solid var(--command-cyan); }
+    .cloud-command-detail .command-hero::after { content: ""; position: absolute; inset: -100px -80px auto auto; width: 260px; height: 260px; background: radial-gradient(circle, rgba(76,201,255,.2), transparent 70%); pointer-events: none; }
+    .cloud-command-detail .command-hero.priority-5,
+    .cloud-command-detail .command-hero.priority-10 { border-left-color: #ff4c4c; box-shadow: 0 0 34px rgba(255,76,76,.16); }
+    .cloud-command-detail .command-hero.priority-15 { border-left-color: var(--command-amber); box-shadow: 0 0 34px rgba(255,214,107,.13); }
+    .cloud-command-detail .command-hero.priority-30 { border-left-color: var(--command-green); }
+    .cloud-command-detail .incident-identity { max-width: 720px; }
+    .cloud-command-detail .incident-title { color: #fff; font-size: clamp(1.65rem, 3vw, 2.45rem); font-weight: 900; line-height: 1.05; }
+    .cloud-command-detail .incident-reference { color: #8fb7d9; font-weight: 700; letter-spacing: .05em; }
+    .cloud-command-detail .status-pill-large { display: inline-block; padding: 8px 14px; border-radius: 999px; background: rgba(105,255,185,.14); border: 1px solid rgba(105,255,185,.32); color: var(--command-green); font-size: .85rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+    .cloud-command-detail .incident-kpi-grid { display: grid; grid-template-columns: repeat(3, minmax(115px, 1fr)); gap: 12px; min-width: min(100%, 420px); }
+    .cloud-command-detail .incident-kpi { padding: 13px 15px; border-radius: 15px; background: rgba(0,0,0,.24); border: 1px solid rgba(255,255,255,.09); text-align: center; }
+    .cloud-command-detail .incident-kpi-label,
+    .cloud-command-detail .panel-kicker { color: #8fb7d9; font-size: .68rem; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
+    .cloud-command-detail .incident-kpi-value { color: #fff; font-size: 1.25rem; font-weight: 900; margin-top: 3px; }
+    .cloud-command-detail .elapsed-timer { color: var(--command-amber); font-variant-numeric: tabular-nums; }
+    .cloud-command-detail .panel-title { color: var(--command-amber); font-size: 1.05rem; font-weight: 900; margin: 0; }
+    .cloud-command-detail .location-address { color: #fff; font-size: clamp(1.25rem, 2vw, 1.7rem); font-weight: 800; }
+    .cloud-command-detail #incident-map { height: min(58vh, 600px); min-height: 440px; border-radius: 16px; overflow: hidden; border: 1px solid rgba(76,201,255,.38); box-shadow: 0 0 25px rgba(0,140,255,.14); }
+    .cloud-command-detail .map-unavailable { min-height: 440px; display: grid; place-items: center; border-radius: 16px; border: 1px dashed rgba(143,183,217,.35); background: rgba(0,0,0,.16); color: #8fb7d9; text-align: center; padding: 28px; }
+    .cloud-command-detail .detail-row { display: flex; justify-content: space-between; gap: 18px; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,.07); }
+    .cloud-command-detail .detail-row:last-child { border-bottom: 0; }
+    .cloud-command-detail .detail-row span { color: #8fb7d9; font-size: .82rem; font-weight: 700; }
+    .cloud-command-detail .detail-row strong { color: #fff; text-align: right; overflow-wrap: anywhere; }
+    .cloud-command-detail .unit-card { padding: 13px; border-radius: 14px; background: linear-gradient(180deg, rgba(19,38,64,.96), rgba(8,18,33,.96)); border: 1px solid rgba(95,178,255,.3); }
+    .cloud-command-detail .unit-number { color: #fff; font-size: 1.2rem; font-weight: 900; letter-spacing: .05em; }
+    .cloud-command-detail .unit-status { color: var(--command-green); font-size: .76rem; font-weight: 900; text-transform: uppercase; }
+    .cloud-command-detail .unit-meta { color: #8fb7d9; font-size: .78rem; }
+    .cloud-command-detail .timeline-scroll { max-height: 480px; overflow-y: auto; padding-right: 8px; }
+    .cloud-command-detail .timeline { border-left: 2px solid rgba(76,201,255,.4); margin-left: 9px; padding-left: 17px; }
+    .cloud-command-detail .timeline-item { position: relative; margin-bottom: 15px; }
+    .cloud-command-detail .timeline-item::before { content: ""; position: absolute; left: -23px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--command-cyan); box-shadow: 0 0 11px var(--command-cyan); }
+    .cloud-command-detail .timeline-time { color: var(--command-amber); font-size: .76rem; font-weight: 800; }
+    .cloud-command-detail .timeline-text { color: #fff; font-size: .9rem; line-height: 1.35; }
+    .cloud-command-detail .read-only-boundary { border-color: rgba(105,255,185,.22); background: rgba(105,255,185,.05); }
+    @media (max-width: 991.98px) { .cloud-command-detail .incident-kpi-grid { width: 100%; } .cloud-command-detail #incident-map, .cloud-command-detail .map-unavailable { min-height: 360px; height: 48vh; } }
+    @media (max-width: 575.98px) { .cloud-command-detail .incident-kpi-grid { grid-template-columns: 1fr; } }
+</style>
+
+{% if not connected or not call %}
+<div class="glass p-4 mb-4">
+    <h2 class="text-danger">Incident could not be loaded</h2>
+    <p class="text-secondary mb-0">{{ error }}</p>
+</div>
+{% else %}
+<section class="cloud-command-detail command-page">
+    <div class="glass p-4 mb-4 command-hero priority-{{ call.priority|default('30') }}">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-4 position-relative">
+            <div class="incident-identity">
+                <div class="command-eyebrow mb-1">READ-ONLY INCIDENT COMMAND VIEW</div>
+                <h1 class="incident-title mb-2">{{ call.incident_description or call.incident_code or "Active Incident" }}</h1>
+                <div class="incident-reference">{{ call.incident_code or "-" }} &middot; {{ call.cfs_number }}</div>
+                <div class="mt-3"><span class="status-pill-large">{{ call.status or "Status not provided" }}</span></div>
+            </div>
+            <div class="incident-kpi-grid" aria-label="Incident key performance indicators">
+                <div class="incident-kpi"><div class="incident-kpi-label">Priority</div><div class="incident-kpi-value">PRI {{ call.priority or "-" }}</div></div>
+                <div class="incident-kpi"><div class="incident-kpi-label">Elapsed</div><div id="incident-elapsed" class="incident-kpi-value elapsed-timer" data-call-time="{{ call.call_datetime }}">--:--:--</div></div>
+                <div class="incident-kpi"><div class="incident-kpi-label">Units</div><div class="incident-kpi-value">{{ call.assigned_units|length }}</div></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 align-items-start">
+        <div class="col-xl-8">
+            <section class="glass p-4 mb-4" aria-labelledby="incident-location-heading">
+                <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
+                    <div>
+                        <div class="panel-kicker">Location</div>
+                        <h2 id="incident-location-heading" class="location-address mb-1">{{ call.location or "Location not provided" }}</h2>
+                        <div class="text-secondary">{{ call.city or "No city" }}</div>
+                    </div>
+                    <span class="badge text-bg-info">Verified snapshot</span>
+                </div>
+                {% if call.latitude is not none and call.longitude is not none %}
+                <div id="incident-map" aria-label="Read-only incident location map"></div>
+                {% else %}
+                <div class="map-unavailable" role="status"><div><i class="bi bi-geo-alt fs-2 d-block mb-2"></i><strong>No verified GIS coordinates</strong><div class="mt-1">The normalized text location remains available above.</div></div></div>
+                {% endif %}
+            </section>
+
+            <section class="glass p-3 read-only-boundary command-safety-banner">
+                <div class="d-flex gap-3 align-items-start"><i class="bi bi-shield-lock-fill text-success fs-4"></i><div><div class="panel-kicker text-success">Read-only boundary</div><div class="text-secondary small">This cloud view displays only normalized, authorized fields from the current inquiry snapshot. It cannot update CAD, acknowledge events, or trigger operational outputs.</div></div></div>
+            </section>
+        </div>
+
+        <aside class="col-xl-4">
+            <section class="glass p-4 mb-4" aria-labelledby="incident-details-heading">
+                <div class="panel-kicker">Call facts</div>
+                <h2 id="incident-details-heading" class="panel-title mb-3">Incident Details</h2>
+                <div class="detail-row"><span>Incident code</span><strong>{{ call.incident_code or "-" }}</strong></div>
+                <div class="detail-row"><span>Agency</span><strong>{{ call.agency or "-" }}</strong></div>
+                <div class="detail-row"><span>Received</span><strong><span class="cad-time" data-cad-time="{{ call.call_datetime }}">{{ call.call_datetime or "-" }}</span></strong></div>
+                <div class="detail-row"><span>Status</span><strong class="text-success">{{ call.status or "-" }}</strong></div>
+                <div class="detail-row"><span>Assignment</span><strong>{{ call.units or "None listed" }}</strong></div>
+            </section>
+
+            <section class="glass p-4 mb-4" aria-labelledby="assigned-units-heading">
+                <div class="d-flex justify-content-between align-items-center mb-3"><div><div class="panel-kicker">Resources</div><h2 id="assigned-units-heading" class="panel-title">Assigned Units</h2></div><span class="badge text-bg-info">{{ call.assigned_units|length }}</span></div>
+                {% if call.assigned_units %}
+                <div class="d-grid gap-2">
+                    {% for unit in call.assigned_units %}
+                    <div class="unit-card"><div class="d-flex justify-content-between gap-3"><div><div class="unit-number">{{ unit.unit_number }}</div><div class="unit-meta">{{ unit.agency or "Agency not provided" }}{% if unit.unit_type %} &middot; {{ unit.unit_type }}{% endif %}</div></div><div class="unit-status">{{ unit.status or "Assigned" }}</div></div></div>
+                    {% endfor %}
+                </div>
+                {% else %}<p class="text-secondary small mb-0">No assigned units are listed in the current snapshot.</p>{% endif %}
+            </section>
+
+            <section class="glass p-4" aria-labelledby="command-log-heading">
+                <div class="d-flex justify-content-between align-items-center mb-3"><div><div class="panel-kicker">Chronology</div><h2 id="command-log-heading" class="panel-title">Command Log</h2></div><span class="badge text-bg-secondary">{{ call.command_logs|length }}</span></div>
+                {% if call.command_logs %}
+                <div class="timeline-scroll" aria-label="command log timeline"><div class="timeline">
+                    {% for log in call.command_logs %}
+                    <div class="timeline-item"><div class="timeline-time"><span class="cad-time" data-cad-time="{{ log.timestamp }}">{{ log.timestamp or "Time not provided" }}</span></div><div class="timeline-text">{% if log.unit_number %}<strong>{{ log.unit_number }}</strong> &middot; {% endif %}{% if log.text %}{{ log.text }}{% elif log.status %}Status changed to {{ log.status }}{% else %}CAD log entry{% endif %}</div>{% if log.status %}<div class="text-success small">{{ log.status }}</div>{% endif %}{% if log.creator %}<div class="text-secondary small">{{ log.creator }}</div>{% endif %}</div>
+                    {% endfor %}
+                </div></div>
+                {% else %}<p class="text-secondary small mb-0">No command log entries were returned in the current read-only snapshot.</p>{% endif %}
+            </section>
+        </aside>
+    </div>
+</section>
+
+{% if call.latitude is not none and call.longitude is not none %}
+<script type="application/json" id="incident-map-data">{{ {"latitude": call.latitude, "longitude": call.longitude, "incident_description": call.incident_description, "location": call.location}|tojson }}</script>
+<script src="/static/vendor/leaflet/leaflet.js"></script>
+<script>
+    (function () {
+        const dataElement = document.getElementById("incident-map-data");
+        const mapElement = document.getElementById("incident-map");
+        if (!dataElement || !mapElement || typeof L === "undefined") return;
+        const data = JSON.parse(dataElement.textContent);
+        const latitude = Number(data.latitude);
+        const longitude = Number(data.longitude);
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+        const map = L.map(mapElement, {zoomControl: true}).setView([latitude, longitude], 16);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom: 19, attribution: "&copy; OpenStreetMap contributors"}).addTo(map);
+        const popup = document.createElement("div");
+        const title = document.createElement("strong");
+        title.textContent = data.incident_description || "Active Incident";
+        popup.appendChild(title);
+        if (data.location) { popup.appendChild(document.createElement("br")); popup.appendChild(document.createTextNode(String(data.location))); }
+        L.marker([latitude, longitude]).addTo(map).bindPopup(popup).openPopup();
+    }());
+</script>
+{% endif %}
+<script>if (window.LCDashTime) { LCDashTime.startCallDetailTimers(); }</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,44 @@
+{
+  "schema_version": "lcdash.phase1-deployment-trust-model.v1",
+  "status": "HUMAN_REVIEW_REQUIRED_NOT_ATTACHED",
+  "account": "862772137583",
+  "region": "us-east-1",
+  "permission_set_name": "LCDashPhase1Deployment",
+  "permissions_boundary_name": "LCDashPhase1Boundary",
+  "principal_type": "AWS_IAM_IDENTITY_CENTER_ASSIGNED_ROLE",
+  "principal_arn": null,
+  "principal_arn_status": "HUMAN_REQUIRED_AFTER_PERMISSION_SET_ASSIGNMENT",
+  "assignment": {
+    "group_or_user": null,
+    "status": "HUMAN_REQUIRED",
+    "public_or_agent_principal_allowed": false
+  },
+  "session": {
+    "temporary_only": true,
+    "mfa_required": true,
+    "maximum_duration_hours": 1,
+    "long_lived_access_keys_allowed": false
+  },
+  "trusted_account_ids": [
+    "862772137583"
+  ],
+  "cross_account_trust_allowed": false,
+  "service_principals_allowed_to_assume_operator_role": [],
+  "human_approval_required_for": [
+    "permission set creation or update",
+    "boundary policy creation or update",
+    "Identity Center assignment",
+    "bootstrap execution",
+    "certificate stack deployment",
+    "foundation stack deployment",
+    "stack destruction"
+  ],
+  "required_evidence": [
+    "sanitized Identity Center permission set and assignment reference",
+    "sanitized MFA and one-hour session configuration reference",
+    "attached deployment policy and permissions boundary ARNs",
+    "IAM Access Analyzer policy validation results",
+    "dry-run synth and exact stack-scoped diff review",
+    "human approval window and operator identity"
+  ]
+}

@@ -161,7 +161,7 @@ def test_start_report_job_endpoint(start_mock):
     )
     assert response.status_code == 200
     assert response.json()["status"] == "queued"
-    start_mock.assert_called_once_with("2026-06")
+    start_mock.assert_called_once_with("2026-06", tenant_context=None)
 
 
 @patch("app.main.start_county_commission_job")

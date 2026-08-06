@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 
+from app.core.tenancy import TENANCY_CONTRACT_VERSION, TenantContext
 from app.services.analytics_database import AnalyticsDatabaseError, AnalyticsRepository
 
 
@@ -88,6 +89,19 @@ VIEW_CATALOG = {
 }
 
 
+class TenantWidgetIsolationError(PermissionError):
+    """Saved widgets require a trusted, current tenant binding."""
+
+
+def _trusted_tenant_id(tenant_context: TenantContext | None) -> str:
+    if (
+        not isinstance(tenant_context, TenantContext)
+        or tenant_context.contract_version != TENANCY_CONTRACT_VERSION
+    ):
+        raise TenantWidgetIsolationError("Trusted tenant context is required.")
+    return tenant_context.tenant_id
+
+
 def validate_view_key(view_key: str) -> str:
     normalized = str(view_key or "").strip().lower()
     if normalized not in VIEW_CATALOG:
@@ -149,7 +163,8 @@ def build_requested_visualization(question: str, context: list[dict]) -> dict | 
     return None
 
 
-def list_saved_widgets() -> list[dict]:
+def list_saved_widgets(*, tenant_context: TenantContext | None) -> list[dict]:
+    tenant_id = _trusted_tenant_id(tenant_context)
     try:
         with AnalyticsRepository() as repository:
             repository.initialize_schema()
@@ -157,10 +172,11 @@ def list_saved_widgets() -> list[dict]:
                 """
                 SELECT widget_id, title, view_key, created_by, created_at
                 FROM lcdash_analytics.saved_analytics_widgets
-                WHERE status = 'active'
+                WHERE tenant_id = %s AND status = 'active'
                 ORDER BY created_at DESC
                 LIMIT 24
-                """
+                """,
+                (tenant_id,),
             )
     except AnalyticsDatabaseError:
         return []
@@ -176,7 +192,14 @@ def list_saved_widgets() -> list[dict]:
     ]
 
 
-def save_widget(*, title: str, view_key: str, created_by: str) -> dict:
+def save_widget(
+    *,
+    title: str,
+    view_key: str,
+    created_by: str,
+    tenant_context: TenantContext | None,
+) -> dict:
+    tenant_id = _trusted_tenant_id(tenant_context)
     safe_key = validate_view_key(view_key)
     clean_title = str(title or "").strip() or VIEW_CATALOG[safe_key]["title"]
     try:
@@ -185,11 +208,11 @@ def save_widget(*, title: str, view_key: str, created_by: str) -> dict:
             row = repository.fetchone(
                 """
                 INSERT INTO lcdash_analytics.saved_analytics_widgets
-                    (title, view_key, created_by)
-                VALUES (%s, %s, %s)
+                    (tenant_id, title, view_key, created_by)
+                VALUES (%s, %s, %s, %s)
                 RETURNING widget_id
                 """,
-                (clean_title[:200], safe_key, str(created_by or "")[:320]),
+                (tenant_id, clean_title[:200], safe_key, str(created_by or "")[:320]),
             )
             repository._commit()
         return {"saved": True, "widget_id": int(row[0])}
@@ -197,7 +220,8 @@ def save_widget(*, title: str, view_key: str, created_by: str) -> dict:
         return {"saved": False, "message": str(exc)}
 
 
-def retire_widget(*, widget_id: int) -> dict:
+def retire_widget(*, widget_id: int, tenant_context: TenantContext | None) -> dict:
+    tenant_id = _trusted_tenant_id(tenant_context)
     try:
         with AnalyticsRepository() as repository:
             repository.initialize_schema()
@@ -205,10 +229,10 @@ def retire_widget(*, widget_id: int) -> dict:
                 """
                 UPDATE lcdash_analytics.saved_analytics_widgets
                 SET status = 'retired', updated_at = NOW()
-                WHERE widget_id = %s AND status = 'active'
+                WHERE widget_id = %s AND tenant_id = %s AND status = 'active'
                 RETURNING widget_id
                 """,
-                (widget_id,),
+                (widget_id, tenant_id),
             )
             repository._commit()
         return {"saved": bool(row), "widget_id": int(row[0]) if row else widget_id}

@@ -296,20 +296,28 @@
 
 <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
     <div>
-        <div class="unit-board-title">Live Unit Board</div>
+        <div class="page-eyebrow">Unit Operations</div>
+        <div class="unit-board-title">Read-Only Unit Board</div>
         <div class="unit-board-subtitle">
-            Full CentralSquare unit roster with active assignments and availability groups
+            Authorized normalized unit fields with active assignments and availability groups
         </div>
     </div>
 
     <div class="text-end">
         <div class="text-info fw-bold">CAD STATUS</div>
-        {% if cad_status == "Connected" %}
-            <div class="text-success fw-bold">CONNECTED</div>
+        {% if cloud_presentation_status.source.connected %}
+            <div class="text-success fw-bold">{{ cloud_presentation_status.source.label }}</div>
+        {% elif cloud_presentation_status.source.may_display_snapshot %}
+            <div class="text-warning fw-bold">{{ cloud_presentation_status.source.label }}</div>
         {% else %}
-            <div class="text-danger fw-bold">DISCONNECTED</div>
+            <div class="text-danger fw-bold">{{ cloud_presentation_status.source.label }}</div>
         {% endif %}
     </div>
+</div>
+
+<div class="alert {% if cloud_presentation_status.source.connected %}alert-info{% elif cloud_presentation_status.source.may_display_snapshot %}alert-warning{% else %}alert-secondary{% endif %} mb-4" role="status">
+    <strong>{{ cloud_presentation_status.source.label }}</strong>
+    {{ cloud_presentation_status.source.notice }} Unit information is read-only.
 </div>
 
 <div class="unit-board-status-bar mb-4">
@@ -317,7 +325,7 @@
         <div>
             <div class="text-info fw-bold">UNIT OPERATIONS</div>
             <h3 class="mb-0">
-                {{ stats.total_units }} Unit{% if stats.total_units != 1 %}s{% endif %} in CAD Roster
+                {{ stats.total_units }} Unit{% if stats.total_units != 1 %}s{% endif %} in Displayed Snapshot
             </h3>
             <div class="text-secondary">
                 Last updated:
@@ -353,7 +361,7 @@
         <div class="glass p-4 unit-kpi">
             <div class="unit-kpi-label">TOTAL UNITS</div>
             <div class="unit-kpi-number">{{ stats.total_units }}</div>
-            <div class="unit-kpi-subtitle">Unique units returned by CAD</div>
+            <div class="unit-kpi-subtitle">Unique units in the displayed snapshot</div>
         </div>
     </div>
 
@@ -394,7 +402,7 @@
         </div>
 
         <div class="d-flex gap-2 flex-wrap">
-            <span class="badge text-bg-success p-2">LIVE CAD DATA</span>
+            <span class="badge {% if cloud_presentation_status.source.connected %}text-bg-success{% elif cloud_presentation_status.source.may_display_snapshot %}text-bg-warning{% else %}text-bg-secondary{% endif %} p-2">{{ cloud_presentation_status.source.label }}</span>
             {% if stats.unknown_units > 0 %}
                 <span class="badge text-bg-warning p-2">{{ stats.unknown_units }} REVIEW</span>
             {% endif %}

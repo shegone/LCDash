@@ -1,0 +1,151 @@
+:root {
+    --command-bg: var(--lcdash-bg, #06101d);
+    --command-panel: var(--lcdash-surface, rgba(14, 31, 53, .94));
+    --command-panel-soft: var(--lcdash-surface-soft, rgba(18, 39, 65, .78));
+    --command-border: var(--lcdash-border, rgba(93, 175, 244, .25));
+    --command-border-strong: var(--lcdash-border-strong, rgba(93, 193, 255, .42));
+    --command-text: var(--lcdash-text, #f4f8fc);
+    --command-muted: var(--lcdash-muted, #8fb0cd);
+    --command-cyan: var(--lcdash-cyan, #55d4ff);
+    --command-green: var(--lcdash-green, #69ffb9);
+    --command-amber: var(--lcdash-yellow, #ffd66b);
+    --command-red: var(--lcdash-red, #ff6b78);
+    --command-radius-sm: 12px;
+    --command-radius: var(--lcdash-radius, 18px);
+    --command-gap-sm: 12px;
+    --command-gap: 24px;
+    --command-touch-target: 44px;
+}
+
+.command-page {
+    color: var(--command-text);
+}
+
+.command-eyebrow,
+.command-panel-kicker {
+    color: var(--command-cyan);
+    font-size: .7rem;
+    font-weight: 900;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+}
+
+.command-page-title {
+    margin: 4px 0;
+    color: var(--command-text);
+    font-size: clamp(1.8rem, 3vw, 2.7rem);
+    font-weight: 950;
+    line-height: 1.05;
+}
+
+.command-page-subtitle {
+    color: var(--command-muted);
+    max-width: 860px;
+}
+
+.command-panel-heading {
+    color: var(--command-amber);
+    font-size: 1.05rem;
+    font-weight: 900;
+}
+
+.command-source-banner,
+.command-safety-banner {
+    border: 1px solid rgba(76, 201, 255, .24);
+    border-radius: var(--command-radius-sm);
+    background: rgba(76, 201, 255, .07);
+    color: var(--command-muted);
+}
+
+.command-safety-banner {
+    border-color: rgba(105, 255, 185, .24);
+    background: rgba(105, 255, 185, .055);
+}
+
+.command-touch-control {
+    min-height: var(--command-touch-target);
+}
+
+/* Shared operational screens retain the command-center hierarchy even where
+   their feature-specific stylesheet predates the parity program. */
+.mae-shell,
+.voice-shell,
+.knowledge-hero,
+.mindshare-hero,
+.reports-hero,
+.map-control-panel,
+.heatmap-controls {
+    color: var(--command-text);
+}
+
+.command-readiness-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: var(--command-gap-sm);
+}
+
+.command-unavailable-state {
+    padding: clamp(18px, 3vw, 28px);
+    border: 1px dashed rgba(255, 214, 107, .38);
+    border-radius: var(--command-radius);
+    background: rgba(255, 214, 107, .06);
+    color: var(--command-muted);
+}
+
+.command-unavailable-state strong {
+    display: block;
+    color: var(--command-amber);
+    margin-bottom: 5px;
+}
+
+.command-scroll-region {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+}
+
+@media (max-width: 991.98px) {
+    :root { --command-gap: 18px; }
+    .command-page-title { font-size: clamp(1.65rem, 6vw, 2.2rem); }
+}
+
+@media (max-width: 575.98px) {
+    :root { --command-gap: 14px; --command-gap-sm: 10px; }
+    .command-page { font-size: .95rem; }
+    .command-eyebrow,
+    .command-panel-kicker { letter-spacing: .1em; }
+    .command-source-banner,
+    .command-safety-banner { padding: 12px !important; }
+
+    .mae-hero,
+    .voice-hero,
+    .knowledge-hero,
+    .mindshare-hero,
+    .reports-hero { padding: 18px !important; }
+
+    .mae-status-grid,
+    .voice-grid,
+    .knowledge-stats,
+    .reports-grid { grid-template-columns: 1fr !important; }
+
+    .table-responsive,
+    .timeline-scroll,
+    .command-scroll-region { -webkit-overflow-scrolling: touch; }
+
+    button,
+    .btn,
+    .nav-link,
+    .map-view-tab,
+    .heatmap-view-tab { min-height: var(--command-touch-target); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .command-page *,
+    .command-page *::before,
+    .command-page *::after {
+        scroll-behavior: auto !important;
+        transition-duration: .01ms !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+    }
+}

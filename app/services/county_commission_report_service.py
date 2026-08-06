@@ -8,7 +8,7 @@ import re
 from threading import Lock, Thread
 from typing import Callable
 from uuid import uuid4
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
@@ -16,13 +16,20 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+from app.core.county_profiles import resolve_county_profile
+from app.core.tenancy import CountyProfile, TenantContext
+from app.core.tenant_authorization import (
+    TenantAuthorizationDenied,
+    authorize_tenant_action,
+)
 from app.integrations.cad.centralsquare import (
     CentralSquareCadAdapter as CentralSquareClient,
 )
+from app.integrations.contracts import ModuleCapability
 from app.services.centralsquare import CentralSquareAPIError
 
 
-LOCAL_TIMEZONE = ZoneInfo("America/New_York")
+DEFAULT_TIMEZONE_NAME = "America/New_York"
 MONTH_PATTERN = re.compile(r"^(\d{4})-(\d{2})$")
 MAX_PAGES = 100
 PAGE_SIZE = 100
@@ -64,20 +71,37 @@ class CountyCommissionReportBusyError(CountyCommissionReportError):
     """Raised when another monthly report is already querying CentralSquare."""
 
 
-def resolve_report_month(month: str, now: datetime | None = None) -> dict:
+def _report_timezone(county_profile: CountyProfile | None = None) -> ZoneInfo:
+    timezone_name = (
+        county_profile.timezone
+        if county_profile is not None
+        else DEFAULT_TIMEZONE_NAME
+    )
+    try:
+        return ZoneInfo(timezone_name)
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        raise ValueError("County profile timezone is unavailable.") from exc
+
+
+def resolve_report_month(
+    month: str,
+    now: datetime | None = None,
+    county_profile: CountyProfile | None = None,
+) -> dict:
     match = MONTH_PATTERN.fullmatch(str(month or "").strip())
     if not match:
         raise ValueError("Month must use YYYY-MM format.")
     year, month_number = int(match.group(1)), int(match.group(2))
     if not 1 <= month_number <= 12:
         raise ValueError("Month must use YYYY-MM format.")
-    start_at = datetime(year, month_number, 1, tzinfo=LOCAL_TIMEZONE)
+    local_timezone = _report_timezone(county_profile)
+    start_at = datetime(year, month_number, 1, tzinfo=local_timezone)
     if month_number == 12:
-        end_at = datetime(year + 1, 1, 1, tzinfo=LOCAL_TIMEZONE)
+        end_at = datetime(year + 1, 1, 1, tzinfo=local_timezone)
     else:
-        end_at = datetime(year, month_number + 1, 1, tzinfo=LOCAL_TIMEZONE)
-    current_month = (now or datetime.now(LOCAL_TIMEZONE)).astimezone(
-        LOCAL_TIMEZONE
+        end_at = datetime(year, month_number + 1, 1, tzinfo=local_timezone)
+    current_month = (now or datetime.now(local_timezone)).astimezone(
+        local_timezone
     ).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     if start_at > current_month:
         raise ValueError("A future month cannot be reported.")
@@ -126,9 +150,28 @@ def build_county_commission_report(
     client: CentralSquareClient | None = None,
     progress_callback: Callable[[int, int], None] | None = None,
     now: datetime | None = None,
+    county_profile: CountyProfile | None = None,
+    tenant_context: TenantContext | None = None,
 ) -> dict:
     """Query monthly CFS pages and count assigned-unit runs by agency."""
-    window = resolve_report_month(month, now=now)
+    if tenant_context is not None:
+        if county_profile is not None:
+            raise TenantAuthorizationDenied(
+                "Trusted context and direct county profile cannot be combined."
+            )
+        county_profile = resolve_county_profile(tenant_context)
+        authorize_tenant_action(
+            tenant_context,
+            county_profile,
+            ModuleCapability.COUNTY_COMMISSION_REPORT,
+            "read",
+        )
+
+    window = resolve_report_month(
+        month,
+        now=now,
+        county_profile=county_profile,
+    )
     client = client or CentralSquareClient()
     search_body = {
         "RecordCreatedFrom": window["start_at"].isoformat(),
@@ -260,19 +303,24 @@ def build_county_commission_pdf(report: dict) -> bytes:
 
 _JOB_LOCK = Lock()
 _JOBS: OrderedDict[str, dict] = OrderedDict()
-_ACTIVE_BY_MONTH: dict[str, str] = {}
+_ACTIVE_BY_MONTH: dict[tuple[str, str], str] = {}
 _MAX_RETAINED_JOBS = 20
+_LEGACY_OWNER = ""
 
 
 def _public_job(job: dict) -> dict:
     return {
         key: value
         for key, value in job.items()
-        if key not in {"internal_error"}
+        if key not in {"internal_error", "_owner_key", "_tenant_context"}
     }
 
 
-def _run_job(job_id: str, month: str):
+def _run_job(
+    job_id: str,
+    month: str,
+    tenant_context: TenantContext | None = None,
+):
     def progress(pages: int, records: int):
         with _JOB_LOCK:
             job = _JOBS.get(job_id)
@@ -284,10 +332,17 @@ def _run_job(job_id: str, month: str):
         _JOBS[job_id]["status"] = "running"
         _JOBS[job_id]["started_at"] = datetime.now(timezone.utc).isoformat()
     try:
-        result = build_county_commission_report(
-            month,
-            progress_callback=progress,
-        )
+        if tenant_context is None:
+            result = build_county_commission_report(
+                month,
+                progress_callback=progress,
+            )
+        else:
+            result = build_county_commission_report(
+                month,
+                progress_callback=progress,
+                tenant_context=tenant_context,
+            )
         with _JOB_LOCK:
             _JOBS[job_id].update({
                 "status": "complete",
@@ -296,7 +351,7 @@ def _run_job(job_id: str, month: str):
                 "pages_scanned": result["quality"]["pages_scanned"],
                 "records_scanned": result["quality"]["records_deduplicated"],
             })
-    except (CountyCommissionReportError, ValueError):
+    except (CountyCommissionReportError, TenantAuthorizationDenied, ValueError):
         with _JOB_LOCK:
             _JOBS[job_id].update({
                 "status": "failed",
@@ -305,19 +360,40 @@ def _run_job(job_id: str, month: str):
             })
     finally:
         with _JOB_LOCK:
-            if _ACTIVE_BY_MONTH.get(month) == job_id:
-                _ACTIVE_BY_MONTH.pop(month, None)
+            owner_month = (_JOBS[job_id]["_owner_key"], month)
+            if _ACTIVE_BY_MONTH.get(owner_month) == job_id:
+                _ACTIVE_BY_MONTH.pop(owner_month, None)
 
 
-def start_county_commission_job(month: str) -> dict:
-    window = resolve_report_month(month)
+def start_county_commission_job(
+    month: str,
+    tenant_context: TenantContext | None = None,
+) -> dict:
+    county_profile: CountyProfile | None = None
+    owner_key = _LEGACY_OWNER
+    if tenant_context is not None:
+        county_profile = resolve_county_profile(tenant_context)
+        authorize_tenant_action(
+            tenant_context,
+            county_profile,
+            ModuleCapability.COUNTY_COMMISSION_REPORT,
+            "read",
+        )
+        owner_key = county_profile.tenant_id
+
+    if county_profile is None:
+        window = resolve_report_month(month)
+    else:
+        window = resolve_report_month(month, county_profile=county_profile)
     month_key = window["key"]
+    owner_month = (owner_key, month_key)
     with _JOB_LOCK:
-        active_id = _ACTIVE_BY_MONTH.get(month_key)
+        active_id = _ACTIVE_BY_MONTH.get(owner_month)
         if active_id and active_id in _JOBS:
             return _public_job(_JOBS[active_id])
         if any(
-            job.get("status") in {"queued", "running"}
+            job.get("_owner_key") == owner_key
+            and job.get("status") in {"queued", "running"}
             for job in _JOBS.values()
         ):
             raise CountyCommissionReportBusyError(
@@ -337,19 +413,42 @@ def start_county_commission_job(month: str) -> dict:
             "records_scanned": 0,
             "message": "",
             "result": None,
+            "_owner_key": owner_key,
+            "_tenant_context": tenant_context,
         }
         _JOBS[job_id] = job
-        _ACTIVE_BY_MONTH[month_key] = job_id
+        _ACTIVE_BY_MONTH[owner_month] = job_id
         while len(_JOBS) > _MAX_RETAINED_JOBS:
             oldest_id, _oldest = _JOBS.popitem(last=False)
             for active_month, active_job_id in list(_ACTIVE_BY_MONTH.items()):
                 if active_job_id == oldest_id:
                     _ACTIVE_BY_MONTH.pop(active_month, None)
-    Thread(target=_run_job, args=(job_id, month_key), daemon=True).start()
+    Thread(
+        target=_run_job,
+        args=(job_id, month_key, tenant_context),
+        daemon=True,
+    ).start()
     return _public_job(job)
 
 
-def get_county_commission_job(job_id: str) -> dict | None:
+def get_county_commission_job(
+    job_id: str,
+    tenant_context: TenantContext | None = None,
+) -> dict | None:
+    owner_key: str | None = None
+    if tenant_context is not None:
+        county_profile = resolve_county_profile(tenant_context)
+        authorize_tenant_action(
+            tenant_context,
+            county_profile,
+            ModuleCapability.COUNTY_COMMISSION_REPORT,
+            "read",
+        )
+        owner_key = county_profile.tenant_id
+
     with _JOB_LOCK:
         job = _JOBS.get(str(job_id or ""))
+        if job is not None and owner_key is not None:
+            if job.get("_owner_key") != owner_key:
+                return None
         return _public_job(job) if job else None

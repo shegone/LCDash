@@ -1,0 +1,195 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "VerifyOwnTemporaryIdentity",
+      "Effect": "Allow",
+      "Action": "sts:GetCallerIdentity",
+      "Resource": "*"
+    },
+    {
+      "Sid": "OperateOnlyApprovedCloudFormationStacks",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:CreateStack",
+        "cloudformation:UpdateStack",
+        "cloudformation:DeleteStack",
+        "cloudformation:DescribeStacks",
+        "cloudformation:DescribeStackEvents",
+        "cloudformation:DescribeStackResources",
+        "cloudformation:GetTemplate",
+        "cloudformation:GetTemplateSummary",
+        "cloudformation:ListStackResources",
+        "cloudformation:CreateChangeSet",
+        "cloudformation:DescribeChangeSet",
+        "cloudformation:ExecuteChangeSet",
+        "cloudformation:DeleteChangeSet",
+        "cloudformation:SetStackPolicy",
+        "cloudformation:UpdateTerminationProtection"
+      ],
+      "Resource": [
+        "arn:aws:cloudformation:us-east-1:862772137583:stack/CDKToolkit/*",
+        "arn:aws:cloudformation:us-east-1:862772137583:stack/lcdash-p1-logan-use1-certificate/*",
+        "arn:aws:cloudformation:us-east-1:862772137583:stack/lcdash-p1-logan-use1-foundation/*"
+      ]
+    },
+    {
+      "Sid": "AssumeOnlyThisAccountCdkRoles",
+      "Effect": "Allow",
+      "Action": [
+        "sts:AssumeRole",
+        "sts:TagSession"
+      ],
+      "Resource": [
+        "arn:aws:iam::862772137583:role/cdk-hnb659fds-deploy-role-862772137583-us-east-1",
+        "arn:aws:iam::862772137583:role/cdk-hnb659fds-file-publishing-role-862772137583-us-east-1",
+        "arn:aws:iam::862772137583:role/cdk-hnb659fds-image-publishing-role-862772137583-us-east-1",
+        "arn:aws:iam::862772137583:role/cdk-hnb659fds-lookup-role-862772137583-us-east-1"
+      ]
+    },
+    {
+      "Sid": "BootstrapNamedRolesAndBoundaryOnly",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:GetRole",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:PutRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:PutRolePermissionsBoundary"
+      ],
+      "Resource": "arn:aws:iam::862772137583:role/cdk-hnb659fds-*",
+      "Condition": {
+        "StringEqualsIfExists": {
+          "iam:PermissionsBoundary": "arn:aws:iam::862772137583:policy/LCDashPhase1Boundary"
+        }
+      }
+    },
+    {
+      "Sid": "PassOnlyBootstrapAndPhase1Roles",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": [
+        "arn:aws:iam::862772137583:role/cdk-hnb659fds-*",
+        "arn:aws:iam::862772137583:role/lcdash-p1-logan-use1-*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": [
+            "cloudformation.amazonaws.com",
+            "ecs-tasks.amazonaws.com",
+            "lambda.amazonaws.com"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "BootstrapAssetStorageOnly",
+      "Effect": "Allow",
+      "Action": [
+        "s3:CreateBucket",
+        "s3:DeleteBucket",
+        "s3:GetBucket*",
+        "s3:PutBucket*",
+        "s3:ListBucket",
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:AbortMultipartUpload"
+      ],
+      "Resource": [
+        "arn:aws:s3:::cdk-hnb659fds-assets-862772137583-us-east-1",
+        "arn:aws:s3:::cdk-hnb659fds-assets-862772137583-us-east-1/*"
+      ]
+    },
+    {
+      "Sid": "BootstrapContainerAssetsOnly",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:CreateRepository",
+        "ecr:DeleteRepository",
+        "ecr:DescribeRepositories",
+        "ecr:GetRepositoryPolicy",
+        "ecr:SetRepositoryPolicy",
+        "ecr:PutLifecyclePolicy",
+        "ecr:GetLifecyclePolicy",
+        "ecr:TagResource",
+        "ecr:UntagResource"
+      ],
+      "Resource": "arn:aws:ecr:us-east-1:862772137583:repository/cdk-hnb659fds-container-assets-862772137583-us-east-1"
+    },
+    {
+      "Sid": "BootstrapVersionParameterOnly",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetParameter",
+        "ssm:PutParameter",
+        "ssm:DeleteParameter"
+      ],
+      "Resource": "arn:aws:ssm:us-east-1:862772137583:parameter/cdk-bootstrap/hnb659fds/version"
+    },
+    {
+      "Sid": "DenyUnapprovedRegions",
+      "Effect": "Deny",
+      "NotAction": [
+        "iam:*",
+        "sts:GetCallerIdentity",
+        "sts:AssumeRole",
+        "sts:TagSession"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:RequestedRegion": "us-east-1"
+        }
+      }
+    },
+    {
+      "Sid": "DenyProtectedGlobalAndOperationalActions",
+      "Effect": "Deny",
+      "Action": [
+        "account:*",
+        "aws-portal:*",
+        "billing:*",
+        "directconnect:*",
+        "execute-api:*",
+        "globalaccelerator:*",
+        "iam:CreateUser",
+        "iam:DeleteUser",
+        "iam:CreateAccessKey",
+        "iam:DeleteAccessKey",
+        "iam:UpdateAccessKey",
+        "iam:CreateLoginProfile",
+        "iam:UpdateLoginProfile",
+        "iam:DeleteLoginProfile",
+        "organizations:*",
+        "route53:*",
+        "route53domains:*",
+        "ssm:StartSession",
+        "ssm:SendCommand",
+        "sns:Publish",
+        "sqs:SendMessage",
+        "ses:SendEmail",
+        "ses:SendRawEmail"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyArbitraryPassRole",
+      "Effect": "Deny",
+      "Action": "iam:PassRole",
+      "NotResource": [
+        "arn:aws:iam::862772137583:role/cdk-hnb659fds-*",
+        "arn:aws:iam::862772137583:role/lcdash-p1-logan-use1-*"
+      ]
+    }
+  ]
+}

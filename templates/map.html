@@ -304,9 +304,16 @@
     </div>
 </div>
 
+<div class="command-safety-banner p-3 mb-4" role="note">
+    <strong class="text-success">Read-only cloud map boundary.</strong>
+    This view cannot update CAD, acknowledge incidents, dispatch units, or trigger operational outputs.
+</div>
+
 {% if not map_data.cad_connected %}
-    <div class="alert alert-danger" role="alert">
-        Live CAD map data is unavailable. The map will remain empty until the connection returns.
+    <div class="command-unavailable-state mb-4" role="status" aria-live="polite">
+        <strong><i class="bi bi-map me-2" aria-hidden="true"></i>Operational map source unavailable</strong>
+        No approved cloud source currently provides broad incident or unit coordinates. The map remains empty;
+        text-only incident detail stays available through the authorized read-only snapshot.
     </div>
 {% elif map_data.roster_warning %}
     <div class="map-warning mb-4" role="status" aria-live="polite">

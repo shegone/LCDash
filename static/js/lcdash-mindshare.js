@@ -34,6 +34,25 @@
 
     if (!form || !questionInput || !messages) return;
 
+    const approvedSource = document.querySelector(".mindshare-assistant")?.dataset.approvedSource === "true";
+    if (!approvedSource) {
+        questionInput.disabled = true;
+        questionInput.placeholder = "Approved Mindshare source unavailable";
+        sendButton.disabled = true;
+        if (voiceToggle) voiceToggle.disabled = true;
+        document.querySelectorAll("[data-mindshare-prompt]").forEach(function (button) {
+            button.disabled = true;
+        });
+        ["mindshare-ai-status", "mindshare-library-status"].forEach(function (cardId) {
+            const card = document.getElementById(cardId);
+            if (!card) return;
+            card.classList.add("is-offline");
+            const value = card.querySelector("strong");
+            if (value) value.textContent = "Unavailable";
+        });
+        return;
+    }
+
     function updateStatusCard(id, online, text) {
         const card = document.getElementById(id);
         if (!card) return;

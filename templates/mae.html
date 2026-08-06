@@ -5,7 +5,25 @@
 {% block content %}
 <link rel="stylesheet" href="/static/css/lcdash-mae.css?v=20260803-analytics-studio">
 
-<section class="mae-shell" aria-labelledby="mae-title">
+<section class="mae-shell command-page" aria-labelledby="mae-title"
+         data-cloud-mode="{{ 'true' if cloud_mode else 'false' }}"
+         data-advisory-ready="{{ 'true' if cloud_presentation_status.advisory.ready else 'false' }}">
+    <div class="alert alert-info" role="status">
+        <strong>{{ cloud_presentation_status.advisory.label }}</strong>
+        {{ cloud_presentation_status.advisory.notice }}
+        <br><strong>{{ cloud_presentation_status.source.label }}</strong>
+        {{ cloud_presentation_status.source.notice }}
+    </div>
+    <div class="command-safety-banner" role="note">
+        Advisory only. MAE cannot dispatch, acknowledge, page, release alerts, control
+        station tones, alter CAD, route calls, or operate ESInet services.
+    </div>
+    {% if not cloud_presentation_status.advisory.ready %}
+    <div class="command-unavailable-state mb-4" role="status" aria-live="polite">
+        <strong><i class="bi bi-shield-exclamation me-2" aria-hidden="true"></i>Approved advisory source unavailable</strong>
+        <span>MAE remains visible for parity review, but inquiries are disabled until an approved citation source is ingested and verified.</span>
+    </div>
+    {% endif %}
     <header class="mae-hero glass">
         <div class="mae-identity">
             <div class="mae-portrait">
@@ -20,11 +38,12 @@
             </div>
         </div>
         <div class="mae-hero-actions">
-            <button class="mae-voice-launch" id="mae-voice-toggle" type="button">
+            <button class="mae-voice-launch" id="mae-voice-toggle" type="button"
+                    {% if cloud_mode %}disabled title="Cloud conversational voice and transcription are not enabled"{% endif %}>
                 <i class="bi bi-mic-fill"></i>
                 <span>
                     <strong>Start voice mode</strong>
-                    <small>Talk naturally with MAE</small>
+                    <small>{% if cloud_mode %}Cloud conversation unavailable{% else %}Talk naturally with MAE{% endif %}</small>
                 </span>
             </button>
             <div class="mae-guardrail">
@@ -114,10 +133,15 @@
             </details>
             <div class="mae-source-note">
                 <i class="bi bi-info-circle"></i>
+                {% if cloud_mode %}
+                Cloud MAE answers only from approved retrieved documents and must show
+                citations. It has no memory, feedback, tools, reports, widgets, or CAD actions.
+                {% else %}
                 MAE checks stored analytics for historical questions and requests
                 live CAD data only when current information is needed. Procedural
                 questions use the indexed CentralSquare documentation.
                 <a href="/knowledge">View the Knowledge Library</a>.
+                {% endif %}
             </div>
         </aside>
 
@@ -130,10 +154,15 @@
                     <div class="mae-bubble">
                         <div class="mae-message-name">MAE</div>
                         <p>
-                            I’m ready to help with live operational awareness and
+                            {% if cloud_mode %}
+                            I can answer only when approved cloud documents provide citation support.
+                            I cannot use CAD data or perform actions.
+                            {% else %}
+                            I’m ready to help with approved read-only operational awareness and
                             historical analysis. Ask me about active calls, units,
                             response activity, stations, trends, or documented
                             CentralSquare procedures.
+                            {% endif %}
                         </p>
                     </div>
                 </article>

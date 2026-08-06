@@ -1,0 +1,263 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowApprovedRegionalServicesWithinBoundary",
+      "Effect": "Allow",
+      "Action": [
+        "acm:*",
+        "cloudformation:*",
+        "cloudtrail:*",
+        "cognito-idp:*",
+        "ec2:*",
+        "ecr:*",
+        "ecs:*",
+        "elasticloadbalancing:*",
+        "lambda:*",
+        "logs:*",
+        "rds:*",
+        "s3:*",
+        "secretsmanager:*",
+        "ssm:GetParameter",
+        "ssm:GetParameters",
+        "ssm:PutParameter",
+        "ssm:DeleteParameter"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "us-east-1"
+        }
+      }
+    },
+    {
+      "Sid": "AllowPhase1BudgetManagement",
+      "Effect": "Allow",
+      "Action": [
+        "budgets:ViewBudget",
+        "budgets:ModifyBudget"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowOnlyNamedPhase1AndBootstrapRolesAndPolicies",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:GetRole",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:PutRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:PutRolePermissionsBoundary",
+        "iam:DeleteRolePermissionsBoundary",
+        "iam:CreatePolicy",
+        "iam:CreatePolicyVersion",
+        "iam:DeletePolicy",
+        "iam:DeletePolicyVersion",
+        "iam:GetPolicy",
+        "iam:GetPolicyVersion",
+        "iam:ListPolicyVersions",
+        "iam:TagPolicy",
+        "iam:UntagPolicy"
+      ],
+      "Resource": [
+        "arn:aws:iam::862772137583:role/lcdash-p1-logan-use1-*",
+        "arn:aws:iam::862772137583:role/cdk-hnb659fds-*",
+        "arn:aws:iam::862772137583:policy/LCDashPhase1*",
+        "arn:aws:iam::862772137583:policy/cdk-hnb659fds-*"
+      ]
+    },
+    {
+      "Sid": "AllowPassOnlyApprovedRoles",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": [
+        "arn:aws:iam::862772137583:role/lcdash-p1-logan-use1-*",
+        "arn:aws:iam::862772137583:role/cdk-hnb659fds-*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": [
+            "cloudformation.amazonaws.com",
+            "ecs-tasks.amazonaws.com",
+            "lambda.amazonaws.com"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "AllowIdentityVerification",
+      "Effect": "Allow",
+      "Action": "sts:GetCallerIdentity",
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyOutsideUsEast1ForRegionalActions",
+      "Effect": "Deny",
+      "NotAction": [
+        "budgets:*",
+        "iam:*",
+        "sts:GetCallerIdentity"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:RequestedRegion": "us-east-1"
+        }
+      }
+    },
+    {
+      "Sid": "DenyRoute53AndExternalNetworkAdministration",
+      "Effect": "Deny",
+      "Action": [
+        "route53:*",
+        "route53domains:*",
+        "directconnect:*",
+        "globalaccelerator:*",
+        "networkmanager:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyIamUsersKeysAndUnapprovedIdentityChanges",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateUser",
+        "iam:DeleteUser",
+        "iam:UpdateUser",
+        "iam:TagUser",
+        "iam:UntagUser",
+        "iam:CreateAccessKey",
+        "iam:DeleteAccessKey",
+        "iam:UpdateAccessKey",
+        "iam:CreateLoginProfile",
+        "iam:UpdateLoginProfile",
+        "iam:DeleteLoginProfile",
+        "iam:CreateGroup",
+        "iam:DeleteGroup",
+        "iam:AddUserToGroup",
+        "iam:RemoveUserFromGroup",
+        "iam:CreateSAMLProvider",
+        "iam:UpdateSAMLProvider",
+        "iam:DeleteSAMLProvider",
+        "iam:CreateOpenIDConnectProvider",
+        "iam:DeleteOpenIDConnectProvider",
+        "iam:UpdateOpenIDConnectProviderThumbprint"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyArbitraryPassRole",
+      "Effect": "Deny",
+      "Action": "iam:PassRole",
+      "NotResource": [
+        "arn:aws:iam::862772137583:role/lcdash-p1-logan-use1-*",
+        "arn:aws:iam::862772137583:role/cdk-hnb659fds-*"
+      ]
+    },
+    {
+      "Sid": "DenyRoleCreationWithoutThisBoundary",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateRole",
+        "iam:PutRolePermissionsBoundary"
+      ],
+      "Resource": [
+        "arn:aws:iam::862772137583:role/lcdash-p1-logan-use1-*",
+        "arn:aws:iam::862772137583:role/cdk-hnb659fds-cfn-exec-role-862772137583-us-east-1"
+      ],
+      "Condition": {
+        "StringNotEquals": {
+          "iam:PermissionsBoundary": "arn:aws:iam::862772137583:policy/LCDashPhase1Boundary"
+        }
+      }
+    },
+    {
+      "Sid": "DenyBoundaryRemoval",
+      "Effect": "Deny",
+      "Action": [
+        "iam:DeleteRolePermissionsBoundary",
+        "iam:DeletePolicy",
+        "iam:DeletePolicyVersion"
+      ],
+      "Resource": [
+        "arn:aws:iam::862772137583:policy/LCDashPhase1Boundary",
+        "arn:aws:iam::862772137583:role/lcdash-p1-logan-use1-*",
+        "arn:aws:iam::862772137583:role/cdk-hnb659fds-*"
+      ]
+    },
+    {
+      "Sid": "DenyOrganizationsAccountBillingAndPurchases",
+      "Effect": "Deny",
+      "Action": [
+        "account:*",
+        "aws-portal:*",
+        "billing:*",
+        "ce:Create*",
+        "ce:Update*",
+        "ce:Delete*",
+        "cur:*",
+        "freetier:*",
+        "organizations:*",
+        "payments:*",
+        "purchase-orders:*",
+        "savingsplans:CreateSavingsPlan",
+        "support:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyProtectedRemoteAndOperationalServices",
+      "Effect": "Deny",
+      "Action": [
+        "execute-api:*",
+        "iot:*",
+        "ssm:StartSession",
+        "ssm:SendCommand",
+        "sns:Publish",
+        "sqs:SendMessage",
+        "ses:SendEmail",
+        "ses:SendRawEmail"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyReadingUnrelatedSecrets",
+      "Effect": "Deny",
+      "Action": "secretsmanager:GetSecretValue",
+      "Resource": "*",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:ResourceTag/Project": "LCDash-AWS"
+        }
+      }
+    },
+    {
+      "Sid": "DenyBatchSecretReads",
+      "Effect": "Deny",
+      "Action": "secretsmanager:BatchGetSecretValue",
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyAccessToUnrelatedBuckets",
+      "Effect": "Deny",
+      "Action": "s3:*",
+      "NotResource": [
+        "arn:aws:s3:::cdk-hnb659fds-assets-862772137583-us-east-1",
+        "arn:aws:s3:::cdk-hnb659fds-assets-862772137583-us-east-1/*",
+        "arn:aws:s3:::lcdash-p1-logan-use1-862772137583-content",
+        "arn:aws:s3:::lcdash-p1-logan-use1-862772137583-content/*",
+        "arn:aws:s3:::lcdash-p1-logan-use1-862772137583-audit",
+        "arn:aws:s3:::lcdash-p1-logan-use1-862772137583-audit/*"
+      ]
+    }
+  ]
+}
