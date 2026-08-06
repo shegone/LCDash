@@ -68,7 +68,7 @@ class CloudAiProviderBoundaryTests(unittest.TestCase):
             ({"action_tools": ["cad.update_call"]}, "action tools"),
             ({"password": "synthetic-not-a-secret"}, "Unknown"),
             ({"generation_model_id": "unreviewed.synthetic"}, "allowlist"),
-            ({"max_output_tokens": 2048}, "between 64 and 1024"),
+            ({"max_output_tokens": 1201}, "between 64 and 1200"),
         )
         for override, pattern in cases:
             with self.subTest(override=override):

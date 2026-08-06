@@ -42,6 +42,14 @@ def test_all_three_surfaces_state_the_action_free_boundary():
     assert "ESInet" in voice
 
 
+def test_jack_renders_sources_separately_and_never_speaks_urls():
+    script = _read("static/js/lcdash-mindshare.js")
+    assert 'heading.textContent = "Sources"' in script
+    assert "payload.citations" in script
+    assert '.replace(/https?:\\/\\/\\S+/gi, "")' in script
+    assert '.replace(/s3:\\/\\/\\S+/gi, "")' in script
+
+
 def test_release_gate_document_forbids_execution_and_bounds_single_call():
     plan = _read("docs/planning/CLOUD_AI_KNOWLEDGE_VOICE_RELEASE_READINESS_2026-08-05.md")
     required = (

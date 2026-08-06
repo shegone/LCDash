@@ -16,7 +16,11 @@ class CloudAiMode(StrEnum):
 
 
 ALLOWED_MODEL_IDS = frozenset(
-    {"amazon.nova-micro-v1:0", "amazon.nova-lite-v1:0"}
+    {
+        "amazon.nova-micro-v1:0",
+        "amazon.nova-lite-v1:0",
+        "us.anthropic.claude-sonnet-5",
+    }
 )
 ALLOWED_CONFIG_KEYS = frozenset(
     {
@@ -94,8 +98,8 @@ class CloudAiProviderConfig:
             raise ValueError("The Bedrock knowledge base ID is invalid.")
         if self.generation_model_id not in ALLOWED_MODEL_IDS:
             raise ValueError("The generation model is outside the reviewed allowlist.")
-        if not 64 <= self.max_output_tokens <= 1024:
-            raise ValueError("max_output_tokens must be between 64 and 1024.")
+        if not 64 <= self.max_output_tokens <= 1200:
+            raise ValueError("max_output_tokens must be between 64 and 1200.")
         if not 1 <= self.retrieval_result_limit <= 10:
             raise ValueError("retrieval_result_limit must be between 1 and 10.")
         if not 0 <= self.retrieval_score_threshold <= 1:

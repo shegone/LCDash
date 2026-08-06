@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from typing import Any
+from functools import cached_property
+
+import boto3
 
 from app.config.settings import Settings
 from app.integrations.cloud_ai import (
@@ -19,6 +22,7 @@ from app.integrations.cloud_ai.bedrock_retrieval import (
     ApprovedBedrockRetriever,
     BedrockRetrieveClient,
     CitationOnlyBedrockAdvisory,
+    GroundedBedrockAdvisory,
 )
 
 
@@ -78,6 +82,56 @@ def build_cloud_ai_runtime(settings: Settings) -> CloudAiRuntime:
     return CloudAiRuntime(config, polly=_build_polly_provider(config))
 
 
+class LazyBedrockRetrieveClient:
+    """Create the Bedrock Agent Runtime client only on the first user request."""
+
+    @cached_property
+    def _client(self):
+        return boto3.client("bedrock-agent-runtime", region_name="us-east-1")
+
+    def retrieve(self, **kwargs: Any) -> dict[str, Any]:
+        return self._client.retrieve(**kwargs)
+
+
+class LazyBedrockConverseClient:
+    """Create the Bedrock Runtime client only on the first grounded request."""
+
+    @cached_property
+    def _client(self):
+        return boto3.client("bedrock-runtime", region_name="us-east-1")
+
+    def converse(self, **kwargs: Any) -> dict[str, Any]:
+        return self._client.converse(**kwargs)
+
+
+def build_activated_cloud_ai_runtime(settings: Settings) -> CloudAiRuntime:
+    """Wire bounded grounded RAG without provider calls at startup."""
+    config = build_cloud_ai_config(settings)
+    if not config.documents_ingested:
+        return CloudAiRuntime(config, polly=_build_polly_provider(config))
+    retriever = ApprovedBedrockRetriever(
+        client=LazyBedrockRetrieveClient(),
+        knowledge_base_id=config.knowledge_base_id,
+        tenant_id=config.tenant_id,
+        allowed_s3_prefixes=config.allowed_s3_prefixes,
+        result_limit=config.retrieval_result_limit,
+        score_threshold=config.retrieval_score_threshold,
+        metadata_filtering_enabled=False,
+    )
+    return CloudAiRuntime(
+        config,
+        advisory=GroundedBedrockAdvisory(
+            retriever,
+            converse_client=LazyBedrockConverseClient(),
+            model_id=config.generation_model_id,
+            max_output_tokens=min(config.max_output_tokens, 400),
+            detail_max_output_tokens=1200,
+            daily_request_limit=200,
+        ),
+        polly=_build_polly_provider(config),
+    )
+
+
 def build_citation_only_runtime(
     settings: Settings, *, retrieve_client: BedrockRetrieveClient
 ) -> CloudAiRuntime:
@@ -92,6 +146,7 @@ def build_citation_only_runtime(
         allowed_s3_prefixes=config.allowed_s3_prefixes,
         result_limit=config.retrieval_result_limit,
         score_threshold=config.retrieval_score_threshold,
+        metadata_filtering_enabled=False,
     )
     return CloudAiRuntime(
         config,
@@ -150,9 +205,18 @@ def answer_cloud_advisory(
     *,
     request_id: str,
     question: str,
+    persona: str = "mae",
+    roles: tuple[str, ...] = ("viewer",),
 ) -> dict[str, Any]:
     response = runtime.answer(
-        AdvisoryRagRequest(request_id, config.tenant_id, question, allowed_tools=())
+        AdvisoryRagRequest(
+            request_id,
+            config.tenant_id,
+            question,
+            persona=persona,
+            roles=roles,
+            allowed_tools=(),
+        )
     )
     return {
         "request_id": response.request_id,

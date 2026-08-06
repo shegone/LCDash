@@ -113,6 +113,7 @@ class OfflinePolicyTests(unittest.TestCase):
 
     def test_managed_provider_permissions_are_read_or_inference_only(self):
         for action in (
+            "bedrock:Retrieve",
             "bedrock:InvokeModel",
             "polly:SynthesizeSpeech",
             "geo-maps:GetTile",
@@ -120,6 +121,7 @@ class OfflinePolicyTests(unittest.TestCase):
             "geo-routes:CalculateRoutes",
         ):
             self.assertIn(action, self.stack_source)
+        self.assertNotIn("bedrock:InvokeModelWithResponseStream", self.stack_source)
         self.assertNotIn("transcribe:StartStreamTranscription", self.stack_source)
         for action in (
             "sns:Publish",

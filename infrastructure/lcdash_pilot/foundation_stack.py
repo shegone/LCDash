@@ -165,10 +165,17 @@ class Phase1FoundationStack(cdk.Stack):
                 "LCDASH_CLOUD_CAD_POLL_SECONDS": "30",
                 "LCDASH_CLOUD_CAD_RECONCILIATION_OVERLAP_SECONDS": "120",
                 "LCDASH_CLOUD_AI_MODE": "advisory-rag",
-                "LCDASH_CLOUD_AI_KNOWLEDGE_BASE_ID": "",
-                "LCDASH_CLOUD_AI_DOCUMENTS_INGESTED": "false",
-                "LCDASH_CLOUD_AI_GENERATION_MODEL_ID": "amazon.nova-micro-v1:0",
-                "LCDASH_CLOUD_AI_MAX_OUTPUT_TOKENS": "512",
+                "LCDASH_CLOUD_AI_KNOWLEDGE_BASE_ID": parameters[
+                    "cloud_ai_knowledge_base_id"
+                ].value_as_string,
+                "LCDASH_CLOUD_AI_DOCUMENTS_INGESTED": parameters[
+                    "cloud_ai_documents_ingested"
+                ].value_as_string,
+                "LCDASH_CLOUD_AI_ALLOWED_S3_PREFIXES": parameters[
+                    "cloud_ai_allowed_s3_prefixes"
+                ].value_as_string,
+                "LCDASH_CLOUD_AI_GENERATION_MODEL_ID": "us.anthropic.claude-sonnet-5",
+                "LCDASH_CLOUD_AI_MAX_OUTPUT_TOKENS": "400",
                 "LCDASH_CLOUD_AI_RETRIEVAL_RESULT_LIMIT": "5",
                 "LCDASH_CLOUD_AI_POLLY_VOICE": "Joanna",
                 "LCDASH_CLOUD_AI_VOICE_ENABLED": "true",
@@ -430,7 +437,10 @@ class Phase1FoundationStack(cdk.Stack):
         )
 
         self._grant_content_access(task_role, content_bucket)
-        self._grant_managed_providers(task_role, parameters["bedrock_resources"])
+        self._grant_managed_providers(
+            task_role,
+            parameters["cloud_ai_knowledge_base_id"],
+        )
         self._add_budget(parameters)
         self._add_optional_trail(parameters["create_trail"])
         self._apply_parameter_tags(parameters)
@@ -455,10 +465,26 @@ class Phase1FoundationStack(cdk.Stack):
             "owner": cdk.CfnParameter(self, "Owner", type="String", min_length=1),
             "cost_center": cdk.CfnParameter(self, "CostCenter", type="String", min_length=1),
             "expiration": cdk.CfnParameter(self, "Expiration", type="String", min_length=1),
-            "bedrock_resources": cdk.CfnParameter(
+            "cloud_ai_knowledge_base_id": cdk.CfnParameter(
                 self,
-                "ApprovedBedrockResourceArns",
-                type="CommaDelimitedList",
+                "CloudAiKnowledgeBaseId",
+                type="String",
+                allowed_pattern="^[A-Z0-9]{10}$",
+                description="Existing reviewed Bedrock knowledge base ID.",
+            ),
+            "cloud_ai_documents_ingested": cdk.CfnParameter(
+                self,
+                "CloudAiDocumentsIngested",
+                type="String",
+                allowed_values=["true", "false"],
+                default="false",
+            ),
+            "cloud_ai_allowed_s3_prefixes": cdk.CfnParameter(
+                self,
+                "CloudAiAllowedS3Prefixes",
+                type="String",
+                min_length=1,
+                description="Comma-separated approved S3 prefixes for cited retrieval.",
             ),
             "create_trail": cdk.CfnParameter(
                 self,
@@ -618,13 +644,41 @@ class Phase1FoundationStack(cdk.Stack):
     def _grant_managed_providers(
         self,
         role: iam.Role,
-        bedrock_resources: cdk.CfnParameter,
+        knowledge_base_id: cdk.CfnParameter,
     ) -> None:
         region_condition = {"StringEquals": {"aws:RequestedRegion": APPROVED_REGION}}
         role.add_to_policy(
             iam.PolicyStatement(
-                actions=["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
-                resources=bedrock_resources.value_as_list,
+                actions=["bedrock:Retrieve"],
+                resources=[cdk.Fn.sub(
+                    "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:"
+                    "knowledge-base/${KnowledgeBaseId}",
+                    {"KnowledgeBaseId": knowledge_base_id.value_as_string},
+                )],
+                conditions=region_condition,
+            )
+        )
+        role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["bedrock:InvokeModel"],
+                resources=[
+                    cdk.Fn.sub(
+                        "arn:${AWS::Partition}:bedrock:us-east-1:${AWS::AccountId}:"
+                        "inference-profile/us.anthropic.claude-sonnet-5"
+                    ),
+                    cdk.Fn.sub(
+                        "arn:${AWS::Partition}:bedrock:us-east-1::"
+                        "foundation-model/anthropic.claude-sonnet-5"
+                    ),
+                    cdk.Fn.sub(
+                        "arn:${AWS::Partition}:bedrock:us-east-2::"
+                        "foundation-model/anthropic.claude-sonnet-5"
+                    ),
+                    cdk.Fn.sub(
+                        "arn:${AWS::Partition}:bedrock:us-west-2::"
+                        "foundation-model/anthropic.claude-sonnet-5"
+                    ),
+                ],
                 conditions=region_condition,
             )
         )
@@ -674,6 +728,37 @@ class Phase1FoundationStack(cdk.Stack):
                     unit="USD",
                 ),
                 cost_filters={"TagKeyValue": ["user:Project$LCDash-AWS"]},
+            ),
+            notifications_with_subscribers=[
+                budgets.CfnBudget.NotificationWithSubscribersProperty(
+                    notification=budgets.CfnBudget.NotificationProperty(
+                        comparison_operator="GREATER_THAN",
+                        notification_type="FORECASTED",
+                        threshold=80,
+                        threshold_type="PERCENTAGE",
+                    ),
+                    subscribers=[subscriber],
+                ),
+                budgets.CfnBudget.NotificationWithSubscribersProperty(
+                    notification=budgets.CfnBudget.NotificationProperty(
+                        comparison_operator="GREATER_THAN",
+                        notification_type="ACTUAL",
+                        threshold=100,
+                        threshold_type="PERCENTAGE",
+                    ),
+                    subscribers=[subscriber],
+                ),
+            ],
+        )
+        budgets.CfnBudget(
+            self,
+            "AiMonthlyBudget",
+            budget=budgets.CfnBudget.BudgetDataProperty(
+                budget_name=f"{NAME_PREFIX}-ai-monthly",
+                budget_type="COST",
+                time_unit="MONTHLY",
+                budget_limit=budgets.CfnBudget.SpendProperty(amount=500, unit="USD"),
+                cost_filters={"Service": ["Amazon Bedrock"]},
             ),
             notifications_with_subscribers=[
                 budgets.CfnBudget.NotificationWithSubscribersProperty(

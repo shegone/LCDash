@@ -126,6 +126,7 @@ from app.services.voice_service import (
 from app.services.cloud_ai_service import (
     CLOUD_POLLY_VOICES,
     answer_cloud_advisory,
+    build_activated_cloud_ai_runtime,
     build_cloud_ai_config,
     build_cloud_ai_runtime,
     cloud_ai_status,
@@ -162,7 +163,7 @@ from app.services.nga911_nova_service import (
 
 cloud_cad_runtime = build_cloud_cad_runtime(settings)
 cloud_ai_config = build_cloud_ai_config(settings)
-cloud_ai_runtime = build_cloud_ai_runtime(settings)
+cloud_ai_runtime = build_activated_cloud_ai_runtime(settings)
 
 
 def _cloud_presentation_status(knowledge_status: dict | None = None):
@@ -273,6 +274,7 @@ class VoiceSpeechRequest(BaseModel):
 
 class CloudAdvisoryRequest(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
+    persona: str = Field(default="mae", pattern="^(mae|jack)$")
 
 
 class MAEFeedbackRequest(BaseModel):
@@ -679,6 +681,12 @@ def _deny_unscoped_cloud_advisory_state() -> None:
             status_code=403,
             detail="This legacy advisory state route is unavailable in the tenant-isolated cloud deployment.",
         )
+
+
+def _cloud_advisory_roles(tenant_context: TenantContext | None) -> tuple[str, ...]:
+    if tenant_context is None or tenant_context.tenant_id != settings.tenant_id:
+        return ("viewer",)
+    return tuple(sorted(tenant_context.roles))
 
 
 @app.get("/api/operations/units")
@@ -1760,7 +1768,13 @@ def cloud_ai_status_api(response: Response):
 
 
 @app.post("/api/cloud-ai/advisory")
-def cloud_ai_advisory_api(payload: CloudAdvisoryRequest):
+def cloud_ai_advisory_api(
+    payload: CloudAdvisoryRequest,
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
+):
     if not cloud_mode_enabled(settings):
         raise HTTPException(status_code=404, detail="Cloud AI is not configured here.")
     return answer_cloud_advisory(
@@ -1768,6 +1782,8 @@ def cloud_ai_advisory_api(payload: CloudAdvisoryRequest):
         cloud_ai_config,
         request_id=f"cloud-advisory-{secrets.token_hex(12)}",
         question=payload.question.strip(),
+        persona=payload.persona,
+        roles=_cloud_advisory_roles(tenant_context),
     )
 
 
@@ -1884,9 +1900,25 @@ def mindshare_chat_api(
     chat_request: MindshareChatRequest,
     request: Request,
     response: Response,
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
 ):
-    _deny_unscoped_cloud_advisory_state()
     response.headers["Cache-Control"] = "no-store"
+    if cloud_mode_enabled(settings):
+        result = answer_cloud_advisory(
+            cloud_ai_runtime,
+            cloud_ai_config,
+            request_id=f"cloud-jack-{secrets.token_hex(12)}",
+            question=chat_request.question.strip(),
+            persona="jack",
+            roles=_cloud_advisory_roles(tenant_context),
+        )
+        result["interaction_id"] = ""
+        result["audit_saved"] = False
+        return result
+    _deny_unscoped_cloud_advisory_state()
     try:
         result = ask_mindshare(
             chat_request.question,
@@ -1905,7 +1937,33 @@ def mindshare_chat_api(
 
 
 @app.post("/api/mindshare/chat/stream")
-def mindshare_chat_stream_api(chat_request: MindshareChatRequest, request: Request):
+def mindshare_chat_stream_api(
+    chat_request: MindshareChatRequest,
+    request: Request,
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
+):
+    if cloud_mode_enabled(settings):
+        result = answer_cloud_advisory(
+            cloud_ai_runtime,
+            cloud_ai_config,
+            request_id=f"cloud-jack-{secrets.token_hex(12)}",
+            question=chat_request.question.strip(),
+            persona="jack",
+            roles=_cloud_advisory_roles(tenant_context),
+        )
+        result["interaction_id"] = ""
+        result["audit_saved"] = False
+        body = "".join(
+            json.dumps(event, separators=(",", ":")) + "\n"
+            for event in (
+                {"type": "complete", "payload": result},
+                {"type": "done"},
+            )
+        )
+        return StreamingResponse(iter((body,)), media_type="application/x-ndjson")
     _deny_unscoped_cloud_advisory_state()
     events: Queue[dict] = Queue()
     history = [message.model_dump() for message in chat_request.history]
@@ -2080,7 +2138,7 @@ def mae_status_api(response: Response):
             "write_access": False,
             "local_ai": {
                 "connected": presentation["advisory"]["ready"],
-                "model": "Citation-only cloud advisory",
+                "model": "Grounded Claude Sonnet 5 advisory",
                 "installed_models": [],
                 "error": presentation["advisory"]["notice"],
             },

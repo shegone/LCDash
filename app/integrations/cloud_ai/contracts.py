@@ -82,11 +82,17 @@ class AdvisoryRagRequest:
     tenant_id: str
     question: str
     allowed_tools: tuple[str, ...] = ()
+    persona: str = "mae"
+    roles: tuple[str, ...] = ("viewer",)
 
     def __post_init__(self) -> None:
         _validate_request_identity(self.request_id, self.tenant_id)
         if not self.question.strip() or len(self.question) > 4000:
             raise ValueError("The advisory question must contain 1-4000 characters.")
+        if self.persona not in {"mae", "jack"}:
+            raise ValueError("The advisory persona must be MAE or JACK.")
+        if not self.roles or any(not re.fullmatch(r"[a-z][a-z0-9-]{1,31}", role) for role in self.roles):
+            raise ValueError("Advisory requests require bounded trusted roles.")
         if self.allowed_tools:
             raise ValueError("Advisory RAG cannot expose CAD or action tools.")
 

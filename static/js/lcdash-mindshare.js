@@ -168,10 +168,12 @@
     }
 
     function answerForSpeech(text) {
-        // JACK keeps source citations in the text answer. They are useful on
-        // screen, but reciting titles and page numbers interrupts a natural
-        // conversation. Remove only the inline [Document, page N] labels.
+        // Sources are rendered separately and are never part of spoken audio.
+        // Strip links defensively in case an approved excerpt contains one.
         return String(text || "")
+            .split(/^Sources\s*$/im)[0]
+            .replace(/https?:\/\/\S+/gi, "")
+            .replace(/s3:\/\/\S+/gi, "")
             .replace(/\s*\[[^\]]+?,\s*page\s+\d+\]/gi, "")
             .replace(/\s{2,}/g, " ")
             .trim();
@@ -580,6 +582,28 @@
             bubble.appendChild(assurance);
         }
         addEvidence(bubble, payload && payload.evidence);
+
+        const citations = payload && Array.isArray(payload.citations)
+            ? payload.citations
+            : [];
+        if (role === "assistant" && citations.length) {
+            const sources = document.createElement("div");
+            sources.className = "mae-sources mae-cloud-citations";
+            sources.setAttribute("aria-label", "Approved document sources");
+            const heading = document.createElement("strong");
+            heading.textContent = "Sources";
+            sources.appendChild(heading);
+            const list = document.createElement("ul");
+            citations.forEach(function (citation) {
+                const item = document.createElement("li");
+                const label = citation.title || "Approved document";
+                const detail = citation.page ? `${label}, page ${citation.page}` : label;
+                item.textContent = detail;
+                list.appendChild(item);
+            });
+            sources.appendChild(list);
+            bubble.appendChild(sources);
+        }
 
         if (role === "assistant") {
             const feedback = buildFeedback(payload && payload.interaction_id);

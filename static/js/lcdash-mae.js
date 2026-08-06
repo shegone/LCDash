@@ -723,6 +723,9 @@
                 const citationBlock = document.createElement("div");
                 citationBlock.className = "mae-sources mae-cloud-citations";
                 citationBlock.setAttribute("aria-label", "Approved document citations");
+                const heading = document.createElement("strong");
+                heading.textContent = "Sources";
+                citationBlock.appendChild(heading);
                 citations.forEach(function (citation) {
                     const chip = document.createElement("span");
                     chip.className = "mae-source-chip";

@@ -103,7 +103,7 @@
       "AWS::CertificateManager::Certificate": 1
     },
     "lcdash-p1-logan-use1-foundation": {
-      "AWS::Budgets::Budget": 1,
+      "AWS::Budgets::Budget": 2,
       "AWS::CloudTrail::Trail": 1,
       "AWS::Cognito::UserPool": 1,
       "AWS::Cognito::UserPoolClient": 1,
