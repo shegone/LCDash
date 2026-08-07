@@ -52,7 +52,7 @@ class OfflinePolicyTests(unittest.TestCase):
             "cognito_access_token_minutes": 15,
             "cognito_id_token_minutes": 15,
             "cognito_refresh_token_days": 1,
-            "alb_session_hours": 1,
+            "alb_session_hours": 24,
             "fixed_tenant": "logan-synthetic",
             "client_supplied_tenant_selector": False,
             "application_lambda_count": 0,

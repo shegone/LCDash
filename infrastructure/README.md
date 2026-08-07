@@ -132,7 +132,7 @@ authorization-code exchange. Authorization code is the only OAuth grant;
 implicit and client-credentials flows are absent. The secret is managed by
 Cognito/ALB, is not put in Secrets Manager or the task environment, and is not
 an application, CAD, vendor, or tenant secret. The listener authenticates before
-forwarding and uses a one-hour session. Cognito requires TOTP MFA, a 14-character
+forwarding and uses a twenty-four-hour session. Cognito requires TOTP MFA, a 14-character
 password with every character class, verified-email-only recovery, 15-minute
 access/ID tokens, one-day rotating refresh tokens, and revocation.
 

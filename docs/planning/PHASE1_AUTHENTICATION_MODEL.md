@@ -48,7 +48,7 @@ public warning, EMS delivery, or another operational output.
   implicit and client-credentials grants are absent.
 - Access and ID tokens last 15 minutes. Refresh tokens last one day, token
   revocation is enabled, and refresh-token rotation has no retry grace period.
-- The ALB authentication session lasts one hour and redirects unauthenticated
+- The ALB authentication session lasts twenty-four hours and redirects unauthenticated
   requests back through Cognito.
 
 ## Required acceptance evidence

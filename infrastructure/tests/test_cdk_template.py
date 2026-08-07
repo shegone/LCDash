@@ -436,7 +436,7 @@ class CdkTemplateTests(unittest.TestCase):
         )
         self.assertEqual(
             https["DefaultActions"][0]["AuthenticateCognitoConfig"]["SessionTimeout"],
-            "3600",
+            "86400",
         )
         self.template.resource_count_is(
             "AWS::ElasticLoadBalancingV2::ListenerRule",

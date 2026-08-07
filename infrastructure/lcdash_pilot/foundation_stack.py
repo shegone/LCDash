@@ -428,7 +428,11 @@ class Phase1FoundationStack(cdk.Stack):
                 on_unauthenticated_request=elbv2.UnauthenticatedAction.AUTHENTICATE,
                 scope="openid email profile",
                 session_cookie_name="LCDashPilotAuth",
-                session_timeout=cdk.Duration.hours(1),
+                # The ALB's own session cookie, not a Cognito token, is what
+                # actually gates re-login -- it is checked locally by the ALB
+                # and is independent of the 15-minute access/ID token
+                # lifetimes. Matches the 24-hour refresh token window.
+                session_timeout=cdk.Duration.hours(24),
                 allow_https_outbound=True,
             ),
         )
