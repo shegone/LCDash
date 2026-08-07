@@ -3,6 +3,7 @@
 {% block title %}Cloud Station Alerts | LCDash{% endblock %}
 
 {% block content %}
+<link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
 <style>
     .station-picker { position: relative; }
     .station-control { cursor: pointer; min-height: 44px; padding: .75rem 1rem; border: 1px solid rgba(76,201,255,.35); border-radius: .75rem; background: rgba(6,20,36,.75); }
@@ -19,6 +20,8 @@
     .dispatch-incident { font-size: clamp(1.6rem,4vw,2.6rem); font-weight: 800; }
     .dispatch-location { margin-top: .5rem; color: #d7e8f5; font-size: 1.2rem; }
     .dispatch-meta-box { height: 100%; padding: 1rem; border: 1px solid rgba(255,255,255,.1); border-radius: .75rem; background: rgba(255,255,255,.035); }
+    #alert-map { height: 260px; border-radius: .75rem; overflow: hidden; border: 1px solid rgba(76,201,255,.35); margin-top: 1rem; }
+    .alert-map-unavailable { margin-top: 1rem; padding: 1rem; border-radius: .75rem; border: 1px dashed rgba(143,183,217,.35); background: rgba(0,0,0,.16); color: #8fb7d9; text-align: center; }
     .arm-status { display: inline-flex; align-items: center; gap: 8px; padding: 8px 13px; border-radius: 999px; background: rgba(255,82,82,.13); border: 1px solid rgba(255,82,82,.35); color: #ff9191; font-weight: 900; }
     .arm-status.armed { background: rgba(105,255,185,.12); border-color: rgba(105,255,185,.4); color: #69ffb9; }
     .status-dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; box-shadow: 0 0 10px currentColor; }
@@ -129,6 +132,10 @@
                 <div class="col-md-4"><div class="dispatch-meta-box"><div class="eyebrow">CFS NUMBER</div><div id="alert-cfs-number" class="fs-5 fw-bold">—</div></div></div>
                 <div class="col-md-4"><div class="dispatch-meta-box"><div class="eyebrow">ASSIGNMENT TIME</div><div id="alert-dispatch-time" class="fs-5 fw-bold">—</div></div></div>
             </div>
+            <div id="alert-map" role="img" aria-label="Incident location map"></div>
+            <div id="alert-map-unavailable" class="alert-map-unavailable" hidden>
+                <i class="bi bi-geo-alt fs-4 d-block mb-1"></i>No verified GIS coordinates for this event.
+            </div>
             <div class="d-flex flex-wrap gap-3 mt-3">
                 <a id="alert-street-view" class="btn btn-outline-light px-4" href="#" target="_blank" rel="noopener noreferrer">
                     <i class="bi bi-binoculars-fill"></i> Open Google Street View
@@ -146,5 +153,6 @@
 </div>
 
 <script id="station-alert-data" type="application/json">{{ alert_data|tojson }}</script>
-<script src="/static/js/lcdash-station-alerts-cloud.js?v=0.4.0"></script>
+<script src="/static/vendor/leaflet/leaflet.js"></script>
+<script src="/static/js/lcdash-station-alerts-cloud.js?v=0.5.0"></script>
 {% endblock %}

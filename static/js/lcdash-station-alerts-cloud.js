@@ -458,6 +458,59 @@
             : "https://www.google.com/maps/search/?api=1&query=" + locationQuery;
     }
 
+    // Self-hosted Leaflet + OpenStreetMap tiles -- the same map used on the
+    // incident command view and GIS Map page, no per-load API billing.
+    let alertMap = null;
+    let alertMapMarker = null;
+
+    function updateAlertMap(alert) {
+        const mapElement = document.getElementById("alert-map");
+        const unavailableElement = document.getElementById("alert-map-unavailable");
+        if (!mapElement || typeof L === "undefined") return;
+
+        const hasCoordinates = validCoordinate(alert.latitude, -90, 90) &&
+            validCoordinate(alert.longitude, -180, 180) &&
+            !(Number(alert.latitude) === 0 && Number(alert.longitude) === 0);
+
+        if (!hasCoordinates) {
+            mapElement.hidden = true;
+            if (unavailableElement) unavailableElement.hidden = false;
+            return;
+        }
+
+        mapElement.hidden = false;
+        if (unavailableElement) unavailableElement.hidden = true;
+
+        const latitude = Number(alert.latitude);
+        const longitude = Number(alert.longitude);
+
+        if (!alertMap) {
+            alertMap = L.map(mapElement, { zoomControl: true }).setView([latitude, longitude], 16);
+            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                maxZoom: 19,
+                attribution: "&copy; OpenStreetMap contributors"
+            }).addTo(alertMap);
+            alertMapMarker = L.marker([latitude, longitude]).addTo(alertMap);
+        } else {
+            alertMap.setView([latitude, longitude], 16);
+            alertMapMarker.setLatLng([latitude, longitude]);
+        }
+
+        const popup = document.createElement("div");
+        const title = document.createElement("strong");
+        title.textContent = alert.incident_description || "Active Incident";
+        popup.appendChild(title);
+        if (alert.location) {
+            popup.appendChild(document.createElement("br"));
+            popup.appendChild(document.createTextNode(String(alert.location)));
+        }
+        alertMapMarker.bindPopup(popup).openPopup();
+
+        // The card is hidden (display:none) while the map first initializes,
+        // so Leaflet measures a zero-size container without this.
+        window.setTimeout(function () { if (alertMap) alertMap.invalidateSize(); }, 50);
+    }
+
     function showVisualAlert(alert) {
         setText("alert-station-name", stationLabel(alert.station_names || selectedStations), "Selected stations");
         setText("alert-incident-code", alert.incident_code, "ASSIGNMENT EVENT");
@@ -467,6 +520,7 @@
         setText("alert-cfs-number", alert.cfs_number, "Unavailable");
         setText("alert-dispatch-time", formatTime(alert.dispatch_datetime));
         setLocationLinks(alert);
+        updateAlertMap(alert);
 
         const soundNotice = document.getElementById("alert-sound-notice");
         if (soundNotice) {
