@@ -22,6 +22,28 @@ class CloudDashboardUnitsPresentationTests(unittest.TestCase):
         self.assertNotIn('VERIFIED READ-ONLY DATA', template)
         self.assertNotIn('"CALL TAKER", safeText(call.call_taker', script[script.index('if (usesCloudPresentation())'):script.index('const detailRow =')])
 
+    def test_dashboard_cloud_facts_format_timestamps_as_eastern_not_raw_utc(self):
+        # Regression test: the "CALL RECEIVED" fact and the latest
+        # command-log timestamp both displayed the raw CAD timestamp
+        # verbatim (e.g. "2026-08-07T14:53:08.865321Z") -- createCloudFact()
+        # set data-cad-time correctly but never added the "cad-time" CSS
+        # class LCDashTime's sweep looks for, and this file never calls that
+        # sweep anyway, so the raw value was never replaced.
+        script = (ROOT / "static" / "js" / "lcdash-dashboard.js").read_text(encoding="utf-8")
+
+        self.assertIn(
+            "const displayValue = timeValue && value && window.LCDashTime\n"
+            "            ? window.LCDashTime.formatCadDisplayTime(value)",
+            script,
+        )
+        self.assertIn('content.classList.add("cad-time")', script)
+        self.assertIn(
+            "const latestDisplay = window.LCDashTime\n"
+            "                    ? window.LCDashTime.formatCadDisplayTime(call.latest_command_log_timestamp)",
+            script,
+        )
+        self.assertIn('createElement("span", "cad-time", safeText(latestDisplay))', script)
+
     def test_units_route_uses_presentation_source_not_snapshot_success(self):
         route = (ROOT / "app" / "main.py").read_text(encoding="utf-8")
         units_route = route[route.index('def units_board('):route.index('@app.get("/calls/{cfs_number}")')]

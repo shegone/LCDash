@@ -81,9 +81,13 @@
 
     function createCloudFact(label, value, timeValue) {
         const fact = createElement("div", "cloud-call-fact");
-        const content = createElement("div", "value", safeText(value, "Not provided"));
+        const displayValue = timeValue && value && window.LCDashTime
+            ? window.LCDashTime.formatCadDisplayTime(value)
+            : value;
+        const content = createElement("div", "value", safeText(displayValue, "Not provided"));
         if (timeValue) {
             content.dataset.cadTime = safeText(value);
+            content.classList.add("cad-time");
         }
         fact.append(createElement("div", "label", label), content);
         return fact;
@@ -397,7 +401,10 @@
                     (logCount === 1 ? "entry" : "entries"))
             );
             if (call.latest_command_log_timestamp) {
-                const latest = createElement("span", "", safeText(call.latest_command_log_timestamp));
+                const latestDisplay = window.LCDashTime
+                    ? window.LCDashTime.formatCadDisplayTime(call.latest_command_log_timestamp)
+                    : call.latest_command_log_timestamp;
+                const latest = createElement("span", "cad-time", safeText(latestDisplay));
                 latest.dataset.cadTime = safeText(call.latest_command_log_timestamp);
                 logSummary.append(document.createTextNode(" · latest "), latest);
             }
