@@ -35,11 +35,12 @@ from app.integrations.cloud_ai.bedrock_retrieval import (
     ApprovedBedrockRetriever,
     DailyRequestBudget,
 )
+from app.services.voice_service import spoken_24_hour_time
 
 
 # Polly is contractually bounded to 1-3000 characters per request. Stay under
-# that so the 911 pronunciation expansion in ``prepare_polly_text`` cannot push
-# a chunk past the limit.
+# that so the time expansion in ``sanitize_spoken_text`` cannot push a chunk
+# past the limit.
 MAX_SENTENCE_SPEECH_CHARACTERS = 2600
 # First chunk goes out as soon as it is complete; later chunks are grouped so
 # the cadence stays natural and the Polly call count stays bounded.
@@ -287,6 +288,15 @@ _NUMERIC_BRACKET = re.compile(r"\[\s*\d+(?:\s*[,-]\s*\d+)*\s*\]")
 _SOURCE_PAREN = re.compile(r"\((?:source|citation|see)\b[^)]*\)", re.IGNORECASE)
 _MARKDOWN_MARKS = re.compile(r"[*_`#>|]+")
 _BULLET_PREFIX = re.compile(r"^\s*[-•–]\s+", re.MULTILINE)
+# A compact or colon-separated 24-hour time (e.g. "13:40") is ambiguous to a
+# TTS engine -- expand it to unambiguous speech ("thirteen forty") before
+# Polly ever sees it, reusing the same wording on-prem's voice pipeline uses.
+_PREFIXED_TIME_PATTERN = re.compile(
+    r"\b(?P<prefix>(?:dispatch\s+)?time(?:\s+(?:is|was))?\s*[:]?|at)\s+"
+    r"(?P<hour>[01]\d|2[0-3])(?::?)(?P<minute>[0-5]\d)\b",
+    flags=re.IGNORECASE,
+)
+_COLON_TIME_PATTERN = re.compile(r"\b(?P<hour>[01]\d|2[0-3]):(?P<minute>[0-5]\d)\b")
 _WHITESPACE = re.compile(r"\s+")
 
 
@@ -337,6 +347,17 @@ def sanitize_spoken_text(text: str) -> str:
     spoken = _BULLET_PREFIX.sub("", spoken)
     spoken = _MARKDOWN_MARKS.sub(" ", spoken)
     spoken = _WHITESPACE.sub(" ", spoken).strip()
+    spoken = _PREFIXED_TIME_PATTERN.sub(
+        lambda match: f"{match.group('prefix')} "
+        f"{spoken_24_hour_time(int(match.group('hour')), int(match.group('minute')))}",
+        spoken,
+    )
+    spoken = _COLON_TIME_PATTERN.sub(
+        lambda match: spoken_24_hour_time(
+            int(match.group("hour")), int(match.group("minute"))
+        ),
+        spoken,
+    )
     if len(spoken) > MAX_SENTENCE_SPEECH_CHARACTERS:
         spoken = spoken[:MAX_SENTENCE_SPEECH_CHARACTERS]
         cut = spoken.rfind(" ")
