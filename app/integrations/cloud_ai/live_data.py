@@ -33,6 +33,15 @@ _TOTAL_CALLS_TERMS = re.compile(
     r"\b(total calls?|calls? (today|yesterday|this week|this month|so far))\b",
     re.IGNORECASE,
 )
+# A historical period reference disambiguates "how many calls" (which
+# _ACTIVE_CALL_TERMS also matches, for "how many calls are active") from a
+# historical-totals question -- "how many calls have we had in the last 8
+# hours" must not be answered with the current active-call list.
+_HISTORICAL_PERIOD_REFERENCE = re.compile(
+    r"\b(today|yesterday|this week|this month|so far"
+    r"|(?:last|past) \d+\s*(?:hour|day|week|month)s?)\b",
+    re.IGNORECASE,
+)
 _RESPONSE_TIME_TERMS = re.compile(
     r"\b(average|typical|mean) response( time)?\b", re.IGNORECASE
 )
@@ -104,11 +113,20 @@ def detect_live_data_intent(question: str) -> LiveDataIntent:
             period = key
             break
 
+    has_historical_period = bool(_HISTORICAL_PERIOD_REFERENCE.search(clean))
+    wants_totals = bool(_TOTAL_CALLS_TERMS.search(clean)) or (
+        bool(_ACTIVE_CALL_TERMS.search(clean)) and has_historical_period
+    )
+
     return LiveDataIntent(
-        wants_active_calls=bool(_ACTIVE_CALL_TERMS.search(clean)) and not target_cfs,
+        wants_active_calls=(
+            bool(_ACTIVE_CALL_TERMS.search(clean))
+            and not target_cfs
+            and not has_historical_period
+        ),
         wants_unit_status=bool(_UNIT_STATUS_TERMS.search(clean)),
         wants_call_detail=bool(target_cfs),
-        wants_totals=bool(_TOTAL_CALLS_TERMS.search(clean)),
+        wants_totals=wants_totals,
         wants_response_time=bool(_RESPONSE_TIME_TERMS.search(clean)),
         wants_busiest=bool(_BUSIEST_TERMS.search(clean)),
         target_cfs_number=target_cfs,

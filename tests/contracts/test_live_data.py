@@ -44,6 +44,35 @@ class DetectLiveDataIntentTests(unittest.TestCase):
             detect_live_data_intent("What is the busiest station this month?").wants_busiest
         )
 
+    def test_how_many_calls_with_a_historical_period_means_totals_not_active(self):
+        # Regression test: "how many calls" alone means active calls right
+        # now, but reported live -- asking "how many calls have we had in
+        # the last 8 hours" was answered with the current active-call list
+        # instead of a historical total, because _ACTIVE_CALL_TERMS matches
+        # "how many calls" regardless of an accompanying historical period.
+        intent = detect_live_data_intent(
+            "How many calls have we had in the last 8 hours?"
+        )
+        self.assertTrue(intent.wants_totals)
+        self.assertFalse(intent.wants_active_calls)
+
+        # A bare "how many calls" with no period reference must still mean
+        # active calls right now -- this must not regress.
+        active_intent = detect_live_data_intent("How many calls are there right now?")
+        self.assertTrue(active_intent.wants_active_calls)
+        self.assertFalse(active_intent.wants_totals)
+
+        # Other historical-period phrasings must also route to totals.
+        for question in (
+            "How many calls in the last 3 days?",
+            "How many calls have we had today?",
+            "How many calls so far?",
+        ):
+            with self.subTest(question=question):
+                phrased_intent = detect_live_data_intent(question)
+                self.assertTrue(phrased_intent.wants_totals)
+                self.assertFalse(phrased_intent.wants_active_calls)
+
     def test_period_defaults_and_recognizes_explicit_windows(self):
         self.assertEqual(detect_live_data_intent("calls today").period, "24h")
         self.assertEqual(detect_live_data_intent("calls this week").period, "7d")
