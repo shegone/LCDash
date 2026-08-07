@@ -934,6 +934,79 @@
         return controls;
     }
 
+    // Renders one answer into a standalone print window rather than printing
+    // the surrounding dashboard. Everything is written as text nodes, never
+    // interpolated HTML, so answer or citation content cannot inject markup.
+    function printAnswer(answerText, citations, questionText) {
+        const frame = document.createElement("iframe");
+        frame.setAttribute("aria-hidden", "true");
+        frame.style.position = "fixed";
+        frame.style.right = "0";
+        frame.style.bottom = "0";
+        frame.style.width = "0";
+        frame.style.height = "0";
+        frame.style.border = "0";
+        document.body.appendChild(frame);
+
+        const frameDoc = frame.contentDocument;
+        const style = frameDoc.createElement("style");
+        style.textContent = [
+            "body{font-family:Georgia,'Times New Roman',serif;color:#111;margin:32px;line-height:1.5}",
+            "h1{font-size:18pt;margin:0 0 2px}",
+            ".meta{font-size:9pt;color:#555;margin-bottom:18px;border-bottom:1px solid #bbb;padding-bottom:10px}",
+            ".label{font-size:9pt;letter-spacing:.08em;text-transform:uppercase;color:#555;margin:18px 0 4px}",
+            ".question{font-size:11pt;font-style:italic;color:#333}",
+            ".answer{font-size:12pt;white-space:pre-wrap}",
+            "ul{margin:4px 0 0;padding-left:20px}",
+            "li{font-size:9.5pt;color:#333;margin-bottom:3px}",
+            ".note{margin-top:24px;padding-top:10px;border-top:1px solid #bbb;font-size:8.5pt;color:#555}"
+        ].join("");
+        frameDoc.head.appendChild(style);
+        frameDoc.title = "JACK answer";
+
+        function block(className, tag, textContent) {
+            const node = frameDoc.createElement(tag);
+            node.className = className;
+            node.textContent = textContent;
+            frameDoc.body.appendChild(node);
+            return node;
+        }
+
+        block("", "h1", "Logan County 911 — JACK");
+        block("meta", "div", `Mindshare technical assistant · printed ${new Date().toLocaleString()}`);
+        if (questionText) {
+            block("label", "div", "Question");
+            block("question", "div", questionText);
+        }
+        block("label", "div", "Answer");
+        block("answer", "div", answerText);
+
+        if (citations && citations.length) {
+            block("label", "div", "Sources");
+            const list = frameDoc.createElement("ul");
+            citations.forEach(function (citation) {
+                const label = citation.title || "Approved document";
+                const item = frameDoc.createElement("li");
+                item.textContent = citation.page ? `${label}, page ${citation.page}` : label;
+                list.appendChild(item);
+            });
+            frameDoc.body.appendChild(list);
+        }
+
+        block(
+            "note",
+            "div",
+            "Advisory only. JACK cannot write to CAD, control station tones, or "
+            + "operate ESInet services. Verify critical information at the source."
+        );
+
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
+        // Safari/Firefox return from print() before the dialog closes, so the
+        // frame is removed on a timer rather than immediately.
+        window.setTimeout(function () { frame.remove(); }, 1000);
+    }
+
     function addMessage(role, content, payload) {
         const article = document.createElement("article");
         article.className = `mae-message mae-message-${role}`;
@@ -1012,6 +1085,17 @@
         if (role === "assistant") {
             const feedback = buildFeedback(payload && payload.interaction_id);
             if (feedback) bubble.appendChild(feedback);
+
+            if (content) {
+                const printButton = document.createElement("button");
+                printButton.type = "button";
+                printButton.className = "mae-read-aloud";
+                printButton.innerHTML = '<i class="bi bi-printer"></i> Print answer';
+                printButton.addEventListener("click", function () {
+                    printAnswer(content, citations, payload && payload.question);
+                });
+                bubble.appendChild(printButton);
+            }
 
             const readButton = document.createElement("button");
             readButton.type = "button";
@@ -1283,7 +1367,7 @@
                     question, requestHistory, controller.signal
                 );
             }
-            addMessage("assistant", payload.answer, payload);
+            addMessage("assistant", payload.answer, {...payload, question: question});
             history.push({role: "assistant", content: payload.answer});
             answerToSpeak = payload.answer;
         } catch (error) {

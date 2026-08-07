@@ -519,14 +519,22 @@ class CdkTemplateTests(unittest.TestCase):
                 logical_id,
             )
 
-    def test_database_has_no_backup_or_high_availability(self):
+    def test_database_is_backed_up_and_protected_without_high_availability(self):
         self.template.has_resource_properties(
             "AWS::RDS::DBInstance",
             {
-                "BackupRetentionPeriod": 0,
-                "DeletionProtection": False,
+                "BackupRetentionPeriod": 7,
+                "DeletionProtection": True,
+                # Single-AZ stays deliberate: this is a cost-bounded pilot, and
+                # durability here comes from backups, not standby capacity.
                 "MultiAZ": False,
             },
+        )
+
+    def test_database_survives_stack_teardown(self):
+        self.template.has_resource(
+            "AWS::RDS::DBInstance",
+            {"DeletionPolicy": "Retain", "UpdateReplacePolicy": "Retain"},
         )
 
     def test_budget_is_two_hundred_usd(self):

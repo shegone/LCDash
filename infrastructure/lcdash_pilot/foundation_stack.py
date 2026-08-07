@@ -235,10 +235,16 @@ class Phase1FoundationStack(cdk.Stack):
             allocated_storage=20,
             max_allocated_storage=20,
             storage_encrypted=True,
-            backup_retention=cdk.Duration.days(0),
-            delete_automated_backups=True,
-            deletion_protection=False,
-            removal_policy=cdk.RemovalPolicy.DESTROY,
+            # The analytics warehouse holds imported historical CAD data that
+            # cannot be cheaply reconstructed in cloud (the collector cannot run
+            # here yet), so the database is protected rather than disposable:
+            # 7 days of automated backups gives point-in-time recovery, deletion
+            # protection blocks an accidental drop, and RETAIN keeps the instance
+            # alive even if the stack itself is torn down.
+            backup_retention=cdk.Duration.days(7),
+            delete_automated_backups=False,
+            deletion_protection=True,
+            removal_policy=cdk.RemovalPolicy.RETAIN,
             cloudwatch_logs_exports=["postgresql"],
         )
         database.node.add_dependency(database_log_group)

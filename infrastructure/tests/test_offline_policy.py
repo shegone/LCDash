@@ -36,8 +36,9 @@ class OfflinePolicyTests(unittest.TestCase):
             "deployment_circuit_breaker_rollback": True,
             "database_instances": 1,
             "database_multi_az": False,
-            "database_backup_days": 0,
-            "database_final_snapshot": False,
+            "database_backup_days": 7,
+            "database_deletion_protection": True,
+            "database_retained_on_teardown": True,
             "content_bucket_versioning": False,
             "bucket_auto_delete_on_teardown": True,
             "ecr_empty_on_teardown": True,
@@ -75,13 +76,16 @@ class OfflinePolicyTests(unittest.TestCase):
             self.assertNotIn(forbidden, self.stack_source)
         self.assertIn('nat_gateways=0', self.stack_source)
 
-    def test_stack_is_single_system_without_backup_or_autoscaling(self):
+    def test_stack_is_single_system_with_protected_database(self):
         required = (
             'desired_count=parameters["desired_task_count"].value_as_number',
             "multi_az=False",
-            "backup_retention=cdk.Duration.days(0)",
-            "deletion_protection=False",
-            "delete_automated_backups=True",
+            # The analytics warehouse is protected, not disposable: imported
+            # historical CAD data cannot be cheaply rebuilt in cloud.
+            "backup_retention=cdk.Duration.days(7)",
+            "deletion_protection=True",
+            "delete_automated_backups=False",
+            "removal_policy=cdk.RemovalPolicy.RETAIN",
             "versioned=False",
             "assign_public_ip=True",
             "circuit_breaker=ecs.DeploymentCircuitBreaker(rollback=True)",
