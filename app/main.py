@@ -40,6 +40,12 @@ from app.services.gis_reference_service import (
     get_reference_catalog,
     get_reference_layer,
 )
+from app.services.aws_map_tiles import (
+    ALLOWED_TILESETS,
+    LazyGeoMapsClient,
+    MapTileUnavailable,
+    fetch_map_tile,
+)
 from app.services.heatmap_service import (
     ALLOWED_HEATMAP_HOURS,
     build_empty_heatmap_snapshot,
@@ -190,6 +196,9 @@ cloud_ai_runtime = build_activated_cloud_ai_runtime(
 cloud_advisory_streamer = build_cloud_advisory_streamer(
     cloud_ai_config, budget=cloud_advisory_budget
 )
+# Constructing this opens no connection; the first tile request creates the
+# client. Tiles are signed server-side so no AWS credential reaches a browser.
+geo_map_tile_client = LazyGeoMapsClient()
 
 
 def _cloud_presentation_status(knowledge_status: dict | None = None):
@@ -847,6 +856,49 @@ def map_reference_layer_api(
 
     response.headers["Cache-Control"] = "private, max-age=3600"
     return reference_layer
+
+
+@app.get("/api/operations/map/tiles/{style}/{z}/{x}/{y}")
+def map_tile_api(style: str, z: int, x: int, y: int):
+    """Proxy one SigV4-signed Amazon Location raster tile.
+
+    The browser cannot sign these requests without holding credentials, so
+    the application signs them with the task role instead. Style names are
+    resolved against a fixed allowlist and coordinates are range-checked
+    before any upstream call is made.
+    """
+    if not cloud_mode_enabled(settings):
+        raise HTTPException(
+            status_code=404, detail="AWS map tiles are available in cloud mode only."
+        )
+    try:
+        payload, content_type = fetch_map_tile(
+            geo_map_tile_client, style=style, z=z, x=x, y=y
+        )
+    except MapTileUnavailable as exc:
+        reason = str(exc)
+        status = 404 if reason == "map_tile_style_not_allowed" else 502
+        if reason.endswith("out_of_range"):
+            status = 400
+        raise HTTPException(status_code=status, detail="Map tile unavailable.") from exc
+    return Response(
+        content=payload,
+        media_type=content_type,
+        # Tiles are immutable for a given z/x/y, so they cache well. Kept
+        # private because the response is served behind authentication.
+        headers={"Cache-Control": "private, max-age=86400"},
+    )
+
+
+@app.get("/api/operations/map/tile-styles")
+def map_tile_styles_api(response: Response):
+    """Report which AWS tile styles this deployment can serve."""
+    response.headers["Cache-Control"] = "private, max-age=3600"
+    available = cloud_mode_enabled(settings)
+    return {
+        "available": available,
+        "styles": sorted(ALLOWED_TILESETS) if available else [],
+    }
 
 
 def _validated_heatmap_hours(hours: int) -> int:

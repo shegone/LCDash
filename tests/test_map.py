@@ -7,7 +7,8 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.main import app, geo_map_tile_client
+from app.services.aws_map_tiles import MapTileUnavailable
 from app.services.map_service import (
     build_empty_map_snapshot,
     build_map_snapshot,
@@ -264,6 +265,71 @@ class MapPageTests(unittest.TestCase):
         response = self.client.get("/api/operations/map/reference/roads")
 
         self.assertEqual(response.status_code, 404)
+
+    def test_tile_styles_report_unavailable_outside_cloud_mode(self):
+        with patch.object(settings, "deployment_mode", "on-prem"):
+            response = self.client.get("/api/operations/map/tile-styles")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"available": False, "styles": []})
+
+    def test_tile_styles_report_satellite_in_cloud_mode(self):
+        with patch.object(settings, "deployment_mode", "synthetic-disconnected"):
+            response = self.client.get("/api/operations/map/tile-styles")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"available": True, "styles": ["satellite"]})
+
+    def test_tile_route_is_not_found_outside_cloud_mode(self):
+        with patch.object(settings, "deployment_mode", "on-prem"):
+            response = self.client.get("/api/operations/map/tiles/satellite/1/0/0")
+
+        self.assertEqual(response.status_code, 404)
+
+    @patch("app.main.fetch_map_tile")
+    def test_tile_route_returns_signed_tile_bytes_in_cloud_mode(self, fetch_mock):
+        fetch_mock.return_value = (b"\x89PNG-bytes", "image/png")
+
+        with patch.object(settings, "deployment_mode", "synthetic-disconnected"):
+            response = self.client.get("/api/operations/map/tiles/satellite/4/2/1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"\x89PNG-bytes")
+        self.assertEqual(response.headers["content-type"], "image/png")
+        self.assertEqual(response.headers["cache-control"], "private, max-age=86400")
+        fetch_mock.assert_called_once_with(
+            geo_map_tile_client, style="satellite", z=4, x=2, y=1
+        )
+
+    @patch("app.main.fetch_map_tile")
+    def test_tile_route_rejects_unapproved_style_without_leaking_detail(
+        self, fetch_mock
+    ):
+        fetch_mock.side_effect = MapTileUnavailable("map_tile_style_not_allowed")
+
+        with patch.object(settings, "deployment_mode", "synthetic-disconnected"):
+            response = self.client.get("/api/operations/map/tiles/vector.basemap/1/0/0")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["detail"], "Map tile unavailable.")
+
+    @patch("app.main.fetch_map_tile")
+    def test_tile_route_maps_out_of_range_to_bad_request(self, fetch_mock):
+        fetch_mock.side_effect = MapTileUnavailable("map_tile_zoom_out_of_range")
+
+        with patch.object(settings, "deployment_mode", "synthetic-disconnected"):
+            response = self.client.get("/api/operations/map/tiles/satellite/99/0/0")
+
+        self.assertEqual(response.status_code, 400)
+
+    @patch("app.main.fetch_map_tile")
+    def test_tile_route_maps_provider_failure_to_bad_gateway(self, fetch_mock):
+        fetch_mock.side_effect = MapTileUnavailable("map_tile_request_failed")
+
+        with patch.object(settings, "deployment_mode", "synthetic-disconnected"):
+            response = self.client.get("/api/operations/map/tiles/satellite/1/0/0")
+
+        self.assertEqual(response.status_code, 502)
 
     @patch("app.main.get_live_map_snapshot")
     def test_disconnected_map_page_keeps_empty_map_shell(self, snapshot_mock):

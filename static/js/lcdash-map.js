@@ -24,15 +24,43 @@
     const defaultCenter = [37.8487, -81.9935];
     const map = L.map("operations-map", { zoomControl: true }).setView(defaultCenter, 11);
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    const streetLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
         attribution: "&copy; OpenStreetMap contributors"
     }).addTo(map);
 
-    const referenceLayerControl = L.control.layers(null, null, {
-        collapsed: window.matchMedia("(max-width: 767px)").matches,
-        position: "topright"
-    }).addTo(map);
+    const referenceLayerControl = L.control.layers(
+        {"Street map": streetLayer},
+        null,
+        {
+            collapsed: window.matchMedia("(max-width: 767px)").matches,
+            position: "topright"
+        }
+    ).addTo(map);
+
+    // Satellite imagery comes from Amazon Location through the application's
+    // signed tile proxy, so no AWS credential is exposed to the browser. The
+    // layer is offered only when the deployment reports it is available,
+    // leaving the on-prem street map untouched.
+    fetch("/api/operations/map/tile-styles", {cache: "no-store"})
+        .then(function (response) {
+            return response.ok ? response.json() : null;
+        })
+        .then(function (payload) {
+            if (!payload || !payload.available) return;
+            if (!Array.isArray(payload.styles) || !payload.styles.includes("satellite")) return;
+            const satelliteLayer = L.tileLayer(
+                "/api/operations/map/tiles/satellite/{z}/{x}/{y}",
+                {
+                    maxZoom: 19,
+                    attribution: "Imagery &copy; Amazon Location Service"
+                }
+            );
+            referenceLayerControl.addBaseLayer(satelliteLayer, "Satellite (flyover)");
+        })
+        .catch(function () {
+            // Satellite imagery is optional; the street map remains usable.
+        });
 
     function referenceLayerStyle(layerId) {
         const styles = {
