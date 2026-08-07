@@ -1239,6 +1239,30 @@
                 });
                 bubble.appendChild(citationBlock);
             }
+            const dataSources = Array.isArray(responsePayload.data_sources)
+                ? responsePayload.data_sources
+                : [];
+            if (dataSources.length) {
+                const dataSourceBlock = document.createElement("div");
+                dataSourceBlock.className = "mae-sources mae-cloud-citations";
+                dataSourceBlock.setAttribute("aria-label", "Live operational data sources");
+                const dataHeading = document.createElement("strong");
+                dataHeading.textContent = "Live data";
+                dataSourceBlock.appendChild(dataHeading);
+                dataSources.forEach(function (source) {
+                    const chip = document.createElement("span");
+                    chip.className = "mae-source-chip";
+                    if (source.available === false) {
+                        chip.style.borderColor = "#e0a030";
+                        chip.style.color = "#f2c265";
+                    }
+                    const availability = source.available === false ? " · unavailable" : "";
+                    const label = source.available === false ? "⚠ " : "";
+                    chip.textContent = `${label}${source.name || "Live source"} · ${source.detail || ""}${availability}`;
+                    dataSourceBlock.appendChild(chip);
+                });
+                bubble.appendChild(dataSourceBlock);
+            }
             if (responsePayload.report_preview) {
                 const preview = responsePayload.report_preview;
                 const panel = document.createElement("div");
@@ -1746,8 +1770,8 @@
 
     if (cloudMode) {
         setStatus("mae-ai-status", true, "Citation-only advisory");
-        setStatus("mae-db-status", false, "Not used in cloud advisory");
-        setStatus("mae-cad-status", false, "No CAD access");
+        setStatus("mae-db-status", true, "Available for analytics questions");
+        setStatus("mae-cad-status", true, "Read-only live status");
         loadCloudVoiceProfile();
     } else {
         loadStatus();

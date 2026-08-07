@@ -32,6 +32,10 @@ from app.integrations.cloud_ai.transcribe_provider import (
     MEDIA_ENCODINGS,
     AwsTranscribeStreamingProvider,
 )
+from app.integrations.cloud_ai.live_data import build_live_data_facts
+from app.integrations.cloud_ai.verified_live_advisory import (
+    VerifiedLiveAdvisory,
+)
 
 
 CLOUD_TRANSCRIBE_AUDIO_FORMATS = tuple(
@@ -128,6 +132,73 @@ class LazyBedrockConverseClient:
 
     def converse(self, **kwargs: Any) -> dict[str, Any]:
         return self._client.converse(**kwargs)
+
+
+def build_verified_live_advisory(
+    settings: Settings, *, budget: DailyRequestBudget | None = None
+) -> VerifiedLiveAdvisory:
+    """Wire the fact-phrasing advisory. Draws from the same shared budget as
+    document-grounded generation so it cannot create an uncounted third path.
+    """
+    config = build_cloud_ai_config(settings)
+    return VerifiedLiveAdvisory(
+        converse_client=LazyBedrockConverseClient(),
+        model_id=config.generation_model_id,
+        budget=budget,
+    )
+
+
+def answer_verified_live_or_none(
+    advisory: VerifiedLiveAdvisory,
+    *,
+    request_id: str,
+    tenant_id: str,
+    question: str,
+    cad_state: Any,
+    cad_status: dict[str, Any],
+    analytics_overview_fn: Any = None,
+) -> dict[str, Any] | None:
+    """Answer from verified live CAD/analytics facts, or return None.
+
+    None means no live-data intent was detected for this question at all --
+    the caller should fall through to the document-citation advisory path
+    unchanged. Once a fact is found this function owns the answer: it will
+    not silently fall through again, so a question never gets two different
+    kinds of answer.
+    """
+    facts, data_sources = build_live_data_facts(
+        question,
+        cad_state=cad_state,
+        cad_status=cad_status,
+        analytics_overview_fn=analytics_overview_fn,
+    )
+    if not facts:
+        return None
+    response = advisory.answer(
+        request_id=request_id,
+        tenant_id=tenant_id,
+        facts=facts,
+        data_sources=data_sources,
+    )
+    return {
+        "request_id": response.request_id,
+        "answer": response.answer,
+        "citations": [],
+        "data_sources": [
+            {
+                "name": source.name,
+                "kind": source.kind,
+                "detail": source.detail,
+                "available": source.available,
+                "timestamp": source.timestamp,
+            }
+            for source in response.data_sources
+        ],
+        "denied": response.denied,
+        "denial_reason": response.denial_reason,
+        "advisory_only": response.advisory_only,
+        "action_executed": response.action_executed,
+    }
 
 
 def build_activated_cloud_ai_runtime(

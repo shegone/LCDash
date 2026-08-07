@@ -142,9 +142,11 @@ from app.services.cloud_ai_service import (
     CLOUD_POLLY_VOICES,
     CLOUD_TRANSCRIBE_AUDIO_FORMATS,
     answer_cloud_advisory,
+    answer_verified_live_or_none,
     build_activated_cloud_ai_runtime,
     build_cloud_ai_config,
     build_cloud_ai_runtime,
+    build_verified_live_advisory,
     cloud_ai_status,
     cloud_mode_enabled,
     synthesize_cloud_speech,
@@ -195,6 +197,11 @@ cloud_ai_runtime = build_activated_cloud_ai_runtime(
 )
 cloud_advisory_streamer = build_cloud_advisory_streamer(
     cloud_ai_config, budget=cloud_advisory_budget
+)
+# Phrases pre-verified live CAD/analytics facts computed in Python; shares
+# the same daily budget so it cannot create an uncounted third generation path.
+cloud_verified_live_advisory = build_verified_live_advisory(
+    settings, budget=cloud_advisory_budget
 )
 # Constructing this opens no connection; the first tile request creates the
 # client. Tiles are signed server-side so no AWS credential reaches a browser.
@@ -2070,14 +2077,27 @@ def cloud_ai_advisory_api(
 ):
     if not cloud_mode_enabled(settings):
         raise HTTPException(status_code=404, detail="Cloud AI is not configured here.")
-    result = answer_cloud_advisory(
-        cloud_ai_runtime,
-        cloud_ai_config,
-        request_id=f"cloud-advisory-{secrets.token_hex(12)}",
-        question=payload.question.strip(),
-        persona=payload.persona,
-        roles=_cloud_advisory_roles(tenant_context),
+    question = payload.question.strip()
+    result = answer_verified_live_or_none(
+        cloud_verified_live_advisory,
+        request_id=f"cloud-live-{secrets.token_hex(12)}",
+        tenant_id=cloud_ai_config.tenant_id,
+        question=question,
+        cad_state=cloud_cad_runtime.state,
+        cad_status=cloud_cad_runtime.status(),
+        analytics_overview_fn=lambda period: get_analytics_overview(
+            period=period, tenant_context=tenant_context
+        ),
     )
+    if result is None:
+        result = answer_cloud_advisory(
+            cloud_ai_runtime,
+            cloud_ai_config,
+            request_id=f"cloud-advisory-{secrets.token_hex(12)}",
+            question=question,
+            persona=payload.persona,
+            roles=_cloud_advisory_roles(tenant_context),
+        )
     report_preview = _suggest_report_preview(payload.question, tenant_context)
     if report_preview is not None:
         result["report_preview"] = report_preview
@@ -2295,14 +2315,27 @@ def mindshare_chat_api(
 ):
     response.headers["Cache-Control"] = "no-store"
     if cloud_mode_enabled(settings):
-        result = answer_cloud_advisory(
-            cloud_ai_runtime,
-            cloud_ai_config,
-            request_id=f"cloud-jack-{secrets.token_hex(12)}",
-            question=chat_request.question.strip(),
-            persona="jack",
-            roles=_cloud_advisory_roles(tenant_context),
+        jack_question = chat_request.question.strip()
+        result = answer_verified_live_or_none(
+            cloud_verified_live_advisory,
+            request_id=f"cloud-jack-live-{secrets.token_hex(12)}",
+            tenant_id=cloud_ai_config.tenant_id,
+            question=jack_question,
+            cad_state=cloud_cad_runtime.state,
+            cad_status=cloud_cad_runtime.status(),
+            analytics_overview_fn=lambda period: get_analytics_overview(
+                period=period, tenant_context=tenant_context
+            ),
         )
+        if result is None:
+            result = answer_cloud_advisory(
+                cloud_ai_runtime,
+                cloud_ai_config,
+                request_id=f"cloud-jack-{secrets.token_hex(12)}",
+                question=jack_question,
+                persona="jack",
+                roles=_cloud_advisory_roles(tenant_context),
+            )
         result["interaction_id"] = ""
         result["audit_saved"] = False
         report_preview = _suggest_report_preview(chat_request.question, tenant_context)
@@ -2337,14 +2370,27 @@ def mindshare_chat_stream_api(
     ] = None,
 ):
     if cloud_mode_enabled(settings):
-        result = answer_cloud_advisory(
-            cloud_ai_runtime,
-            cloud_ai_config,
-            request_id=f"cloud-jack-{secrets.token_hex(12)}",
-            question=chat_request.question.strip(),
-            persona="jack",
-            roles=_cloud_advisory_roles(tenant_context),
+        jack_question = chat_request.question.strip()
+        result = answer_verified_live_or_none(
+            cloud_verified_live_advisory,
+            request_id=f"cloud-jack-live-{secrets.token_hex(12)}",
+            tenant_id=cloud_ai_config.tenant_id,
+            question=jack_question,
+            cad_state=cloud_cad_runtime.state,
+            cad_status=cloud_cad_runtime.status(),
+            analytics_overview_fn=lambda period: get_analytics_overview(
+                period=period, tenant_context=tenant_context
+            ),
         )
+        if result is None:
+            result = answer_cloud_advisory(
+                cloud_ai_runtime,
+                cloud_ai_config,
+                request_id=f"cloud-jack-{secrets.token_hex(12)}",
+                question=jack_question,
+                persona="jack",
+                roles=_cloud_advisory_roles(tenant_context),
+            )
         result["interaction_id"] = ""
         result["audit_saved"] = False
         report_preview = _suggest_report_preview(chat_request.question, tenant_context)

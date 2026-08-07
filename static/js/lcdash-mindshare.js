@@ -1082,6 +1082,31 @@
             bubble.appendChild(sources);
         }
 
+        const dataSources = payload && Array.isArray(payload.data_sources)
+            ? payload.data_sources
+            : [];
+        if (role === "assistant" && dataSources.length) {
+            const dataSourceBlock = document.createElement("div");
+            dataSourceBlock.className = "mae-sources mae-cloud-citations";
+            dataSourceBlock.setAttribute("aria-label", "Live operational data sources");
+            const dataHeading = document.createElement("strong");
+            dataHeading.textContent = "Live data";
+            dataSourceBlock.appendChild(dataHeading);
+            const dataList = document.createElement("ul");
+            dataSources.forEach(function (source) {
+                const item = document.createElement("li");
+                if (source.available === false) {
+                    item.style.color = "#f2c265";
+                }
+                const availability = source.available === false ? " · unavailable" : "";
+                const label = source.available === false ? "⚠ " : "";
+                item.textContent = `${label}${source.name || "Live source"} · ${source.detail || ""}${availability}`;
+                dataList.appendChild(item);
+            });
+            dataSourceBlock.appendChild(dataList);
+            bubble.appendChild(dataSourceBlock);
+        }
+
         if (role === "assistant") {
             const feedback = buildFeedback(payload && payload.interaction_id);
             if (feedback) bubble.appendChild(feedback);

@@ -53,8 +53,15 @@ class MaeCloudChatPresentationTests(unittest.TestCase):
     def test_cloud_presentation_discloses_excluded_capabilities(self):
         template = self.read("templates/mae.html")
 
-        self.assertIn("no memory, feedback, tools, reports, widgets, or CAD actions", template)
-        self.assertIn("must show\n                citations", template)
+        self.assertIn(
+            "no memory,\n                feedback, tools, reports, widgets, or CAD write/dispatch actions",
+            template,
+        )
+        # Document answers still require citations; live CAD/analytics
+        # answers are a distinct, separately-disclosed capability that does
+        # not carry a document citation (see verified_live_advisory.py).
+        self.assertIn("approved retrieved documents (with citations)", template)
+        self.assertIn("CAD access\n                is read-only", template)
         self.assertIn("Cloud conversational voice and transcription are not enabled", template)
 
 

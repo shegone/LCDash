@@ -14,6 +14,8 @@ from .contracts import (
 from .provider_config import CloudAiProviderConfig
 from .polly_provider import AwsPollySpeechProvider, build_polly_client
 from .runtime import CloudAiRuntime, CloudAiRuntimeStatus, CloudAiRuntimeUnavailable
+from .live_data import LiveDataSource, VerifiedFact, build_live_data_facts
+from .verified_live_advisory import VerifiedLiveAdvisory, VerifiedLiveResponse
 
 __all__ = [
     "AdvisoryCitation",
@@ -31,4 +33,9 @@ __all__ = [
     "PollySpeechRequest",
     "PollyVoice",
     "TranscribePushToTalkRequest",
+    "LiveDataSource",
+    "VerifiedFact",
+    "build_live_data_facts",
+    "VerifiedLiveAdvisory",
+    "VerifiedLiveResponse",
 ]
