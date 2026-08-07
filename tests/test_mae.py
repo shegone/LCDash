@@ -86,6 +86,32 @@ class MAEPageTests(unittest.TestCase):
             script,
         )
 
+    def test_mae_browser_formats_analytics_timestamps_as_eastern_not_raw_utc(self):
+        # Regression test: the report-preview freshness text and the evidence
+        # panel's source timestamp were both rendered as raw backend
+        # timestamp strings with no client-side formatting -- correct after
+        # the backend fix, but still full ISO strings with microseconds
+        # rather than the clean 24hr Eastern format used everywhere else.
+        script = (Path(__file__).parents[1] / "static/js/lcdash-mae.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "const freshnessDisplay = preview.freshness && window.LCDashTime",
+            script,
+        )
+        self.assertIn(
+            "window.LCDashTime.formatCadDisplayTime(preview.freshness)",
+            script,
+        )
+        self.assertIn(
+            "const evidenceTimestamp = group.timestamp && window.LCDashTime",
+            script,
+        )
+        self.assertIn(
+            "window.LCDashTime.formatCadDisplayTime(group.timestamp)",
+            script,
+        )
+
     def test_mae_write_refusal_includes_assurance_and_timing(self):
         result = ask_mae("Dispatch MED10 and close the call.")
         self.assertFalse(result["write_access"])

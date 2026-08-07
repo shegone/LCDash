@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.services.analytics_reporting import (
     EXCLUDED_DISPATCHER_IDENTITY,
+    LOCAL_TIMEZONE,
     _agency_display_label,
     AnalyticsRangeError,
     get_analytics_overview,
@@ -79,6 +80,20 @@ class AnalyticsWindowTests(unittest.TestCase):
         )
         self.assertNotIn("password", str(result).lower())
         self.assertNotIn("database_url", str(result).lower())
+
+    def test_latest_data_at_conversion_matches_generated_at_timezone(self):
+        # Regression test: latest_data_at came straight from a raw UTC
+        # database timestamp (MAX(source_collected_at)) with no timezone
+        # conversion, unlike generated_at in the same response, which
+        # already correctly used LOCAL_TIMEZONE. The observed bug: a report
+        # preview showed "2026-08-05T20:17:03.622565+00:00" instead of
+        # Eastern time. The fix applies the exact same conversion
+        # generated_at already used.
+        raw_utc_value = datetime(2026, 8, 5, 20, 17, 3, 622565, tzinfo=timezone.utc)
+        converted = raw_utc_value.astimezone(LOCAL_TIMEZONE).isoformat()
+        self.assertTrue(converted.startswith("2026-08-05T16:17:03.622565"))
+        self.assertTrue(converted.endswith("-04:00"))
+        self.assertNotIn("+00:00", converted)
 
 
 class AnalyticsOverviewRouteTests(unittest.TestCase):

@@ -1049,7 +1049,10 @@
             const panel = document.createElement("div");
             panel.className = "mae-report-preview";
             const notice = document.createElement("p");
-            notice.textContent = `${preview.source || "approved source"} · ${preview.freshness || "freshness unavailable"}. ${preview.disclaimer || "Review before saving or exporting."}`;
+            const freshnessDisplay = preview.freshness && window.LCDashTime
+                ? window.LCDashTime.formatCadDisplayTime(preview.freshness)
+                : (preview.freshness || "freshness unavailable");
+            notice.textContent = `${preview.source || "approved source"} · ${freshnessDisplay}. ${preview.disclaimer || "Review before saving or exporting."}`;
             const save = document.createElement("button");
             save.type = "button";
             save.textContent = "Save as Template";

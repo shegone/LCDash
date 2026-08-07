@@ -62,6 +62,19 @@ class MindsharePageTests(unittest.TestCase):
         )
         self.assertNotIn("persona=mae", mae_script)
 
+    def test_jack_report_preview_formats_freshness_as_eastern_not_raw_utc(self):
+        script = (Path(__file__).parents[1] / "static/js/lcdash-mindshare.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "const freshnessDisplay = preview.freshness && window.LCDashTime",
+            script,
+        )
+        self.assertIn(
+            "window.LCDashTime.formatCadDisplayTime(preview.freshness)",
+            script,
+        )
+
     def test_mindshare_technical_page_carries_server_rendered_cloud_mode(self):
         response = self.client.get("/mindshare/technical")
 

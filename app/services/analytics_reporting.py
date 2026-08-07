@@ -848,7 +848,7 @@ def _query_overview(
         "start_date": window.start_date,
         "end_date": window.end_date,
         "generated_at": datetime.now(LOCAL_TIMEZONE).isoformat(),
-        "latest_data_at": latest_data.isoformat() if latest_data else "",
+        "latest_data_at": latest_data.astimezone(LOCAL_TIMEZONE).isoformat() if latest_data else "",
         "metrics": {
             "total_calls": total_calls,
             "unit_responses": int(metrics_row[1] or 0),
