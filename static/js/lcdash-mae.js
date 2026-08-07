@@ -1144,6 +1144,35 @@
         window.setTimeout(function () { frame.remove(); }, 1000);
     }
 
+    // Read one answer aloud on demand, independent of hands-free voice mode.
+    // Mirrors JACK's Listen control so both assistants behave the same way.
+    function appendListenButton(bubble, answerText) {
+        if (!answerText) return;
+        const readButton = document.createElement("button");
+        readButton.type = "button";
+        readButton.className = "mae-read-aloud";
+        readButton.innerHTML = '<i class="bi bi-volume-up-fill"></i> Listen';
+        readButton.addEventListener("click", async function () {
+            readButton.disabled = true;
+            readButton.innerHTML = '<i class="bi bi-soundwave"></i> Speaking…';
+            // Pause hands-free capture so the answer is not recorded as input.
+            if (voiceModeActive) stopListeningCycle(true);
+            try {
+                const outcome = await speakAnswer(answerText);
+                if (outcome && outcome.queued && !outcome.played) {
+                    window.alert("MAE could not play this answer.");
+                }
+            } catch (error) {
+                window.alert(error.message || "MAE could not play this answer.");
+            } finally {
+                readButton.disabled = false;
+                readButton.innerHTML = '<i class="bi bi-volume-up-fill"></i> Listen';
+                if (voiceModeActive && !maeBusy) beginListeningCycle();
+            }
+        });
+        bubble.appendChild(readButton);
+    }
+
     function appendPrintButton(bubble, answerText, citations, questionText) {
         if (!answerText) return;
         const printButton = document.createElement("button");
@@ -1232,6 +1261,7 @@
                 panel.append(notice, save);
                 bubble.appendChild(panel);
             }
+            appendListenButton(bubble, content);
             appendPrintButton(bubble, content, citations, responsePayload.question);
             article.append(avatar, bubble);
             messages.appendChild(article);
@@ -1278,6 +1308,7 @@
         }
 
         if (role === "assistant") {
+            appendListenButton(bubble, content);
             appendPrintButton(bubble, content, [], responsePayload.question);
 
             const feedback = buildFeedback(responsePayload.interaction_id);
