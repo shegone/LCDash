@@ -19,6 +19,7 @@ from app.integrations.cloud_ai import (
     PollySpeechRequest,
     PollyVoice,
     TranscribePushToTalkRequest,
+    voice_for_persona,
 )
 from app.integrations.cloud_ai.contracts import PushToTalkAudioFormat
 from app.integrations.cloud_ai.bedrock_retrieval import (
@@ -270,7 +271,7 @@ def build_citation_only_runtime(
 
 
 def cloud_ai_status(
-    config: CloudAiProviderConfig, runtime: CloudAiRuntime
+    config: CloudAiProviderConfig, runtime: CloudAiRuntime, persona: str = "mae"
 ) -> dict[str, Any]:
     status = runtime.status
     documents_ready = bool(config.documents_ingested and status.rag_available)
@@ -302,7 +303,7 @@ def cloud_ai_status(
         "tts": {
             "ready": status.tts_ready,
             "disabled_reason": tts_reason,
-            "voice": config.polly_voice.value,
+            "voice": voice_for_persona(config, persona).value,
             "model": "Amazon Polly neural",
         },
         "stt": {

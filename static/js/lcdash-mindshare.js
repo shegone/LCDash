@@ -97,7 +97,8 @@
     async function loadVoiceStatus() {
         if (!voiceToggle) return;
         try {
-            const response = await fetch("/api/voice/status", {
+            // persona=jack so the shared status endpoint reports JACK's own voice, not MAE's default.
+            const response = await fetch("/api/voice/status?persona=jack", {
                 cache: "no-store"
             });
             const status = await response.json();

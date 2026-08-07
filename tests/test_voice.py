@@ -53,6 +53,27 @@ class VoicePageTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["connected"])
 
+    @patch("app.main.get_voice_status")
+    def test_voice_status_endpoint_accepts_a_persona_and_rejects_unknown_ones(
+        self, get_status
+    ):
+        # /api/voice/status is the endpoint both MAE's and JACK's frontends
+        # poll to learn which Polly voice to ask for; it must accept a
+        # persona for either assistant and reject anything else outright,
+        # the same way the sibling advisory/speech request bodies do.
+        get_status.return_value = {
+            "connected": True,
+            "tts": {"ready": True},
+            "jack_tts": {"ready": True},
+            "stt": {"ready": True},
+        }
+        for persona in ("mae", "jack"):
+            response = self.client.get(f"/api/voice/status?persona={persona}")
+            self.assertEqual(response.status_code, 200)
+
+        rejected = self.client.get("/api/voice/status?persona=bogus")
+        self.assertEqual(rejected.status_code, 422)
+
     @patch("app.main.synthesize_speech")
     def test_speech_endpoint(self, synthesize):
         synthesize.return_value = (b"audio", "audio/mpeg")
@@ -68,6 +89,35 @@ class VoicePageTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b"audio")
         self.assertEqual(response.headers["content-type"], "audio/mpeg")
+
+    @patch("app.main.synthesize_cloud_sentence")
+    def test_cloud_sentence_speech_endpoint_forwards_persona_per_assistant(
+        self, synthesize
+    ):
+        # End-to-end regression test for the reported bug: hits the exact
+        # HTTP contract both MAE's and JACK's "Listen" buttons call and
+        # confirms the persona each browser sends actually reaches the
+        # voice resolver, instead of being accepted and silently dropped.
+        synthesize.return_value = b"synthetic-mp3"
+        with patch("app.main.settings.deployment_mode", "synthetic-disconnected"):
+            jack_response = self.client.post(
+                "/api/cloud-ai/speech/sentence",
+                json={"text": "Copy that.", "persona": "jack", "voice": ""},
+            )
+            mae_response = self.client.post(
+                "/api/cloud-ai/speech/sentence",
+                json={"text": "Copy that.", "persona": "mae", "voice": ""},
+            )
+            rejected = self.client.post(
+                "/api/cloud-ai/speech/sentence",
+                json={"text": "Copy that.", "persona": "bogus", "voice": ""},
+            )
+
+        self.assertEqual(jack_response.status_code, 200)
+        self.assertEqual(mae_response.status_code, 200)
+        self.assertEqual(rejected.status_code, 422)
+        self.assertEqual(synthesize.call_args_list[0].kwargs["persona"], "jack")
+        self.assertEqual(synthesize.call_args_list[1].kwargs["persona"], "mae")
 
     def test_lcdash_pronunciation_rules(self):
         self.assertEqual(

@@ -28,6 +28,7 @@ from app.integrations.cloud_ai import (
     CloudAiRuntimeUnavailable,
     PollySpeechRequest,
     PollyVoice,
+    voice_for_persona,
 )
 from app.integrations.cloud_ai.provider_config import CloudAiMode
 from app.integrations.cloud_ai.bedrock_retrieval import (
@@ -720,15 +721,26 @@ def synthesize_cloud_sentence(
     request_id: str,
     text: str,
     voice: str = "",
+    persona: str = "mae",
 ) -> bytes:
-    """Synthesize one sanitized sentence. Source URLs can never reach Polly."""
+    """Synthesize one sanitized sentence. Source URLs can never reach Polly.
+
+    JACK is pinned to its own voice (see ``voice_for_persona``) regardless of
+    what ``voice`` a caller supplies, so a stale or mistaken client value can
+    never make JACK speak in MAE's voice. Every other persona keeps the prior
+    behavior: an explicit ``voice`` wins, otherwise the configured default.
+    """
     spoken = sanitize_spoken_text(text)
     if not spoken:
         raise CloudAiRuntimeUnavailable("empty_speech_text")
-    try:
-        selected_voice = PollyVoice(voice or config.polly_voice.value)
-    except ValueError as exc:
-        raise CloudAiRuntimeUnavailable("polly_voice_not_allowed") from exc
+    default_voice = voice_for_persona(config, persona)
+    if persona == "jack":
+        selected_voice = default_voice
+    else:
+        try:
+            selected_voice = PollyVoice(voice) if voice else default_voice
+        except ValueError as exc:
+            raise CloudAiRuntimeUnavailable("polly_voice_not_allowed") from exc
     return runtime.synthesize(
         PollySpeechRequest(request_id, config.tenant_id, spoken, selected_voice)
     )

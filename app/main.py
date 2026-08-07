@@ -2142,19 +2142,25 @@ def voice_lab_page(request: Request):
 
 
 @app.get("/api/voice/status")
-def voice_status_api(response: Response):
+def voice_status_api(
+    response: Response,
+    persona: str = Query(default="mae", pattern="^(mae|jack)$"),
+):
     response.headers["Cache-Control"] = "no-store"
     if cloud_mode_enabled(settings):
-        return cloud_ai_status(cloud_ai_config, cloud_ai_runtime)
+        return cloud_ai_status(cloud_ai_config, cloud_ai_runtime, persona=persona)
     return get_voice_status()
 
 
 @app.get("/api/cloud-ai/status")
-def cloud_ai_status_api(response: Response):
+def cloud_ai_status_api(
+    response: Response,
+    persona: str = Query(default="mae", pattern="^(mae|jack)$"),
+):
     response.headers["Cache-Control"] = "no-store"
     if not cloud_mode_enabled(settings):
         raise HTTPException(status_code=404, detail="Cloud AI is not configured here.")
-    return cloud_ai_status(cloud_ai_config, cloud_ai_runtime)
+    return cloud_ai_status(cloud_ai_config, cloud_ai_runtime, persona=persona)
 
 
 @app.post("/api/cloud-ai/advisory")
@@ -2278,6 +2284,7 @@ def cloud_ai_sentence_speech_api(payload: CloudSentenceSpeechRequest):
             request_id=f"cloud-polly-{secrets.token_hex(12)}",
             text=payload.text,
             voice=payload.voice,
+            persona=payload.persona,
         )
     except CloudAiRuntimeUnavailable as exc:
         status = cloud_ai_status(cloud_ai_config, cloud_ai_runtime)

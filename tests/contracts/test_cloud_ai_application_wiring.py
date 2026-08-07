@@ -7,7 +7,11 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from app.integrations.cloud_ai import CloudAiRuntimeUnavailable
+from app.integrations.cloud_ai import (
+    CloudAiRuntime,
+    CloudAiRuntimeUnavailable,
+    PollyVoice,
+)
 from app.services.cloud_ai_service import (
     CLOUD_POLLY_VOICES,
     CLOUD_TRANSCRIBE_AUDIO_FORMATS,
@@ -20,6 +24,7 @@ from app.services.cloud_ai_service import (
     synthesize_cloud_speech,
     transcribe_cloud_speech,
 )
+from app.services.cloud_ai_streaming import synthesize_cloud_sentence
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -69,6 +74,96 @@ class CloudAiApplicationWiringTests(unittest.TestCase):
         self.assertEqual(
             {voice["id"] for voice in CLOUD_POLLY_VOICES}, {"Matthew", "Joanna"}
         )
+        self.network.assert_not_called()
+
+    def test_status_reports_jacks_own_voice_without_disturbing_maes(self):
+        # Regression test: the /api/voice/status and /api/cloud-ai/status
+        # endpoints used to call cloud_ai_status() with no persona at all, so
+        # every caller -- MAE's page or JACK's -- received the identical,
+        # single configured voice. JACK's frontend trusted that value
+        # verbatim, so it ended up asking Polly for MAE's voice.
+        settings = _settings(cloud_ai_mode="advisory-rag", cloud_ai_voice_enabled=True)
+        config = build_cloud_ai_config(settings)
+        runtime = build_cloud_ai_runtime(settings)
+        # The default persona (what every pre-fix caller effectively used)
+        # and an explicit "mae" persona must keep reporting the exact same,
+        # unchanged voice.
+        self.assertEqual(cloud_ai_status(config, runtime)["tts"]["voice"], "Joanna")
+        self.assertEqual(
+            cloud_ai_status(config, runtime, persona="mae")["tts"]["voice"],
+            "Joanna",
+        )
+        # JACK must get its own, different voice from that same status call.
+        self.assertEqual(
+            cloud_ai_status(config, runtime, persona="jack")["tts"]["voice"],
+            "Matthew",
+        )
+        self.network.assert_not_called()
+
+    def test_jack_sentence_speech_is_pinned_to_its_own_voice(self):
+        # Regression test for the reported bug: JACK's Listen button played
+        # audio in MAE's voice. synthesize_cloud_sentence() backs the
+        # /api/cloud-ai/speech/sentence endpoint both personas' "Listen"
+        # buttons call; it used to accept a "persona" field and silently
+        # discard it, trusting the caller-supplied "voice" unconditionally.
+        settings = _settings(cloud_ai_mode="advisory-rag", cloud_ai_voice_enabled=True)
+        config = build_cloud_ai_config(settings)
+
+        class _RecordingPolly:
+            def __init__(self):
+                self.requests = []
+
+            def synthesize(self, request):
+                self.requests.append(request)
+                return b"synthetic-mp3"
+
+        polly = _RecordingPolly()
+        runtime = CloudAiRuntime(config, polly=polly)
+
+        # MAE keeps today's exact behavior: an explicit voice is honored...
+        synthesize_cloud_sentence(
+            runtime,
+            config,
+            request_id="request-cloud-2001",
+            text="Call 911.",
+            voice="Matthew",
+            persona="mae",
+        )
+        self.assertEqual(polly.requests[-1].voice, PollyVoice.MATTHEW)
+        # ...and an empty voice still falls back to the configured default.
+        synthesize_cloud_sentence(
+            runtime,
+            config,
+            request_id="request-cloud-2002",
+            text="Call 911.",
+            voice="",
+            persona="mae",
+        )
+        self.assertEqual(polly.requests[-1].voice, PollyVoice.JOANNA)
+
+        # JACK always gets Matthew when no voice is supplied (the cold-start
+        # path, before the browser has fetched a status response)...
+        synthesize_cloud_sentence(
+            runtime,
+            config,
+            request_id="request-cloud-2003",
+            text="Call 911.",
+            voice="",
+            persona="jack",
+        )
+        self.assertEqual(polly.requests[-1].voice, PollyVoice.MATTHEW)
+        # ...and also when a caller explicitly sends MAE's voice alongside
+        # persona=jack -- the exact failure mode that shipped, since the
+        # status endpoint used to hand every caller the same voice string.
+        synthesize_cloud_sentence(
+            runtime,
+            config,
+            request_id="request-cloud-2004",
+            text="Call 911.",
+            voice="Joanna",
+            persona="jack",
+        )
+        self.assertEqual(polly.requests[-1].voice, PollyVoice.MATTHEW)
         self.network.assert_not_called()
 
     def test_cloud_transcription_is_wired_but_rejects_unstreamable_audio(self):

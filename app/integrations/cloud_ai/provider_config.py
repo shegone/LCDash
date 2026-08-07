@@ -152,3 +152,16 @@ class CloudAiProviderConfig:
             ),
             action_tools=tuple(str(item) for item in raw_tools),
         )
+
+
+def voice_for_persona(config: CloudAiProviderConfig, persona: str) -> PollyVoice:
+    """Resolve the Polly voice a persona speaks with.
+
+    JACK always uses its own distinct voice (Matthew) so the two assistants
+    can never be confused, regardless of what a caller requests. Every other
+    persona -- MAE, or anything unrecognized -- keeps the prior, unchanged
+    behavior: the single deployment-wide operator-configured default.
+    """
+    if persona == "jack":
+        return PollyVoice.MATTHEW
+    return config.polly_voice

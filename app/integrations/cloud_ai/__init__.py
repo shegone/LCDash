@@ -11,7 +11,7 @@ from .contracts import (
     PollyVoice,
     TranscribePushToTalkRequest,
 )
-from .provider_config import CloudAiProviderConfig
+from .provider_config import CloudAiProviderConfig, voice_for_persona
 from .polly_provider import AwsPollySpeechProvider, build_polly_client
 from .runtime import CloudAiRuntime, CloudAiRuntimeStatus, CloudAiRuntimeUnavailable
 from .live_data import LiveDataSource, VerifiedFact, build_live_data_facts
@@ -33,6 +33,7 @@ __all__ = [
     "PollySpeechRequest",
     "PollyVoice",
     "TranscribePushToTalkRequest",
+    "voice_for_persona",
     "LiveDataSource",
     "VerifiedFact",
     "build_live_data_facts",

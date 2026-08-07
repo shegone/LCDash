@@ -41,6 +41,27 @@ class MindsharePageTests(unittest.TestCase):
         self.assertIn('id="jack-voice-player"', response.text)
         self.assertIn("/static/js/lcdash-mindshare.js", response.text)
 
+    def test_jack_voice_status_request_is_persona_scoped(self):
+        # Regression test: JACK's Listen button was playing audio in MAE's
+        # voice because loadVoiceStatus() fetched the same, persona-blind
+        # "/api/voice/status" MAE's page uses, so the "cloudVoiceName" it
+        # then sent back to the speech endpoint was always MAE's voice.
+        script = (Path(__file__).parents[1] / "static/js/lcdash-mindshare.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('fetch("/api/voice/status?persona=jack", {', script)
+        self.assertIn('persona: "jack"', script)
+
+        mae_script = (Path(__file__).parents[1] / "static/js/lcdash-mae.js").read_text(
+            encoding="utf-8"
+        )
+        # MAE's own status fetch must stay exactly as it was before this
+        # fix: unscoped, relying on the server's unchanged "mae" default.
+        self.assertIn(
+            'fetch("/api/cloud-ai/status", {cache: "no-store"});', mae_script
+        )
+        self.assertNotIn("persona=mae", mae_script)
+
     def test_jack_hines_tribute_page_is_separate_from_assistant(self):
         response = self.client.get("/mindshare/jack-hines")
 
