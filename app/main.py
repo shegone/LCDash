@@ -962,10 +962,7 @@ def station_alerts_api(
                 "Approved cloud assignment source unavailable.",
             )
         snapshot = build_cloud_unit_snapshot(cloud_cad_runtime.state)
-        alert_data = build_station_alert_snapshot(snapshot, station)
-        for alert in alert_data["alerts"]:
-            alert.pop("announcement", None)
-        return alert_data
+        return build_station_alert_snapshot(snapshot, station)
 
     try:
         return get_live_station_alert_snapshot(station)
@@ -1226,8 +1223,6 @@ def station_alerts_page(
         if _cloud_cad_bridge_enabled():
             snapshot = build_cloud_unit_snapshot(cloud_cad_runtime.state)
             alert_data = build_station_alert_snapshot(snapshot, station)
-            for alert in alert_data["alerts"]:
-                alert.pop("announcement", None)
         else:
             alert_data = build_empty_station_alert_snapshot(
                 station,

@@ -19,17 +19,21 @@
     .dispatch-incident { font-size: clamp(1.6rem,4vw,2.6rem); font-weight: 800; }
     .dispatch-location { margin-top: .5rem; color: #d7e8f5; font-size: 1.2rem; }
     .dispatch-meta-box { height: 100%; padding: 1rem; border: 1px solid rgba(255,255,255,.1); border-radius: .75rem; background: rgba(255,255,255,.035); }
+    .arm-status { display: inline-flex; align-items: center; gap: 8px; padding: 8px 13px; border-radius: 999px; background: rgba(255,82,82,.13); border: 1px solid rgba(255,82,82,.35); color: #ff9191; font-weight: 900; }
+    .arm-status.armed { background: rgba(105,255,185,.12); border-color: rgba(105,255,185,.4); color: #69ffb9; }
+    .status-dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; box-shadow: 0 0 10px currentColor; }
 </style>
 <section class="command-page" data-cloud-station-alerts="true">
     <div class="glass p-4 mb-4">
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
             <div>
-                <div class="eyebrow">CLOUD READ-ONLY ALERT</div>
+                <div class="eyebrow">SUPPLEMENTARY ALERT DISPLAY — ADVISORY ONLY</div>
                 <h1 class="h2 mb-2">Station Assignment Alerts</h1>
                 <p class="text-secondary mb-0">
-                    Select stations to watch for assignment events visible in this browser.
-                    This page cannot acknowledge CAD, dispatch, page, play tones or speech,
-                    activate station hardware, or trigger any operational output.
+                    Select stations to watch for assignment events. This is a supplementary
+                    display, not a substitute for your station's primary dispatch notification
+                    system, which remains unchanged. This page cannot acknowledge CAD, dispatch,
+                    page, activate station hardware, or trigger any operational output.
                 </p>
             </div>
             <div class="text-end">
@@ -71,12 +75,25 @@
                     Selection is stored only in this browser and does not configure CAD or station equipment.
                 </div>
             </div>
-            <div class="col-lg-4">
-                <div class="command-unavailable-state p-3" role="note">
-                    <strong>Visual notification only.</strong><br>
-                    No audio, speech, tone, page, webhook acknowledgment, or external device output.
+            <div class="col-lg-auto">
+                <button id="arm-station-alerts" type="button" class="btn btn-outline-info px-4">
+                    <i class="bi bi-volume-up-fill"></i> Enable Loud Alerts
+                </button>
+            </div>
+            <div class="col-lg-auto">
+                <button id="test-station-alert" type="button" class="btn btn-outline-warning px-4">
+                    <i class="bi bi-bell-fill"></i> Test Full Alert
+                </button>
+            </div>
+            <div class="col-lg-auto">
+                <div id="station-alert-arm-status" class="arm-status">
+                    <span class="status-dot"></span>
+                    SOUND DISARMED
                 </div>
             </div>
+        </div>
+        <div id="station-alert-message" class="text-secondary small mt-3">
+            "Test Full Alert" enables browser audio and plays the tone and spoken announcement once, using sample data.
         </div>
     </div>
 
@@ -94,26 +111,28 @@
 
 <div id="cloud-station-alert-overlay" class="dispatch-overlay" role="dialog" aria-modal="true" aria-label="Cloud-visible station assignment alert">
     <div class="dispatch-alert-card">
-        <div class="dispatch-banner">CLOUD-VISIBLE ALERT ONLY — <span id="alert-station-name">STATION</span></div>
+        <div class="dispatch-banner">SUPPLEMENTARY ALERT — <span id="alert-station-name">STATION</span></div>
         <div class="dispatch-content">
             <div id="alert-incident-code" class="eyebrow">ASSIGNMENT EVENT</div>
             <div id="alert-incident-title" class="dispatch-incident">INCIDENT</div>
             <div id="alert-location" class="dispatch-location">Location unavailable</div>
+            <div id="alert-sound-notice" class="text-warning fw-bold mt-2"></div>
             <div class="row g-3 mt-3">
                 <div class="col-md-4"><div class="dispatch-meta-box"><div class="eyebrow">UNITS</div><div id="alert-units" class="fs-4 fw-bold">—</div></div></div>
                 <div class="col-md-4"><div class="dispatch-meta-box"><div class="eyebrow">CFS NUMBER</div><div id="alert-cfs-number" class="fs-5 fw-bold">—</div></div></div>
                 <div class="col-md-4"><div class="dispatch-meta-box"><div class="eyebrow">ASSIGNMENT TIME</div><div id="alert-dispatch-time" class="fs-5 fw-bold">—</div></div></div>
             </div>
             <div class="command-unavailable-state p-3 mt-4">
-                Display only. Returning to Dashboard does not acknowledge or change the source event.
+                Advisory display only. Closing this alert does not acknowledge or change the source event,
+                and does not affect your station's primary dispatch notification system.
             </div>
-            <a id="acknowledge-station-alert" class="btn btn-light btn-lg w-100 mt-4 py-3 fw-bold" href="/dashboard">
-                <i class="bi bi-arrow-left-circle-fill"></i> Return to Dashboard
-            </a>
+            <button id="close-station-alert" type="button" class="btn btn-light btn-lg w-100 mt-4 py-3 fw-bold">
+                <i class="bi bi-check-circle-fill"></i> Close Alert
+            </button>
         </div>
     </div>
 </div>
 
 <script id="station-alert-data" type="application/json">{{ alert_data|tojson }}</script>
-<script src="/static/js/lcdash-station-alerts-cloud.js?v=0.1.0"></script>
+<script src="/static/js/lcdash-station-alerts-cloud.js?v=0.2.0"></script>
 {% endblock %}

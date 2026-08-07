@@ -47,7 +47,7 @@ def cloud_unit_snapshot():
     }
 
 
-def test_cloud_page_uses_visual_only_template_and_never_calls_legacy_station_source():
+def test_cloud_page_uses_supplementary_alert_template_and_never_calls_legacy_station_source():
     with (
         patch("app.main.settings.deployment_mode", "synthetic-disconnected"),
         patch("app.main._cloud_cad_bridge_enabled", return_value=True),
@@ -58,19 +58,25 @@ def test_cloud_page_uses_visual_only_template_and_never_calls_legacy_station_sou
 
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-store"
-    assert "CLOUD READ-ONLY ALERT" in response.text
-    assert "CLOUD-VISIBLE ALERT ONLY" in response.text
-    assert 'href="/dashboard"' in response.text
-    assert "Return to Dashboard" in response.text
+    assert "SUPPLEMENTARY ALERT DISPLAY" in response.text
+    assert "not a substitute for your station's primary dispatch notification" in response.text
+    assert '<button id="close-station-alert"' in response.text
+    assert "Close Alert" in response.text
     assert "lcdash-station-alerts-cloud.js" in response.text
     assert "lcdash-station-alerts.js?v=0.5.1" not in response.text
-    assert "Enable Loud Alerts" not in response.text
-    assert "Test Full Alert" not in response.text
+    # Advisory audio parity is deliberately approved for this page (Ted,
+    # 2026-08-07) as a supplementary fire-station display -- the real
+    # on-prem dispatch/tone system stays authoritative and unchanged. See
+    # docs/planning/CLOUD_UI_FULL_PARITY_PROGRAM_2026-08-06.md and the
+    # override recorded in memory (lcdash-cloud-station-alerts-decision).
+    assert "Enable Loud Alerts" in response.text
+    assert "Test Full Alert" in response.text
+    # Cloud speech still never calls on-prem's local Speaches endpoint.
     assert "/api/voice/speech" not in response.text
     legacy_source.assert_not_called()
 
 
-def test_cloud_api_uses_in_memory_read_snapshot_and_removes_announcement():
+def test_cloud_api_uses_in_memory_read_snapshot_and_includes_announcement():
     with (
         patch("app.main.settings.deployment_mode", "synthetic-disconnected"),
         patch("app.main._cloud_cad_bridge_enabled", return_value=True),
@@ -86,7 +92,10 @@ def test_cloud_api_uses_in_memory_read_snapshot_and_removes_announcement():
     assert payload["connected"] is True
     assert payload["selected_stations"] == ["STA 100"]
     assert payload["alerts"][0]["event_id"]
-    assert "announcement" not in payload["alerts"][0]
+    announcement = payload["alerts"][0]["announcement"]
+    assert announcement.startswith(
+        "Station 100, respond to Approved display location for a synthetic assignment."
+    )
     legacy_source.assert_not_called()
 
 
@@ -111,7 +120,7 @@ def test_cloud_api_fails_closed_without_approved_read_source():
     legacy_source.assert_not_called()
 
 
-def test_cloud_script_contains_no_audio_speech_or_outbound_action_path():
+def test_cloud_script_has_fake_tone_and_advisory_speech_but_no_cad_write_path():
     script = (ROOT / "static/js/lcdash-station-alerts-cloud.js").read_text(
         encoding="utf-8"
     )
@@ -120,19 +129,32 @@ def test_cloud_script_contains_no_audio_speech_or_outbound_action_path():
     )
 
     assert 'fetch("/api/operations/station-alerts?' in script
-    for forbidden in (
-        "Audio(",
-        "AudioContext",
-        "/api/voice/speech",
-        "playDispatchTone",
-        "speechSynthesis",
-        "acknowledge",
+    # The tone is synthesized entirely client-side (a WAV built from sine
+    # segments) -- no audio asset files, no real dispatch hardware, no CAD
+    # dependency at all.
+    for expected in (
+        "createToneWave",
         "dispatchAudio",
+        "playDispatchTone",
+        "new Audio(",
     ):
+        assert expected in script
+    # Cloud speech reuses MAE's advisory-only Amazon Polly endpoint, never
+    # on-prem's local Speaches service, and never the browser's native
+    # speechSynthesis API.
+    assert '/api/cloud-ai/speech/sentence' in script
+    assert "/api/voice/speech" not in script
+    assert "speechSynthesis" not in script
+    # No CAD write, dispatch, page, or acknowledgment vocabulary anywhere in
+    # the script or template -- this stays a read-only, advisory display.
+    for forbidden in ("acknowledge", "dispatch(", "AudioContext"):
         assert forbidden not in script
-    assert '<a id="acknowledge-station-alert"' in template
-    assert 'href="/dashboard"' in template
-    assert "No audio, speech, tone, page" in template
+    assert 'id="close-station-alert"' in template
+    # "acknowledge" only appears disclaiming that closing the popup does not
+    # acknowledge anything -- no control is named or labeled as one.
+    assert 'id="acknowledge-station-alert"' not in template
+    assert "does not acknowledge" in template.lower()
+    assert "advisory display only" in template.lower()
 
 
 def test_on_prem_page_still_uses_existing_full_alert_path():
