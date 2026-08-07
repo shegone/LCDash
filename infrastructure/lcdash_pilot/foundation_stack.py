@@ -174,7 +174,7 @@ class Phase1FoundationStack(cdk.Stack):
                 "LCDASH_CLOUD_AI_ALLOWED_S3_PREFIXES": parameters[
                     "cloud_ai_allowed_s3_prefixes"
                 ].value_as_string,
-                "LCDASH_CLOUD_AI_GENERATION_MODEL_ID": "us.anthropic.claude-sonnet-5",
+                "LCDASH_CLOUD_AI_GENERATION_MODEL_ID": "us.amazon.nova-pro-v1:0",
                 "LCDASH_CLOUD_AI_MAX_OUTPUT_TOKENS": "400",
                 "LCDASH_CLOUD_AI_RETRIEVAL_RESULT_LIMIT": "5",
                 "LCDASH_CLOUD_AI_POLLY_VOICE": "Joanna",
@@ -664,27 +664,41 @@ class Phase1FoundationStack(cdk.Stack):
                 resources=[
                     cdk.Fn.sub(
                         "arn:${AWS::Partition}:bedrock:us-east-1:${AWS::AccountId}:"
-                        "inference-profile/us.anthropic.claude-sonnet-5"
+                        "inference-profile/us.amazon.nova-pro-v1:0"
                     ),
                     cdk.Fn.sub(
                         "arn:${AWS::Partition}:bedrock:us-east-1::"
-                        "foundation-model/anthropic.claude-sonnet-5"
+                        "foundation-model/amazon.nova-pro-v1:0"
                     ),
                     cdk.Fn.sub(
                         "arn:${AWS::Partition}:bedrock:us-east-2::"
-                        "foundation-model/anthropic.claude-sonnet-5"
+                        "foundation-model/amazon.nova-pro-v1:0"
                     ),
                     cdk.Fn.sub(
                         "arn:${AWS::Partition}:bedrock:us-west-2::"
-                        "foundation-model/anthropic.claude-sonnet-5"
+                        "foundation-model/amazon.nova-pro-v1:0"
                     ),
                 ],
-                conditions=region_condition,
+                conditions={
+                    "StringEquals": {
+                        "aws:RequestedRegion": ["us-east-1", "us-east-2", "us-west-2"]
+                    }
+                },
             )
         )
         role.add_to_policy(
             iam.PolicyStatement(
                 actions=["polly:SynthesizeSpeech"],
+                resources=["*"],
+                conditions=region_condition,
+            )
+        )
+        # Amazon Transcribe streaming defines no resource type for
+        # StartStreamTranscription, so the region condition is the tightest
+        # scope the service allows. Batch transcription stays ungranted.
+        role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["transcribe:StartStreamTranscription"],
                 resources=["*"],
                 conditions=region_condition,
             )

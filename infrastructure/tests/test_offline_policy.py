@@ -116,14 +116,18 @@ class OfflinePolicyTests(unittest.TestCase):
             "bedrock:Retrieve",
             "bedrock:InvokeModel",
             "polly:SynthesizeSpeech",
+            "transcribe:StartStreamTranscription",
             "geo-maps:GetTile",
             "geo-places:Geocode",
             "geo-routes:CalculateRoutes",
         ):
             self.assertIn(action, self.stack_source)
         self.assertNotIn("bedrock:InvokeModelWithResponseStream", self.stack_source)
-        self.assertNotIn("transcribe:StartStreamTranscription", self.stack_source)
         for action in (
+            # Batch transcription would persist audio in S3; streaming does not.
+            "transcribe:StartTranscriptionJob",
+            "transcribe:StartMedicalStreamTranscription",
+            "transcribe:StartCallAnalyticsStreamTranscription",
             "sns:Publish",
             "ses:SendEmail",
             "sqs:SendMessage",

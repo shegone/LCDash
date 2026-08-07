@@ -66,7 +66,8 @@ class MAEPageTests(unittest.TestCase):
         self.assertIn('"/api/mae/chat/stream"', script)
         self.assertIn("let synthesisChain = Promise.resolve()", script)
         self.assertIn("const audioPromise = synthesisChain.then", script)
-        self.assertIn("groupedSpeech.length >= 140", script)
+        self.assertIn("const SPEECH_GROUP_TARGET = 180", script)
+        self.assertIn("group.length >= SPEECH_GROUP_TARGET", script)
         self.assertIn("let alreadySpoken = false", script)
 
     def test_mae_write_refusal_includes_assurance_and_timing(self):

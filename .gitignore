@@ -225,6 +225,16 @@ __marimo__/
 .cptr/*
 !.cptr/model
 
+# Claude Code writes per-machine "allow always" rules here; the shared project
+# rules in .claude/settings.json are tracked instead.
+.claude/settings.local.json
+
+# CDK synth output and scratch build directories are regenerated on demand.
+cdk.out/
+infrastructure/cdk.out/
+work/
+infrastructure/work/
+
 # Operational GIS sources and generated map layers stay on the private server.
 data/gis-source/
 data/gis-public/

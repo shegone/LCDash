@@ -36,9 +36,9 @@
     let lastSpeechAt = 0;
     let speechDetected = false;
     let discardRecording = false;
-    let activeAudioUrl = "";
-    let activeSpeechController = null;
-    let activeSpeechRequest = 0;
+    let cloudVoiceName = "";
+    let sentenceSpeechAvailable = true;
+    let advisoryStreamAvailable = true;
 
     const maeShell = document.querySelector(".mae-shell");
     const cloudMode = maeShell?.dataset.cloudMode === "true";
@@ -157,9 +157,214 @@
         });
     }
 
+    // ---- Sentence-level speech -------------------------------------------
+    // Source URLs and citations are rendered separately and must never be
+    // spoken. Every chunk is sanitized here and again on the server before it
+    // reaches Polly.
+    const SPEECH_ABBREVIATIONS = new Set([
+        "mr", "mrs", "ms", "dr", "prof", "rev", "gen", "adm", "col", "maj",
+        "sgt", "lt", "capt", "cpt", "cmdr", "ofc", "det", "dep", "supt", "insp",
+        "st", "ave", "rd", "blvd", "hwy", "ln", "ct", "apt", "ste", "bldg",
+        "sta", "stn", "rm", "unit", "bat", "eng", "med", "sq",
+        "no", "nos", "dept", "div", "est", "approx", "fig", "figs", "sec",
+        "secs", "art", "ch", "chap", "p", "pp", "vol", "eds", "attn", "ref",
+        "inc", "corp", "co", "ltd", "llc", "assn", "govt", "ext",
+        "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct",
+        "nov", "dec", "mon", "tue", "tues", "wed", "thu", "thur", "thurs",
+        "fri", "sat", "sun", "vs", "etc", "al", "cf", "viz", "resp",
+        "e.g", "i.e", "a.m", "p.m", "u.s", "u.s.a", "u.k"
+    ]);
+    const SPEECH_TERMINATORS = ".!?";
+    const SPEECH_CLOSERS = "\"')]}»”’";
+    const SPEECH_GROUP_TARGET = 180;
+    const SPEECH_MAX_CHARS = 2400;
+
+    function answerForSpeech(text) {
+        return String(text || "")
+            .split(/^\s*sources\s*:?\s*$/im)[0]
+            .replace(/\b(?:https?|s3|ftp|file):\/\/\S+/gi, " ")
+            .replace(/\b[\w.+-]+@[\w-]+\.[\w.-]+\b/g, " ")
+            .replace(/\b(?:www\.\S+|[\w-]+\.(?:com|org|net|gov|edu|io|us|mil))\b/gi, " ")
+            .replace(/\[[^\]]*?(?:page|p\.)\s*\d+[^\]]*?\]/gi, " ")
+            .replace(/\[\s*\d+(?:\s*[,-]\s*\d+)*\s*\]/g, " ")
+            .replace(/\((?:source|citation|see)\b[^)]*\)/gi, " ")
+            .replace(/^\s*[-•–]\s+/gm, "")
+            .replace(/[*_`#>|]+/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+    }
+
+    function isSpeechSoftStop(source, dotIndex, end) {
+        const prefix = source.slice(0, dotIndex);
+        const tokens = prefix.split(/\s+/);
+        const token = tokens.length ? tokens[tokens.length - 1] : "";
+        const clean = token.toLowerCase().replace(/^[([{"'“‘]+/, "");
+        if (clean && SPEECH_ABBREVIATIONS.has(clean)) return true;
+        if (clean.length === 1 && /[a-z]/.test(clean)) return true;
+        if (/^(?:[a-z]\.)+[a-z]$/.test(clean)) return true;
+        const line = prefix.split("\n").pop();
+        if (token && /^\s*(?:\d{1,3}|[A-Za-z]|[ivxIVX]{1,4})$/.test(line)) return true;
+        const tail = source.slice(end).replace(/^\s+/, "");
+        if (!tail) return false;
+        // A lower-case continuation almost always means the period belonged to
+        // an abbreviation this list does not know about.
+        if (/^[a-z]/.test(tail)) return true;
+        // "Sta. 3", "Rm. 12", "Ch. 5" - a short word followed by a number.
+        if (/^\d/.test(tail) && /^[a-z]+$/.test(clean) && clean.length <= 4) return true;
+        return false;
+    }
+
+    function boundSpeechChunk(chunk) {
+        const parts = [];
+        let rest = chunk;
+        while (rest.length > SPEECH_MAX_CHARS) {
+            const window = rest.slice(0, SPEECH_MAX_CHARS);
+            let cut = window.lastIndexOf(" ");
+            if (cut < SPEECH_MAX_CHARS / 4) cut = SPEECH_MAX_CHARS;
+            parts.push(rest.slice(0, cut).trim());
+            rest = rest.slice(cut).trim();
+        }
+        if (rest) parts.push(rest);
+        return parts.filter(Boolean);
+    }
+
+    // Incremental sentence chunker. A chunk is released only once its end has
+    // been confirmed by a following whitespace character, so a sentence can
+    // never be cut mid-word, mid-decimal, or mid-abbreviation. The first chunk
+    // is released on its own so audio can start immediately; later sentences
+    // are grouped so the cadence stays natural and Polly calls stay bounded.
+    function createSpeechChunker() {
+        let buffer = "";
+        let carry = "";
+        let group = "";
+        let emitted = 0;
+        let stopped = false;
+
+        function boundaryIndex(text, final) {
+            const length = text.length;
+            let index = 0;
+            while (index < length) {
+                const char = text[index];
+                if (char === "\n") return index + 1;
+                if (SPEECH_TERMINATORS.indexOf(char) !== -1) {
+                    let end = index + 1;
+                    while (end < length && SPEECH_TERMINATORS.indexOf(text[end]) !== -1) {
+                        end += 1;
+                    }
+                    while (end < length && SPEECH_CLOSERS.indexOf(text[end]) !== -1) {
+                        end += 1;
+                    }
+                    if (end >= length) return final ? length : -1;
+                    if (!/\s/.test(text[end])) {
+                        index = end;
+                        continue;
+                    }
+                    if (char === "." && isSpeechSoftStop(text, index, end)) {
+                        index = end;
+                        continue;
+                    }
+                    return end;
+                }
+                index += 1;
+            }
+            return (final && text.trim()) ? length : -1;
+        }
+
+        function process(text, final) {
+            const sentences = [];
+            if (stopped) {
+                buffer = "";
+            } else {
+                buffer += text;
+                if (final && carry) {
+                    buffer = (carry + " " + buffer).trim();
+                    carry = "";
+                }
+                while (buffer) {
+                    const index = boundaryIndex(buffer, final);
+                    if (index < 0) break;
+                    let piece = buffer.slice(0, index).trim();
+                    buffer = buffer.slice(index).replace(/^\s+/, "");
+                    if (!piece) continue;
+                    if (carry) {
+                        piece = (carry + " " + piece).trim();
+                        carry = "";
+                    }
+                    // A Sources block is rendered separately and is never spoken.
+                    if (/^\s*sources\s*:?\s*$/i.test(piece)) {
+                        stopped = true;
+                        buffer = "";
+                        break;
+                    }
+                    if ((piece.match(/[A-Za-z]/g) || []).length < 2 && !final) {
+                        carry = piece;
+                        continue;
+                    }
+                    sentences.push(piece);
+                }
+            }
+            const ready = [];
+            sentences.forEach(function (sentence) {
+                if (emitted === 0 && !group) {
+                    ready.push(sentence);
+                    emitted += 1;
+                    return;
+                }
+                group = (group + " " + sentence).trim();
+                if (group.length >= SPEECH_GROUP_TARGET) {
+                    ready.push(group);
+                    group = "";
+                    emitted += 1;
+                }
+            });
+            if (final && group) {
+                ready.push(group);
+                group = "";
+                emitted += 1;
+            }
+            const bounded = [];
+            ready.forEach(function (item) {
+                boundSpeechChunk(item).forEach(function (part) { bounded.push(part); });
+            });
+            return bounded;
+        }
+
+        return {
+            feed: function (text) { return process(String(text || ""), false); },
+            flush: function () { return process("", true); }
+        };
+    }
+
+    function splitIntoSpeechChunks(text) {
+        const chunker = createSpeechChunker();
+        const chunks = chunker.feed(String(text || ""));
+        chunker.flush().forEach(function (item) { chunks.push(item); });
+        return chunks;
+    }
+
     async function requestSpeechAudio(text, signal) {
-        const spokenText = String(text || "").trim().slice(0, 2500);
+        const spokenText = String(text || "").trim().slice(0, SPEECH_MAX_CHARS);
         if (!spokenText) return null;
+        if (cloudMode && sentenceSpeechAvailable) {
+            const sentenceResponse = await fetch("/api/cloud-ai/speech/sentence", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                cache: "no-store",
+                signal: signal,
+                body: JSON.stringify({
+                    text: spokenText,
+                    persona: "mae",
+                    voice: cloudVoiceName || ""
+                })
+            });
+            if (sentenceResponse.ok) return sentenceResponse.blob();
+            if (sentenceResponse.status === 404 || sentenceResponse.status === 405) {
+                sentenceSpeechAvailable = false;
+            } else {
+                const detail = await sentenceResponse.json().catch(function () { return {}; });
+                throw new Error(detail.detail || "MAE could not generate speech.");
+            }
+        }
         const response = await fetch("/api/voice/speech", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
@@ -167,7 +372,9 @@
             signal: signal,
             body: JSON.stringify({
                 text: spokenText,
-                voice: "mae-synthetic-female",
+                voice: cloudMode
+                    ? (cloudVoiceName || "Joanna")
+                    : "mae-synthetic-female",
                 speed: 1.0,
                 response_format: "mp3"
             })
@@ -180,39 +387,155 @@
         return response.blob();
     }
 
-    async function playSpeechAudio(audioBlob, requestId) {
-        if (!audioBlob || requestId !== activeSpeechRequest) return;
-        if (activeAudioUrl) URL.revokeObjectURL(activeAudioUrl);
-        activeAudioUrl = URL.createObjectURL(audioBlob);
-        voicePlayer.src = activeAudioUrl;
+    // Sequential audio queue: exactly one clip plays at a time, synthesis for
+    // the next chunk overlaps playback of the current one, one failed chunk is
+    // skipped without breaking the chain, and a new session abandons the old
+    // queue outright.
+    const speech = (function () {
+        let sessionId = 0;
+        let controller = null;
+        let synthesisChain = Promise.resolve();
+        let playbackChain = Promise.resolve();
+        let objectUrl = "";
+        let releaseActivePlayback = null;
+        let queued = 0;
+        let played = 0;
 
-        await new Promise(function (resolve, reject) {
-            voicePlayer.onended = resolve;
-            voicePlayer.onerror = function () {
-                reject(new Error("The browser could not play MAE's voice."));
-            };
-            const playPromise = voicePlayer.play();
-            if (playPromise) playPromise.catch(reject);
-        });
-    }
+        function isCurrent(id) {
+            return id === sessionId && id > 0;
+        }
+
+        function revoke() {
+            if (objectUrl) {
+                URL.revokeObjectURL(objectUrl);
+                objectUrl = "";
+            }
+        }
+
+        function resetPlayer() {
+            if (releaseActivePlayback) {
+                const release = releaseActivePlayback;
+                releaseActivePlayback = null;
+                release();
+            }
+            if (!voicePlayer) return;
+            try {
+                voicePlayer.pause();
+            } catch (error) {
+                // A player that was never started cannot be paused; ignore.
+            }
+            voicePlayer.onended = null;
+            voicePlayer.onerror = null;
+            voicePlayer.removeAttribute("src");
+            try {
+                voicePlayer.load();
+            } catch (error) {
+                // Reloading an empty player is a no-op in some browsers.
+            }
+        }
+
+        function begin() {
+            sessionId += 1;
+            if (controller) controller.abort();
+            controller = new AbortController();
+            synthesisChain = Promise.resolve();
+            playbackChain = Promise.resolve();
+            queued = 0;
+            played = 0;
+            resetPlayer();
+            revoke();
+            return sessionId;
+        }
+
+        function stop() {
+            sessionId += 1;
+            if (controller) {
+                controller.abort();
+                controller = null;
+            }
+            synthesisChain = Promise.resolve();
+            playbackChain = Promise.resolve();
+            resetPlayer();
+            revoke();
+        }
+
+        function play(audioBlob, id) {
+            if (!voicePlayer || !audioBlob || !isCurrent(id)) return Promise.resolve();
+            revoke();
+            objectUrl = URL.createObjectURL(audioBlob);
+            voicePlayer.src = objectUrl;
+            return new Promise(function (resolve) {
+                let settled = false;
+                function finish() {
+                    if (settled) return;
+                    settled = true;
+                    if (releaseActivePlayback === finish) releaseActivePlayback = null;
+                    voicePlayer.onended = null;
+                    voicePlayer.onerror = null;
+                    resolve();
+                }
+                releaseActivePlayback = finish;
+                voicePlayer.onended = function () {
+                    played += 1;
+                    finish();
+                };
+                voicePlayer.onerror = finish;
+                const playPromise = voicePlayer.play();
+                if (playPromise && playPromise.catch) playPromise.catch(finish);
+            });
+        }
+
+        function enqueue(id, text) {
+            if (!isCurrent(id)) return;
+            const clean = answerForSpeech(text);
+            if (!clean) return;
+            queued += 1;
+            const signal = controller ? controller.signal : undefined;
+            const audioPromise = synthesisChain.then(function () {
+                if (!isCurrent(id)) return null;
+                return requestSpeechAudio(clean, signal);
+            }).catch(function () {
+                // A single failed sentence is skipped; the queue continues.
+                return null;
+            });
+            synthesisChain = audioPromise.then(function () { return undefined; });
+            playbackChain = playbackChain.then(function () {
+                return audioPromise;
+            }).then(function (audioBlob) {
+                if (!audioBlob || !isCurrent(id)) return undefined;
+                return play(audioBlob, id);
+            }).catch(function () { return undefined; });
+        }
+
+        function idle() {
+            return playbackChain.then(function () {
+                return {queued: queued, played: played};
+            }, function () {
+                return {queued: queued, played: played};
+            });
+        }
+
+        return {
+            begin: begin,
+            stop: stop,
+            enqueue: enqueue,
+            idle: idle,
+            isCurrent: isCurrent
+        };
+    })();
 
     async function speakAnswer(text) {
-        activeSpeechRequest += 1;
-        const requestId = activeSpeechRequest;
-        if (activeSpeechController) activeSpeechController.abort();
-        activeSpeechController = new AbortController();
-        if (voicePlayer) {
-            voicePlayer.pause();
-            voicePlayer.removeAttribute("src");
-            voicePlayer.load();
-        }
+        const sessionId = speech.begin();
         if (voiceModeActive) {
             setMicrophoneEnabled(false);
             setVoiceState("speaking", "MAE is speaking", "The microphone is paused to prevent an echo.");
         }
-        const audioBlob = await requestSpeechAudio(text, activeSpeechController.signal);
-        await playSpeechAudio(audioBlob, requestId);
-        if (requestId === activeSpeechRequest) activeSpeechController = null;
+        const chunks = splitIntoSpeechChunks(answerForSpeech(text));
+        if (!chunks.length) return {queued: 0, played: 0};
+        chunks.forEach(function (chunk) {
+            speech.enqueue(sessionId, chunk);
+        });
+        return speech.idle();
     }
 
     async function transcribeRecording(blob) {
@@ -408,13 +731,7 @@
     function endVoiceMode() {
         voiceModeActive = false;
         stopListeningCycle(true);
-        activeSpeechRequest += 1;
-        if (activeSpeechController) activeSpeechController.abort();
-        activeSpeechController = null;
-        if (voicePlayer) {
-            voicePlayer.pause();
-            voicePlayer.removeAttribute("src");
-        }
+        speech.stop();
         if (microphoneStream) {
             microphoneStream.getTracks().forEach(function (track) {
                 track.stop();
@@ -867,7 +1184,10 @@
                 readButton.innerHTML = '<i class="bi bi-soundwave"></i> Speaking…';
                 if (voiceModeActive) stopListeningCycle(true);
                 try {
-                    await speakAnswer(content);
+                    const outcome = await speakAnswer(content);
+                    if (outcome && outcome.queued && !outcome.played) {
+                        window.alert("MAE could not play this answer.");
+                    }
                 } catch (error) {
                     window.alert(error.message || "MAE could not play this answer.");
                 } finally {
@@ -916,23 +1236,113 @@
                 ? "The approved citation service is not ready. No advisory answer was produced."
                 : (payload.detail || "MAE could not complete the inquiry."));
         }
-        if (cloudMode) {
-            if (payload.denied === true) {
-                return {
-                    answer: "No advisory answer was produced because approved citation support was unavailable.",
-                    citations: [],
-                    denied: true
-                };
-            }
-            if (!payload.answer || !Array.isArray(payload.citations) || !payload.citations.length) {
-                return {
-                    answer: "No advisory answer was displayed because mandatory approved citations were missing.",
-                    citations: [],
-                    denied: true
-                };
+        if (cloudMode) return normalizeCloudPayload(payload);
+        return payload;
+    }
+
+    function normalizeCloudPayload(payload) {
+        const result = payload || {};
+        if (result.denied === true) {
+            return {
+                answer: "No advisory answer was produced because approved citation support was unavailable.",
+                citations: [],
+                denied: true
+            };
+        }
+        if (!result.answer || !Array.isArray(result.citations) || !result.citations.length) {
+            return {
+                answer: "No advisory answer was displayed because mandatory approved citations were missing.",
+                citations: [],
+                denied: true
+            };
+        }
+        return result;
+    }
+
+    async function readNdjsonStream(response, consumeEvent) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let wireBuffer = "";
+        while (true) {
+            const part = await reader.read();
+            wireBuffer += decoder.decode(part.value || new Uint8Array(), {stream: !part.done});
+            const lines = wireBuffer.split("\n");
+            wireBuffer = lines.pop() || "";
+            lines.filter(Boolean).forEach(function (line) { consumeEvent(JSON.parse(line)); });
+            if (part.done) break;
+        }
+        if (wireBuffer.trim()) consumeEvent(JSON.parse(wireBuffer));
+    }
+
+    // Cloud advisory: speech begins on the first completed sentence instead of
+    // waiting for the whole generated answer.
+    async function fetchCloudStreamedAnswer(question, speakResponse, signal) {
+        const response = await fetch("/api/cloud-ai/advisory/stream", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            cache: "no-store",
+            signal: signal,
+            body: JSON.stringify({question: question, persona: "mae"})
+        });
+        if (response.status === 404 || response.status === 405) {
+            advisoryStreamAvailable = false;
+            throw new Error("The cloud advisory stream is unavailable.");
+        }
+        if (!response.ok || !response.body) {
+            throw new Error("The cloud advisory stream is unavailable.");
+        }
+
+        const sessionId = speakResponse ? speech.begin() : 0;
+        let payload = null;
+        let failure = "";
+        let spoken = false;
+
+        function consumeEvent(event) {
+            if (!event || typeof event !== "object") return;
+            if (event.type === "chunk") {
+                if (!speakResponse) return;
+                const chunkText = String(event.speech || event.text || "");
+                if (!chunkText.trim()) return;
+                if (!spoken) {
+                    spoken = true;
+                    if (voiceModeActive) setMicrophoneEnabled(false);
+                    setVoiceState(
+                        "speaking",
+                        "MAE is speaking",
+                        "The rest of the answer is still being prepared."
+                    );
+                }
+                speech.enqueue(sessionId, chunkText);
+            } else if (event.type === "complete") {
+                payload = event.payload || {};
+            } else if (event.type === "error") {
+                failure = String(event.detail || "");
             }
         }
-        return payload;
+
+        try {
+            await readNdjsonStream(response, consumeEvent);
+        } catch (error) {
+            if (speakResponse) speech.stop();
+            throw error;
+        }
+        if (failure) {
+            if (speakResponse) speech.stop();
+            throw new Error(failure);
+        }
+        if (!payload) {
+            if (speakResponse) speech.stop();
+            throw new Error("The cloud advisory stream ended early.");
+        }
+        const normalized = normalizeCloudPayload(payload);
+        if (speakResponse && !spoken && normalized.answer) {
+            splitIntoSpeechChunks(answerForSpeech(normalized.answer)).forEach(function (chunk) {
+                speech.enqueue(sessionId, chunk);
+            });
+            spoken = true;
+        }
+        if (speakResponse) await speech.idle();
+        return normalized;
     }
 
     async function fetchStreamedAnswer(question, requestHistory, signal) {
@@ -945,69 +1355,58 @@
         });
         if (!response.ok || !response.body) throw new Error("MAE's response stream is unavailable.");
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let wireBuffer = "";
-        let speechBuffer = "";
-        let groupedSpeech = "";
-        let synthesisChain = Promise.resolve();
-        let speechChain = Promise.resolve();
+        const sessionId = speech.begin();
+        const chunker = createSpeechChunker();
         let payload = null;
-        let streamedSpeech = false;
-        activeSpeechRequest += 1;
-        const speechRequestId = activeSpeechRequest;
-        if (activeSpeechController) activeSpeechController.abort();
-        activeSpeechController = new AbortController();
-        if (voicePlayer) { voicePlayer.pause(); voicePlayer.removeAttribute("src"); voicePlayer.load(); }
+        let failure = "";
+        let spoken = false;
 
-        function queueSpeechChunk(sentence) {
-            const clean = sentence.trim();
-            if (!clean || !voiceModeActive) return;
-            streamedSpeech = true;
-            setMicrophoneEnabled(false);
-            setVoiceState("speaking", "MAE is speaking", "The next part of the answer is being prepared.");
-            const audioPromise = synthesisChain.then(function () {
-                if (!voiceModeActive || speechRequestId !== activeSpeechRequest) return null;
-                return requestSpeechAudio(clean, activeSpeechController.signal);
-            });
-            synthesisChain = audioPromise.then(function () { return undefined; });
-            speechChain = speechChain.then(function () { return audioPromise; }).then(function (audioBlob) {
-                if (!voiceModeActive) return undefined;
-                return playSpeechAudio(audioBlob, speechRequestId);
-            });
-        }
-        function acceptSentence(sentence) {
-            if (!streamedSpeech) { queueSpeechChunk(sentence); return; }
-            groupedSpeech = `${groupedSpeech} ${sentence}`.trim();
-            if (groupedSpeech.length >= 140) { queueSpeechChunk(groupedSpeech); groupedSpeech = ""; }
-        }
-        function consumeEvent(event) {
-            if (event.type === "token") {
-                speechBuffer += String(event.text || "");
-                let match = speechBuffer.match(/^([\s\S]*?[.!?])(?=\s|$)/);
-                while (match) {
-                    acceptSentence(match[1]);
-                    speechBuffer = speechBuffer.slice(match[1].length).trimStart();
-                    match = speechBuffer.match(/^([\s\S]*?[.!?])(?=\s|$)/);
+        function queueSpeechChunks(chunks) {
+            chunks.forEach(function (chunk) {
+                if (!chunk || !voiceModeActive) return;
+                if (!spoken) {
+                    spoken = true;
+                    setMicrophoneEnabled(false);
+                    setVoiceState(
+                        "speaking",
+                        "MAE is speaking",
+                        "The next part of the answer is being prepared."
+                    );
                 }
-            } else if (event.type === "complete") payload = event.payload || {};
-            else if (event.type === "error") throw new Error(event.detail || "MAE could not complete the inquiry.");
+                speech.enqueue(sessionId, chunk);
+            });
         }
-        while (true) {
-            const part = await reader.read();
-            wireBuffer += decoder.decode(part.value || new Uint8Array(), {stream: !part.done});
-            const lines = wireBuffer.split("\n");
-            wireBuffer = lines.pop() || "";
-            lines.filter(Boolean).forEach(function (line) { consumeEvent(JSON.parse(line)); });
-            if (part.done) break;
+
+        function consumeEvent(event) {
+            if (!event || typeof event !== "object") return;
+            if (event.type === "token") {
+                queueSpeechChunks(chunker.feed(String(event.text || "")));
+            } else if (event.type === "complete") {
+                payload = event.payload || {};
+            } else if (event.type === "error") {
+                failure = String(event.detail || "MAE could not complete the inquiry.");
+            }
         }
-        if (wireBuffer.trim()) consumeEvent(JSON.parse(wireBuffer));
-        if (!payload) throw new Error("MAE's response stream ended early.");
-        groupedSpeech = `${groupedSpeech} ${speechBuffer}`.trim();
-        if (groupedSpeech) queueSpeechChunk(groupedSpeech);
-        if (!streamedSpeech && payload.answer) queueSpeechChunk(payload.answer);
-        await speechChain;
-        if (speechRequestId === activeSpeechRequest) activeSpeechController = null;
+
+        try {
+            await readNdjsonStream(response, consumeEvent);
+        } catch (error) {
+            speech.stop();
+            throw error;
+        }
+        if (failure) {
+            speech.stop();
+            throw new Error(failure);
+        }
+        if (!payload) {
+            speech.stop();
+            throw new Error("MAE's response stream ended early.");
+        }
+        queueSpeechChunks(chunker.flush());
+        if (!spoken && payload.answer) {
+            queueSpeechChunks(splitIntoSpeechChunks(answerForSpeech(payload.answer)));
+        }
+        await speech.idle();
         return payload;
     }
 
@@ -1035,16 +1434,31 @@
 
         try {
             let payload;
-            if (settings.speakResponse && voiceModeActive) {
+            const wantsSpeech = Boolean(settings.speakResponse && voiceModeActive);
+            if (wantsSpeech) {
                 try {
-                    payload = await fetchStreamedAnswer(question, requestHistory, controller.signal);
-                    alreadySpoken = true;
+                    if (cloudMode) {
+                        if (!advisoryStreamAvailable) {
+                            throw new Error("The cloud advisory stream is unavailable.");
+                        }
+                        payload = await fetchCloudStreamedAnswer(
+                            question, wantsSpeech, controller.signal
+                        );
+                    } else {
+                        payload = await fetchStreamedAnswer(question, requestHistory, controller.signal);
+                    }
+                    alreadySpoken = wantsSpeech;
                 } catch (streamError) {
                     if (streamError.name === "AbortError") throw streamError;
-                    setVoiceState("processing", "MAE is completing the answer", "The standard private response path is being used.");
+                    // Streaming is unavailable; fall back to the whole-answer path.
+                    if (wantsSpeech) {
+                        setVoiceState("processing", "MAE is completing the answer", "The standard private response path is being used.");
+                    }
                     payload = await fetchCompleteAnswer(question, requestHistory, controller.signal);
-                    await speakAnswer(payload.answer);
-                    alreadySpoken = true;
+                    if (wantsSpeech) {
+                        await speakAnswer(payload.answer);
+                        alreadySpoken = true;
+                    }
                 }
             } else {
                 payload = await fetchCompleteAnswer(question, requestHistory, controller.signal);
@@ -1088,6 +1502,8 @@
         const question = questionInput.value.trim();
         if (!question) return;
         questionInput.value = "";
+        // A new question abandons any queued or playing audio from the last one.
+        speech.stop();
         if (voiceModeActive) stopListeningCycle(true);
         ask(question, {speakResponse: voiceModeActive});
     });
@@ -1116,10 +1532,34 @@
     voiceStop.addEventListener("click", endVoiceMode);
     window.addEventListener("beforeunload", endVoiceMode);
 
+    // Cloud Polly voices are enum-bound (Joanna / Matthew); the on-prem voice
+    // names are not accepted there, so the active voice comes from the server.
+    async function loadCloudVoiceProfile() {
+        try {
+            const response = await fetch("/api/cloud-ai/status", {cache: "no-store"});
+            if (!response.ok) return;
+            const status = await response.json();
+            const tts = status.tts || {};
+            const stt = status.stt || {};
+            cloudVoiceName = String(tts.voice || "");
+            if (!tts.ready) sentenceSpeechAvailable = false;
+            voiceReady = Boolean(status.connected && tts.ready && stt.ready);
+            if (voiceToggle && voiceReady) {
+                voiceToggle.disabled = false;
+                voiceToggle.title = "Start a private voice conversation with MAE";
+                const label = voiceToggle.querySelector("small");
+                if (label) label.textContent = "Talk naturally with MAE";
+            }
+        } catch (error) {
+            cloudVoiceName = "";
+        }
+    }
+
     if (cloudMode) {
         setStatus("mae-ai-status", true, "Citation-only advisory");
         setStatus("mae-db-status", false, "Not used in cloud advisory");
         setStatus("mae-cad-status", false, "No CAD access");
+        loadCloudVoiceProfile();
     } else {
         loadStatus();
         loadVoiceStatus();

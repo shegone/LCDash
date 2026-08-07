@@ -10,7 +10,8 @@ import secrets
 from datetime import datetime, timezone
 from typing import Annotated, Literal
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, Response, UploadFile
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
@@ -32,6 +33,7 @@ from app.services.operations_service import (
 )
 from app.services.map_service import (
     build_empty_map_snapshot,
+    build_map_snapshot,
     get_live_map_snapshot,
 )
 from app.services.gis_reference_service import (
@@ -132,6 +134,7 @@ from app.services.voice_service import (
 )
 from app.services.cloud_ai_service import (
     CLOUD_POLLY_VOICES,
+    CLOUD_TRANSCRIBE_AUDIO_FORMATS,
     answer_cloud_advisory,
     build_activated_cloud_ai_runtime,
     build_cloud_ai_config,
@@ -139,8 +142,16 @@ from app.services.cloud_ai_service import (
     cloud_ai_status,
     cloud_mode_enabled,
     synthesize_cloud_speech,
+    transcribe_cloud_speech,
 )
 from app.integrations.cloud_ai import CloudAiRuntimeUnavailable
+from app.integrations.cloud_ai.bedrock_retrieval import DailyRequestBudget
+from app.services.cloud_ai_streaming import (
+    build_cloud_advisory_streamer,
+    iter_advisory_ndjson,
+    stream_cloud_advisory,
+    synthesize_cloud_sentence,
+)
 from app.services.centralsquare import (
     CentralSquareAPIError,
 )
@@ -170,7 +181,15 @@ from app.services.nga911_nova_service import (
 
 cloud_cad_runtime = build_cloud_cad_runtime(settings)
 cloud_ai_config = build_cloud_ai_config(settings)
-cloud_ai_runtime = build_activated_cloud_ai_runtime(settings)
+# One shared budget so the whole-answer and streaming advisory paths draw
+# from a single daily generation cap rather than two independent ones.
+cloud_advisory_budget = DailyRequestBudget(200)
+cloud_ai_runtime = build_activated_cloud_ai_runtime(
+    settings, budget=cloud_advisory_budget
+)
+cloud_advisory_streamer = build_cloud_advisory_streamer(
+    cloud_ai_config, budget=cloud_advisory_budget
+)
 
 
 def _cloud_presentation_status(knowledge_status: dict | None = None):
@@ -179,6 +198,20 @@ def _cloud_presentation_status(knowledge_status: dict | None = None):
         ai_status=cloud_ai_status(cloud_ai_config, cloud_ai_runtime),
         knowledge_status=knowledge_status or {},
     )
+
+
+_CLOUD_AI_MODEL_LABELS = {
+    "us.amazon.nova-pro-v1:0": "Amazon Nova Pro",
+    "amazon.nova-lite-v1:0": "Amazon Nova Lite",
+    "amazon.nova-micro-v1:0": "Amazon Nova Micro",
+    "us.anthropic.claude-sonnet-5": "Claude Sonnet 5",
+}
+
+
+def _cloud_ai_model_label() -> str:
+    """Describe the configured generation model without hardcoding a vendor."""
+    model_id = settings.cloud_ai_generation_model_id
+    return f"Grounded {_CLOUD_AI_MODEL_LABELS.get(model_id, model_id)} advisory"
 
 
 def _cloud_cad_bridge_enabled() -> bool:
@@ -1030,7 +1063,20 @@ def gis_map(
     ] = None,
 ):
     try:
-        map_data = get_live_map_snapshot(tenant_context=tenant_context)
+        if _cloud_cad_bridge_enabled():
+            # Plot the same allowlisted read-only snapshot the dashboard shows.
+            # Unit positions are intentionally absent from UNIT_FIELDS, so the
+            # cloud map plots incidents only.
+            snapshot = _current_operations_snapshot()
+            map_data = build_map_snapshot(
+                {
+                    "calls": snapshot["calls"],
+                    "all_units": [],
+                    "roster_connected": False,
+                }
+            )
+        else:
+            map_data = get_live_map_snapshot(tenant_context=tenant_context)
     except CentralSquareAPIError as exc:
         map_data = build_empty_map_snapshot(str(exc))
 
@@ -1376,6 +1422,9 @@ def county_commission_job_api(
         job_id,
         tenant_context=tenant_context,
     )
+    if not job:
+        raise HTTPException(status_code=404, detail="Monthly report job not found.")
+    return job
 
 
 def _cloud_report_intent(payload: CloudReportIntentRequest) -> ReportIntent:
@@ -1808,20 +1857,30 @@ def knowledge_document_pdf(
 
 @app.get("/mindshare")
 def mindshare_page(request: Request):
+    presentation = _cloud_presentation_status(get_knowledge_status())
     return templates.TemplateResponse(
         request=request,
         name="mindshare.html",
-        context={"version": "0.4.0"},
+        context={
+            "version": "0.4.0",
+            "cloud_mode": cloud_mode_enabled(settings),
+            "cloud_presentation_status": presentation,
+        },
         headers={"Cache-Control": "no-store"},
     )
 
 
 @app.get("/mindshare/technical")
 def mindshare_technical_page(request: Request):
+    presentation = _cloud_presentation_status(get_knowledge_status())
     return templates.TemplateResponse(
         request=request,
         name="mindshare_technical.html",
-        context={"version": "0.4.0"},
+        context={
+            "version": "0.4.0",
+            "cloud_mode": cloud_mode_enabled(settings),
+            "cloud_presentation_status": presentation,
+        },
         headers={"Cache-Control": "no-store"},
     )
 
@@ -1969,6 +2028,75 @@ def cloud_ai_advisory_api(
     return result
 
 
+@app.post("/api/cloud-ai/advisory/stream")
+def cloud_ai_advisory_stream_api(
+    payload: CloudAdvisoryRequest,
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
+):
+    if not cloud_mode_enabled(settings):
+        raise HTTPException(status_code=404, detail="Cloud AI is not configured here.")
+    question = payload.question.strip()
+    roles = _cloud_advisory_roles(tenant_context)
+    report_preview = _suggest_report_preview(payload.question, tenant_context)
+
+    def events():
+        for event in stream_cloud_advisory(
+            cloud_advisory_streamer,
+            cloud_ai_config,
+            request_id=f"cloud-advisory-{secrets.token_hex(12)}",
+            question=question,
+            persona=payload.persona,
+            roles=roles,
+        ):
+            if event.get("type") == "complete":
+                result = event["payload"]
+                result["interaction_id"] = ""
+                result["audit_saved"] = False
+                if report_preview is not None:
+                    result["report_preview"] = report_preview
+            yield event
+
+    return StreamingResponse(
+        iter_advisory_ndjson(events()),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
+
+
+class CloudSentenceSpeechRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=3000)
+    persona: str = Field(default="mae", pattern="^(mae|jack)$")
+    voice: str = Field(default="", max_length=40)
+
+
+@app.post("/api/cloud-ai/speech/sentence")
+def cloud_ai_sentence_speech_api(payload: CloudSentenceSpeechRequest):
+    if not cloud_mode_enabled(settings):
+        raise HTTPException(status_code=404, detail="Cloud AI is not configured here.")
+    try:
+        audio = synthesize_cloud_sentence(
+            cloud_ai_runtime,
+            cloud_ai_config,
+            request_id=f"cloud-polly-{secrets.token_hex(12)}",
+            text=payload.text,
+            voice=payload.voice,
+        )
+    except CloudAiRuntimeUnavailable as exc:
+        status = cloud_ai_status(cloud_ai_config, cloud_ai_runtime)
+        raise HTTPException(
+            status_code=503,
+            detail=status["tts"]["disabled_reason"] or str(exc),
+        ) from exc
+    return Response(
+        content=audio,
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.post("/api/voice/speech")
 def voice_speech_api(
     payload: VoiceSpeechRequest,
@@ -2023,7 +2151,12 @@ def voice_speech_api(
 
 
 @app.post("/api/voice/transcribe")
-async def voice_transcribe_api(file: UploadFile = File(...)):
+async def voice_transcribe_api(
+    file: UploadFile = File(...),
+    audio_format: str = Form("webm-opus"),
+    sample_rate_hz: int = Form(48000),
+    duration_seconds: float = Form(30.0),
+):
     audio = await file.read()
     if not audio:
         raise HTTPException(status_code=400, detail="The recording is empty.")
@@ -2034,11 +2167,28 @@ async def voice_transcribe_api(file: UploadFile = File(...)):
         )
 
     if cloud_mode_enabled(settings):
-        status = cloud_ai_status(cloud_ai_config, cloud_ai_runtime)
-        raise HTTPException(
-            status_code=503,
-            detail=status["disabled_reason"] or "Cloud transcription is unavailable.",
-        )
+        try:
+            transcript = await run_in_threadpool(
+                transcribe_cloud_speech,
+                cloud_ai_runtime,
+                cloud_ai_config,
+                request_id=f"cloud-stt-{secrets.token_hex(12)}",
+                audio=audio,
+                audio_format=audio_format,
+                sample_rate_hz=sample_rate_hz,
+                duration_seconds=duration_seconds,
+            )
+        except CloudAiRuntimeUnavailable as exc:
+            status = cloud_ai_status(cloud_ai_config, cloud_ai_runtime)
+            raise HTTPException(
+                status_code=503,
+                detail=status["stt"]["disabled_reason"] or str(exc),
+            ) from exc
+        return {
+            "text": transcript,
+            "model": "Amazon Transcribe streaming en-US",
+            "stored": False,
+        }
 
     try:
         return transcribe_audio(
@@ -2326,7 +2476,7 @@ def mae_status_api(response: Response):
             "write_access": False,
             "local_ai": {
                 "connected": presentation["advisory"]["ready"],
-                "model": "Grounded Claude Sonnet 5 advisory",
+                "model": _cloud_ai_model_label(),
                 "installed_models": [],
                 "error": presentation["advisory"]["notice"],
             },

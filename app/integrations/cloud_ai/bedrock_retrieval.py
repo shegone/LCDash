@@ -13,6 +13,34 @@ from urllib.parse import urlsplit
 from .contracts import AdvisoryCitation, AdvisoryRagRequest, AdvisoryRagResponse
 
 
+class DailyRequestBudget:
+    """One shared daily generation cap for every advisory entry point.
+
+    The whole-answer and streaming paths are constructed independently, so
+    without a shared budget each would enforce its own 200-request cap and
+    the effective daily limit would silently double.
+    """
+
+    def __init__(self, daily_limit: int = 200) -> None:
+        if not 1 <= daily_limit <= 200:
+            raise ValueError("Daily budget must be between 1 and 200 requests.")
+        self._daily_limit = daily_limit
+        self._lock = Lock()
+        self._day = date.today()
+        self._count = 0
+
+    def reserve(self) -> bool:
+        with self._lock:
+            today = date.today()
+            if today != self._day:
+                self._day = today
+                self._count = 0
+            if self._count >= self._daily_limit:
+                return False
+            self._count += 1
+            return True
+
+
 class BedrockRetrieveClient(Protocol):
     def retrieve(self, **kwargs: Any) -> dict[str, Any]: ...
 
@@ -142,7 +170,8 @@ class GroundedBedrockAdvisory:
     def __init__(self, retriever: ApprovedBedrockRetriever, *,
                  converse_client: BedrockConverseClient, model_id: str,
                  max_output_tokens: int = 400, detail_max_output_tokens: int = 1200,
-                 daily_request_limit: int = 200) -> None:
+                 daily_request_limit: int = 200,
+                 budget: DailyRequestBudget | None = None) -> None:
         if not 64 <= max_output_tokens <= 400:
             raise ValueError("Grounded generation requires a 64-400 default token cap.")
         if not max_output_tokens <= detail_max_output_tokens <= 1200:
@@ -154,21 +183,12 @@ class GroundedBedrockAdvisory:
         self._model_id = model_id
         self._max_output_tokens = max_output_tokens
         self._detail_max_output_tokens = detail_max_output_tokens
-        self._daily_limit = daily_request_limit
-        self._usage_lock = Lock()
-        self._usage_day = date.today()
-        self._requests_today = 0
+        # A caller may inject a budget shared with another entry point (e.g.
+        # the streaming advisory path) so both draw from one daily cap.
+        self._budget = budget or DailyRequestBudget(daily_request_limit)
 
     def _reserve_request(self) -> bool:
-        with self._usage_lock:
-            today = date.today()
-            if today != self._usage_day:
-                self._usage_day = today
-                self._requests_today = 0
-            if self._requests_today >= self._daily_limit:
-                return False
-            self._requests_today += 1
-            return True
+        return self._budget.reserve()
 
     @staticmethod
     def _clean_answer(text: str) -> str:

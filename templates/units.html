@@ -441,6 +441,7 @@
                                 </div>
                             </div>
 
+                            {% if not cloud_presentation %}
                             <div class="unit-timer-box">
                                 <div class="label">TIME IN STATUS</div>
                                 <div
@@ -463,6 +464,7 @@
                                     </div>
                                 {% endif %}
                             </div>
+                            {% endif %}
 
                             <div class="unit-call-title">
                                 {{ unit.incident_description }}
@@ -479,6 +481,10 @@
 
                             <div class="unit-time-grid">
                                 <div class="row g-2 small">
+                                    {# Unit-level CAD timers are absent from the cloud
+                                       read contract (UNIT_FIELDS), so the cloud view
+                                       omits the grid rather than showing empty cells. #}
+                                    {% if not cloud_presentation %}
                                     <div class="col-6">
                                         <div class="label">DISPATCH</div>
                                         <div class="unit-time-value">
@@ -543,6 +549,8 @@
                                             {% endif %}
                                         </div>
                                     </div>
+
+                                    {% endif %}
 
                                     <div class="col-6 text-end">
                                         <div class="label">OPEN VIEW</div>

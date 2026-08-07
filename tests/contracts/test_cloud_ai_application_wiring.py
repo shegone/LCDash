@@ -10,6 +10,7 @@ from unittest.mock import patch
 from app.integrations.cloud_ai import CloudAiRuntimeUnavailable
 from app.services.cloud_ai_service import (
     CLOUD_POLLY_VOICES,
+    CLOUD_TRANSCRIBE_AUDIO_FORMATS,
     answer_cloud_advisory,
     build_cloud_ai_config,
     build_cloud_ai_runtime,
@@ -17,6 +18,7 @@ from app.services.cloud_ai_service import (
     cloud_ai_status,
     cloud_mode_enabled,
     synthesize_cloud_speech,
+    transcribe_cloud_speech,
 )
 
 
@@ -61,12 +63,44 @@ class CloudAiApplicationWiringTests(unittest.TestCase):
         self.assertFalse(status["documents_ingested"])
         self.assertTrue(status["voice_enabled"])
         self.assertTrue(status["tts"]["ready"])
-        self.assertFalse(status["stt"]["ready"])
+        self.assertTrue(status["stt"]["ready"])
         self.assertFalse(status["action_tools_enabled"])
         self.assertIn("not ingested", status["disabled_reason"])
         self.assertEqual(
             {voice["id"] for voice in CLOUD_POLLY_VOICES}, {"Matthew", "Joanna"}
         )
+        self.network.assert_not_called()
+
+    def test_cloud_transcription_is_wired_but_rejects_unstreamable_audio(self):
+        settings = _settings(cloud_ai_mode="advisory-rag", cloud_ai_voice_enabled=True)
+        config = build_cloud_ai_config(settings)
+        runtime = build_cloud_ai_runtime(settings)
+        self.assertTrue(runtime.status.stt_ready)
+        self.assertEqual(set(CLOUD_TRANSCRIBE_AUDIO_FORMATS), {"pcm", "ogg-opus"})
+        with self.assertRaisesRegex(
+            CloudAiRuntimeUnavailable, "transcribe_format_not_allowed"
+        ):
+            transcribe_cloud_speech(
+                runtime,
+                config,
+                request_id="request-cloud-1004",
+                audio=b"synthetic-audio",
+                audio_format="webm-opus",
+                sample_rate_hz=48000,
+                duration_seconds=2.0,
+            )
+        with self.assertRaisesRegex(
+            CloudAiRuntimeUnavailable, "transcribe_request_not_allowed"
+        ):
+            transcribe_cloud_speech(
+                runtime,
+                config,
+                request_id="request-cloud-1005",
+                audio=b"synthetic-audio",
+                audio_format="pcm",
+                sample_rate_hz=16000,
+                duration_seconds=45.0,
+            )
         self.network.assert_not_called()
 
     def test_advisory_and_voice_fail_closed_before_document_gate(self):

@@ -102,15 +102,16 @@ class VoicePageTests(unittest.TestCase):
         script = (Path(__file__).parents[1] / "static/js/lcdash-mindshare.js").read_text(
             encoding="utf-8"
         )
-        self.assertIn('voice: "jack-synthetic-southern-male"', script)
-        self.assertIn("speed: 0.92", script)
-        self.assertIn("activeSpeechController.abort()", script)
+        self.assertIn(': "jack-synthetic-southern-male"', script)
+        self.assertIn("speed: cloudMode ? 1.0 : 0.92", script)
+        self.assertIn("controller.abort()", script)
         self.assertIn("status.jack_tts.ready", script)
         self.assertIn("let synthesisChain = Promise.resolve()", script)
         self.assertIn("const audioPromise = synthesisChain.then", script)
-        self.assertIn("groupedSpeech.length >= 140", script)
+        self.assertIn("const SPEECH_GROUP_TARGET = 180", script)
+        self.assertIn("group.length >= SPEECH_GROUP_TARGET", script)
         self.assertIn("function answerForSpeech(text)", script)
-        self.assertIn("answerForSpeech(clean)", script)
+        self.assertIn("answerForSpeech(text)", script)
         self.assertIn("/knowledge/documents/mindshare/${item.document_id}", script)
 
     def test_live_stt_uses_cpu_to_avoid_jack_gpu_contention(self):

@@ -305,6 +305,10 @@ def build_cloud_operations_snapshot(state) -> dict:
                 "call_datetime": _cloud_display_text(item.get("call_datetime")),
                 "location": _cloud_display_text(item.get("location_label")),
                 "city": _cloud_display_text(item.get("city")),
+                # Allowlisted coordinates power the map view only; they are never
+                # rendered as text. See CALL_FIELDS in cloud_read_config.
+                "latitude": item.get("latitude"),
+                "longitude": item.get("longitude"),
                 "units": ", ".join(unit["unit_number"] for unit in assigned_units),
                 "assigned_units": assigned_units,
                 "command_log_count": len(command_logs),
@@ -529,6 +533,24 @@ def build_empty_unit_snapshot() -> dict:
 
 def build_cloud_unit_snapshot(state) -> dict:
     """Project only reviewed normalized unit fields into the roster display."""
+    # Join assignments to their incident using allowlisted CALL_FIELDS only.
+    # Unit-level CAD timers and responder identity are deliberately absent from
+    # UNIT_FIELDS, so they stay blank rather than being inferred.
+    assignment_context: dict[str, dict[str, str]] = {}
+    for call in state.calls:
+        cfs_number = _cloud_display_text(call.get("cfs_number"))
+        if not cfs_number:
+            continue
+        assignment_context[cfs_number] = {
+            "location": _cloud_display_text(call.get("location_label")),
+            "incident_description": _cloud_display_text(
+                call.get("incident_description")
+            ),
+            "incident_code": _cloud_display_text(call.get("incident_code")),
+            "priority": _cloud_display_text(call.get("priority")),
+            "call_datetime": _cloud_display_text(call.get("call_datetime")),
+        }
+
     roster_units = []
     active_rows = []
     for item in state.units:
@@ -545,12 +567,16 @@ def build_cloud_unit_snapshot(state) -> dict:
         roster_units.append(unit)
         assignment = _cloud_display_text(item.get("assignment_cfs_number"))
         if assignment:
+            context = assignment_context.get(assignment, {})
             active_rows.append(
                 {
                     **unit,
                     "cfs_number": assignment,
-                    "location": "",
-                    "incident_description": "",
+                    "location": context.get("location", ""),
+                    "incident_description": context.get("incident_description", ""),
+                    "incident_code": context.get("incident_code", ""),
+                    "priority": context.get("priority", ""),
+                    "call_datetime": context.get("call_datetime", ""),
                 }
             )
     groups = build_full_unit_roster(roster_units, active_rows)

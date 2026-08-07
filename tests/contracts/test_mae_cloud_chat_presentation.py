@@ -35,7 +35,7 @@ class MaeCloudChatPresentationTests(unittest.TestCase):
     def test_cloud_answers_require_citations_and_render_sanitized_fields(self):
         script = self.read("static/js/lcdash-mae.js")
 
-        self.assertIn("!Array.isArray(payload.citations) || !payload.citations.length", script)
+        self.assertIn("!Array.isArray(result.citations) || !result.citations.length", script)
         self.assertIn("mandatory approved citations were missing", script)
         self.assertIn("approved citation support was unavailable", script)
         self.assertIn('citationBlock.setAttribute("aria-label", "Approved document citations")', script)

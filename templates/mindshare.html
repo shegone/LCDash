@@ -9,10 +9,12 @@
     Advisory reference only. JACK cannot transmit radio traffic, change console or gateway configuration,
     dispatch, acknowledge events, activate alerts or tones, alter CAD, or control emergency-call routing.
 </div>
+{% if not cloud_presentation_status.advisory.ready %}
 <div class="command-unavailable-state mb-4" role="status" aria-live="polite">
     <strong><i class="bi bi-journal-x me-2" aria-hidden="true"></i>Approved Mindshare cloud library unavailable</strong>
     <span>The on-prem experience is represented for parity review. Cloud questions remain disabled until approved manuals are ingested and verified.</span>
 </div>
+{% endif %}
 <section class="mindshare-hero glass command-page">
     <div>
         <div class="mindshare-eyebrow">LOGAN COUNTY RADIO TECHNOLOGY</div>

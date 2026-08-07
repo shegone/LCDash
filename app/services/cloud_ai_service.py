@@ -15,14 +15,27 @@ from app.integrations.cloud_ai import (
     CloudAiRuntime,
     CloudAiRuntimeUnavailable,
     CloudPollyProvider,
+    CloudTranscribeProvider,
     PollySpeechRequest,
     PollyVoice,
+    TranscribePushToTalkRequest,
 )
+from app.integrations.cloud_ai.contracts import PushToTalkAudioFormat
 from app.integrations.cloud_ai.bedrock_retrieval import (
     ApprovedBedrockRetriever,
     BedrockRetrieveClient,
     CitationOnlyBedrockAdvisory,
+    DailyRequestBudget,
     GroundedBedrockAdvisory,
+)
+from app.integrations.cloud_ai.transcribe_provider import (
+    MEDIA_ENCODINGS,
+    AwsTranscribeStreamingProvider,
+)
+
+
+CLOUD_TRANSCRIBE_AUDIO_FORMATS = tuple(
+    audio_format.value for audio_format in MEDIA_ENCODINGS
 )
 
 
@@ -75,11 +88,24 @@ def _build_polly_provider(
     return None
 
 
+def _build_transcribe_provider(
+    config: CloudAiProviderConfig,
+) -> CloudTranscribeProvider | None:
+    if config.mode.value == "advisory-rag" and config.voice_enabled:
+        return AwsTranscribeStreamingProvider(
+            max_transcript_characters=config.max_transcript_characters,
+        )
+    return None
+
+
 def build_cloud_ai_runtime(settings: Settings) -> CloudAiRuntime:
-    """Wire optional TTS without making a managed-service request at startup."""
+    """Wire optional voice without making a managed-service request at startup."""
     config = build_cloud_ai_config(settings)
-    # Transcribe remains intentionally absent pending its separate provider gate.
-    return CloudAiRuntime(config, polly=_build_polly_provider(config))
+    return CloudAiRuntime(
+        config,
+        transcribe=_build_transcribe_provider(config),
+        polly=_build_polly_provider(config),
+    )
 
 
 class LazyBedrockRetrieveClient:
@@ -104,11 +130,21 @@ class LazyBedrockConverseClient:
         return self._client.converse(**kwargs)
 
 
-def build_activated_cloud_ai_runtime(settings: Settings) -> CloudAiRuntime:
-    """Wire bounded grounded RAG without provider calls at startup."""
+def build_activated_cloud_ai_runtime(
+    settings: Settings, *, budget: DailyRequestBudget | None = None
+) -> CloudAiRuntime:
+    """Wire bounded grounded RAG without provider calls at startup.
+
+    Pass the same ``budget`` given to the streaming advisory path so both
+    draw from one daily generation cap instead of two independent ones.
+    """
     config = build_cloud_ai_config(settings)
     if not config.documents_ingested:
-        return CloudAiRuntime(config, polly=_build_polly_provider(config))
+        return CloudAiRuntime(
+            config,
+            transcribe=_build_transcribe_provider(config),
+            polly=_build_polly_provider(config),
+        )
     retriever = ApprovedBedrockRetriever(
         client=LazyBedrockRetrieveClient(),
         knowledge_base_id=config.knowledge_base_id,
@@ -127,7 +163,9 @@ def build_activated_cloud_ai_runtime(settings: Settings) -> CloudAiRuntime:
             max_output_tokens=min(config.max_output_tokens, 400),
             detail_max_output_tokens=1200,
             daily_request_limit=200,
+            budget=budget,
         ),
+        transcribe=_build_transcribe_provider(config),
         polly=_build_polly_provider(config),
     )
 
@@ -138,7 +176,11 @@ def build_citation_only_runtime(
     """Future-gated Retrieve-only wiring; constructing it performs no API call."""
     config = build_cloud_ai_config(settings)
     if not config.documents_ingested:
-        return CloudAiRuntime(config, polly=_build_polly_provider(config))
+        return CloudAiRuntime(
+            config,
+            transcribe=_build_transcribe_provider(config),
+            polly=_build_polly_provider(config),
+        )
     retriever = ApprovedBedrockRetriever(
         client=retrieve_client,
         knowledge_base_id=config.knowledge_base_id,
@@ -151,6 +193,7 @@ def build_citation_only_runtime(
     return CloudAiRuntime(
         config,
         advisory=CitationOnlyBedrockAdvisory(retriever),
+        transcribe=_build_transcribe_provider(config),
         polly=_build_polly_provider(config),
     )
 
@@ -171,7 +214,7 @@ def cloud_ai_status(
     stt_reason = (
         ""
         if status.stt_ready
-        else "Cloud transcription remains disabled pending a separate activation review."
+        else "Cloud speech-to-text is unavailable pending provider configuration."
     )
     return {
         "provider": "aws-managed-advisory",
@@ -253,3 +296,38 @@ def synthesize_cloud_speech(
     return runtime.synthesize(
         PollySpeechRequest(request_id, config.tenant_id, text, selected_voice)
     )
+
+
+def transcribe_cloud_speech(
+    runtime: CloudAiRuntime,
+    config: CloudAiProviderConfig,
+    *,
+    request_id: str,
+    audio: bytes,
+    audio_format: str,
+    sample_rate_hz: int,
+    duration_seconds: float,
+) -> str:
+    """Transcribe one bounded push-to-talk clip; never persists or logs it.
+
+    This call blocks while the Transcribe stream completes, so an async caller
+    must dispatch it through a worker thread rather than awaiting it inline.
+    """
+    try:
+        selected_format = PushToTalkAudioFormat(audio_format)
+    except ValueError as exc:
+        raise CloudAiRuntimeUnavailable("transcribe_format_not_allowed") from exc
+    if selected_format.value not in CLOUD_TRANSCRIBE_AUDIO_FORMATS:
+        raise CloudAiRuntimeUnavailable("transcribe_format_not_allowed")
+    try:
+        push_to_talk = TranscribePushToTalkRequest(
+            request_id,
+            config.tenant_id,
+            selected_format,
+            int(sample_rate_hz),
+            float(duration_seconds),
+            language_code=config.transcribe_language_code,
+        )
+    except (TypeError, ValueError) as exc:
+        raise CloudAiRuntimeUnavailable("transcribe_request_not_allowed") from exc
+    return runtime.transcribe(push_to_talk, audio)

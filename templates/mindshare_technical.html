@@ -6,15 +6,18 @@
 <link rel="stylesheet" href="/static/css/lcdash-mae.css?v=20260726">
 <link rel="stylesheet" href="/static/css/lcdash-mindshare.css?v=20260726">
 
-<section class="mae-shell mindshare-assistant command-page" aria-labelledby="mindshare-title" data-approved-source="false">
+<section class="mae-shell mindshare-assistant command-page" aria-labelledby="mindshare-title"
+         data-approved-source="{{ 'true' if cloud_presentation_status.advisory.ready else 'false' }}">
     <div class="command-safety-banner" role="note">
         Advisory reference only. JACK cannot transmit radio traffic, change system configuration,
         dispatch, acknowledge, activate alerts or tones, alter CAD, or control emergency-call routing.
     </div>
+    {% if not cloud_presentation_status.advisory.ready %}
     <div class="command-unavailable-state mb-4" role="status" aria-live="polite">
         <strong><i class="bi bi-journal-x me-2" aria-hidden="true"></i>Approved Mindshare source unavailable</strong>
         <span>Questions and voice are disabled until reviewed Mindshare documents are ingested into the cloud library.</span>
     </div>
+    {% endif %}
     <header class="mae-hero glass">
         <div class="mae-identity">
             <div class="mae-orb" aria-hidden="true">
@@ -27,7 +30,8 @@
             </div>
         </div>
         <div class="mae-hero-actions">
-            <button class="mae-voice-launch" id="jack-voice-toggle" type="button" disabled>
+            <button class="mae-voice-launch" id="jack-voice-toggle" type="button"
+                    {% if cloud_mode %}disabled title="Cloud conversational voice and transcription are not enabled"{% endif %}>
                 <i class="bi bi-mic-fill"></i>
                 <span>
                     <strong>Start voice mode</strong>

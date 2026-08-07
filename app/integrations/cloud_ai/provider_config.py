@@ -19,6 +19,7 @@ ALLOWED_MODEL_IDS = frozenset(
     {
         "amazon.nova-micro-v1:0",
         "amazon.nova-lite-v1:0",
+        "us.amazon.nova-pro-v1:0",
         "us.anthropic.claude-sonnet-5",
     }
 )

@@ -319,7 +319,11 @@ class CloudCadDisplayBridgeTests(unittest.TestCase):
         self.assertNotIn("authorization", rendered)
         self.assertNotIn("must not pass", rendered)
 
-    def test_cloud_coordinates_are_validated_and_detail_only(self):
+    def test_cloud_coordinates_are_validated_then_available_for_the_map(self):
+        # Coordinates now flow into the list snapshot to power the map view,
+        # but they are pre-validated at the CAD ingestion boundary
+        # (_address_coordinates) before build_cloud_operations_snapshot ever
+        # sees them, and no template renders latitude/longitude as text.
         normalized = _normalize_calls(
             [
                 {
@@ -342,9 +346,12 @@ class CloudCadDisplayBridgeTests(unittest.TestCase):
         )
         state = CloudCadDisplayState(calls=normalized)
         snapshot = build_cloud_operations_snapshot(state)
-        for call in snapshot["calls"]:
-            self.assertNotIn("latitude", call)
-            self.assertNotIn("longitude", call)
+        by_cfs = {call["cfs_number"]: call for call in snapshot["calls"]}
+        self.assertEqual(by_cfs["mapped"]["latitude"], 37.8487)
+        self.assertEqual(by_cfs["mapped"]["longitude"], -81.9935)
+        for cfs_number in ("zero", "infinite", "range"):
+            self.assertIsNone(by_cfs[cfs_number]["latitude"])
+            self.assertIsNone(by_cfs[cfs_number]["longitude"])
 
         mapped = build_cloud_call_detail(state, "mapped")
         self.assertEqual(mapped["latitude"], 37.8487)

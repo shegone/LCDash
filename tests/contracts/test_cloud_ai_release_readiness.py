@@ -46,8 +46,7 @@ def test_jack_renders_sources_separately_and_never_speaks_urls():
     script = _read("static/js/lcdash-mindshare.js")
     assert 'heading.textContent = "Sources"' in script
     assert "payload.citations" in script
-    assert '.replace(/https?:\\/\\/\\S+/gi, "")' in script
-    assert '.replace(/s3:\\/\\/\\S+/gi, "")' in script
+    assert '.replace(/\\b(?:https?|s3|ftp|file):\\/\\/\\S+/gi, " ")' in script
 
 
 def test_release_gate_document_forbids_execution_and_bounds_single_call():
