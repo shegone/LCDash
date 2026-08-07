@@ -10,7 +10,10 @@
 
     var OUTPUT_SAMPLE_RATE_HZ = 16000;
     var MAX_DURATION_SECONDS = 30;
-    var MAX_BYTES = 1900000; // safety margin under the server's 2,000,000-byte cap
+    // The 30-second duration cap binds first at 960,000 bytes, so this is a
+    // defensive ceiling rather than the limiting constraint in practice. The
+    // server's actual upload cap (app/main.py voice_transcribe_api) is 20 MB.
+    var MAX_BYTES = 1900000;
     var BYTES_PER_SAMPLE = 2;
     var SCRIPT_PROCESSOR_BUFFER_SIZE = 4096;
     var MAX_OUTPUT_SAMPLES = Math.min(

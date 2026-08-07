@@ -49,21 +49,34 @@
     }
 
     async function loadStatus() {
+        let nova = null;
         try {
             const [novaResponse, voiceResponse] = await Promise.all([
                 fetch("/api/nga911/v1/nova/status", {cache: "no-store"}),
                 fetch("/api/voice/status", {cache: "no-store"})
             ]);
-            const nova = await novaResponse.json();
+            nova = await novaResponse.json();
             const voice = await voiceResponse.json();
-            setStatus(nova.connected && nova.model_available, nova.connected ? nova.model : "Unavailable");
-            voiceReady = Boolean(voiceResponse.ok && voice.connected && voice.tts && voice.tts.ready && voice.stt && voice.stt.ready);
+            if (nova.cloud_available === false) {
+                setStatus(false, nova.disabled_reason || "Not available in the cloud pilot");
+            } else {
+                setStatus(nova.connected && nova.model_available, nova.connected ? nova.model : "Unavailable");
+            }
+            voiceReady = Boolean(
+                nova.cloud_available !== false
+                && voiceResponse.ok && voice.connected
+                && voice.tts && voice.tts.ready && voice.stt && voice.stt.ready
+            );
         } catch (error) {
             setStatus(false, "Unavailable");
             voiceReady = false;
         }
         voiceToggle.disabled = !voiceReady;
-        if (!voiceReady) voiceToggle.querySelector("small").textContent = "Voice service unavailable";
+        // Cloud mode already rendered its own explanatory label server-side;
+        // do not overwrite it with the generic on-prem-outage message.
+        if (!voiceReady && nova?.cloud_available !== false) {
+            voiceToggle.querySelector("small").textContent = "Voice service unavailable";
+        }
     }
 
     function addMessage(role, text, payload) {

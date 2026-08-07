@@ -1812,7 +1812,11 @@ def nga911_nova_page(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="nga911_nova.html",
-        context={"standalone": request.url.path == "/nga911/nova", "version": "0.1.0"},
+        context={
+            "standalone": request.url.path == "/nga911/nova",
+            "version": "0.1.0",
+            "cloud_mode": cloud_mode_enabled(settings),
+        },
         headers={"Cache-Control": "no-store"},
     )
 

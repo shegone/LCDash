@@ -4,6 +4,7 @@ from time import perf_counter
 import httpx
 
 from app.config.settings import settings
+from app.services.cloud_ai_service import cloud_mode_enabled
 from app.services.nga911_intelligence_service import (
     get_nga911_intelligence_overview,
     get_nga911_logan_operations,
@@ -14,7 +15,27 @@ class NOVAServiceError(RuntimeError):
     """Raised when NOVA cannot answer from the NGA911 intelligence layer."""
 
 
+# NOVA calls a local Ollama instance (settings.ollama_base_url), which exists
+# only on-prem. There is no cloud-hosted equivalent yet: every existing
+# Bedrock advisory path in this codebase is retrieval-and-citation-enforced
+# by construction (GroundedBedrockAdvisory / CloudAiProviderConfig), and
+# NOVA's NGA911 context is inline synthetic data with no approved source to
+# cite -- it needs its own reviewed advisory class, not a bolt-on to the KB
+# path. Until that exists, report honestly rather than attempting a
+# connection that can only fail or timing out silently.
 def get_nova_status() -> dict:
+    if cloud_mode_enabled(settings):
+        return {
+            "assistant": "NOVA",
+            "connected": False,
+            "model": settings.mae_model,
+            "model_available": False,
+            "scope": "NGA911 Intelligence layer only",
+            "write_access": False,
+            "synthetic_data": True,
+            "cloud_available": False,
+            "disabled_reason": "NOVA is not available in the cloud pilot yet.",
+        }
     try:
         response = httpx.get(
             f"{settings.ollama_base_url.rstrip('/')}/api/tags",
@@ -39,6 +60,8 @@ def get_nova_status() -> dict:
 
 
 def ask_nova(question: str, history: list[dict] | None = None) -> dict:
+    if cloud_mode_enabled(settings):
+        raise NOVAServiceError("NOVA is not available in the cloud pilot yet.")
     started = perf_counter()
     clean_question = (question or "").strip()
     if not clean_question:

@@ -21,6 +21,10 @@
     let audioContext = null;
     let analyser = null;
     let mediaRecorder = null;
+    let microphoneSource = null;
+    // Cloud mode captures raw PCM instead of using MediaRecorder: Amazon
+    // Transcribe streaming cannot ingest the webm/opus MediaRecorder produces.
+    let pcmCapture = null;
     let voiceChunks = [];
     let voiceFrame = null;
     let voiceCycleStarted = 0;
@@ -542,9 +546,21 @@
         return speech.idle();
     }
 
-    async function transcribeRecording(blob) {
+    async function transcribeRecording(blob, clip) {
         const formData = new FormData();
-        formData.append("file", blob, "jack-question.webm");
+        if (clip && clip.audioFormat === "pcm") {
+            // The server defaults to webm-opus/48000; raw PCM must declare its
+            // own format and rate or the push-to-talk contract rejects it.
+            formData.append("file", blob, "jack-question.pcm");
+            formData.append("audio_format", clip.audioFormat);
+            formData.append("sample_rate_hz", String(clip.sampleRateHz));
+            formData.append(
+                "duration_seconds",
+                String(Math.min(30, Math.max(0.1, clip.durationSeconds)))
+            );
+        } else {
+            formData.append("file", blob, "jack-question.webm");
+        }
         const response = await fetch("/api/voice/transcribe", {
             method: "POST",
             cache: "no-store",
@@ -559,24 +575,83 @@
         return String(payload.text || "").trim();
     }
 
+    // Shared tail for both capture paths so cloud and on-prem behave
+    // identically once a clip exists.
+    async function finishVoiceRecording(recording, clip) {
+        const shouldSubmit =
+            voiceModeActive && speechDetected && !discardRecording && Boolean(recording);
+        setMicrophoneEnabled(false);
+
+        if (!shouldSubmit) {
+            if (voiceModeActive && !jackBusy) {
+                window.setTimeout(beginListeningCycle, 150);
+            }
+            return;
+        }
+
+        setVoiceState(
+            "processing",
+            "Understanding your question",
+            cloudMode
+                ? "Amazon Transcribe is processing the recording."
+                : "Local speech recognition is processing the recording."
+        );
+        try {
+            const question = await transcribeRecording(recording, clip);
+            if (!question || question.length < 2) {
+                setVoiceState(
+                    "listening",
+                    "I did not catch that",
+                    "Please ask the question again."
+                );
+                window.setTimeout(beginListeningCycle, 500);
+                return;
+            }
+            await ask(question, {speakResponse: true});
+        } catch (error) {
+            setVoiceState(
+                "error",
+                "Voice request failed",
+                error.message || "Please try again."
+            );
+            if (voiceModeActive) {
+                window.setTimeout(beginListeningCycle, 1200);
+            }
+        }
+    }
+
     function stopListeningCycle(discard) {
         discardRecording = Boolean(discard);
         if (voiceFrame) {
             window.cancelAnimationFrame(voiceFrame);
             voiceFrame = null;
         }
+        if (pcmCapture) {
+            const capture = pcmCapture;
+            pcmCapture = null;
+            capture.stop().then(function (clip) {
+                finishVoiceRecording(clip ? clip.blob : null, clip);
+            }).catch(function () {
+                finishVoiceRecording(null, null);
+            });
+            return;
+        }
         if (mediaRecorder && mediaRecorder.state === "recording") {
             mediaRecorder.stop();
         }
     }
 
+    function isCapturing() {
+        if (cloudMode) return Boolean(pcmCapture);
+        return Boolean(mediaRecorder) && mediaRecorder.state === "recording";
+    }
+
     function monitorVoiceLevel() {
-        if (
-            !voiceModeActive ||
-            !mediaRecorder ||
-            mediaRecorder.state !== "recording" ||
-            !analyser
-        ) {
+        // The cloud path has no MediaRecorder, so capture liveness must be
+        // asked of whichever recorder is actually running. Getting this wrong
+        // stops the natural-pause detector on its first frame and the clip
+        // never ends.
+        if (!voiceModeActive || !isCapturing() || !analyser) {
             return;
         }
 
@@ -633,57 +708,43 @@
         speechDetected = false;
         discardRecording = false;
 
-        const options = {};
-        if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
-            options.mimeType = "audio/webm;codecs=opus";
-        }
-        mediaRecorder = new MediaRecorder(microphoneStream, options);
-        mediaRecorder.addEventListener("dataavailable", function (event) {
-            if (event.data.size) voiceChunks.push(event.data);
-        });
-        mediaRecorder.addEventListener("stop", async function () {
-            const shouldSubmit =
-                voiceModeActive && speechDetected && !discardRecording;
-            const mimeType = mediaRecorder.mimeType || "audio/webm";
-            const recording = new Blob(voiceChunks, {type: mimeType});
-            setMicrophoneEnabled(false);
-
-            if (!shouldSubmit) {
-                if (voiceModeActive && !jackBusy) {
-                    window.setTimeout(beginListeningCycle, 150);
-                }
-                return;
-            }
-
-            setVoiceState(
-                "processing",
-                "Understanding your question",
-                "Local speech recognition is processing the recording."
-            );
-            try {
-                const question = await transcribeRecording(recording);
-                if (!question || question.length < 2) {
-                    setVoiceState(
-                        "listening",
-                        "I did not catch that",
-                        "Please ask the question again."
-                    );
-                    window.setTimeout(beginListeningCycle, 500);
-                    return;
-                }
-                await ask(question, {speakResponse: true});
-            } catch (error) {
+        if (cloudMode) {
+            if (!window.LCDashVoiceCapture || !microphoneSource) {
                 setVoiceState(
                     "error",
-                    "Voice request failed",
-                    error.message || "Please try again."
+                    "Voice capture unavailable",
+                    "This browser cannot capture audio for cloud transcription."
                 );
-                if (voiceModeActive) {
-                    window.setTimeout(beginListeningCycle, 1200);
-                }
+                return;
             }
-        });
-        mediaRecorder.start(250);
+            try {
+                pcmCapture = window.LCDashVoiceCapture.start(
+                    audioContext, microphoneSource
+                );
+            } catch (error) {
+                pcmCapture = null;
+                setVoiceState(
+                    "error",
+                    "Voice capture unavailable",
+                    error.message || "Cloud audio capture could not start."
+                );
+                return;
+            }
+        } else {
+            const options = {};
+            if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
+                options.mimeType = "audio/webm;codecs=opus";
+            }
+            mediaRecorder = new MediaRecorder(microphoneStream, options);
+            mediaRecorder.addEventListener("dataavailable", function (event) {
+                if (event.data.size) voiceChunks.push(event.data);
+            });
+            mediaRecorder.addEventListener("stop", function () {
+                const mimeType = mediaRecorder.mimeType || "audio/webm";
+                finishVoiceRecording(new Blob(voiceChunks, {type: mimeType}), null);
+            });
+            mediaRecorder.start(250);
+        }
         setVoiceState(
             "listening",
             "Listening",
@@ -724,9 +785,12 @@
             await audioContext.resume();
             analyser = audioContext.createAnalyser();
             analyser.fftSize = 512;
-            audioContext
-                .createMediaStreamSource(microphoneStream)
-                .connect(analyser);
+            // Retained so cloud PCM capture can tap the same source node
+            // rather than opening a second one on the same stream.
+            microphoneSource = audioContext.createMediaStreamSource(
+                microphoneStream
+            );
+            microphoneSource.connect(analyser);
             voiceModeActive = true;
             voiceToggle.classList.add("is-active");
             voiceToggle.querySelector("strong").textContent =
@@ -761,6 +825,8 @@
             audioContext = null;
         }
         analyser = null;
+        microphoneSource = null;
+        pcmCapture = null;
         if (voiceSession) voiceSession.hidden = true;
         if (voiceToggle) {
             voiceToggle.classList.remove("is-active");

@@ -37,7 +37,7 @@ class MAEPageTests(unittest.TestCase):
             response.text,
         )
         self.assertIn(
-            "/static/js/lcdash-mae.js?v=20260803-custom-analytics",
+            "/static/js/lcdash-mae.js?v=20260807-cloud-voice",
             response.text,
         )
         self.assertIn("/static/img/mae/mae-neutral.jpg", response.text)

@@ -686,6 +686,39 @@ class Phase1FoundationStack(cdk.Stack):
                 },
             )
         )
+        # Sentence-streamed advisory generation (app/services/cloud_ai_streaming.py)
+        # calls converse_stream, which Bedrock authorizes separately from the
+        # synchronous converse/invoke call above. Same resources, same region
+        # scope as InvokeModel -- streaming reaches only the models the
+        # whole-answer path can already reach.
+        role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["bedrock:InvokeModelWithResponseStream"],
+                resources=[
+                    cdk.Fn.sub(
+                        "arn:${AWS::Partition}:bedrock:us-east-1:${AWS::AccountId}:"
+                        "inference-profile/us.amazon.nova-pro-v1:0"
+                    ),
+                    cdk.Fn.sub(
+                        "arn:${AWS::Partition}:bedrock:us-east-1::"
+                        "foundation-model/amazon.nova-pro-v1:0"
+                    ),
+                    cdk.Fn.sub(
+                        "arn:${AWS::Partition}:bedrock:us-east-2::"
+                        "foundation-model/amazon.nova-pro-v1:0"
+                    ),
+                    cdk.Fn.sub(
+                        "arn:${AWS::Partition}:bedrock:us-west-2::"
+                        "foundation-model/amazon.nova-pro-v1:0"
+                    ),
+                ],
+                conditions={
+                    "StringEquals": {
+                        "aws:RequestedRegion": ["us-east-1", "us-east-2", "us-west-2"]
+                    }
+                },
+            )
+        )
         role.add_to_policy(
             iam.PolicyStatement(
                 actions=["polly:SynthesizeSpeech"],

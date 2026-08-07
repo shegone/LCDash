@@ -1,10 +1,12 @@
 import unittest
 from unittest.mock import Mock, patch
 
+import httpx
 from fastapi.testclient import TestClient
 
+from app.config.settings import settings
 from app.main import app
-from app.services.nga911_nova_service import ask_nova
+from app.services.nga911_nova_service import NOVAServiceError, ask_nova, get_nova_status
 
 
 class NOVAServiceTests(unittest.TestCase):
@@ -29,6 +31,34 @@ class NOVAServiceTests(unittest.TestCase):
         self.assertIn("Position 6", context_prompt)
         self.assertIn("synthetic", system_prompt)
 
+    def test_cloud_mode_reports_unavailable_without_attempting_ollama(self):
+        with (
+            patch.object(settings, "deployment_mode", "synthetic-disconnected"),
+            patch("app.services.nga911_nova_service.httpx.get") as get_mock,
+            patch("app.services.nga911_nova_service.httpx.post") as post_mock,
+        ):
+            status = get_nova_status()
+            with self.assertRaises(NOVAServiceError):
+                ask_nova("Summarize current network health.")
+
+        get_mock.assert_not_called()
+        post_mock.assert_not_called()
+        self.assertFalse(status["connected"])
+        self.assertFalse(status["cloud_available"])
+        self.assertIn("not available in the cloud pilot", status["disabled_reason"])
+
+    def test_on_prem_mode_still_attempts_ollama(self):
+        with (
+            patch.object(settings, "deployment_mode", "on-prem"),
+            patch("app.services.nga911_nova_service.httpx.get") as get_mock,
+        ):
+            get_mock.side_effect = httpx.ConnectError("connection refused")
+            status = get_nova_status()
+
+        get_mock.assert_called_once()
+        self.assertFalse(status["connected"])
+        self.assertNotIn("cloud_available", status)
+
 
 class NOVAPageTests(unittest.TestCase):
     def setUp(self):
@@ -47,6 +77,27 @@ class NOVAPageTests(unittest.TestCase):
         self.assertIn("/static/js/lcdash-nova.js?v=0.1.1", response.text)
         self.assertIn("detect your natural pause automatically", response.text)
         self.assertNotIn('href="/station-alerts"', response.text)
+
+    def test_cloud_mode_page_shows_unavailable_banner_and_disables_composer(self):
+        with patch.object(settings, "deployment_mode", "synthetic-disconnected"):
+            response = self.client.get("/nga911/nova")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("NOVA is not available in the cloud pilot yet", response.text)
+        self.assertIn('id="nova-question" rows="2" maxlength="4000" '
+                       'placeholder="NOVA is not available in the cloud pilot yet" '
+                       'aria-label="NOVA question" disabled', response.text)
+        self.assertIn('id="nova-send" type="submit" disabled', response.text)
+        self.assertIn('id="nova-voice-toggle" type="button" disabled', response.text)
+
+    def test_on_prem_mode_page_has_no_unavailable_banner(self):
+        with patch.object(settings, "deployment_mode", "on-prem"):
+            response = self.client.get("/nga911/nova")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("not available in the cloud pilot", response.text)
+        self.assertNotIn('id="nova-question" rows="2" maxlength="4000" '
+                          'placeholder="NOVA is not available in the cloud pilot yet"', response.text)
 
     def test_embedded_nova_page_uses_lcdash_shell(self):
         response = self.client.get("/nga911-intelligence/nova")
@@ -74,6 +125,16 @@ class NOVAPageTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["assistant"], "NOVA")
         ask_mock.assert_called_once()
+
+    def test_cloud_mode_chat_endpoint_returns_honest_503(self):
+        with patch.object(settings, "deployment_mode", "synthetic-disconnected"):
+            response = self.client.post(
+                "/api/nga911/v1/nova/chat",
+                json={"question": "Summarize current network health.", "history": []},
+            )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("not available in the cloud pilot", response.json()["detail"])
 
     @patch("app.main.get_nova_status")
     def test_nova_status_is_no_store(self, status_mock):

@@ -115,6 +115,10 @@ class OfflinePolicyTests(unittest.TestCase):
         for action in (
             "bedrock:Retrieve",
             "bedrock:InvokeModel",
+            # Sentence-streamed advisory generation (cloud_ai_streaming.py)
+            # calls converse_stream, which Bedrock authorizes under this
+            # action rather than plain InvokeModel.
+            "bedrock:InvokeModelWithResponseStream",
             "polly:SynthesizeSpeech",
             "transcribe:StartStreamTranscription",
             "geo-maps:GetTile",
@@ -122,7 +126,6 @@ class OfflinePolicyTests(unittest.TestCase):
             "geo-routes:CalculateRoutes",
         ):
             self.assertIn(action, self.stack_source)
-        self.assertNotIn("bedrock:InvokeModelWithResponseStream", self.stack_source)
         for action in (
             # Batch transcription would persist audio in S3; streaming does not.
             "transcribe:StartTranscriptionJob",
