@@ -110,6 +110,11 @@ from app.services.knowledge_service import (
     get_knowledge_status,
     list_knowledge_documents,
 )
+from app.services.cloud_document_library import (
+    CloudDocumentLibraryUnavailable,
+    build_cloud_document_library,
+    content_disposition_header,
+)
 from app.services.mindshare_service import (
     MindshareServiceError,
     ask_mindshare,
@@ -206,6 +211,9 @@ cloud_verified_live_advisory = build_verified_live_advisory(
 # Constructing this opens no connection; the first tile request creates the
 # client. Tiles are signed server-side so no AWS credential reaches a browser.
 geo_map_tile_client = LazyGeoMapsClient()
+# Same source-of-truth prefixes as the Bedrock Knowledge Base
+# (cloud_ai_allowed_s3_prefixes); no provider call happens at construction.
+cloud_document_library = build_cloud_document_library(settings)
 
 
 def _cloud_presentation_status(knowledge_status: dict | None = None):
@@ -1719,16 +1727,49 @@ def mae_reliability_page(request: Request):
     )
 
 
+def _cloud_library_documents(library_key: str) -> list[dict]:
+    """Adapt live S3 listings into the shape knowledge.html/mindshare_library.html
+    already render. page_count/chunk_count/indexed_at have no live-listing
+    equivalent (that metadata lives only in the on-prem Postgres index, which
+    is never populated in cloud) and are left blank rather than fabricated.
+
+    Fails closed to an empty list on any provider error, matching
+    list_knowledge_documents()'s existing behavior -- the page falls back to
+    its "waiting for sync" empty state rather than a 500.
+    """
+    try:
+        documents = cloud_document_library.list_documents(library_key)
+    except CloudDocumentLibraryUnavailable:
+        return []
+    return [
+        {
+            "document_id": document.document_id,
+            "title": document.title,
+            "file_name": document.relative_path,
+            "is_pdf": True,
+            "page_count": "",
+            "chunk_count": "",
+            "indexed_at": "",
+        }
+        for document in documents
+    ]
+
+
 @app.get("/knowledge")
 def knowledge_page(request: Request):
     knowledge_status = get_knowledge_status()
     presentation = _cloud_presentation_status(knowledge_status)
+    documents = (
+        _cloud_library_documents("centralsquare")
+        if cloud_mode_enabled(settings)
+        else list_knowledge_documents()
+    )
     return templates.TemplateResponse(
         request=request,
         name="knowledge.html",
         context={
             "knowledge_status": knowledge_status,
-            "documents": list_knowledge_documents(),
+            "documents": documents,
             "cloud_presentation_status": presentation,
             "version": "0.3.0",
         },
@@ -1901,16 +1942,37 @@ def nga911_nova_chat_api(chat_request: NOVAChatRequest, response: Response):
 @app.get("/knowledge/documents/{library_key}/{document_id}")
 def knowledge_document_pdf(
     library_key: Literal["centralsquare", "mindshare"],
-    document_id: int,
+    document_id: str,
+    download: bool = False,
 ):
-    document = get_knowledge_document_file(document_id, library_key)
+    if cloud_mode_enabled(settings):
+        result = cloud_document_library.fetch_document(library_key, document_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="PDF document not found.")
+        payload, filename = result
+        return Response(
+            content=payload,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": content_disposition_header(
+                    filename, download=download
+                ),
+                "Cache-Control": "private, no-store",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+    try:
+        numeric_document_id = int(document_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="PDF document not found.")
+    document = get_knowledge_document_file(numeric_document_id, library_key)
     if not document:
         raise HTTPException(status_code=404, detail="PDF document not found.")
     return FileResponse(
         path=document["path"],
         media_type="application/pdf",
         filename=document["file_name"],
-        content_disposition_type="inline",
+        content_disposition_type="attachment" if download else "inline",
         headers={
             "Cache-Control": "private, no-store",
             "X-Content-Type-Options": "nosniff",
@@ -1960,6 +2022,11 @@ def mindshare_jack_hines_page(request: Request):
 
 @app.get("/mindshare/library")
 def mindshare_library_page(request: Request):
+    documents = (
+        _cloud_library_documents("mindshare")
+        if cloud_mode_enabled(settings)
+        else list_knowledge_documents(library_key="mindshare")
+    )
     return templates.TemplateResponse(
         request=request,
         name="mindshare_library.html",
@@ -1968,9 +2035,7 @@ def mindshare_library_page(request: Request):
                 library_key="mindshare",
                 source_dir=settings.mindshare_knowledge_source_dir,
             ),
-            "documents": list_knowledge_documents(
-                library_key="mindshare",
-            ),
+            "documents": documents,
             "version": "0.4.0",
         },
         headers={"Cache-Control": "no-store"},

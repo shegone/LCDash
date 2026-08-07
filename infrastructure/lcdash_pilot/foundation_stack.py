@@ -447,6 +447,7 @@ class Phase1FoundationStack(cdk.Stack):
         )
 
         self._grant_content_access(task_role, content_bucket)
+        self._grant_document_library_read(task_role)
         self._grant_managed_providers(
             task_role,
             parameters["cloud_ai_knowledge_base_id"],
@@ -648,6 +649,43 @@ class Phase1FoundationStack(cdk.Stack):
             iam.PolicyStatement(
                 actions=["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
                 resources=[bucket.arn_for_objects("logan-synthetic/reports/*")],
+            )
+        )
+
+    def _grant_document_library_read(self, role: iam.Role) -> None:
+        """Read-only access to the same two approved-document prefixes the
+        Bedrock Knowledge Base already retrieves from -- one reviewed set of
+        164 documents, one source of truth for both citation retrieval and
+        the document library UI. Never grants Put/Delete; this bucket holds
+        a signed approval gate's output, not an application-writable store.
+        """
+        document_library_bucket = s3.Bucket.from_bucket_name(
+            self,
+            "DocumentLibraryBucket",
+            bucket_name=cdk.Fn.sub(
+                f"{NAME_PREFIX}-${{AWS::AccountId}}-document-library"
+            ),
+        )
+        approved_prefixes = [
+            "tenants/logan-synthetic/document-library/mindshare/current/"
+            "onprem-approved-164-2026-08-05/*",
+            "tenants/logan-synthetic/document-library/centralsquare/current/"
+            "onprem-approved-164-2026-08-05/*",
+        ]
+        role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["s3:ListBucket"],
+                resources=[document_library_bucket.bucket_arn],
+                conditions={"StringLike": {"s3:prefix": approved_prefixes}},
+            )
+        )
+        role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["s3:GetObject"],
+                resources=[
+                    document_library_bucket.arn_for_objects(prefix)
+                    for prefix in approved_prefixes
+                ],
             )
         )
 

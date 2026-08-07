@@ -105,6 +105,13 @@
                                             <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>
                                             {{ document.title }}
                                         </a>
+                                        <a
+                                            class="mindshare-document-link ms-2"
+                                            href="/knowledge/documents/mindshare/{{ document.document_id }}?download=true"
+                                            aria-label="Download {{ document.title }} PDF"
+                                        >
+                                            <i class="bi bi-download" aria-hidden="true"></i>
+                                        </a>
                                     </strong>
                                 {% else %}
                                     <strong>{{ document.title }}</strong>
