@@ -37,7 +37,7 @@ class MAEPageTests(unittest.TestCase):
             response.text,
         )
         self.assertIn(
-            "/static/js/lcdash-mae.js?v=20260807-cloud-voice",
+            "/static/js/lcdash-mae.js?v=20260807-live-data-fix",
             response.text,
         )
         self.assertIn("/static/img/mae/mae-neutral.jpg", response.text)
@@ -69,6 +69,22 @@ class MAEPageTests(unittest.TestCase):
         self.assertIn("const SPEECH_GROUP_TARGET = 180", script)
         self.assertIn("group.length >= SPEECH_GROUP_TARGET", script)
         self.assertIn("let alreadySpoken = false", script)
+
+    def test_mae_browser_treats_citation_free_live_data_answers_as_valid(self):
+        # Live-data answers are deliberately citation-free; only a document-grounded answer with no citations is a real failure.
+        script = (Path(__file__).parents[1] / "static/js/lcdash-mae.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "const isVerifiedLiveAnswer = Array.isArray(result.data_sources) "
+            "&& result.data_sources.length > 0;",
+            script,
+        )
+        self.assertIn(
+            "!isVerifiedLiveAnswer && (!Array.isArray(result.citations) "
+            "|| !result.citations.length)",
+            script,
+        )
 
     def test_mae_write_refusal_includes_assurance_and_timing(self):
         result = ask_mae("Dispatch MED10 and close the call.")

@@ -1462,7 +1462,13 @@
                 denied: true
             };
         }
-        if (!result.answer || !Array.isArray(result.citations) || !result.citations.length) {
+        // A verified-live-data answer (current CAD/analytics facts) is
+        // deliberately citation-free -- the model phrases already-computed
+        // facts rather than interpreting a retrieved document, so there is
+        // nothing to cite. Only document-grounded answers must carry
+        // citations.
+        const isVerifiedLiveAnswer = Array.isArray(result.data_sources) && result.data_sources.length > 0;
+        if (!result.answer || (!isVerifiedLiveAnswer && (!Array.isArray(result.citations) || !result.citations.length))) {
             return {
                 answer: "No advisory answer was displayed because mandatory approved citations were missing.",
                 citations: [],

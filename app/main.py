@@ -1755,15 +1755,36 @@ def _cloud_library_documents(library_key: str) -> list[dict]:
     ]
 
 
+def _cloud_knowledge_status(documents: list[dict]) -> dict:
+    """Cloud-mode status summary for the S3-backed library pages.
+
+    The on-prem "documents/chunks/drive sync" numbers come from the Postgres
+    full-text index, which is never populated in cloud -- querying it there
+    always reads back zero, which previously rendered a contradictory "0
+    indexed documents" / "unavailable" banner directly above a fully working
+    S3-backed document list. chunks/index_state/drive_sync have no cloud
+    equivalent and are left absent rather than fabricated; the templates only
+    display them on-prem.
+    """
+    return {
+        "connected": bool(documents),
+        "documents": len(documents),
+        "chunks": None,
+        "index_state": {},
+        "drive_sync": {},
+    }
+
+
 @app.get("/knowledge")
 def knowledge_page(request: Request):
-    knowledge_status = get_knowledge_status()
+    cloud_mode = cloud_mode_enabled(settings)
+    if cloud_mode:
+        documents = _cloud_library_documents("centralsquare")
+        knowledge_status = _cloud_knowledge_status(documents)
+    else:
+        documents = list_knowledge_documents()
+        knowledge_status = get_knowledge_status()
     presentation = _cloud_presentation_status(knowledge_status)
-    documents = (
-        _cloud_library_documents("centralsquare")
-        if cloud_mode_enabled(settings)
-        else list_knowledge_documents()
-    )
     return templates.TemplateResponse(
         request=request,
         name="knowledge.html",
@@ -1771,6 +1792,7 @@ def knowledge_page(request: Request):
             "knowledge_status": knowledge_status,
             "documents": documents,
             "cloud_presentation_status": presentation,
+            "cloud_mode": cloud_mode,
             "version": "0.3.0",
         },
         headers={"Cache-Control": "no-store"},
@@ -2022,20 +2044,23 @@ def mindshare_jack_hines_page(request: Request):
 
 @app.get("/mindshare/library")
 def mindshare_library_page(request: Request):
-    documents = (
-        _cloud_library_documents("mindshare")
-        if cloud_mode_enabled(settings)
-        else list_knowledge_documents(library_key="mindshare")
-    )
+    cloud_mode = cloud_mode_enabled(settings)
+    if cloud_mode:
+        documents = _cloud_library_documents("mindshare")
+        knowledge_status = _cloud_knowledge_status(documents)
+    else:
+        documents = list_knowledge_documents(library_key="mindshare")
+        knowledge_status = get_knowledge_status(
+            library_key="mindshare",
+            source_dir=settings.mindshare_knowledge_source_dir,
+        )
     return templates.TemplateResponse(
         request=request,
         name="mindshare_library.html",
         context={
-            "knowledge_status": get_knowledge_status(
-                library_key="mindshare",
-                source_dir=settings.mindshare_knowledge_source_dir,
-            ),
+            "knowledge_status": knowledge_status,
             "documents": documents,
+            "cloud_mode": cloud_mode,
             "version": "0.4.0",
         },
         headers={"Cache-Control": "no-store"},
@@ -2180,8 +2205,37 @@ def cloud_ai_advisory_stream_api(
     if not cloud_mode_enabled(settings):
         raise HTTPException(status_code=404, detail="Cloud AI is not configured here.")
     question = payload.question.strip()
-    roles = _cloud_advisory_roles(tenant_context)
     report_preview = _suggest_report_preview(payload.question, tenant_context)
+    live_result = answer_verified_live_or_none(
+        cloud_verified_live_advisory,
+        request_id=f"cloud-live-{secrets.token_hex(12)}",
+        tenant_id=cloud_ai_config.tenant_id,
+        question=question,
+        cad_state=cloud_cad_runtime.state,
+        cad_status=cloud_cad_runtime.status(),
+        analytics_overview_fn=lambda period: get_analytics_overview(
+            period=period, tenant_context=tenant_context
+        ),
+    )
+    if live_result is not None:
+        live_result["interaction_id"] = ""
+        live_result["audit_saved"] = False
+        if report_preview is not None:
+            live_result["report_preview"] = report_preview
+        body = "".join(
+            json.dumps(event, separators=(",", ":")) + "\n"
+            for event in (
+                {"type": "complete", "payload": live_result},
+                {"type": "done"},
+            )
+        )
+        return StreamingResponse(
+            iter((body,)),
+            media_type="application/x-ndjson",
+            headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+        )
+
+    roles = _cloud_advisory_roles(tenant_context)
 
     def events():
         for event in stream_cloud_advisory(

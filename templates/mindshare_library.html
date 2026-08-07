@@ -38,6 +38,15 @@
 </section>
 
 <div class="row g-4 mb-4">
+    {% if cloud_mode %}
+    <div class="col-md-4">
+        <div class="glass mindshare-stat">
+            <i class="bi bi-file-earmark-text"></i>
+            <strong>{{ knowledge_status.documents }}</strong>
+            <span>Available documents</span>
+        </div>
+    </div>
+    {% else %}
     <div class="col-md-4">
         <div class="glass mindshare-stat">
             <i class="bi bi-file-earmark-text"></i>
@@ -59,6 +68,7 @@
             <span>Google Drive sync</span>
         </div>
     </div>
+    {% endif %}
 </div>
 
 <section class="glass p-4">

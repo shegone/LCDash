@@ -1,6 +1,7 @@
 """Route-level contracts: verified-live facts are tried before document RAG,
 and a question with no live-data intent falls through unchanged."""
 
+import json
 import unittest
 from unittest.mock import patch
 
@@ -117,6 +118,64 @@ class CloudAdvisoryLiveDataRoutingTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["denied"])
         document_mock.assert_not_called()
+
+
+class CloudAdvisoryStreamLiveDataRoutingTests(unittest.TestCase):
+    """The streaming endpoint (used in MAE voice mode) must try live data
+    first too -- it previously skipped straight to document RAG, so a voice
+    question like "how many active calls" could never get a live answer."""
+
+    def setUp(self):
+        self.client = TestClient(app)
+
+    @staticmethod
+    def _events(response):
+        return [json.loads(line) for line in response.text.splitlines() if line.strip()]
+
+    @patch("app.main.stream_cloud_advisory")
+    @patch("app.main.answer_verified_live_or_none")
+    def test_stream_returns_live_data_without_calling_document_rag_stream(
+        self, live_mock, stream_mock
+    ):
+        live_mock.return_value = dict(LIVE_RESULT)
+        with patch.object(settings, "deployment_mode", "synthetic-disconnected"):
+            response = self.client.post(
+                "/api/cloud-ai/advisory/stream",
+                json={"question": "How many active calls are there right now?"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        events = self._events(response)
+        complete = next(event for event in events if event["type"] == "complete")
+        self.assertEqual(complete["payload"]["answer"], LIVE_RESULT["answer"])
+        self.assertEqual(complete["payload"]["citations"], [])
+        self.assertEqual(len(complete["payload"]["data_sources"]), 1)
+        self.assertTrue(any(event["type"] == "done" for event in events))
+        stream_mock.assert_not_called()
+
+    @patch("app.main.stream_cloud_advisory")
+    @patch("app.main.answer_verified_live_or_none")
+    def test_stream_falls_through_to_document_rag_stream_when_no_live_intent(
+        self, live_mock, stream_mock
+    ):
+        live_mock.return_value = None
+        stream_mock.return_value = iter(
+            [
+                {"type": "status", "stage": "retrieving"},
+                {"type": "complete", "payload": dict(DOCUMENT_RESULT)},
+            ]
+        )
+        with patch.object(settings, "deployment_mode", "synthetic-disconnected"):
+            response = self.client.post(
+                "/api/cloud-ai/advisory/stream",
+                json={"question": "How do I configure CAD window columns?"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        events = self._events(response)
+        complete = next(event for event in events if event["type"] == "complete")
+        self.assertEqual(complete["payload"]["answer"], DOCUMENT_RESULT["answer"])
+        stream_mock.assert_called_once()
 
 
 class JackAdvisoryLiveDataRoutingTests(unittest.TestCase):
