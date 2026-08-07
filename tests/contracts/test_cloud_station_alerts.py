@@ -145,6 +145,14 @@ def test_cloud_script_has_fake_tone_and_advisory_speech_but_no_cad_write_path():
     assert '/api/cloud-ai/speech/sentence' in script
     assert "/api/voice/speech" not in script
     assert "speechSynthesis" not in script
+    # Street view/map are plain outbound links to Google's own site, never
+    # an embedded Maps/Street View widget -- the embedded APIs bill per
+    # load, a plain <a href> to google.com does not.
+    assert "setLocationLinks" in script
+    assert '"https://www.google.com/maps/@?api=1&map_action=pano&viewpoint="' in script
+    assert 'id="alert-google-maps"' in template
+    assert 'id="alert-street-view"' in template
+    assert 'target="_blank"' in template
     # No CAD write, dispatch, page, or acknowledgment vocabulary anywhere in
     # the script or template -- this stays a read-only, advisory display.
     for forbidden in ("acknowledge", "dispatch(", "AudioContext"):

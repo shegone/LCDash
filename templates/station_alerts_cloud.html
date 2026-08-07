@@ -122,6 +122,14 @@
                 <div class="col-md-4"><div class="dispatch-meta-box"><div class="eyebrow">CFS NUMBER</div><div id="alert-cfs-number" class="fs-5 fw-bold">—</div></div></div>
                 <div class="col-md-4"><div class="dispatch-meta-box"><div class="eyebrow">ASSIGNMENT TIME</div><div id="alert-dispatch-time" class="fs-5 fw-bold">—</div></div></div>
             </div>
+            <div class="d-flex flex-wrap gap-3 mt-3">
+                <a id="alert-google-maps" class="btn btn-outline-info px-4" href="#" target="_blank" rel="noopener noreferrer">
+                    <i class="bi bi-map-fill"></i> Open Google Map
+                </a>
+                <a id="alert-street-view" class="btn btn-outline-light px-4" href="#" target="_blank" rel="noopener noreferrer">
+                    <i class="bi bi-binoculars-fill"></i> Open Google Street View
+                </a>
+            </div>
             <div class="command-unavailable-state p-3 mt-4">
                 Advisory display only. Closing this alert does not acknowledge or change the source event,
                 and does not affect your station's primary dispatch notification system.
@@ -134,5 +142,5 @@
 </div>
 
 <script id="station-alert-data" type="application/json">{{ alert_data|tojson }}</script>
-<script src="/static/js/lcdash-station-alerts-cloud.js?v=0.2.0"></script>
+<script src="/static/js/lcdash-station-alerts-cloud.js?v=0.3.0"></script>
 {% endblock %}

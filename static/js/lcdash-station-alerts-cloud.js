@@ -434,6 +434,39 @@
     }
     // --- end fake alert tone
 
+    // Plain outbound links to Google's own maps/street-view pages, never an
+    // embedded Maps/Street View widget -- those bill per load through the
+    // Google Maps Platform API, a plain <a href> to google.com does not.
+    function validCoordinate(value, minimum, maximum) {
+        if (value === null || value === undefined || String(value).trim() === "") return false;
+        const number = Number(value);
+        return Number.isFinite(number) && number >= minimum && number <= maximum;
+    }
+
+    function setLocationLinks(alert) {
+        const streetViewLink = document.getElementById("alert-street-view");
+        const googleMapsLink = document.getElementById("alert-google-maps");
+        if (!streetViewLink && !googleMapsLink) return;
+
+        const hasCoordinates = validCoordinate(alert.latitude, -90, 90) &&
+            validCoordinate(alert.longitude, -180, 180) &&
+            !(Number(alert.latitude) === 0 && Number(alert.longitude) === 0);
+        const locationQuery = encodeURIComponent(alert.location || "");
+
+        if (streetViewLink) {
+            streetViewLink.href = hasCoordinates
+                ? "https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=" +
+                    Number(alert.latitude) + "," + Number(alert.longitude)
+                : "https://www.google.com/maps/search/?api=1&query=" + locationQuery;
+        }
+        if (googleMapsLink) {
+            googleMapsLink.href = hasCoordinates
+                ? "https://www.google.com/maps/search/?api=1&query=" +
+                    Number(alert.latitude) + "," + Number(alert.longitude)
+                : "https://www.google.com/maps/search/?api=1&query=" + locationQuery;
+        }
+    }
+
     function showVisualAlert(alert) {
         setText("alert-station-name", stationLabel(alert.station_names || selectedStations), "Selected stations");
         setText("alert-incident-code", alert.incident_code, "ASSIGNMENT EVENT");
@@ -442,6 +475,7 @@
         setText("alert-units", (alert.unit_numbers || []).join(", "), "Unit unavailable");
         setText("alert-cfs-number", alert.cfs_number, "Unavailable");
         setText("alert-dispatch-time", formatTime(alert.dispatch_datetime));
+        setLocationLinks(alert);
 
         const soundNotice = document.getElementById("alert-sound-notice");
         if (soundNotice) {
@@ -487,7 +521,9 @@
             dispatch_datetime: now.toISOString(),
             announcement: "Station " + stationNumber +
                 ", respond to 911 Mark Spurlock Drive for a test commercial structure fire. Time is " +
-                testTime + "."
+                testTime + ".",
+            latitude: 37.8507803,
+            longitude: -81.9975482
         };
         showVisualAlert(demo);
         window.setTimeout(function () { if (testButton) testButton.disabled = false; }, 500);
