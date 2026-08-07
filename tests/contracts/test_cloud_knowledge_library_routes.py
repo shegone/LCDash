@@ -72,6 +72,48 @@ class KnowledgeLibraryPageRoutingTests(unittest.TestCase):
         onprem_list_mock.assert_called_once()
 
 
+class MindshareStatusApiCloudLibraryTests(unittest.TestCase):
+    """/api/mindshare/status feeds JACK's page's "Mindshare library" status
+    card -- it used to report the same always-zero Postgres count as the
+    library page did before that was fixed, a third instance of the same
+    bug found while re-verifying the page fix live."""
+
+    def setUp(self):
+        self.client = TestClient(app)
+
+    @patch("app.main.cloud_document_library.list_documents")
+    def test_cloud_mode_reports_real_document_count_not_postgres_zero(
+        self, list_mock
+    ):
+        list_mock.return_value = SAMPLE_DOCUMENTS
+        with patch.object(settings, "deployment_mode", "synthetic-disconnected"):
+            response = self.client.get("/api/mindshare/status")
+
+        self.assertEqual(response.status_code, 200)
+        knowledge = response.json()["knowledge"]
+        self.assertEqual(knowledge["documents"], len(SAMPLE_DOCUMENTS))
+        self.assertTrue(knowledge["connected"])
+        list_mock.assert_called_once_with("mindshare")
+
+    @patch("app.main.get_mindshare_status")
+    @patch("app.main.cloud_document_library.list_documents")
+    def test_on_prem_mode_never_calls_the_cloud_library(
+        self, cloud_list_mock, status_mock
+    ):
+        status_mock.return_value = {
+            "assistant": {"connected": True},
+            "knowledge": {"connected": True, "documents": 5, "chunks": 40},
+            "radio_intelligence": {"connected": False},
+            "mode": "read_only",
+        }
+        with patch.object(settings, "deployment_mode", "on-prem"):
+            response = self.client.get("/api/mindshare/status")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["knowledge"]["documents"], 5)
+        cloud_list_mock.assert_not_called()
+
+
 class KnowledgeDocumentPdfRoutingTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)

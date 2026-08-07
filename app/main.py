@@ -2413,7 +2413,10 @@ def knowledge_status_api(response: Response):
 @app.get("/api/mindshare/status")
 def mindshare_status_api(response: Response):
     response.headers["Cache-Control"] = "no-store"
-    return get_mindshare_status()
+    status = get_mindshare_status()
+    if cloud_mode_enabled(settings):
+        status["knowledge"] = _cloud_knowledge_status(_cloud_library_documents("mindshare"))
+    return status
 
 
 @app.get("/api/mindshare/knowledge/status")
