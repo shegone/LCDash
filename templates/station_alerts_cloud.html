@@ -12,9 +12,9 @@
     .station-choice-count { color: var(--bs-secondary-color); font-size: .85rem; }
     .cloud-station-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: .75rem; padding: .85rem 0; border-bottom: 1px solid rgba(255,255,255,.08); }
     .dispatch-overlay { position: fixed; inset: 0; z-index: 2000; display: none; place-items: center; padding: 1rem; background: rgba(1,7,15,.92); }
-    .dispatch-overlay.visible { display: grid; }
-    .dispatch-alert-card { width: min(900px,100%); max-height: 94vh; overflow: auto; border: 1px solid rgba(76,201,255,.45); border-radius: 1rem; background: #081524; box-shadow: 0 0 60px rgba(76,201,255,.18); }
-    .dispatch-banner { padding: 1rem 1.25rem; background: #0b6b87; color: white; font-weight: 800; letter-spacing: .05em; }
+    .dispatch-overlay.visible { display: grid; animation: alert-in .22s ease-out, alert-screen-flash 1s linear infinite; }
+    .dispatch-alert-card { width: min(900px,100%); max-height: 94vh; overflow: auto; border: 3px solid #ff5252; border-radius: 1rem; background: #081524; box-shadow: 0 0 60px rgba(255,82,82,.4); animation: alert-pulse 1.2s infinite alternate; }
+    .dispatch-banner { padding: 1rem 1.25rem; background: #ff3f3f; color: white; font-weight: 800; letter-spacing: .05em; animation: alert-banner-flash 1s linear infinite; }
     .dispatch-content { padding: 1.5rem; }
     .dispatch-incident { font-size: clamp(1.6rem,4vw,2.6rem); font-weight: 800; }
     .dispatch-location { margin-top: .5rem; color: #d7e8f5; font-size: 1.2rem; }
@@ -22,6 +22,13 @@
     .arm-status { display: inline-flex; align-items: center; gap: 8px; padding: 8px 13px; border-radius: 999px; background: rgba(255,82,82,.13); border: 1px solid rgba(255,82,82,.35); color: #ff9191; font-weight: 900; }
     .arm-status.armed { background: rgba(105,255,185,.12); border-color: rgba(105,255,185,.4); color: #69ffb9; }
     .status-dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; box-shadow: 0 0 10px currentColor; }
+    @keyframes alert-in { from { opacity: 0; transform: scale(.98); } to { opacity: 1; transform: scale(1); } }
+    @keyframes alert-screen-flash { 0%, 100% { background-color: rgba(1,7,15,.92); } 50% { background-color: rgba(115,0,0,.85); } }
+    @keyframes alert-pulse { from { box-shadow: 0 0 34px rgba(255,82,82,.28); } to { box-shadow: 0 0 75px rgba(255,82,82,.6); } }
+    @keyframes alert-banner-flash { 0%, 100% { background: #ff3f3f; color: #ffffff; } 50% { background: #ffffff; color: #8b0000; } }
+    @media (prefers-reduced-motion: reduce) {
+        .dispatch-overlay.visible, .dispatch-banner, .dispatch-alert-card { animation-duration: 2s; }
+    }
 </style>
 <section class="command-page" data-cloud-station-alerts="true">
     <div class="glass p-4 mb-4">
@@ -123,9 +130,6 @@
                 <div class="col-md-4"><div class="dispatch-meta-box"><div class="eyebrow">ASSIGNMENT TIME</div><div id="alert-dispatch-time" class="fs-5 fw-bold">—</div></div></div>
             </div>
             <div class="d-flex flex-wrap gap-3 mt-3">
-                <a id="alert-google-maps" class="btn btn-outline-info px-4" href="#" target="_blank" rel="noopener noreferrer">
-                    <i class="bi bi-map-fill"></i> Open Google Map
-                </a>
                 <a id="alert-street-view" class="btn btn-outline-light px-4" href="#" target="_blank" rel="noopener noreferrer">
                     <i class="bi bi-binoculars-fill"></i> Open Google Street View
                 </a>
@@ -142,5 +146,5 @@
 </div>
 
 <script id="station-alert-data" type="application/json">{{ alert_data|tojson }}</script>
-<script src="/static/js/lcdash-station-alerts-cloud.js?v=0.3.0"></script>
+<script src="/static/js/lcdash-station-alerts-cloud.js?v=0.4.0"></script>
 {% endblock %}

@@ -150,7 +150,9 @@ def test_cloud_script_has_fake_tone_and_advisory_speech_but_no_cad_write_path():
     # load, a plain <a href> to google.com does not.
     assert "setLocationLinks" in script
     assert '"https://www.google.com/maps/@?api=1&map_action=pano&viewpoint="' in script
-    assert 'id="alert-google-maps"' in template
+    # Just one click link for street view -- no separate "Open Google Map"
+    # button; the address itself is already auto-displayed above it.
+    assert 'id="alert-google-maps"' not in template
     assert 'id="alert-street-view"' in template
     assert 'target="_blank"' in template
     # No CAD write, dispatch, page, or acknowledgment vocabulary anywhere in
@@ -162,6 +164,16 @@ def test_cloud_script_has_fake_tone_and_advisory_speech_but_no_cad_write_path():
     # acknowledge anything -- no control is named or labeled as one.
     assert 'id="acknowledge-station-alert"' not in template
     assert "does not acknowledge" in template.lower()
+
+
+def test_cloud_alert_overlay_flashes_red_like_on_prem():
+    template = (ROOT / "templates/station_alerts_cloud.html").read_text(
+        encoding="utf-8"
+    )
+    assert "alert-screen-flash" in template
+    assert "alert-banner-flash" in template
+    assert "alert-pulse" in template
+    assert "prefers-reduced-motion" in template
     assert "advisory display only" in template.lower()
 
 

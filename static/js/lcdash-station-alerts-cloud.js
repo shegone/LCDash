@@ -445,26 +445,17 @@
 
     function setLocationLinks(alert) {
         const streetViewLink = document.getElementById("alert-street-view");
-        const googleMapsLink = document.getElementById("alert-google-maps");
-        if (!streetViewLink && !googleMapsLink) return;
+        if (!streetViewLink) return;
 
         const hasCoordinates = validCoordinate(alert.latitude, -90, 90) &&
             validCoordinate(alert.longitude, -180, 180) &&
             !(Number(alert.latitude) === 0 && Number(alert.longitude) === 0);
         const locationQuery = encodeURIComponent(alert.location || "");
 
-        if (streetViewLink) {
-            streetViewLink.href = hasCoordinates
-                ? "https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=" +
-                    Number(alert.latitude) + "," + Number(alert.longitude)
-                : "https://www.google.com/maps/search/?api=1&query=" + locationQuery;
-        }
-        if (googleMapsLink) {
-            googleMapsLink.href = hasCoordinates
-                ? "https://www.google.com/maps/search/?api=1&query=" +
-                    Number(alert.latitude) + "," + Number(alert.longitude)
-                : "https://www.google.com/maps/search/?api=1&query=" + locationQuery;
-        }
+        streetViewLink.href = hasCoordinates
+            ? "https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=" +
+                Number(alert.latitude) + "," + Number(alert.longitude)
+            : "https://www.google.com/maps/search/?api=1&query=" + locationQuery;
     }
 
     function showVisualAlert(alert) {
