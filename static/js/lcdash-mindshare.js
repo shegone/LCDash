@@ -32,14 +32,15 @@
     let lastSpeechAt = 0;
     let speechDetected = false;
     let discardRecording = false;
-    let cloudMode = false;
     let cloudVoiceName = "";
     let sentenceSpeechAvailable = true;
     let advisoryStreamAvailable = true;
 
     if (!form || !questionInput || !messages) return;
 
-    const approvedSource = document.querySelector(".mindshare-assistant")?.dataset.approvedSource === "true";
+    const mindshareShell = document.querySelector(".mindshare-assistant");
+    const cloudMode = mindshareShell?.dataset.cloudMode === "true";
+    const approvedSource = mindshareShell?.dataset.approvedSource === "true";
     if (!approvedSource) {
         questionInput.disabled = true;
         questionInput.placeholder = "Approved Mindshare source unavailable";
@@ -73,13 +74,19 @@
                 cache: "no-store"
             });
             const payload = await response.json();
-            updateStatusCard(
-                "mindshare-ai-status",
-                Boolean(payload.assistant && payload.assistant.connected),
-                payload.assistant && payload.assistant.connected
-                    ? payload.assistant.model
-                    : "Unavailable"
-            );
+            if (cloudMode) {
+                // Cloud JACK has no local model to check -- it runs the same
+                // Bedrock citation-only advisory path as cloud MAE.
+                updateStatusCard("mindshare-ai-status", true, "Citation-only advisory");
+            } else {
+                updateStatusCard(
+                    "mindshare-ai-status",
+                    Boolean(payload.assistant && payload.assistant.connected),
+                    payload.assistant && payload.assistant.connected
+                        ? payload.assistant.model
+                        : "Unavailable"
+                );
+            }
             const knowledge = payload.knowledge || {};
             updateStatusCard(
                 "mindshare-library-status",
@@ -89,7 +96,7 @@
                     : "Unavailable"
             );
         } catch (error) {
-            updateStatusCard("mindshare-ai-status", false, "Unavailable");
+            updateStatusCard("mindshare-ai-status", cloudMode, cloudMode ? "Citation-only advisory" : "Unavailable");
             updateStatusCard("mindshare-library-status", false, "Unavailable");
         }
     }
@@ -102,7 +109,6 @@
                 cache: "no-store"
             });
             const status = await response.json();
-            cloudMode = Boolean(status.cloud_mode);
             const tts = status.tts || {};
             const stt = status.stt || {};
             if (cloudMode) {

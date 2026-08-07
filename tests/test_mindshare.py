@@ -62,6 +62,35 @@ class MindsharePageTests(unittest.TestCase):
         )
         self.assertNotIn("persona=mae", mae_script)
 
+    def test_mindshare_technical_page_carries_server_rendered_cloud_mode(self):
+        response = self.client.get("/mindshare/technical")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('data-cloud-mode="false"', response.text)
+
+    def test_jack_cloud_ai_status_matches_maes_treatment_not_local_ollama(self):
+        # Regression test: JACK's "Local AI" status tile always showed
+        # "Unavailable" in cloud mode because it read cloudMode from an
+        # async fetch response (a race against loadStatus(), which runs at
+        # the same time) and had no cloud branch at all -- it always
+        # reported whether an on-prem Ollama server was reachable, which it
+        # never is from AWS, right next to an assistant answering questions
+        # fine. MAE's page solves this with a synchronous, server-rendered
+        # data-cloud-mode attribute and a hardcoded cloud label; JACK now
+        # matches that pattern exactly.
+        script = (Path(__file__).parents[1] / "static/js/lcdash-mindshare.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'const cloudMode = mindshareShell?.dataset.cloudMode === "true";',
+            script,
+        )
+        self.assertIn(
+            'updateStatusCard("mindshare-ai-status", true, "Citation-only advisory");',
+            script,
+        )
+        self.assertNotIn("cloudMode = Boolean(status.cloud_mode)", script)
+
     def test_jack_hines_tribute_page_is_separate_from_assistant(self):
         response = self.client.get("/mindshare/jack-hines")
 
