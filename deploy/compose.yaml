@@ -297,7 +297,7 @@ services:
     restart: unless-stopped
     gpus: all
     ports:
-      - "14.1.1.227:11434:11434"
+      - "127.0.0.1:11434:11434"
     environment:
       OLLAMA_KEEP_ALIVE: "30m"
     volumes:
@@ -652,6 +652,8 @@ services:
     command:
       - tunnel
       - --no-autoupdate
+      - --metrics
+      - 127.0.0.1:20241
       - run
       - --token-file
       - /run/secrets/cloudflare_tunnel_token
