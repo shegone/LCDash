@@ -13,6 +13,8 @@ from aws_cdk import (
     aws_ecs as ecs,
     aws_elasticloadbalancingv2 as elbv2,
     aws_elasticloadbalancingv2_actions as elbv2_actions,
+    aws_events as events,
+    aws_events_targets as targets,
     aws_iam as iam,
     aws_logs as logs,
     aws_rds as rds,
@@ -123,30 +125,29 @@ class Phase1FoundationStack(cdk.Stack):
         )
         task_definition.add_volume(name="RuntimeTemp")
         repository.grant_pull(task_definition.obtain_execution_role())
+        pilot_image_uri = cdk.Token.as_string(
+            cdk.Fn.condition_if(
+                "PilotImagePublishedCondition",
+                cdk.Fn.join(
+                    "",
+                    [
+                        repository.repository_uri,
+                        "@",
+                        parameters["pilot_image_digest"].value_as_string,
+                    ],
+                ),
+                cdk.Fn.join(
+                    "",
+                    [
+                        repository.repository_uri,
+                        ":dormant-not-published",
+                    ],
+                ),
+            )
+        )
         container = task_definition.add_container(
             "Web",
-            image=ecs.ContainerImage.from_registry(
-                cdk.Token.as_string(
-                    cdk.Fn.condition_if(
-                        "PilotImagePublishedCondition",
-                        cdk.Fn.join(
-                            "",
-                            [
-                                repository.repository_uri,
-                                "@",
-                                parameters["pilot_image_digest"].value_as_string,
-                            ],
-                        ),
-                        cdk.Fn.join(
-                            "",
-                            [
-                                repository.repository_uri,
-                                ":dormant-not-published",
-                            ],
-                        ),
-                    )
-                )
-            ),
+            image=ecs.ContainerImage.from_registry(pilot_image_uri),
             logging=ecs.LogDrivers.aws_logs(
                 stream_prefix="web",
                 log_group=log_group,
@@ -242,8 +243,9 @@ class Phase1FoundationStack(cdk.Stack):
             max_allocated_storage=20,
             storage_encrypted=True,
             # The analytics warehouse holds imported historical CAD data that
-            # cannot be cheaply reconstructed in cloud (the collector cannot run
-            # here yet), so the database is protected rather than disposable:
+            # cannot be cheaply reconstructed in cloud (only forward increments
+            # are collected here), so the database is protected rather than
+            # disposable:
             # 7 days of automated backups gives point-in-time recovery, deletion
             # protection blocks an accidental drop, and RETAIN keeps the instance
             # alive even if the stack itself is torn down.
@@ -452,6 +454,15 @@ class Phase1FoundationStack(cdk.Stack):
             ),
         )
 
+        self._add_analytics_collector(
+            parameters=parameters,
+            vpc=vpc,
+            cluster=cluster,
+            repository=repository,
+            image_uri=pilot_image_uri,
+            database=database,
+        )
+
         self._grant_content_access(task_role, content_bucket)
         self._grant_document_library_read(task_role)
         self._grant_managed_providers(
@@ -471,6 +482,201 @@ class Phase1FoundationStack(cdk.Stack):
                 "After foundation deployment, create a Hostinger CNAME for aws.logan911.com "
                 "to this ALB hostname and validate it externally."
             ),
+        )
+
+    def _add_analytics_collector(
+        self,
+        *,
+        parameters: dict[str, cdk.CfnParameter],
+        vpc: ec2.Vpc,
+        cluster: ecs.Cluster,
+        repository: ecr.Repository,
+        image_uri: str,
+        database: rds.DatabaseInstance,
+    ) -> None:
+        """Scheduled incremental analytics collection.
+
+        Reuses the web image and the same cloud CAD read path; the only new
+        privilege is the CAD secret on its task role and the database secret on
+        its execution role. It runs in the PUBLIC subnets with a public IP
+        because this VPC has no NAT and no interface endpoints -- a task in the
+        isolated subnets cannot reach ECR, Secrets Manager, or CloudWatch Logs
+        and would never start.
+        """
+        if database.secret is None:
+            raise ValueError("Generated database secret was not created.")
+
+        log_group = logs.LogGroup(
+            self,
+            "AnalyticsCollectorLogs",
+            log_group_name=f"/lcdash/{NAME_PREFIX}/analytics-collector",
+            retention=logs.RetentionDays.ONE_WEEK,
+            removal_policy=cdk.RemovalPolicy.DESTROY,
+        )
+
+        collector_task_role = iam.Role(
+            self,
+            "AnalyticsCollectorTaskRole",
+            role_name=f"{NAME_PREFIX}-analytics-collector",
+            assumed_by=iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
+            description=(
+                "Scheduled analytics collector: reviewed CentralSquare read-only "
+                "secret and nothing else"
+            ),
+        )
+        collector_task_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["secretsmanager:GetSecretValue"],
+                resources=[parameters["cloud_cad_secret_arn"].value_as_string],
+            )
+        )
+
+        task_definition = ecs.FargateTaskDefinition(
+            self,
+            "AnalyticsCollectorTaskDefinition",
+            family=f"{NAME_PREFIX}-analytics-collector",
+            cpu=512,
+            memory_limit_mib=1024,
+            task_role=collector_task_role,
+        )
+        task_definition.add_volume(name="CollectorTemp")
+        repository.grant_pull(task_definition.obtain_execution_role())
+        container = task_definition.add_container(
+            "AnalyticsCollector",
+            image=ecs.ContainerImage.from_registry(image_uri),
+            command=["python", "-m", "app.tools.cloud_analytics_collector"],
+            logging=ecs.LogDrivers.aws_logs(
+                stream_prefix="analytics-collector",
+                log_group=log_group,
+            ),
+            readonly_root_filesystem=True,
+            user="10001:10001",
+            environment={
+                "LCDASH_DEBUG": "false",
+                "LCDASH_DEPLOYMENT_MODE": "synthetic-disconnected",
+                "LCDASH_TENANT": "logan-synthetic",
+                "LCDASH_CLOUD_CAD_ENABLED": "true",
+                "LCDASH_CLOUD_CAD_MODE": "centralsquare-read-poll",
+                "LCDASH_CLOUD_CAD_SECRET_ARN": parameters[
+                    "cloud_cad_secret_arn"
+                ].value_as_string,
+                "LCDASH_CLOUD_CAD_POLL_SECONDS": "30",
+                "LCDASH_CLOUD_CAD_RECONCILIATION_OVERLAP_SECONDS": "120",
+                "LCDASH_DATABASE_HOST": database.db_instance_endpoint_address,
+                "LCDASH_DATABASE_PORT": database.db_instance_endpoint_port,
+                "LCDASH_DATABASE_NAME": "lcdash",
+                "TMPDIR": "/tmp",
+                "HOME": "/tmp/home",
+                "XDG_CACHE_HOME": "/tmp/cache",
+            },
+            secrets={
+                "LCDASH_DATABASE_USERNAME": ecs.Secret.from_secrets_manager(
+                    database.secret, "username"
+                ),
+                "LCDASH_DATABASE_PASSWORD": ecs.Secret.from_secrets_manager(
+                    database.secret, "password"
+                ),
+            },
+        )
+        container.add_mount_points(
+            ecs.MountPoint(
+                source_volume="CollectorTemp",
+                container_path="/tmp",
+                read_only=False,
+            )
+        )
+
+        collector_security_group = ec2.SecurityGroup(
+            self,
+            "AnalyticsCollectorSecurityGroup",
+            vpc=vpc,
+            security_group_name=f"{NAME_PREFIX}-analytics-collector",
+            description=(
+                "Scheduled analytics collector: DNS, HTTPS, and pilot PostgreSQL only"
+            ),
+            allow_all_outbound=False,
+        )
+        collector_security_group.add_egress_rule(
+            ec2.Peer.any_ipv4(),
+            ec2.Port.tcp(443),
+            "AWS APIs and CentralSquare over HTTPS",
+        )
+        resolver = ec2.Peer.ipv4("10.42.0.2/32")
+        collector_security_group.add_egress_rule(resolver, ec2.Port.udp(53))
+        collector_security_group.add_egress_rule(resolver, ec2.Port.tcp(53))
+        # Adds the matching 5432 ingress on the RDS security group and the
+        # 5432 egress on the collector group. The port is stated literally
+        # rather than taken from the endpoint attribute so the rule is
+        # reviewable as PostgreSQL-only in the rendered template.
+        database.connections.allow_from(
+            collector_security_group,
+            ec2.Port.tcp(5432),
+            "Scheduled analytics collector PostgreSQL access",
+        )
+
+        enabled_condition = cdk.CfnCondition(
+            self,
+            "AnalyticsCollectorEnabledCondition",
+            expression=cdk.Fn.condition_equals(
+                parameters["analytics_collector_enabled"].value_as_string,
+                "true",
+            ),
+        )
+        rule = events.Rule(
+            self,
+            "AnalyticsCollectorSchedule",
+            rule_name=f"{NAME_PREFIX}-analytics-collector",
+            description=(
+                "Periodic incremental analytics collection from CentralSquare; "
+                "dormant unless AnalyticsCollectorEnabled is true."
+            ),
+            # The L2 construct takes a literal boolean, so it cannot read the
+            # parameter. Ship it off and let the CfnCondition below override
+            # State, so the rendered template is DISABLED by default and only
+            # ENABLED when the operator deliberately sets the parameter.
+            enabled=False,
+            schedule=events.Schedule.rate(
+                cdk.Duration.minutes(
+                    parameters["analytics_collector_schedule_minutes"].value_as_number
+                )
+            ),
+            targets=[
+                targets.EcsTask(
+                    cluster=cluster,
+                    task_definition=task_definition,
+                    task_count=1,
+                    subnet_selection=ec2.SubnetSelection(
+                        subnet_type=ec2.SubnetType.PUBLIC
+                    ),
+                    assign_public_ip=True,
+                    security_groups=[collector_security_group],
+                )
+            ],
+        )
+        cfn_rule = rule.node.default_child
+        if not isinstance(cfn_rule, events.CfnRule):
+            raise TypeError("Expected an AWS::Events::Rule as the rule's child.")
+        cfn_rule.add_property_override(
+            "State",
+            cdk.Fn.condition_if(
+                enabled_condition.logical_id, "ENABLED", "DISABLED"
+            ),
+        )
+
+        cdk.CfnOutput(
+            self,
+            "AnalyticsCollectorTaskDefinitionArn",
+            value=task_definition.task_definition_arn,
+        )
+        cdk.CfnOutput(
+            self,
+            "AnalyticsCollectorLogGroupName",
+            value=log_group.log_group_name,
+        )
+        cdk.CfnOutput(
+            self,
+            "AnalyticsCollectorSecurityGroupId",
+            value=collector_security_group.security_group_id,
         )
 
     def _parameters(self) -> dict[str, cdk.CfnParameter]:
@@ -534,6 +740,29 @@ class Phase1FoundationStack(cdk.Stack):
                 description=(
                     "Immutable digest published to the Phase 1 ECR repository. "
                     "NOT_PUBLISHED is the dormant initial placeholder only."
+                ),
+            ),
+            "analytics_collector_enabled": cdk.CfnParameter(
+                self,
+                "AnalyticsCollectorEnabled",
+                type="String",
+                allowed_values=["true", "false"],
+                default="false",
+                description=(
+                    "Set to true only in a separately reviewed update to start the "
+                    "scheduled analytics collection runs."
+                ),
+            ),
+            "analytics_collector_schedule_minutes": cdk.CfnParameter(
+                self,
+                "AnalyticsCollectorScheduleMinutes",
+                type="Number",
+                default=30,
+                min_value=5,
+                max_value=1440,
+                description=(
+                    "Interval in minutes between analytics collection runs when "
+                    "AnalyticsCollectorEnabled is true."
                 ),
             ),
             "cloud_cad_secret_arn": cdk.CfnParameter(

@@ -296,10 +296,13 @@ class CdkTemplateTests(unittest.TestCase):
                 for statement in statements
             ):
                 secret_policies.append(resource)
-        self.assertEqual(len(secret_policies), 1)
-        attached_role = secret_policies[0]["Properties"]["Roles"][0]["Ref"]
-        self.assertIn("ExecutionRole", attached_role)
-        self.assertNotIn("ApplicationTaskRole", attached_role)
+        # One for the web execution role, one for the scheduled collector's.
+        self.assertEqual(len(secret_policies), 2)
+        for policy in secret_policies:
+            attached_role = policy["Properties"]["Roles"][0]["Ref"]
+            self.assertIn("ExecutionRole", attached_role)
+            self.assertNotIn("ApplicationTaskRole", attached_role)
+            self.assertNotIn("AnalyticsCollectorTaskRole", attached_role)
 
     def test_cloud_cad_read_poll_reference_is_enabled_and_exactly_scoped(self):
         template = self.template.to_json()
@@ -325,13 +328,17 @@ class CdkTemplateTests(unittest.TestCase):
                 actions = actions if isinstance(actions, list) else [actions]
                 if any(action.startswith("secretsmanager:") for action in actions):
                     matches.append(statement)
-        self.assertEqual(len(matches), 2)
-        cad_statement = next(
+        # Two database-secret grants (web + collector execution roles) and two
+        # CAD-secret grants (web + collector task roles); nothing else.
+        self.assertEqual(len(matches), 4)
+        cad_statements = [
             statement
             for statement in matches
             if statement["Resource"] == {"Ref": "CloudCadReadSecretArn"}
-        )
-        self.assertEqual(cad_statement["Action"], "secretsmanager:GetSecretValue")
+        ]
+        self.assertEqual(len(cad_statements), 2)
+        for statement in cad_statements:
+            self.assertEqual(statement["Action"], "secretsmanager:GetSecretValue")
 
     def test_container_insights_is_explicitly_disabled(self):
         self.template.has_resource_properties(
@@ -535,6 +542,248 @@ class CdkTemplateTests(unittest.TestCase):
         self.template.has_resource(
             "AWS::RDS::DBInstance",
             {"DeletionPolicy": "Retain", "UpdateReplacePolicy": "Retain"},
+        )
+
+    def _collector_task_definition(self):
+        return next(
+            resource
+            for resource in self.template.to_json()["Resources"].values()
+            if resource["Type"] == "AWS::ECS::TaskDefinition"
+            and resource["Properties"]["Family"]
+            == "lcdash-p1-logan-use1-analytics-collector"
+        )
+
+    def _collector_security_group(self):
+        resources = self.template.to_json()["Resources"]
+        groups = [
+            (logical_id, resource)
+            for logical_id, resource in resources.items()
+            if resource["Type"] == "AWS::EC2::SecurityGroup"
+            and resource["Properties"].get("GroupName")
+            == "lcdash-p1-logan-use1-analytics-collector"
+        ]
+        self.assertEqual(len(groups), 1)
+        return groups[0]
+
+    def test_analytics_collector_task_runs_the_collector_entrypoint(self):
+        task = self._collector_task_definition()
+        self.assertEqual(len(task["Properties"]["ContainerDefinitions"]), 1)
+        container = task["Properties"]["ContainerDefinitions"][0]
+        self.assertEqual(container["Name"], "AnalyticsCollector")
+        self.assertEqual(
+            container["Command"],
+            ["python", "-m", "app.tools.cloud_analytics_collector"],
+        )
+        self.assertTrue(container["ReadonlyRootFilesystem"])
+        self.assertEqual(container["User"], "10001:10001")
+        # Same image contract as the web task: the shared pilot digest.
+        self.assertEqual(
+            container["Image"]["Fn::If"][0], "PilotImagePublishedCondition"
+        )
+        self.assertEqual(
+            container["Image"]["Fn::If"][1]["Fn::Join"][1][-1],
+            {"Ref": "PilotImageDigest"},
+        )
+        environment = {
+            item["Name"]: item["Value"] for item in container["Environment"]
+        }
+        self.assertEqual(environment["LCDASH_CLOUD_CAD_ENABLED"], "true")
+        self.assertEqual(
+            environment["LCDASH_CLOUD_CAD_MODE"], "centralsquare-read-poll"
+        )
+        self.assertEqual(
+            environment["LCDASH_CLOUD_CAD_SECRET_ARN"],
+            {"Ref": "CloudCadReadSecretArn"},
+        )
+        self.assertEqual(environment["LCDASH_TENANT"], "logan-synthetic")
+        self.assertEqual(environment["LCDASH_DATABASE_NAME"], "lcdash")
+        self.assertIn("Fn::GetAtt", environment["LCDASH_DATABASE_HOST"])
+        self.assertEqual(
+            {item["Name"] for item in container["Secrets"]},
+            {"LCDASH_DATABASE_USERNAME", "LCDASH_DATABASE_PASSWORD"},
+        )
+        self.assertEqual(
+            container["LogConfiguration"]["Options"]["awslogs-stream-prefix"],
+            "analytics-collector",
+        )
+        self.template.has_resource_properties(
+            "AWS::Logs::LogGroup",
+            {"LogGroupName": "/lcdash/lcdash-p1-logan-use1/analytics-collector"},
+        )
+
+    def test_analytics_collector_schedule_ships_disabled(self):
+        template = self.template.to_json()
+        self.template.resource_count_is("AWS::Events::Rule", 1)
+        enabled = template["Parameters"]["AnalyticsCollectorEnabled"]
+        self.assertEqual(enabled["Default"], "false")
+        self.assertEqual(enabled["AllowedValues"], ["true", "false"])
+        minutes = template["Parameters"]["AnalyticsCollectorScheduleMinutes"]
+        self.assertEqual(minutes["Type"], "Number")
+        self.assertEqual(minutes["Default"], 30)
+        self.assertEqual(minutes["MinValue"], 5)
+        self.assertEqual(
+            template["Conditions"]["AnalyticsCollectorEnabledCondition"],
+            {"Fn::Equals": [{"Ref": "AnalyticsCollectorEnabled"}, "true"]},
+        )
+        rule = next(
+            resource
+            for resource in template["Resources"].values()
+            if resource["Type"] == "AWS::Events::Rule"
+        )
+        # State is a condition, so the default parameter value renders DISABLED.
+        self.assertEqual(
+            rule["Properties"]["State"],
+            {
+                "Fn::If": [
+                    "AnalyticsCollectorEnabledCondition",
+                    "ENABLED",
+                    "DISABLED",
+                ]
+            },
+        )
+        self.assertEqual(
+            rule["Properties"]["ScheduleExpression"]["Fn::Join"][1],
+            ["rate(", {"Ref": "AnalyticsCollectorScheduleMinutes"}, " minutes)"],
+        )
+
+    def test_analytics_collector_rule_targets_the_collector_task_publicly(self):
+        template = self.template.to_json()
+        rule = next(
+            resource
+            for resource in template["Resources"].values()
+            if resource["Type"] == "AWS::Events::Rule"
+        )
+        targets = rule["Properties"]["Targets"]
+        self.assertEqual(len(targets), 1)
+        parameters = targets[0]["EcsParameters"]
+        self.assertEqual(parameters["LaunchType"], "FARGATE")
+        self.assertEqual(parameters["TaskCount"], 1)
+        collector_logical_id = next(
+            logical_id
+            for logical_id, resource in template["Resources"].items()
+            if resource["Type"] == "AWS::ECS::TaskDefinition"
+            and resource["Properties"]["Family"]
+            == "lcdash-p1-logan-use1-analytics-collector"
+        )
+        self.assertEqual(
+            parameters["TaskDefinitionArn"], {"Ref": collector_logical_id}
+        )
+        self.assertEqual(targets[0]["Arn"], {"Fn::GetAtt": ["ClusterEB0386A7", "Arn"]})
+
+        network = parameters["NetworkConfiguration"]["AwsVpcConfiguration"]
+        # This VPC has no NAT and no interface endpoints, so an isolated-subnet
+        # task could never pull the image or read its secrets.
+        self.assertEqual(network["AssignPublicIp"], "ENABLED")
+        subnets = [subnet["Ref"] for subnet in network["Subnets"]]
+        self.assertTrue(subnets)
+        for subnet in subnets:
+            self.assertIn("publicSubnet", subnet)
+        collector_group_id, _ = self._collector_security_group()
+        self.assertEqual(
+            network["SecurityGroups"],
+            [{"Fn::GetAtt": [collector_group_id, "GroupId"]}],
+        )
+
+    def test_analytics_collector_security_group_is_https_dns_and_postgres_only(self):
+        collector_group_id, group = self._collector_security_group()
+        egress = group["Properties"]["SecurityGroupEgress"]
+        self.assertEqual(
+            sorted(
+                (
+                    rule.get("IpProtocol"),
+                    rule.get("FromPort"),
+                    rule.get("ToPort"),
+                    rule.get("CidrIp"),
+                )
+                for rule in egress
+            ),
+            [
+                ("tcp", 53, 53, "10.42.0.2/32"),
+                ("tcp", 443, 443, "0.0.0.0/0"),
+                ("udp", 53, 53, "10.42.0.2/32"),
+            ],
+        )
+        self.assertNotIn("SecurityGroupIngress", group["Properties"])
+
+        resources = self.template.to_json()["Resources"]
+        database_group_id = next(
+            logical_id
+            for logical_id, resource in resources.items()
+            if resource["Type"] == "AWS::EC2::SecurityGroup"
+            and "DatabaseSecurityGroup" in logical_id
+        )
+        postgres_egress = [
+            resource["Properties"]
+            for resource in resources.values()
+            if resource["Type"] == "AWS::EC2::SecurityGroupEgress"
+            and resource["Properties"].get("GroupId")
+            == {"Fn::GetAtt": [collector_group_id, "GroupId"]}
+        ]
+        self.assertEqual(len(postgres_egress), 1)
+        self.assertEqual(postgres_egress[0]["FromPort"], 5432)
+        self.assertEqual(postgres_egress[0]["ToPort"], 5432)
+        self.assertEqual(
+            postgres_egress[0]["DestinationSecurityGroupId"],
+            {"Fn::GetAtt": [database_group_id, "GroupId"]},
+        )
+
+        postgres_ingress = [
+            resource["Properties"]
+            for resource in resources.values()
+            if resource["Type"] == "AWS::EC2::SecurityGroupIngress"
+            and resource["Properties"].get("SourceSecurityGroupId")
+            == {"Fn::GetAtt": [collector_group_id, "GroupId"]}
+        ]
+        self.assertEqual(len(postgres_ingress), 1)
+        self.assertEqual(postgres_ingress[0]["FromPort"], 5432)
+        self.assertEqual(
+            postgres_ingress[0]["GroupId"],
+            {"Fn::GetAtt": [database_group_id, "GroupId"]},
+        )
+
+    def test_analytics_collector_task_role_holds_only_the_cad_secret(self):
+        resources = self.template.to_json()["Resources"]
+        policies = [
+            resource
+            for logical_id, resource in resources.items()
+            if resource["Type"] == "AWS::IAM::Policy"
+            and logical_id.startswith("AnalyticsCollectorTaskRole")
+        ]
+        self.assertEqual(len(policies), 1)
+        statements = policies[0]["Properties"]["PolicyDocument"]["Statement"]
+        self.assertEqual(len(statements), 1)
+        self.assertEqual(statements[0]["Action"], "secretsmanager:GetSecretValue")
+        self.assertEqual(statements[0]["Resource"], {"Ref": "CloudCadReadSecretArn"})
+
+        collector_role_id = next(
+            logical_id
+            for logical_id, resource in resources.items()
+            if resource["Type"] == "AWS::IAM::Role"
+            and logical_id.startswith("AnalyticsCollectorTaskRole")
+        )
+        role = resources[collector_role_id]
+        self.assertNotIn("ManagedPolicyArns", role["Properties"])
+        self.assertNotIn("Policies", role["Properties"])
+
+        for statement in statements:
+            actions = statement["Action"]
+            actions = actions if isinstance(actions, list) else [actions]
+            for action in actions:
+                self.assertFalse(action.startswith("s3:"), action)
+                self.assertFalse(action.startswith("kms:"), action)
+                self.assertFalse(action.startswith("bedrock:"), action)
+
+    def test_analytics_collector_outputs_are_published(self):
+        outputs = self.template.to_json()["Outputs"]
+        for name in (
+            "AnalyticsCollectorTaskDefinitionArn",
+            "AnalyticsCollectorLogGroupName",
+            "AnalyticsCollectorSecurityGroupId",
+        ):
+            self.assertIn(name, outputs)
+        self.assertEqual(
+            outputs["AnalyticsCollectorLogGroupName"]["Value"],
+            {"Ref": "AnalyticsCollectorLogsC30B61C9"},
         )
 
     def test_budget_is_two_hundred_usd(self):
