@@ -537,6 +537,25 @@ class CloudCadReadPoller:
         self._task = None
 
 
+def build_cloud_cad_connector(runtime_settings: Any):
+    """Return the authenticated read-only connector, or None when disabled.
+
+    Shared by the request-path poller and the scheduled analytics collector so
+    both use exactly one reviewed construction: same allowlisted operations,
+    same Secrets Manager credential provider, same documented endpoints.
+    """
+    if not runtime_settings.cloud_cad_enabled:
+        return None
+    config = _cloud_cad_config(runtime_settings)
+    return CloudCentralSquareReadConnector(
+        config,
+        from_header="lcdash-cloud-pilot",
+        secret_provider=SecretsManagerCredentialProvider(config.secret_reference),
+        transport=HttpxReadTransport(),
+        enabled=True,
+    )
+
+
 def build_cloud_cad_runtime(runtime_settings: Any) -> CloudCadReadPoller:
     """Build no AWS/HTTP dependency unless the explicit activation flag is true."""
     if not runtime_settings.cloud_cad_enabled:
@@ -546,7 +565,18 @@ def build_cloud_cad_runtime(runtime_settings: Any) -> CloudCadReadPoller:
             mode="synthetic-disconnected",
             poll_seconds=30,
         )
-    config = CloudCadReadConfig.from_mapping(
+    config = _cloud_cad_config(runtime_settings)
+    connector = build_cloud_cad_connector(runtime_settings)
+    return CloudCadReadPoller(
+        connector,
+        enabled=True,
+        mode=config.mode.value,
+        poll_seconds=config.poll_seconds,
+    )
+
+
+def _cloud_cad_config(runtime_settings: Any) -> CloudCadReadConfig:
+    return CloudCadReadConfig.from_mapping(
         {
             "mode": runtime_settings.cloud_cad_mode,
             "tenant_id": runtime_settings.tenant_id,
@@ -558,17 +588,4 @@ def build_cloud_cad_runtime(runtime_settings: Any) -> CloudCadReadPoller:
             "reconciliation_overlap_seconds": runtime_settings.cloud_cad_reconciliation_overlap_seconds,
             "webhooks_enabled": False,
         }
-    )
-    connector = CloudCentralSquareReadConnector(
-        config,
-        from_header="lcdash-cloud-pilot",
-        secret_provider=SecretsManagerCredentialProvider(config.secret_reference),
-        transport=HttpxReadTransport(),
-        enabled=True,
-    )
-    return CloudCadReadPoller(
-        connector,
-        enabled=True,
-        mode=config.mode.value,
-        poll_seconds=config.poll_seconds,
     )

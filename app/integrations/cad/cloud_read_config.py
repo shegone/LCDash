@@ -164,7 +164,19 @@ class CloudCadReadConfig:
 
     @property
     def allowed_operations(self) -> tuple[str, ...]:
-        return ("authenticate", "health", "search_calls", "get_call", "search_units")
+        # get_cfs_analytics is a read of CentralSquare's own per-call timing
+        # record; it is what the analytics collector needs to compute response
+        # metrics. Like the others it is strictly a GET -- nothing here can
+        # dispatch, acknowledge, or otherwise mutate CAD (see
+        # FORBIDDEN_OPERATIONS).
+        return (
+            "authenticate",
+            "health",
+            "search_calls",
+            "get_call",
+            "search_units",
+            "get_cfs_analytics",
+        )
 
     @property
     def forbidden_operations(self) -> tuple[str, ...]:

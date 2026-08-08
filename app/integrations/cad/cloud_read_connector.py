@@ -292,6 +292,23 @@ class CloudCentralSquareReadConnector:
             ),
         )
 
+    def get_cfs_analytics(self, cfs_number: str) -> Any:
+        """Read one call's CentralSquare timing record (GET, never a mutation).
+
+        Supplies the dispatch/enroute/on-scene stamps the analytics collector
+        turns into response metrics.
+        """
+        if not _CFS_NUMBER.fullmatch(cfs_number):
+            raise ValueError("CFS number is not safe for an endpoint path.")
+        return self._read_request(
+            operation="get_cfs_analytics",
+            method="GET",
+            url=(
+                f"{CENTRALSQUARE_DOCUMENTED_CAD_BASE_URL}/cfs_analytics/"
+                f"{quote(cfs_number, safe='._-')}"
+            ),
+        )
+
     def search_units(self, body: Mapping[str, Any], *, skip: int = 0, limit: int = 100) -> Any:
         return self._read_request(
             operation="search_units",
