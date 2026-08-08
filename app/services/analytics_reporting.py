@@ -58,11 +58,17 @@ class AnalyticsWindow:
     end_date: str
 
 
+MIN_CUSTOM_HOURS = 1
+MAX_CUSTOM_HOURS = MAX_CUSTOM_DAYS * 24
+
+
 def resolve_analytics_window(
     period: str = DEFAULT_PERIOD,
     start: str = "",
     end: str = "",
     now: datetime | None = None,
+    *,
+    hours: int | None = None,
 ) -> AnalyticsWindow:
     local_now = now or datetime.now(LOCAL_TIMEZONE)
     if local_now.tzinfo is None:
@@ -72,6 +78,23 @@ def resolve_analytics_window(
 
     start = (start or "").strip()
     end = (end or "").strip()
+
+    if hours is not None:
+        if start or end:
+            raise AnalyticsRangeError("hours cannot be combined with a custom start/end range.")
+        if not (MIN_CUSTOM_HOURS <= hours <= MAX_CUSTOM_HOURS):
+            raise AnalyticsRangeError(
+                f"hours must be between {MIN_CUSTOM_HOURS} and {MAX_CUSTOM_HOURS}."
+            )
+        start_at = local_now - timedelta(hours=hours)
+        return AnalyticsWindow(
+            key=f"{hours}h",
+            label=f"Last {hours} hours",
+            start_at=start_at.astimezone(timezone.utc),
+            end_at=local_now.astimezone(timezone.utc),
+            start_date=start_at.date().isoformat(),
+            end_date=local_now.date().isoformat(),
+        )
 
     if start or end:
         if not start or not end:
@@ -879,6 +902,8 @@ def get_analytics_overview(
     end: str = "",
     county_profile: CountyProfile | None = None,
     tenant_context: TenantContext | None = None,
+    *,
+    hours: int | None = None,
 ) -> dict:
     if tenant_context is not None:
         if county_profile is not None:
@@ -893,7 +918,7 @@ def get_analytics_overview(
             "read",
         )
 
-    window = resolve_analytics_window(period=period, start=start, end=end)
+    window = resolve_analytics_window(period=period, start=start, end=end, hours=hours)
 
     if not analytics_database_is_configured():
         return _empty_overview(

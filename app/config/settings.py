@@ -151,6 +151,12 @@ class Settings:
     cloud_ai_voice_enabled: bool = _env_bool(
         "LCDASH_CLOUD_AI_VOICE_ENABLED", True
     )
+    cloud_ai_tool_calling_enabled: bool = _env_bool(
+        "LCDASH_CLOUD_AI_TOOL_CALLING_ENABLED", False
+    )
+    cloud_ai_tool_model_id: str = _env(
+        "LCDASH_CLOUD_AI_TOOL_MODEL_ID"
+    ).strip()
     database_url: str = field(default_factory=_database_url, repr=False)
     centralsquare_webhook_secret: str = field(
         default=_env("CENTRALSQUARE_WEBHOOK_SECRET"),

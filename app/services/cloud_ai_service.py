@@ -34,6 +34,8 @@ from app.integrations.cloud_ai.transcribe_provider import (
     AwsTranscribeStreamingProvider,
 )
 from app.integrations.cloud_ai.live_data import build_live_data_facts
+from app.integrations.cloud_ai.live_tools import LiveToolRegistry
+from app.integrations.cloud_ai.tool_calling_advisory import ToolCallingLiveAdvisory
 from app.integrations.cloud_ai.verified_live_advisory import (
     VerifiedLiveAdvisory,
 )
@@ -181,6 +183,73 @@ def answer_verified_live_or_none(
         facts=facts,
         data_sources=data_sources,
     )
+    return {
+        "request_id": response.request_id,
+        "answer": response.answer,
+        "citations": [],
+        "data_sources": [
+            {
+                "name": source.name,
+                "kind": source.kind,
+                "detail": source.detail,
+                "available": source.available,
+                "timestamp": source.timestamp,
+            }
+            for source in response.data_sources
+        ],
+        "denied": response.denied,
+        "denial_reason": response.denial_reason,
+        "advisory_only": response.advisory_only,
+        "action_executed": response.action_executed,
+    }
+
+
+def build_tool_calling_advisory(
+    settings: Settings, *, budget: DailyRequestBudget | None = None
+) -> ToolCallingLiveAdvisory:
+    """Wire the read-only tool-calling advisory. Off unless
+    ``LCDASH_CLOUD_AI_TOOL_CALLING_ENABLED`` is set; shares the same budget
+    as the other two generation paths.
+    """
+    config = build_cloud_ai_config(settings)
+    model_id = settings.cloud_ai_tool_model_id or config.generation_model_id
+    return ToolCallingLiveAdvisory(
+        converse_client=LazyBedrockConverseClient(),
+        model_id=model_id,
+        budget=budget,
+    )
+
+
+def answer_tool_calling_or_none(
+    advisory: ToolCallingLiveAdvisory,
+    *,
+    request_id: str,
+    tenant_id: str,
+    question: str,
+    cad_state: Any,
+    cad_status: dict[str, Any],
+    analytics_overview_fn: Any = None,
+) -> dict[str, Any] | None:
+    """Answer using the tool-calling loop, or return None.
+
+    None means either the feature answered nothing (caller falls through to
+    the document-citation path) or the model never actually called a tool --
+    deliberately treated the same way, since an un-tooled answer here would
+    just be the model guessing.
+    """
+    registry = LiveToolRegistry(
+        cad_state=cad_state,
+        cad_status=cad_status,
+        analytics_overview_fn=analytics_overview_fn,
+    )
+    response = advisory.answer(
+        request_id=request_id,
+        tenant_id=tenant_id,
+        question=question,
+        registry=registry,
+    )
+    if response is None:
+        return None
     return {
         "request_id": response.request_id,
         "answer": response.answer,

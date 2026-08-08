@@ -27,6 +27,25 @@ class AnalyticsWindowTests(unittest.TestCase):
         self.assertEqual(window.label, "Last 7 days")
         self.assertEqual((window.end_at - window.start_at).days, 7)
 
+    def test_hours_window_gives_arbitrary_precision_unlike_the_fixed_presets(self):
+        window = resolve_analytics_window(hours=8, now=self.now)
+
+        self.assertEqual(window.key, "8h")
+        self.assertEqual(window.label, "Last 8 hours")
+        self.assertEqual((window.end_at - window.start_at).total_seconds(), 8 * 3600)
+
+    def test_hours_rejects_out_of_bounds_values(self):
+        with self.assertRaises(AnalyticsRangeError):
+            resolve_analytics_window(hours=0, now=self.now)
+        with self.assertRaises(AnalyticsRangeError):
+            resolve_analytics_window(hours=366 * 24 + 1, now=self.now)
+
+    def test_hours_cannot_be_combined_with_a_custom_range(self):
+        with self.assertRaises(AnalyticsRangeError):
+            resolve_analytics_window(
+                hours=8, start="2026-07-01", end="2026-07-03", now=self.now
+            )
+
     def test_non_dispatcher_employee_is_explicitly_excluded_from_dispatcher_metrics(self):
         self.assertEqual(EXCLUDED_DISPATCHER_IDENTITY, "KIM MAYNARD")
 

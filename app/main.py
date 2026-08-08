@@ -147,10 +147,12 @@ from app.services.cloud_ai_service import (
     CLOUD_POLLY_VOICES,
     CLOUD_TRANSCRIBE_AUDIO_FORMATS,
     answer_cloud_advisory,
+    answer_tool_calling_or_none,
     answer_verified_live_or_none,
     build_activated_cloud_ai_runtime,
     build_cloud_ai_config,
     build_cloud_ai_runtime,
+    build_tool_calling_advisory,
     build_verified_live_advisory,
     cloud_ai_status,
     cloud_mode_enabled,
@@ -206,6 +208,12 @@ cloud_advisory_streamer = build_cloud_advisory_streamer(
 # Phrases pre-verified live CAD/analytics facts computed in Python; shares
 # the same daily budget so it cannot create an uncounted third generation path.
 cloud_verified_live_advisory = build_verified_live_advisory(
+    settings, budget=cloud_advisory_budget
+)
+# Off unless LCDASH_CLOUD_AI_TOOL_CALLING_ENABLED is set; constructing it
+# makes no provider call, so it is safe to build unconditionally and gate
+# its use at the call site instead.
+cloud_tool_calling_advisory = build_tool_calling_advisory(
     settings, budget=cloud_advisory_budget
 )
 # Constructing this opens no connection; the first tile request creates the
@@ -2180,6 +2188,18 @@ def cloud_ai_advisory_api(
             period=period, tenant_context=tenant_context
         ),
     )
+    if result is None and settings.cloud_ai_tool_calling_enabled:
+        result = answer_tool_calling_or_none(
+            cloud_tool_calling_advisory,
+            request_id=f"cloud-tool-{secrets.token_hex(12)}",
+            tenant_id=cloud_ai_config.tenant_id,
+            question=question,
+            cad_state=cloud_cad_runtime.state,
+            cad_status=cloud_cad_runtime.status(),
+            analytics_overview_fn=lambda **window: get_analytics_overview(
+                tenant_context=tenant_context, **window
+            ),
+        )
     if result is None:
         result = answer_cloud_advisory(
             cloud_ai_runtime,
@@ -2218,6 +2238,18 @@ def cloud_ai_advisory_stream_api(
             period=period, tenant_context=tenant_context
         ),
     )
+    if live_result is None and settings.cloud_ai_tool_calling_enabled:
+        live_result = answer_tool_calling_or_none(
+            cloud_tool_calling_advisory,
+            request_id=f"cloud-tool-{secrets.token_hex(12)}",
+            tenant_id=cloud_ai_config.tenant_id,
+            question=question,
+            cad_state=cloud_cad_runtime.state,
+            cad_status=cloud_cad_runtime.status(),
+            analytics_overview_fn=lambda **window: get_analytics_overview(
+                tenant_context=tenant_context, **window
+            ),
+        )
     if live_result is not None:
         live_result["interaction_id"] = ""
         live_result["audit_saved"] = False
