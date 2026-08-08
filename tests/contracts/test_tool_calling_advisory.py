@@ -228,6 +228,47 @@ class ToolCallingLiveAdvisoryAnswerTests(unittest.TestCase):
         )
         self.assertLessEqual(len(response.answer), 800)
 
+    def test_thinking_preamble_is_stripped_from_the_answer(self):
+        # Nova Pro wraps its reasoning in <thinking>...</thinking> in the text
+        # block; the user must never see it.
+        client = _ScriptedClient(
+            [
+                _tool_use_message("list_active_calls"),
+                _final_message(
+                    "<thinking>The tool shows CFS26-1 is oldest.</thinking>"
+                    "The oldest incident is CFS26-1."
+                ),
+            ]
+        )
+        advisory = ToolCallingLiveAdvisory(converse_client=client, model_id="m")
+        response = advisory.answer(
+            request_id="req-0000001",
+            tenant_id="logan-synthetic",
+            question="what is the oldest incident?",
+            registry=_registry(),
+        )
+        self.assertEqual(response.answer, "The oldest incident is CFS26-1.")
+        self.assertNotIn("thinking", response.answer.lower())
+
+    def test_unclosed_thinking_tag_does_not_leak_reasoning(self):
+        client = _ScriptedClient(
+            [
+                _tool_use_message("list_active_calls"),
+                _final_message("<thinking>reasoning that got truncated"),
+            ]
+        )
+        advisory = ToolCallingLiveAdvisory(converse_client=client, model_id="m")
+        response = advisory.answer(
+            request_id="req-0000001",
+            tenant_id="logan-synthetic",
+            question="what is the oldest incident?",
+            registry=_registry(),
+        )
+        # Everything from the stray opener on is dropped, leaving no answer text,
+        # so this denies cleanly rather than leaking the raw reasoning.
+        self.assertTrue(response.denied)
+        self.assertNotIn("thinking", (response.answer + response.denial_reason).lower())
+
     def test_empty_question_returns_none_without_calling_the_model(self):
         client = _ScriptedClient([])
         advisory = ToolCallingLiveAdvisory(converse_client=client, model_id="m")

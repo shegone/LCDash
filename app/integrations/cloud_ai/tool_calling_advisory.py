@@ -15,6 +15,7 @@ caller falls through to the document-citation path instead.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Protocol
 
 from .contracts import REQUEST_ID, TENANT_ID
@@ -55,9 +56,26 @@ _SYSTEM_PROMPT = (
 )
 
 
+# Nova Pro (and other reasoning models) prefix answers with a
+# <thinking>...</thinking> preamble in the text block. It must never reach the
+# user, so strip whole tagged spans; also drop a stray unclosed opener/closer
+# so a truncated response can't leak a raw tag or the reasoning after it.
+_THINKING_BLOCK = re.compile(r"<thinking>.*?</thinking>", re.IGNORECASE | re.DOTALL)
+_THINKING_TO_END = re.compile(r"<thinking>.*$", re.IGNORECASE | re.DOTALL)
+_STRAY_THINKING_TAG = re.compile(r"</?thinking>", re.IGNORECASE)
+
+
+def _strip_thinking(text: str) -> str:
+    text = _THINKING_BLOCK.sub("", text)
+    text = _THINKING_TO_END.sub("", text)
+    text = _STRAY_THINKING_TAG.sub("", text)
+    return text.strip()
+
+
 def _text_from_message(message: dict[str, Any]) -> str:
     blocks = message.get("content") or []
-    return "\n".join(str(block.get("text") or "") for block in blocks if "text" in block).strip()
+    joined = "\n".join(str(block.get("text") or "") for block in blocks if "text" in block)
+    return _strip_thinking(joined)
 
 
 def _tool_use_blocks(message: dict[str, Any]) -> list[dict[str, Any]]:
