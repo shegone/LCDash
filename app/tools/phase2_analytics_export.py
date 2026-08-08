@@ -146,12 +146,19 @@ def build_bundle(
 
 
 def encrypt_bundle(bundle: Mapping[str, Any], kms_client: Any, *, key_id: str) -> tuple[bytes, str]:
-    """Encrypt the bundle, returning the envelope bytes and plaintext sha256.
+    """Encrypt a bundle mapping. See ``encrypt_plaintext`` for the contract."""
+    return encrypt_plaintext(canonical(bundle), kms_client, key_id=key_id)
 
-    The data key is requested WITHOUT an encryption context because the
-    importer decrypts without one; adding a context here would fail decrypt.
+
+def encrypt_plaintext(plaintext: bytes, kms_client: Any, *, key_id: str) -> tuple[bytes, str]:
+    """Encrypt exact plaintext bytes, returning the envelope and its sha256.
+
+    Operates on bytes rather than re-serializing so the checksum published as
+    the importer's ``ExpectedPlaintextSha256`` covers precisely what was
+    sealed. The data key is requested WITHOUT an encryption context because
+    the importer decrypts without one; adding a context here would fail
+    decrypt.
     """
-    plaintext = canonical(bundle)
     plaintext_sha256 = hashlib.sha256(plaintext).hexdigest()
     aad = {
         "schema": ENVELOPE_SCHEMA,
