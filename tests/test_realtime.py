@@ -190,7 +190,21 @@ class RealtimeEndpointTests(unittest.TestCase):
         publish_mock.assert_not_awaited()
 
     @patch("app.main.settings.centralsquare_webhook_secret", "test-secret")
-    def test_receiver_rejects_invalid_json_and_scalar_json(self):
+    @patch("app.main.event_broker.publish", new_callable=AsyncMock)
+    @patch("app.main.process_webhook_event")
+    def test_receiver_rejects_invalid_json_and_accepts_scalar_json(
+        self,
+        process_mock,
+        publish_mock,
+    ):
+        process_mock.return_value = {
+            "accepted": True,
+            "duplicate": False,
+            "persisted": True,
+            "event_id": "not-returned",
+            "source": "cfs",
+            "received_at": "2026-07-29T19:45:00+00:00",
+        }
         invalid = self.client.post(
             "/api/integrations/centralsquare/webhooks/cfs",
             content=b"{bad-json",
@@ -209,7 +223,13 @@ class RealtimeEndpointTests(unittest.TestCase):
         )
 
         self.assertEqual(invalid.status_code, 400)
-        self.assertEqual(scalar.status_code, 422)
+        self.assertEqual(scalar.status_code, 202)
+        process_mock.assert_called_once_with(
+            "cfs",
+            "not-an-event",
+            len(b'"not-an-event"'),
+        )
+        publish_mock.assert_awaited_once()
 
     @patch("app.main.settings.webhook_max_body_bytes", 10)
     @patch("app.main.settings.centralsquare_webhook_secret", "test-secret")

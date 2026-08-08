@@ -15,6 +15,48 @@
     font-size: .96rem;
 }
 
+.dashboard-view-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.dashboard-refresh-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 11px;
+    border: 1px solid rgba(76, 201, 255, .32);
+    border-radius: 999px;
+    background: rgba(76, 201, 255, .08);
+    color: var(--lcdash-cyan);
+    font-size: .72rem;
+    font-weight: 900;
+    letter-spacing: .05em;
+}
+
+.dashboard-refresh-button:hover,
+.dashboard-refresh-button:focus-visible {
+    border-color: rgba(76, 201, 255, .72);
+    background: rgba(76, 201, 255, .16);
+    color: #ffffff;
+}
+
+.dashboard-refresh-button:disabled {
+    cursor: wait;
+    opacity: .68;
+}
+
+.dashboard-refresh-button[aria-busy="true"] i {
+    animation: dashboard-refresh-spin .8s linear infinite;
+}
+
+@keyframes dashboard-refresh-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 .ops-status-bar {
     padding: 16px 18px;
     border: 1px solid rgba(76, 201, 255, .30);
@@ -243,6 +285,10 @@
     .incident-card.is-updated {
         animation: none;
     }
+
+    .dashboard-refresh-button[aria-busy="true"] i {
+        animation: none;
+    }
 }
 
 .ops-status-bar.is-disconnected {
@@ -253,6 +299,15 @@
 .ops-status-bar.is-stale {
     border-color: rgba(255, 76, 91, .72);
     box-shadow: 0 0 34px rgba(255, 76, 91, .18);
+}
+
+.ops-status-bar.is-updating {
+    border-color: rgba(76, 201, 255, .48);
+}
+
+.view-mode-badge.is-updating {
+    border-color: rgba(76, 201, 255, .48);
+    color: var(--lcdash-cyan);
 }
 
 .view-mode-badge.is-reconnecting {
@@ -288,6 +343,15 @@
 
     .view-mode-badge {
         margin-top: 12px;
+    }
+
+    .dashboard-view-controls {
+        justify-content: flex-start;
+        margin-top: 12px;
+    }
+
+    .dashboard-view-controls .view-mode-badge {
+        margin-top: 0;
     }
 
     .ops-status-grid {

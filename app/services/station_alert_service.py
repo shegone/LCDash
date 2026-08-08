@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta, timezone
+import re
 from threading import Lock
+from zoneinfo import ZoneInfo
 
 from app.auth.oauth import CentralSquareAuthError
 from app.services.cad_service import get_active_calls
@@ -10,10 +12,12 @@ from app.services.operations_service import (
     sort_dashboard_calls,
 )
 from app.services.unit_service import get_all_units
+from app.services.voice_service import spoken_24_hour_time
 
 
 STATION_ROSTER_CACHE_SECONDS = 60
 STATION_CLIENT_CACHE_SECONDS = 15 * 60
+LOCAL_TIMEZONE = ZoneInfo("America/New_York")
 
 _roster_cache_lock = Lock()
 _client_cache_lock = Lock()
@@ -69,6 +73,50 @@ def _parse_datetime(value: str) -> datetime:
         return parsed.astimezone(timezone.utc)
     except (TypeError, ValueError):
         return datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _announcement_station_name(value) -> str:
+    station = _safe_text(value)
+    station = re.sub(r"^(?:station|sta)\s*[-:#]?\s*", "", station, flags=re.IGNORECASE)
+    return station.strip(" ,.-")
+
+
+def _spoken_dispatch_time(value: datetime) -> str:
+    """Return a clear local twenty-four-hour time for text-to-speech."""
+    local_time = value.astimezone(LOCAL_TIMEZONE)
+    return spoken_24_hour_time(local_time.hour, local_time.minute)
+
+
+def build_station_alert_announcement(alert: dict) -> str:
+    """Build a concise announcement from the station-alert safe field set."""
+    station_names = [
+        _announcement_station_name(value)
+        for value in (alert.get("station_names") or [])
+        if _announcement_station_name(value)
+    ]
+    location = _safe_text(alert.get("location"))
+    incident = _safe_text(alert.get("incident_description"))
+    dispatch_time = _parse_datetime(_safe_text(alert.get("dispatch_datetime")))
+
+    if (
+        not station_names
+        or not location
+        or location.casefold() == "location unavailable"
+        or not incident
+        or dispatch_time == datetime.min.replace(tzinfo=timezone.utc)
+    ):
+        return ""
+
+    if len(station_names) == 1:
+        station_phrase = f"Station {station_names[0]}"
+    else:
+        station_phrase = "Stations " + ", ".join(station_names[:-1]) + f" and {station_names[-1]}"
+
+    spoken_time = _spoken_dispatch_time(dispatch_time)
+    return (
+        f"{station_phrase}, respond to {location} for a "
+        f"{incident.lower()}. Time is {spoken_time}."
+    )
 
 
 def build_station_catalog(units: list) -> list:
@@ -251,8 +299,7 @@ def build_station_alert_snapshot(unit_snapshot: dict, selected_stations=None) ->
             ]
         )
 
-        alerts.append(
-            {
+        alert = {
                 "event_id": event_id,
                 "cfs_number": cfs_number,
                 "incident_code": _safe_text(call.get("incident_code") or assignments[0].get("incident_code")),
@@ -267,7 +314,8 @@ def build_station_alert_snapshot(unit_snapshot: dict, selected_stations=None) ->
                 "latitude": call.get("latitude"),
                 "longitude": call.get("longitude"),
             }
-        )
+        alert["announcement"] = build_station_alert_announcement(alert)
+        alerts.append(alert)
 
     alerts = sorted(
         alerts,

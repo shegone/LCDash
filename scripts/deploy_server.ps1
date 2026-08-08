@@ -1,11 +1,12 @@
 $ErrorActionPreference = "Stop"
 
 $ProjectPath = "E:\Projects\LCDash"
-$Server = "ted@14.1.1.177"
+$Server = "administrator@14.1.1.227"
 $SshKey = Join-Path $env:USERPROFILE ".ssh\lcdash_server_ed25519"
-$RemoteArchive = "/home/ted/lcdash-platform/incoming-lcdash.tar.gz"
-$RemoteDeployScript = "/home/ted/lcdash-platform/bin/deploy-lcdash.sh"
+$RemoteArchive = "/srv/lcdash-platform/incoming/incoming-lcdash.tar.gz"
+$RemoteDeployScript = "/srv/lcdash-platform/bin/deploy-lcdash.sh"
 $LocalArchive = Join-Path $env:TEMP "lcdash-deploy.tar.gz"
+$ExpectedBranch = "deployment/ubuntu-nvidia-227"
 
 Set-Location $ProjectPath
 
@@ -14,8 +15,8 @@ if (-not (Test-Path -LiteralPath $SshKey)) {
 }
 
 $branch = (git branch --show-current).Trim()
-if ($branch -ne "feature/authentication") {
-    throw "Expected feature/authentication, but the current branch is $branch."
+if ($branch -ne $ExpectedBranch) {
+    throw "Expected $ExpectedBranch, but the current branch is $branch."
 }
 
 $workingChanges = git status --porcelain
@@ -23,13 +24,13 @@ if ($workingChanges) {
     throw "The project has uncommitted changes. Commit and push them in GitHub Desktop first."
 }
 
-git fetch origin feature/authentication
+git fetch origin $ExpectedBranch
 if ($LASTEXITCODE -ne 0) {
     throw "GitHub could not be checked."
 }
 
 $localCommit = (git rev-parse HEAD).Trim()
-$remoteCommit = (git rev-parse origin/feature/authentication).Trim()
+$remoteCommit = (git rev-parse "origin/$ExpectedBranch").Trim()
 if ($localCommit -ne $remoteCommit) {
     throw "Windows and GitHub are not synchronized. Use GitHub Desktop to push or pull first."
 }

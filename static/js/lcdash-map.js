@@ -29,6 +29,64 @@
         attribution: "&copy; OpenStreetMap contributors"
     }).addTo(map);
 
+    const referenceLayerControl = L.control.layers(null, null, {
+        collapsed: window.matchMedia("(max-width: 767px)").matches,
+        position: "topright"
+    }).addTo(map);
+
+    function referenceLayerStyle(layerId) {
+        const styles = {
+            county: { color: "#ffffff", weight: 2.5, fill: false, opacity: 0.9 },
+            psap: { color: "#ffd66b", weight: 2, fill: false, dashArray: "7 5", opacity: 0.95 },
+            municipalities: { color: "#a8a0ff", weight: 1.5, fillColor: "#a8a0ff", fillOpacity: 0.06 },
+            provisioning: { color: "#4cc9ff", weight: 1.5, fill: false, dashArray: "4 5" },
+            "esb-fire": { color: "#ff6f6f", weight: 1.3, fillColor: "#ff6f6f", fillOpacity: 0.08 },
+            "esb-ems": { color: "#69ffb9", weight: 1.3, fillColor: "#69ffb9", fillOpacity: 0.08 },
+            "esb-law": { color: "#4cc9ff", weight: 1.3, fillColor: "#4cc9ff", fillOpacity: 0.08 },
+            roads: { color: "#8fb7d9", weight: 1.15, opacity: 0.62 }
+        };
+        return styles[layerId] || { color: "#dbeeff", weight: 1.25, fillOpacity: 0.05 };
+    }
+
+    function referenceLayerLabel(properties) {
+        if (!properties) return "";
+        return properties.name || properties.agency || "";
+    }
+
+    async function loadReferenceLayers() {
+        try {
+            const catalogResponse = await fetch("/api/operations/map/reference", {
+                credentials: "same-origin"
+            });
+            if (!catalogResponse.ok) return;
+            const catalog = await catalogResponse.json();
+            const layers = Array.isArray(catalog.layers) ? catalog.layers : [];
+
+            await Promise.all(layers.map(async function (layerInfo) {
+                const layerResponse = await fetch(
+                    "/api/operations/map/reference/" + encodeURIComponent(layerInfo.id),
+                    { credentials: "same-origin" }
+                );
+                if (!layerResponse.ok) return;
+                const layerData = await layerResponse.json();
+                const leafletLayer = L.geoJSON(layerData, {
+                    style: function () { return referenceLayerStyle(layerInfo.id); },
+                    onEachFeature: function (feature, featureLayer) {
+                        const label = referenceLayerLabel(feature.properties);
+                        if (!label) return;
+                        const tooltip = document.createElement("span");
+                        tooltip.textContent = label;
+                        featureLayer.bindTooltip(tooltip, { sticky: true });
+                    }
+                });
+                referenceLayerControl.addOverlay(leafletLayer, layerInfo.label);
+                if (layerInfo.default_visible) leafletLayer.addTo(map);
+            }));
+        } catch (error) {
+            // CAD call and unit mapping remains available if static references are absent.
+        }
+    }
+
     const records = [];
     const callToggle = document.getElementById("show-calls");
     const unitToggle = document.getElementById("show-units");
@@ -253,4 +311,5 @@
     if (fitButton) fitButton.addEventListener("click", function () { applyFilters(true); });
 
     applyFilters(true);
+    loadReferenceLayers();
 })();

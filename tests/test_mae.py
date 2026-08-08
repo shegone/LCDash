@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -27,7 +28,18 @@ class MAEPageTests(unittest.TestCase):
         self.assertIn('id="mae-voice-session"', response.text)
         self.assertIn('id="mae-voice-player"', response.text)
         self.assertIn("/static/css/lcdash-mae.css", response.text)
-        self.assertIn("/static/js/lcdash-mae.js", response.text)
+        self.assertIn("Analytics Studio", response.text)
+        self.assertIn("Busiest weekdays", response.text)
+        self.assertIn("Peak hours", response.text)
+        self.assertIn("Dispatcher workload", response.text)
+        self.assertIn(
+            "Show me a chart of the busiest days of the week for the last 30 days.",
+            response.text,
+        )
+        self.assertIn(
+            "/static/js/lcdash-mae.js?v=20260803-custom-analytics",
+            response.text,
+        )
         self.assertIn("/static/img/mae/mae-neutral.jpg", response.text)
         self.assertIn('alt="MAE virtual assistant"', response.text)
 
@@ -38,9 +50,24 @@ class MAEPageTests(unittest.TestCase):
         self.assertIn(".mae-portrait", stylesheet.text)
         self.assertIn(".mae-avatar-assistant", stylesheet.text)
 
+        script = self.client.get("/static/js/lcdash-mae.js")
+        self.assertEqual(script.status_code, 200)
+        self.assertIn("const maeRequestTimeoutMs = 130000;", script.text)
+        self.assertIn("}, maeRequestTimeoutMs);", script.text)
+
         avatar = self.client.get("/static/img/mae/mae-neutral.jpg")
         self.assertEqual(avatar.status_code, 200)
         self.assertEqual(avatar.headers["content-type"], "image/jpeg")
+
+    def test_mae_browser_uses_streamed_synthesize_ahead_voice(self):
+        script = (Path(__file__).parents[1] / "static/js/lcdash-mae.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"/api/mae/chat/stream"', script)
+        self.assertIn("let synthesisChain = Promise.resolve()", script)
+        self.assertIn("const audioPromise = synthesisChain.then", script)
+        self.assertIn("groupedSpeech.length >= 140", script)
+        self.assertIn("let alreadySpoken = false", script)
 
     def test_mae_write_refusal_includes_assurance_and_timing(self):
         result = ask_mae("Dispatch MED10 and close the call.")
@@ -60,6 +87,39 @@ class MAEPageTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()["write_access"])
         self.assertEqual(response.headers["cache-control"], "no-store")
+
+    @patch("app.main.build_analytics_report", return_value=b"%PDF-synthetic")
+    @patch("app.main.get_analytics_overview")
+    def test_analytics_report_endpoint_returns_download_only_pdf(
+        self,
+        analytics_mock,
+        report_mock,
+    ):
+        analytics_mock.return_value = {"available": True, "period_label": "Last 7 days"}
+
+        response = self.client.post(
+            "/api/mae/analytics-report",
+            json={"period": "7d"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"%PDF-synthetic")
+        self.assertEqual(response.headers["content-type"], "application/pdf")
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        self.assertIn("attachment", response.headers["content-disposition"])
+        analytics_mock.assert_called_once_with(period="7d")
+        report_mock.assert_called_once_with(analytics_mock.return_value, "")
+
+    @patch("app.main.get_analytics_overview", return_value={"available": False})
+    def test_analytics_report_requires_available_historical_analytics(
+        self,
+        analytics_mock,
+    ):
+        response = self.client.post("/api/mae/analytics-report", json={"period": "7d"})
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.headers["content-type"], "application/json")
+        analytics_mock.assert_called_once_with(period="7d")
 
     @patch("app.main.record_mae_interaction")
     @patch("app.main.ask_mae")
@@ -103,6 +163,24 @@ class MAEPageTests(unittest.TestCase):
             audit_mock.call_args.kwargs["user_email"],
             "supervisor@example.com",
         )
+
+    @patch("app.main.record_mae_interaction")
+    @patch("app.main.ask_mae")
+    def test_stream_endpoint_emits_tokens_and_final_payload(self, ask_mock, audit_mock):
+        def streamed(question, history, entities, token_callback=None):
+            token_callback("Three active calls.")
+            return {"answer": "Three active calls.", "sources": [], "write_access": False}
+
+        ask_mock.side_effect = streamed
+        audit_mock.return_value = {"saved": True, "interaction_id": "test-id"}
+        response = self.client.post(
+            "/api/mae/chat/stream",
+            headers={"cf-access-authenticated-user-email": "supervisor@example.com"},
+            json={"question": "How many calls are active?", "history": []},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('"type":"token"', response.text)
+        self.assertIn('"type":"complete"', response.text)
 
     @patch("app.main.record_mae_feedback")
     def test_feedback_endpoint_records_supervisor_rating(self, feedback_mock):
@@ -279,6 +357,138 @@ class MAEGuardrailTests(unittest.TestCase):
         cad_mock.assert_called_once_with(24)
         post_mock.assert_not_called()
         self.assertIn("CFS26-50001", result["answer"])
+
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service.get_live_operations_snapshot")
+    @patch("app.services.mae_service.get_latest_completed_calls_by_incident")
+    def test_latest_five_calls_by_incident_type_are_verified_from_database(
+        self,
+        incident_calls_mock,
+        live_mock,
+        post_mock,
+    ):
+        incident_calls_mock.return_value = {
+            "available": True,
+            "incident_type": "chest pain",
+            "requested_limit": 5,
+            "calls_returned": 2,
+            "latest_stored_at": "2026-08-01T16:00:00+00:00",
+            "calls": [
+                {
+                    "cfs_number": "CFS26-51005",
+                    "call_received_at": "2026-08-01T16:00:00+00:00",
+                    "incident_description": "Chest Pain",
+                    "priority": "15",
+                    "city": "LOGAN",
+                },
+                {
+                    "cfs_number": "CFS26-50991",
+                    "call_received_at": "2026-08-01T14:30:00+00:00",
+                    "incident_description": "Chest Pain / Discomfort",
+                    "priority": "10",
+                    "city": "CHAPMANVILLE",
+                },
+            ],
+        }
+
+        result = ask_mae("Show me the last five chest pain calls.")
+
+        incident_calls_mock.assert_called_once_with("chest pain", 5)
+        live_mock.assert_not_called()
+        post_mock.assert_not_called()
+        self.assertIn("latest 2 completed calls", result["answer"])
+        self.assertIn("- 1. CFS26-51005", result["answer"])
+        self.assertIn("- 2. CFS26-50991", result["answer"])
+        self.assertIn("call narrative", result["answer"])
+        self.assertEqual(result["sources"][0]["kind"], "historical")
+
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service.get_call_detail")
+    def test_basic_call_summary_omits_command_log_details(
+        self,
+        call_detail_mock,
+        post_mock,
+    ):
+        call_detail_mock.return_value = {
+            "cfs_number": "CFS26-51005",
+            "incident_description": "Chest Pain",
+            "status": "Closed",
+            "priority": "15",
+            "location": "100 TEST STREET, LOGAN",
+            "call_datetime": "2026-08-01T16:00:00+00:00",
+            "assigned_units": [{"unit_number": "MED10", "status": "Clear"}],
+            "reporter": {"name": "TEST REPORTER"},
+            "command_logs": [{"text": "PRIVATE DETAIL"}],
+            "raw": {},
+        }
+
+        result = ask_mae("Give me a call summary for CFS26-51005.")
+
+        call_detail_mock.assert_called_once_with("CFS26-51005")
+        post_mock.assert_not_called()
+        self.assertIn("CFS26-51005", result["answer"])
+        self.assertIn("MED10", result["answer"])
+        self.assertNotIn("TEST REPORTER", result["answer"])
+        self.assertNotIn("PRIVATE DETAIL", result["answer"])
+
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service.get_call_detail")
+    def test_detailed_call_report_includes_returned_command_log(
+        self,
+        call_detail_mock,
+        post_mock,
+    ):
+        call_detail_mock.return_value = {
+            "cfs_number": "CFS26-51005",
+            "incident_description": "Chest Pain",
+            "status": "Closed",
+            "assigned_units": [],
+            "reporter": {"name": "TEST REPORTER"},
+            "command_logs": [{"text": "DOCUMENTED CAD EVENT"}],
+            "raw": {},
+        }
+
+        result = ask_mae("Give me a detailed call report for CFS26-51005.")
+
+        call_detail_mock.assert_called_once_with("CFS26-51005")
+        post_mock.assert_not_called()
+        self.assertIn("TEST REPORTER", result["answer"])
+        self.assertIn("DOCUMENTED CAD EVENT", result["answer"])
+
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service.get_call_detail")
+    def test_call_narrative_is_grounded_in_returned_cad_chronology(
+        self,
+        call_detail_mock,
+        post_mock,
+    ):
+        call_detail_mock.return_value = {
+            "cfs_number": "CFS26-51005",
+            "incident_description": "Chest Pain",
+            "location": "100 TEST STREET, LOGAN",
+            "call_datetime": "2026-08-01T16:00:00+00:00",
+            "assigned_units": [{"unit_number": "MED10"}],
+            "command_logs": [
+                {
+                    "timestamp": "2026-08-01T16:02:00+00:00",
+                    "text": "MED10 DISPATCHED",
+                },
+                {
+                    "timestamp": "2026-08-01T16:08:00+00:00",
+                    "text": "MED10 ON SCENE",
+                },
+            ],
+            "raw": {},
+        }
+
+        result = ask_mae("Give me a call narrative for CFS26-51005.")
+
+        call_detail_mock.assert_called_once_with("CFS26-51005")
+        post_mock.assert_not_called()
+        self.assertIn("based strictly", result["answer"])
+        self.assertIn("MED10 DISPATCHED", result["answer"])
+        self.assertIn("MED10 ON SCENE", result["answer"])
+        self.assertIn("does not infer", result["answer"])
 
     @patch("app.services.mae_service.httpx.post")
     @patch("app.services.mae_service.get_recent_cad_activity")
@@ -1046,6 +1256,78 @@ class MAEGuardrailTests(unittest.TestCase):
         self.assertIn("Yes. I found CFS26-24436", result["answer"])
         self.assertNotIn("inquiry-only", result["answer"].lower())
         self.assertEqual(result["assurance"]["confidence"], "high")
+
+
+class MAEToolCallingRoutingTests(unittest.TestCase):
+    """The flag-gated tool-calling loop runs strictly between the _verified_*
+    fast-paths and the plain LLM fallback, and only for operational questions.
+    With the flag off, behavior must be identical to before."""
+
+    _LIVE_SOURCE = {"name": "CentralSquare live operations", "kind": "live",
+                    "detail": "snap", "available": True, "timestamp": ""}
+    _DOC_SOURCE = {"name": "CentralSquare documentation", "kind": "document",
+                   "detail": "doc", "available": True, "timestamp": ""}
+    _TOOL_RESULT = {
+        "answer": "The oldest active call is CFS26-1 with MED31 on scene.",
+        "sources": [_LIVE_SOURCE],
+        "model": "qwen3.6:27b",
+        "generated_at": "2026-08-08T12:00:00-04:00",
+        "write_access": False,
+        "research": {"live_verified": True},
+    }
+
+    def _fallback_post(self):
+        resp = unittest.mock.Mock()
+        resp.raise_for_status.return_value = None
+        resp.json.return_value = {"message": {"content": "PLAIN FALLBACK ANSWER."}}
+        return resp
+
+    @patch("app.services.mae_service.run_mae_tool_loop")
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service._build_read_context")
+    def test_flag_off_never_calls_tool_loop(self, ctx_mock, post_mock, loop_mock):
+        ctx_mock.return_value = ([], [self._LIVE_SOURCE])
+        post_mock.return_value = self._fallback_post()
+        with patch.object(mae_service.settings, "mae_tool_calling_enabled", False):
+            result = ask_mae("which incident has been open longest")
+        loop_mock.assert_not_called()
+        self.assertEqual(result["answer"], "PLAIN FALLBACK ANSWER.")
+
+    @patch("app.services.mae_service.run_mae_tool_loop")
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service._build_read_context")
+    def test_flag_on_operational_uses_tool_loop_before_fallback(self, ctx_mock, post_mock, loop_mock):
+        ctx_mock.return_value = ([], [self._LIVE_SOURCE])
+        loop_mock.return_value = dict(self._TOOL_RESULT)
+        post_mock.return_value = self._fallback_post()
+        with patch.object(mae_service.settings, "mae_tool_calling_enabled", True):
+            result = ask_mae("which incident has been open longest")
+        loop_mock.assert_called_once()
+        self.assertEqual(result["answer"], self._TOOL_RESULT["answer"])
+        post_mock.assert_not_called()  # tool answer won; plain fallback skipped
+
+    @patch("app.services.mae_service.run_mae_tool_loop")
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service._build_read_context")
+    def test_flag_on_knowledge_question_skips_tool_loop(self, ctx_mock, post_mock, loop_mock):
+        ctx_mock.return_value = ([], [self._DOC_SOURCE])  # no live/historical source
+        post_mock.return_value = self._fallback_post()
+        with patch.object(mae_service.settings, "mae_tool_calling_enabled", True):
+            result = ask_mae("how do I configure a radio channel plan")
+        loop_mock.assert_not_called()
+        self.assertEqual(result["answer"], "PLAIN FALLBACK ANSWER.")
+
+    @patch("app.services.mae_service.run_mae_tool_loop")
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service._build_read_context")
+    def test_flag_on_but_loop_returns_none_falls_through(self, ctx_mock, post_mock, loop_mock):
+        ctx_mock.return_value = ([], [self._LIVE_SOURCE])
+        loop_mock.return_value = None  # model called no tool / errored
+        post_mock.return_value = self._fallback_post()
+        with patch.object(mae_service.settings, "mae_tool_calling_enabled", True):
+            result = ask_mae("which incident has been open longest")
+        loop_mock.assert_called_once()
+        self.assertEqual(result["answer"], "PLAIN FALLBACK ANSWER.")
 
 
 if __name__ == "__main__":

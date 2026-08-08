@@ -1,8 +1,11 @@
 from time import perf_counter
+import json
+from collections.abc import Callable
 
 import httpx
 
 from app.config.settings import settings
+from app.services.jack_memory_service import find_approved_jack_memory
 from app.services.knowledge_service import (
     get_document_passages,
     get_knowledge_status,
@@ -73,6 +76,15 @@ _PRODUCT_FOCUS_RULES = (
 )
 
 _QUERY_REWRITES = (
+    (
+        (
+            "what does mri stand for",
+            "what is mri",
+            "define mri",
+            "mri meaning",
+        ),
+        "Mindshare Radio Interface",
+    ),
     (("phone book", "phonebook"), "Console Exec Enable Phone Book Sharing"),
     (("display resolution",), "Add Display Resolution"),
     (
@@ -93,6 +105,18 @@ _QUERY_REWRITES = (
     ),
 )
 
+_DOCUMENTED_DEFINITIONS = (
+    (
+        (
+            "what does mri stand for",
+            "what is mri",
+            "define mri",
+            "mri meaning",
+        ),
+        "In the Mindshare product context, MRI stands for Mindshare Radio Interface.",
+    ),
+)
+
 
 def _retrieval_question(question: str) -> str:
     normalized = " ".join((question or "").lower().split())
@@ -100,6 +124,28 @@ def _retrieval_question(question: str) -> str:
         if any(alias in normalized for alias in aliases):
             return rewrite
     return question
+
+
+def _documented_definition(question: str) -> str | None:
+    normalized = " ".join((question or "").lower().split()).rstrip("?.! ")
+    for prompts, answer in _DOCUMENTED_DEFINITIONS:
+        if normalized in prompts:
+            return answer
+    return None
+
+
+def _may_use_general_knowledge(question: str) -> bool:
+    """Allow plain technical concepts, never undocumented operating details."""
+    normalized = " ".join((question or "").lower().split())
+    if _product_focus(question) or "mindshare" in normalized or "mri" in normalized:
+        return False
+    restricted_terms = (
+        "port", "ip address", "subnet", "gateway", "frequency",
+        "firmware", "password", "credential", "license key", "api key",
+        "firewall", "configuration", "config", "multicast", "install ",
+        "update ", "upgrade ", "reconfigure ", "reset ",
+    )
+    return not any(term in normalized for term in restricted_terms)
 
 
 def _prioritize_rewritten_title(
@@ -330,10 +376,10 @@ def _result_is_direct(result: dict) -> bool:
 
 def _build_context(results: list[dict]) -> str:
     blocks = []
-    for index, result in enumerate(results[:3], start=1):
+    for index, result in enumerate(results[:2], start=1):
         page_number = int(result.get("page_number") or 0)
         page_label = f"page {page_number}" if page_number else "page unknown"
-        content = str(result.get("content") or "").strip()[:900]
+        content = str(result.get("content") or "").strip()[:600]
         blocks.append(
             "\n".join(
                 (
@@ -352,6 +398,7 @@ def _evidence(results: list[dict]) -> list[dict]:
         {
             "title": result.get("title") or result.get("file_name") or "",
             "file_name": result.get("file_name") or "",
+            "document_id": int(result.get("document_id") or 0),
             "page_number": int(result.get("page_number") or 0),
             "content": str(result.get("content") or "")[:900],
             "retrieval": result.get("retrieval") or [],
@@ -363,6 +410,7 @@ def _evidence(results: list[dict]) -> list[dict]:
 def ask_mindshare(
     question: str,
     history: list[dict] | None = None,
+    token_callback: Callable[[str], None] | None = None,
 ) -> dict:
     started = perf_counter()
     clean_question = (question or "").strip()
@@ -373,10 +421,12 @@ def ask_mindshare(
     if boundary:
         return boundary
 
+    approved_memory = find_approved_jack_memory(clean_question, limit=4)
+
     retrieval_question = _retrieval_question(clean_question)
     results = search_knowledge(
         retrieval_question,
-        limit=12,
+        limit=8,
         library_key="mindshare",
     )
     if retrieval_question != clean_question:
@@ -412,7 +462,14 @@ def ask_mindshare(
     direct_results = [
         result for result in focused_results if _result_is_direct(result)
     ]
-    if not direct_results:
+    # Broad public-site pages can match generic technical words with high
+    # coverage even when they do not establish a product-specific answer.
+    # Route safe, non-Mindshare concepts to clearly labeled general guidance;
+    # retain document-first behavior for named products and procedures.
+    general_knowledge = (
+        _may_use_general_knowledge(clean_question) and not approved_memory
+    )
+    if not direct_results and not general_knowledge and not approved_memory:
         product_focus = _product_focus(clean_question)
         focus_detail = (
             f" for {product_focus[0]}" if product_focus else ""
@@ -447,7 +504,44 @@ def ask_mindshare(
             "write_access": False,
         }
 
+    definition = _documented_definition(clean_question)
+    if definition:
+        return {
+            "answer": definition,
+            "sources": [
+                {
+                    "name": "Mindshare technical library",
+                    "detail": "Document-derived product definition",
+                    "available": True,
+                }
+            ],
+            "evidence": _evidence(direct_results),
+            "assurance": {
+                "level": "high",
+                "label": "Document-derived definition",
+                "detail": "The product definition was verified in the indexed Mindshare source shown.",
+            },
+            "timing": {
+                "total_ms": round((perf_counter() - started) * 1000),
+            },
+            "model": "Mindshare documented product glossary",
+            "write_access": False,
+        }
+
     context = _build_context(direct_results)
+    if approved_memory:
+        memory_blocks = [
+            (
+                f"Approved local guidance: {item['title']}\n"
+                f"{item['guidance']}"
+            )
+            for item in approved_memory
+        ]
+        context = "\n\n".join(
+            part
+            for part in (context, "\n\n".join(memory_blocks))
+            if part
+        )
     recent_history = []
     for message in (history or [])[-2:]:
         role = str(message.get("role") or "").strip().lower()
@@ -481,6 +575,8 @@ Memorial identity and voice:
 
 Scope and safety:
 - Answer only from the supplied Mindshare technical-library passages.
+- Supervisor-approved local guidance may supplement those passages. Clearly
+  label it as local guidance and never present it as a vendor-manual statement.
 - This assistant is separate from MAE and has no CentralSquare CAD access.
 - Never invent a procedure, setting, port, address, version, or compatibility claim.
 - Never reveal credentials, license secrets, private keys, or passwords.
@@ -498,6 +594,40 @@ Scope and safety:
   include only documented actionable steps, and finish with a complete sentence.
 """.strip()
 
+    if approved_memory and not direct_results:
+        system_prompt = """
+You are JACK, the Mindshare Technical Assistant for Logan County 911.
+
+Answer from the supplied supervisor-approved local guidance. Begin with
+`Supervisor-approved local guidance:` so it is not confused with a vendor
+manual. Be concise, factual, practical, and read-only. Do not reveal
+credentials or claim to change equipment. Do not invent settings, ports,
+frequencies, versions, firmware steps, or compatibility details beyond the
+approved guidance. If the guidance does not answer the question, say so.
+""".strip()
+    elif general_knowledge:
+        system_prompt = """
+You are JACK, the Mindshare Technical Assistant for Logan County 911.
+
+Answer this ordinary technical-concept question from your general technical
+knowledge. Start with `General technical guidance:` so it is not confused with
+a documented Mindshare procedure. Be concise, factual, and practical.
+
+Do not provide a port, frequency, credential, license value, IP address,
+firmware instruction, configuration setting, or equipment-changing step. Do
+not claim a vendor-specific fact or cite a document that was not supplied. If
+the question needs a product-specific answer, say that the manual or product
+model is needed. You are read-only and cannot change equipment.
+""".strip()
+    else:
+        system_prompt = system_prompt.replace(
+            "- Cite supporting material inline as [Document title, page N].",
+            "- Cite supporting material inline as [Document title, page N].\n"
+            "- You may add one `Suggestion (inference):` only when it follows "
+            "from the cited passages. Never infer a setting, port, frequency, "
+            "credential, firmware action, or change command.",
+        )
+
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(recent_history)
     messages.append(
@@ -505,31 +635,60 @@ Scope and safety:
             "role": "user",
             "content": (
                 f"Question:\n{clean_question}\n\n"
-                f"Mindshare library passages:\n{context}"
+                + (
+                    "No product-specific source was supplied; answer only as general technical guidance."
+                    if general_knowledge
+                    else (
+                        f"Supervisor-approved local guidance:\n{context}"
+                        if approved_memory and not direct_results
+                        else f"Mindshare library and approved local context:\n{context}"
+                    )
+                )
             ),
         }
     )
 
     try:
-        response = httpx.post(
-            f"{settings.ollama_base_url.rstrip('/')}/api/chat",
-            json={
+        request_payload = {
                 "model": settings.mae_model,
                 "messages": messages,
-                "stream": False,
+                "stream": token_callback is not None,
                 "think": False,
+                "keep_alive": "2h",
                 "options": {
                     "temperature": 0.1,
-                    "num_ctx": 4096,
-                    "num_predict": 160,
+                    "num_ctx": 3072,
+                    "num_predict": 110,
                 },
-            },
-            timeout=settings.mae_request_timeout_seconds,
-        )
-        response.raise_for_status()
-        answer = str(
-            (response.json().get("message") or {}).get("content") or ""
-        ).strip()
+            }
+        if token_callback is None:
+            response = httpx.post(
+                f"{settings.ollama_base_url.rstrip('/')}/api/chat",
+                json=request_payload,
+                timeout=settings.mae_request_timeout_seconds,
+            )
+            response.raise_for_status()
+            answer = str(
+                (response.json().get("message") or {}).get("content") or ""
+            ).strip()
+        else:
+            answer_parts = []
+            with httpx.stream(
+                "POST",
+                f"{settings.ollama_base_url.rstrip('/')}/api/chat",
+                json=request_payload,
+                timeout=settings.mae_request_timeout_seconds,
+            ) as response:
+                response.raise_for_status()
+                for line in response.iter_lines():
+                    if not line:
+                        continue
+                    event = json.loads(line)
+                    token = str((event.get("message") or {}).get("content") or "")
+                    if token:
+                        answer_parts.append(token)
+                        token_callback(token)
+            answer = "".join(answer_parts).strip()
     except (httpx.HTTPError, ValueError, TypeError) as exc:
         raise MindshareServiceError(
             "JACK could not complete the Mindshare inquiry."
@@ -540,23 +699,84 @@ Scope and safety:
             "JACK returned an empty response."
         )
 
+    if approved_memory and not direct_results:
+        if not answer.lower().startswith("supervisor-approved local guidance:"):
+            answer = f"Supervisor-approved local guidance: {answer}"
+        return {
+            "answer": answer,
+            "sources": [
+                {
+                    "name": "JACK approved local knowledge",
+                    "detail": (
+                        f"{len(approved_memory)} supervisor-approved guidance "
+                        f"item{'' if len(approved_memory) == 1 else 's'}"
+                    ),
+                    "available": True,
+                }
+            ],
+            "evidence": [],
+            "assurance": {
+                "level": "approved_local",
+                "label": "Supervisor-approved local guidance",
+                "detail": "This guidance was approved locally and is not presented as a vendor-manual statement.",
+            },
+            "timing": {"total_ms": round((perf_counter() - started) * 1000)},
+            "model": settings.mae_model,
+            "write_access": False,
+        }
+
+    if general_knowledge:
+        if not answer.lower().startswith("general technical guidance:"):
+            answer = f"General technical guidance: {answer}"
+        return {
+            "answer": answer,
+            "sources": [
+                {
+                    "name": "JACK general technical knowledge",
+                    "detail": "Not a Mindshare documented procedure",
+                    "available": True,
+                }
+            ],
+            "evidence": [],
+            "assurance": {
+                "level": "general",
+                "label": "General technical guidance",
+                "detail": "Use the applicable product manual before making any configuration or operational change.",
+            },
+            "timing": {"total_ms": round((perf_counter() - started) * 1000)},
+            "model": settings.mae_model,
+            "write_access": False,
+        }
+
     top_score = max(
         float(result.get("hybrid_score") or 0)
         for result in direct_results
     )
     assurance_level = "high" if top_score >= 0.5 else "supported"
-    return {
-        "answer": answer,
-        "sources": [
+    sources = [
+        {
+            "name": "Mindshare technical library",
+            "detail": (
+                f"{len(direct_results[:3])} supporting passage"
+                f"{'' if len(direct_results[:3]) == 1 else 's'}"
+            ),
+            "available": True,
+        }
+    ]
+    if approved_memory:
+        sources.append(
             {
-                "name": "Mindshare technical library",
+                "name": "JACK approved local knowledge",
                 "detail": (
-                    f"{len(direct_results[:3])} supporting passage"
-                    f"{'' if len(direct_results[:3]) == 1 else 's'}"
+                    f"{len(approved_memory)} supervisor-approved guidance "
+                    f"item{'' if len(approved_memory) == 1 else 's'}"
                 ),
                 "available": True,
             }
-        ],
+        )
+    return {
+        "answer": answer,
+        "sources": sources,
         "evidence": _evidence(direct_results),
         "assurance": {
             "level": assurance_level,

@@ -8,10 +8,10 @@ import secrets
 
 
 DEFAULT_SECRET_PATH = Path(
-    "/home/ted/lcdash-platform/secrets/centralsquare_webhook_secret"
+    "/srv/lcdash-platform/secrets/centralsquare_webhook_secret"
 )
 DEFAULT_RECORD_PATH = Path(
-    "/home/ted/lcdash-platform/secrets/platform-credentials.txt"
+    "/srv/lcdash-platform/secrets/platform-credentials.txt"
 )
 RECORD_LABEL = "CentralSquare webhook secret: "
 CFS_SUBSCRIPTION_LABEL = "CentralSquare CFS subscription ID: "

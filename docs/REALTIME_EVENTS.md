@@ -99,7 +99,8 @@ fetches `/api/operations/snapshot`. EventSource reconnects automatically.
 
 - A unique random webhook secret is supplied through a Docker secret.
 - Receiver bodies are limited to 1 MiB by default.
-- Only JSON objects and arrays are accepted.
+- All valid JSON event shapes are accepted because CentralSquare callback
+  variants may deliver an object, array, or scalar notification.
 - Duplicate payloads are identified with a SHA-256 digest.
 - Raw webhook payloads are not stored in the real-time metadata table.
 - Raw payloads are not sent over the browser event stream.
@@ -167,6 +168,10 @@ system is not enough evidence to declare a subscription unhealthy. The page
 contains no CAD payloads, caller information, addresses, unit locations,
 credentials, webhook secrets, or event hashes.
 
-The controlled end-to-end production CAD test is intentionally deferred. Until
-that test is completed, observed metadata confirms receipt but does not replace
-formal operational validation.
+The controlled receiver and browser-delivery acceptance completed August 3,
+2026. Both CFS and unit sources accepted a unique authenticated synthetic event,
+rejected its immediate duplicate, emitted one metadata-only browser event, and
+retained the connected live snapshot plus 30-second reconciliation. Existing
+metadata also confirmed prior real CentralSquare deliveries for both sources.
+See `REALTIME_ACCEPTANCE_2026-08-03.md` for the bounded evidence and remaining
+public-browser observation note.

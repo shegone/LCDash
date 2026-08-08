@@ -4,7 +4,7 @@ import json
 import re
 from threading import Lock
 from time import monotonic, perf_counter
-from typing import Any
+from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -20,7 +20,11 @@ from app.services.cad_service import get_call_detail, simplify_call
 from app.services.centralsquare import CentralSquareAPIError, CentralSquareClient
 from app.services.knowledge_service import search_knowledge
 from app.services.mae_memory_service import find_approved_memory
+from app.services.mae_analytics_visualization_service import (
+    build_requested_visualization,
+)
 from app.services.mae_tool_registry import get_mae_tool_catalog
+from app.services.mae_tool_loop import run_mae_tool_loop
 from app.services.operations_service import (
     get_live_operations_snapshot,
     get_live_unit_snapshot,
@@ -42,6 +46,9 @@ NON-NEGOTIABLE SAFETY AND AUTHORITY RULES:
 - You are inquiry-only. Never add, update, delete, dispatch, acknowledge, close,
   or otherwise change anything in CentralSquare CAD or any connected system.
 - You only receive data from named read-only LCDash tools.
+- The approved CentralSquare inquiry paths are CFS detail, current operations,
+  current unit roster, and recent call arrivals. They are server-side
+  allowlisted queries, not a generic CAD API connection.
 - Never claim that you performed an operational action.
 - If asked to perform a write action, clearly say that MAE is currently
   inquiry-only and cannot perform it.
@@ -53,7 +60,10 @@ NON-NEGOTIABLE SAFETY AND AUTHORITY RULES:
   CentralSquare data takes precedence for active, latest, and current facts.
 - If counts differ, explain the likely reason instead of silently choosing one.
 - Never use PostgreSQL to answer what is active, open, current, in progress,
-  available, or latest. Those facts must come from live CentralSquare data.
+  available, or the latest call overall. Those facts must come from live
+  CentralSquare data. PostgreSQL may identify the latest completed calls that
+  match an explicitly requested incident type when the answer clearly labels
+  them as completed historical records.
 - Calls and units are different measures. Never report a unit count as a call
   count or infer the number of calls from unit statuses.
 - In Logan County CAD, lower numeric priority values are more urgent:
@@ -108,7 +118,7 @@ LIVE_PATTERN = re.compile(
 ANALYTICS_PATTERN = re.compile(
     r"\b(analytics|average|busiest|calls by|completed calls?|historical|history|"
     r"last \d+ (?:hours?|days?)|month|past|report|response time|"
-    r"statistics|stats|trend|week|year|yesterday)\b",
+    r"statistics|stats|trend|chart|graph|visualize|week|year|yesterday)\b",
     re.IGNORECASE,
 )
 RECENT_HOURS_PATTERN = re.compile(
@@ -122,6 +132,23 @@ RECENT_SINGLE_HOUR_PATTERN = re.compile(
 LATEST_CALL_PATTERN = re.compile(
     r"\b(?:last|latest|most recent)\s+(?:calls?|incidents?)\b",
     re.IGNORECASE,
+)
+INCIDENT_TYPE_LIST_PATTERNS = (
+    re.compile(
+        r"\b(?:last|latest|most recent)\s+"
+        r"(?:(?P<count>\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\s+)?"
+        r"(?P<incident>[a-z][a-z0-9 /&'\-]{1,60}?)\s+"
+        r"(?:calls?|incidents?)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:last|latest|most recent)\s+"
+        r"(?P<count>\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\s+"
+        r"(?:calls?|incidents?)\s+(?:for|of|with|matching)\s+"
+        r"(?:the\s+)?(?:call\s+type\s+)?"
+        r"(?P<incident>[a-z][a-z0-9 /&'\-]{1,60})",
+        re.IGNORECASE,
+    ),
 )
 OPERATIONAL_PATTERN = re.compile(
     r"\b(busy|cad|calls?|cfs|coverage|dispatch|ems|fire|happening|"
@@ -206,7 +233,17 @@ CALL_DETAIL_PATTERN = re.compile(
     re.IGNORECASE,
 )
 CALL_SUMMARY_PATTERN = re.compile(
-    r"\b(?:complete\s+)?(?:summary|details?)\s+(?:of|for)\s+"
+    r"\b(?:complete\s+)?(?:call\s+)?(?:summary|details?)\s+(?:of|for)\s+"
+    r"(?:CFS(?:\d{2})?[- ]?)?\d{3,}\b",
+    re.IGNORECASE,
+)
+DETAILED_CALL_REPORT_PATTERN = re.compile(
+    r"\b(?:detailed|complete|full)\s+(?:call\s+)?(?:report|summary|details?)"
+    r"\s+(?:of|for)\s+(?:CFS(?:\d{2})?[- ]?)?\d{3,}\b",
+    re.IGNORECASE,
+)
+CALL_NARRATIVE_PATTERN = re.compile(
+    r"\b(?:call\s+)?narrative\s+(?:of|for)\s+"
     r"(?:CFS(?:\d{2})?[- ]?)?\d{3,}\b",
     re.IGNORECASE,
 )
@@ -424,6 +461,112 @@ def _hours_from_question(question: str) -> int | None:
     if not match:
         return 1 if RECENT_SINGLE_HOUR_PATTERN.search(question) else None
     return min(max(int(match.group(1)), 1), 168)
+
+
+def _incident_type_list_request(question: str) -> tuple[int, str] | None:
+    number_words = {
+        "one": 1,
+        "two": 2,
+        "three": 3,
+        "four": 4,
+        "five": 5,
+        "six": 6,
+        "seven": 7,
+        "eight": 8,
+        "nine": 9,
+        "ten": 10,
+    }
+    for pattern in INCIDENT_TYPE_LIST_PATTERNS:
+        match = pattern.search(question)
+        if not match:
+            continue
+        count_text = str(match.groupdict().get("count") or "5").lower()
+        count = number_words.get(
+            count_text,
+            int(count_text) if count_text.isdigit() else 5,
+        )
+        incident_type = re.sub(
+            r"\s+",
+            " ",
+            str(match.group("incident") or "").strip(" .,:;?!-"),
+        )
+        incident_type = re.sub(
+            r"^(?:the\s+)?(?:call\s+type\s+|type\s+)",
+            "",
+            incident_type,
+            flags=re.IGNORECASE,
+        ).strip()
+        if incident_type.lower() in {"call", "calls", "incident", "incidents"}:
+            continue
+        if len(incident_type) >= 2:
+            return min(max(count, 1), 10), incident_type
+    return None
+
+
+def get_latest_completed_calls_by_incident(
+    incident_type: str,
+    limit: int = 5,
+) -> dict:
+    safe_limit = min(max(int(limit), 1), 10)
+    search_term = incident_type.strip()[:80]
+    escaped_term = (
+        search_term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    )
+    try:
+        with AnalyticsRepository() as repository:
+            rows = repository.fetchall(
+                """
+                SELECT
+                    cfs_number,
+                    call_received_at,
+                    incident_code,
+                    incident_description,
+                    priority,
+                    response_agency,
+                    city,
+                    closed_at
+                FROM lcdash_analytics.calls
+                WHERE incident_description ILIKE %(pattern)s ESCAPE '\\'
+                   OR incident_code ILIKE %(pattern)s ESCAPE '\\'
+                ORDER BY call_received_at DESC NULLS LAST, cfs_number DESC
+                LIMIT %(limit)s
+                """,
+                {"pattern": f"%{escaped_term}%", "limit": safe_limit},
+            )
+    except AnalyticsDatabaseError as exc:
+        return {
+            "available": False,
+            "incident_type": search_term,
+            "requested_limit": safe_limit,
+            "calls": [],
+            "message": str(exc),
+        }
+
+    calls = [
+        {
+            "cfs_number": row[0],
+            "call_received_at": row[1].isoformat() if row[1] else "",
+            "incident_code": row[2],
+            "incident_description": row[3],
+            "priority": row[4],
+            "agency": row[5],
+            "city": row[6],
+            "closed_at": row[7].isoformat() if row[7] else "",
+        }
+        for row in rows
+    ]
+    return {
+        "available": True,
+        "incident_type": search_term,
+        "requested_limit": safe_limit,
+        "calls_returned": len(calls),
+        "calls": calls,
+        "latest_stored_at": calls[0]["call_received_at"] if calls else "",
+        "important_note": (
+            "These are completed calls stored in PostgreSQL. Active calls are "
+            "not included until they are collected as completed incidents."
+        ),
+    }
 
 
 def get_recent_database_activity(hours: int) -> dict:
@@ -937,6 +1080,7 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
             }
         )
     recent_hours = _hours_from_question(question)
+    incident_type_request = _incident_type_list_request(question)
     wants_latest_call = bool(LATEST_CALL_PATTERN.search(question))
     wants_active_calls = bool(ACTIVE_CALL_PATTERN.search(question))
     wants_knowledge = bool(KNOWLEDGE_PATTERN.search(question))
@@ -985,6 +1129,7 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
             or wants_comparison
             or wants_today_yesterday
             or wants_discipline_breakdown
+            or incident_type_request
         )
     )
     looks_operational = bool(
@@ -1102,7 +1247,34 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
         wants_live = False
         wants_analytics = False
 
-    if wants_today_yesterday:
+    if incident_type_request:
+        incident_limit, incident_type = incident_type_request
+        incident_calls = get_latest_completed_calls_by_incident(
+            incident_type,
+            incident_limit,
+        )
+        context.append(
+            {
+                "source": "PostgreSQL incident-type call list",
+                "purpose": (
+                    f"Latest {incident_limit} completed calls matching "
+                    f"{incident_type}"
+                ),
+                "data": incident_calls,
+            }
+        )
+        sources.append(
+            {
+                "name": "PostgreSQL analytics",
+                "kind": "historical",
+                "detail": (
+                    f"Latest completed calls matching {incident_type}"
+                ),
+                "available": bool(incident_calls.get("available")),
+                "timestamp": incident_calls.get("latest_stored_at") or "",
+            }
+        )
+    elif wants_today_yesterday:
         comparison = get_today_yesterday_activity()
         context.append(
             {
@@ -1160,11 +1332,16 @@ def _build_read_context(question: str) -> tuple[list[dict], list[dict]]:
         period = _period_from_question(question)
         analytics = get_analytics_overview(period=period)
         analytics_for_comparison = analytics
+        analytics_context = _trim_rows(analytics)
+        analytics_context["daily_volume"] = _trim_rows(
+            (analytics.get("daily_volume") or [])[-30:],
+            30,
+        )
         context.append(
             {
                 "source": "PostgreSQL analytics",
                 "purpose": "Historical completed-call analysis",
-                "data": _trim_rows(analytics),
+                "data": analytics_context,
             }
         )
         sources.append(
@@ -1744,6 +1921,9 @@ def _finalize_mae_response(
     )
     response.setdefault("clarification_required", False)
     response.setdefault("choices", [])
+    visualization = build_requested_visualization(question, context)
+    if visualization:
+        response["analytics_visualization"] = visualization
     response["assurance"] = _assurance_summary(response, sources)
     return response
 
@@ -1909,12 +2089,146 @@ def _verified_patient_name_answer(
     )
 
 
+def _verified_incident_type_call_list_answer(
+    question: str,
+    context: list[dict],
+    sources: list[dict],
+) -> dict | None:
+    request = _incident_type_list_request(question)
+    if not request:
+        return None
+
+    requested_limit, requested_type = request
+    data = _context_data(context, "PostgreSQL incident-type call list")
+    if not data:
+        return None
+    if not data.get("available"):
+        return _verified_response(
+            (
+                "The completed-call database is unavailable, so I cannot verify "
+                f"the latest {requested_type} calls right now."
+            ),
+            sources,
+        )
+
+    calls = [row for row in (data.get("calls") or []) if isinstance(row, dict)]
+    if not calls:
+        return _verified_response(
+            (
+                f"I found no completed calls whose incident code or description "
+                f"matches \"{requested_type}.\" This does not rule out an active "
+                "call that has not yet reached the completed-call database."
+            ),
+            sources,
+        )
+
+    lines = [
+        (
+            f"The latest {len(calls)} completed calls matching "
+            f"\"{requested_type}\" are:"
+        )
+    ]
+    for index, call in enumerate(calls, start=1):
+        cfs_number = str(call.get("cfs_number") or "Unknown CFS")
+        description = str(
+            call.get("incident_description")
+            or call.get("incident_code")
+            or "Incident description not returned"
+        )
+        received = _format_mae_local_datetime(call.get("call_received_at"))
+        details = [description]
+        if received:
+            details.append(received)
+        if call.get("city"):
+            details.append(str(call["city"]))
+        if call.get("priority") not in (None, ""):
+            details.append(f"Priority {call['priority']}")
+        lines.append(f"- {index}. {cfs_number}: " + " | ".join(details))
+
+    if len(calls) < requested_limit:
+        lines.append(f"Only {len(calls)} matching completed calls were available.")
+    lines.append(
+        "Give me one of those CFS numbers and ask for a call summary, a "
+        "detailed call report, or a call narrative."
+    )
+    return _verified_response("\n".join(lines), sources)
+
+
+def _verified_call_narrative_answer(
+    question: str,
+    context: list[dict],
+    sources: list[dict],
+) -> dict | None:
+    if not CALL_NARRATIVE_PATTERN.search(question):
+        return None
+
+    call = _context_data(context, "CentralSquare live CFS detail")
+    if not call:
+        return None
+
+    cfs_number = str(call.get("cfs_number") or "Selected call")
+    description = str(
+        call.get("incident_description")
+        or call.get("incident_code")
+        or "incident description not returned"
+    )
+    received = _format_mae_local_datetime(call.get("call_datetime"))
+    location = str(call.get("location") or "location not returned")
+    opening = f"{cfs_number} was entered as {description}"
+    if received:
+        opening += f" at {received}"
+    opening += f" for {location}."
+
+    lines = [
+        "Call narrative based strictly on the CentralSquare fields and command log:",
+        opening,
+    ]
+    units = [
+        str(unit.get("unit_number") or "").strip()
+        for unit in (call.get("assigned_units") or [])
+        if isinstance(unit, dict) and str(unit.get("unit_number") or "").strip()
+    ]
+    if units:
+        lines.append("Assigned units: " + ", ".join(units) + ".")
+
+    command_logs = [
+        entry
+        for entry in (call.get("command_logs") or [])
+        if isinstance(entry, dict)
+    ]
+    if command_logs:
+        lines.append("Documented CAD chronology:")
+        for entry in command_logs[-25:]:
+            timestamp = _format_mae_local_datetime(entry.get("timestamp"))
+            text = str(
+                entry.get("text")
+                or entry.get("status")
+                or "CAD activity"
+            ).strip()
+            prefix = f"{timestamp} — " if timestamp else ""
+            lines.append(f"- {prefix}{text}")
+    else:
+        lines.append(
+            "No command-log entries were returned, so no event chronology can "
+            "be stated beyond the call fields above."
+        )
+
+    lines.append(
+        "This narrative does not infer events, patient condition, or outcomes "
+        "that were not returned by CentralSquare."
+    )
+    return _verified_response("\n".join(lines), sources)
+
+
 def _verified_call_summary_answer(
     question: str,
     context: list[dict],
     sources: list[dict],
 ) -> dict | None:
-    if not CALL_SUMMARY_PATTERN.search(question):
+    if not (
+        CALL_SUMMARY_PATTERN.search(question)
+        or DETAILED_CALL_REPORT_PATTERN.search(question)
+    ):
         return None
 
     call = _context_data(context, "CentralSquare live CFS detail")
@@ -1955,51 +2269,57 @@ def _verified_call_summary_answer(
     else:
         lines.append("- Assigned units: None returned")
 
-    reporter = call.get("reporter") or {}
-    if isinstance(reporter, dict):
-        reporter_name = str(
-            reporter.get("name")
-            or reporter.get("full_name")
-            or reporter.get("Name")
-            or ""
-        ).strip()
-        reporter_phone = str(
-            reporter.get("phone")
-            or reporter.get("phone_number")
-            or reporter.get("PhoneNumber")
-            or ""
-        ).strip()
-        if reporter_name:
-            lines.append(f"- Reporter: {reporter_name}")
-        if reporter_phone:
-            lines.append(f"- Reporter phone: {reporter_phone}")
-
-    command_logs = [
-        entry
-        for entry in (call.get("command_logs") or [])
-        if isinstance(entry, dict)
-    ]
-    if command_logs:
-        lines.append(
-            f"- Command log: {len(command_logs)} entries returned; "
-            "most recent entries:"
-        )
-        for entry in command_logs[-10:]:
-            timestamp = _format_mae_local_datetime(entry.get("timestamp"))
-            text = str(
-                entry.get("text")
-                or entry.get("status")
-                or "CAD activity"
+    detailed = bool(
+        DETAILED_CALL_REPORT_PATTERN.search(question)
+        or re.search(r"\bcomplete\s+summary\b", question, re.IGNORECASE)
+        or re.search(r"\bcall\s+details?\b", question, re.IGNORECASE)
+    )
+    if detailed:
+        reporter = call.get("reporter") or {}
+        if isinstance(reporter, dict):
+            reporter_name = str(
+                reporter.get("name")
+                or reporter.get("full_name")
+                or reporter.get("Name")
+                or ""
             ).strip()
-            prefix = f"{timestamp} — " if timestamp else ""
-            lines.append(f"  - {prefix}{text}")
-    else:
-        lines.append("- Command log: No entries returned")
+            reporter_phone = str(
+                reporter.get("phone")
+                or reporter.get("phone_number")
+                or reporter.get("PhoneNumber")
+                or ""
+            ).strip()
+            if reporter_name:
+                lines.append(f"- Reporter: {reporter_name}")
+            if reporter_phone:
+                lines.append(f"- Reporter phone: {reporter_phone}")
 
-    if call.get("rapidsos"):
-        lines.append("- RapidSOS: Data attached")
-    if call.get("proqa"):
-        lines.append("- ProQA: Data attached")
+        command_logs = [
+            entry
+            for entry in (call.get("command_logs") or [])
+            if isinstance(entry, dict)
+        ]
+        if command_logs:
+            lines.append(
+                f"- Command log: {len(command_logs)} entries returned; "
+                "most recent entries:"
+            )
+            for entry in command_logs[-10:]:
+                timestamp = _format_mae_local_datetime(entry.get("timestamp"))
+                text = str(
+                    entry.get("text")
+                    or entry.get("status")
+                    or "CAD activity"
+                ).strip()
+                prefix = f"{timestamp} — " if timestamp else ""
+                lines.append(f"  - {prefix}{text}")
+        else:
+            lines.append("- Command log: No entries returned")
+
+        if call.get("rapidsos"):
+            lines.append("- RapidSOS: Data attached")
+        if call.get("proqa"):
+            lines.append("- ProQA: Data attached")
 
     return _verified_response("\n".join(lines), sources)
 
@@ -2806,10 +3126,21 @@ def get_mae_status() -> dict:
     }
 
 
+def _has_operational_sources(sources: list[dict]) -> bool:
+    """True when retrieval attached live CAD or historical analytics context --
+    i.e. the question is operational, so the tool-calling loop is worth running.
+    Knowledge-only questions (document/memory sources) skip the loop and keep
+    the existing document-answer path."""
+    return any(
+        source.get("kind") in {"live", "historical"} for source in (sources or [])
+    )
+
+
 def ask_mae(
     question: str,
     history: list[dict] | None = None,
     conversation_entities: dict | None = None,
+    token_callback: Callable[[str], None] | None = None,
 ) -> dict:
     request_started = perf_counter()
     clean_question = (question or "").strip()
@@ -2863,6 +3194,16 @@ def ask_mae(
             sources,
         )
         or _verified_patient_name_answer(
+            routing_question,
+            context,
+            sources,
+        )
+        or _verified_incident_type_call_list_answer(
+            routing_question,
+            context,
+            sources,
+        )
+        or _verified_call_narrative_answer(
             routing_question,
             context,
             sources,
@@ -2959,6 +3300,37 @@ def ask_mae(
             "generation_ms": 0,
         }
         return final_response
+
+    # Read-only LLM tool-calling: for operational questions the deterministic
+    # _verified_* fast-paths above did not answer, let the model fetch data via
+    # read-only tools. Flag-gated; returns None (falls through to the plain
+    # fallback below) if disabled, non-operational, the model calls no tool, or
+    # Ollama errors -- so this can only add answers, never remove or break one.
+    if settings.mae_tool_calling_enabled and _has_operational_sources(sources):
+        tool_generation_started = perf_counter()
+        tool_response = run_mae_tool_loop(
+            clean_question,
+            conversation_history,
+            token_callback=token_callback,
+        )
+        if tool_response is not None:
+            tool_sources = tool_response.get("sources") or []
+            final_response = _finalize_mae_response(
+                tool_response,
+                routing_question,
+                context,
+                tool_sources,
+            )
+            final_response["timing"] = {
+                "total_ms": max(int((perf_counter() - request_started) * 1000), 0),
+                "retrieval_ms": retrieval_ms,
+                "generation_ms": max(
+                    int((perf_counter() - tool_generation_started) * 1000),
+                    0,
+                ),
+            }
+            return final_response
+
     payload = {
         "model": settings.mae_model,
         "messages": _ollama_messages(
@@ -2966,7 +3338,7 @@ def ask_mae(
             conversation_history,
             context,
         ),
-        "stream": False,
+        "stream": token_callback is not None,
         "think": False,
         "options": {
             "temperature": 0.2,
@@ -2977,13 +3349,32 @@ def ask_mae(
 
     generation_started = perf_counter()
     try:
-        response = httpx.post(
-            f"{settings.ollama_base_url.rstrip('/')}/api/chat",
-            json=payload,
-            timeout=settings.mae_request_timeout_seconds,
-        )
-        response.raise_for_status()
-        answer = str(response.json().get("message", {}).get("content") or "").strip()
+        if token_callback is None:
+            response = httpx.post(
+                f"{settings.ollama_base_url.rstrip('/')}/api/chat",
+                json=payload,
+                timeout=settings.mae_request_timeout_seconds,
+            )
+            response.raise_for_status()
+            answer = str(response.json().get("message", {}).get("content") or "").strip()
+        else:
+            answer_parts = []
+            with httpx.stream(
+                "POST",
+                f"{settings.ollama_base_url.rstrip('/')}/api/chat",
+                json=payload,
+                timeout=settings.mae_request_timeout_seconds,
+            ) as response:
+                response.raise_for_status()
+                for line in response.iter_lines():
+                    if not line:
+                        continue
+                    event = json.loads(line)
+                    token = str(event.get("message", {}).get("content") or "")
+                    if token:
+                        answer_parts.append(token)
+                        token_callback(token)
+            answer = "".join(answer_parts).strip()
     except (httpx.HTTPError, ValueError, TypeError) as exc:
         raise MAEServiceError(f"The local MAE model is unavailable: {exc}") from exc
 

@@ -1,4 +1,4 @@
-const STATIC_CACHE = "lcdash-static-v7";
+const STATIC_CACHE = "lcdash-static-v8";
 const STATIC_ASSETS = [
     "/static/vendor/bootstrap/bootstrap.min.css",
     "/static/vendor/bootstrap-icons/bootstrap-icons.css",

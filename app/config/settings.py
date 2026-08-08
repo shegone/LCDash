@@ -128,11 +128,32 @@ class Settings:
         "EMS_UNIT_PREFIXES",
         "MED,EMS",
     )
+    nga911_provider_mode: str = _env(
+        "NGA911_PROVIDER_MODE",
+        "mock",
+    )
     ollama_base_url: str = _env("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
-    mae_model: str = _env("MAE_MODEL", "qwen3:8b")
+    mae_model: str = _env("MAE_MODEL", "qwen3.6:27b")
     mae_request_timeout_seconds: int = _env_int(
         "MAE_REQUEST_TIMEOUT_SECONDS",
         120,
+    )
+    # Read-only LLM tool-calling for MAE. Off by default; enable only after a
+    # flag-off deploy is verified and the live Ollama build is smoke-tested.
+    mae_tool_calling_enabled: bool = _env_bool(
+        "MAE_TOOL_CALLING_ENABLED",
+        False,
+    )
+    mae_tool_max_rounds: int = _env_int(
+        "MAE_TOOL_MAX_ROUNDS",
+        5,
+    )
+    # Tool payloads (call lists, command logs) are larger than the plain
+    # context, so the tool loop runs with a wider context window than the
+    # 8192 used for the context-stuffed fallback.
+    mae_tool_context_tokens: int = _env_int(
+        "MAE_TOOL_CONTEXT_TOKENS",
+        32768,
     )
     knowledge_source_dir: str = _env(
         "KNOWLEDGE_SOURCE_DIR",
@@ -141,6 +162,10 @@ class Settings:
     mindshare_knowledge_source_dir: str = _env(
         "MINDSHARE_KNOWLEDGE_SOURCE_DIR",
         "knowledge/mindshare",
+    )
+    gis_reference_dir: str = _env(
+        "GIS_REFERENCE_DIR",
+        "data/gis-public",
     )
     knowledge_index_interval_seconds: int = _env_int(
         "KNOWLEDGE_INDEX_INTERVAL_SECONDS",
@@ -163,9 +188,29 @@ class Settings:
         "speaches-ai/Kokoro-82M-v1.0-ONNX",
     )
     voice_tts_voice: str = _env("VOICE_TTS_VOICE", "af_heart")
+    voice_qwen_tts_base_url: str = _env(
+        "VOICE_QWEN_TTS_BASE_URL",
+        "http://127.0.0.1:8003",
+    )
+    voice_qwen_tts_model: str = _env(
+        "VOICE_QWEN_TTS_MODEL",
+        "lcdash-qwen3-tts-mae",
+    )
+    voice_qwen_tts_voice: str = _env(
+        "VOICE_QWEN_TTS_VOICE",
+        "mae-synthetic-female",
+    )
+    voice_jack_tts_base_url: str = _env(
+        "VOICE_JACK_TTS_BASE_URL",
+        "http://127.0.0.1:8005",
+    )
+    voice_jack_tts_model: str = _env(
+        "VOICE_JACK_TTS_MODEL",
+        "lcdash-qwen3-tts-jack",
+    )
     voice_stt_model: str = _env(
         "VOICE_STT_MODEL",
-        "Systran/faster-distil-whisper-small.en",
+        "deepdml/faster-whisper-large-v3-turbo-ct2",
     )
     voice_request_timeout_seconds: int = _env_int(
         "VOICE_REQUEST_TIMEOUT_SECONDS",

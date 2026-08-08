@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-secret_file="${1:-/home/ted/lcdash-platform/secrets/centralsquare_webhook_secret}"
+secret_file="${1:-/srv/lcdash-platform/secrets/centralsquare_webhook_secret}"
 base_url="${2:-http://127.0.0.1:8010}"
 
 secret="$(cat "$secret_file")"

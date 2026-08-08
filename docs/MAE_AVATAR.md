@@ -33,3 +33,24 @@ fallback while adding an optional animated layer:
 
 Animation must never delay or block MAE's text response, operational data, or
 read-only safety controls.
+
+## Dedicated MetaHuman workstation
+
+The planned animation host is a separate Windows workstation named
+`mae-avatar-01` with an Intel i9-12900KF, 128 GB RAM, an NVIDIA RTX 3090
+24 GB GPU, and a 2 TB SSD.
+
+- Preserve Windows and use the NVIDIA Studio driver branch.
+- Run Unreal Engine, MetaHuman, facial animation, lip synchronization, and
+  Pixel Streaming on `mae-avatar-01`.
+- Keep `.227` as the production AI, audio, CAD, application, and database
+  server; do not place Unreal or MetaHuman rendering workloads on it.
+- Treat the animated avatar as an optional presentation layer. The static MAE
+  portrait remains the mandatory fallback whenever the workstation, renderer,
+  stream, or animation input is unavailable.
+- Keep operational responses usable when the avatar is disabled or offline.
+
+Before installing the avatar software stack, inventory Windows version and
+activation, firmware, storage health and free space, NVIDIA driver and GPU
+status, network interface and address plan, audio devices, display setup, and
+remote-administration method.

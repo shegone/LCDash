@@ -14,7 +14,9 @@ It does not currently connect to or record the Mindshare radio network.
 ## Beta architecture
 
 - API server: Speaches, private to the Docker network
-- Text to speech: Kokoro 82M ONNX
+- MAE text to speech: Qwen3-TTS 1.7B VoiceDesign with the approved synthetic
+  female MAE profile
+- JACK and fallback text to speech: Kokoro 82M ONNX
 - Speech to text: Faster-Whisper distilled small English
 - Model loader: automatically restores both models into a persistent cache
 - User interface: `/voice`
@@ -23,7 +25,8 @@ It does not currently connect to or record the Mindshare radio network.
   - `POST /api/voice/speech`
   - `POST /api/voice/transcribe`
 
-The browser never connects directly to the speech container.
+The browser never connects directly to either speech container. Qwen3-TTS is
+private to the Docker network and has no CAD credentials or direct CAD access.
 
 The Speaches image is pinned by digest so a future upstream `latest` update
 cannot silently change the tested production runtime.
@@ -47,6 +50,27 @@ button.
 Browser microphone access requires either HTTPS or a localhost connection.
 Remote supervisor access must therefore use the secured HTTPS dashboard URL.
 
+MAE uses the Qwen3-TTS synthetic female voice. It is a text-designed synthetic
+voice, not an imitation of a real speaker. The speech-only pronunciation
+dictionary renders `MAE` as "May" and `911` as "nine one one."
+
+## Station-alert announcement timing
+
+When station-alert sound is armed, the browser begins generating the approved
+MAE announcement as soon as the paging tone starts. The resulting audio is
+prepared but never played during the tone. Only the tone's completion event can
+release playback, so speech cannot overlap, interrupt, or delay the
+authoritative paging audio. If preparation is still in progress when the tone
+ends, the page waits for the prepared audio rather than restarting the request.
+Station-alert speech expands dispatch time into natural 24-hour wording, such
+as "fifteen twenty-three," rather than relying on the voice engine to infer
+how to read compact digits.
+
+JACK uses a fixed, fully synthetic older male southern West Virginia/Appalachian
+character at an unhurried 0.92× cadence. A single generated synthetic reference
+is reused for every response so the speaker identity remains stable. It is not
+an imitation of a real person.
+
 ## JACK conversational voice mode
 
 The JACK technical-assistant page uses the same private conversational loop as
@@ -54,9 +78,11 @@ MAE. It listens for a question, transcribes it locally, submits it through
 JACK's existing read-only Mindshare documentation workflow, speaks the answer,
 and resumes listening.
 
-JACK uses the `am_michael` Kokoro voice as the current mature American male
-voice. This is a standard synthesized voice and is not a clone or imitation of
-Jack Hines. Individual JACK answers also include a **Listen** button.
+JACK uses the approved Qwen3-TTS synthetic Southern male voice. Individual
+JACK answers also include a **Listen** button.
+
+JACK cancels a stale speech request and stops prior playback before starting a
+new answer, so repeated interactions cannot overlap or restart an answer.
 
 JACK uses a compact, product-focused retrieval context and concise response
 budget so the CPU-based local model can answer promptly. The browser allows a
@@ -70,6 +96,9 @@ engine. Displayed and stored text is not changed.
 
 - `MAE` is spoken as `May`.
 - `911`, `9-1-1`, and `9 1 1` are spoken as `nine one one`.
+- Recognized 24-hour times are expanded before synthesis: `1523` is spoken as
+  `fifteen twenty-three`, `1500` as `fifteen hundred`, and `08:05` as
+  `zero eight oh five`. Displayed and stored text is unchanged.
 
 ## GPU upgrade
 
@@ -82,6 +111,28 @@ retain the same API contract. Benchmark:
 3. Kokoro as a low-latency fallback.
 
 No cloned voice should be used without documented permission from the speaker.
+
+## Live STT resource placement
+
+JACK's live microphone transcription runs Faster-Whisper on the server CPU
+with INT8 computation and eight CPU threads. This intentional split leaves the
+RTX 3090 available for the 27B conversational model and Qwen JACK voice, which
+otherwise leave too little CUDA working memory for reliable follow-up
+transcription. Short conversational recordings remain local and are not
+stored. Parakeet remains a separately evaluated canary rather than the live
+default.
+
+## Parakeet STT evaluation plan
+
+Parakeet TDT 0.6B v3 is now available as a private canary for complete-audio,
+English transcription. Whisper Large-v3-Turbo remains the live MAE/JACK
+transcription default until a supervisor microphone A/B evaluation is complete.
+
+The evaluation compares at least 15 short local recordings containing normal
+questions, unit numbers, locations, CAD terms, pauses, and ordinary background
+noise. Review accuracy, silence behavior, turnaround time, and any missed
+dispatch terminology before changing the default. Do not use this offline TDT
+model as a future continuous radio-streaming engine.
 
 ## Radio boundary
 

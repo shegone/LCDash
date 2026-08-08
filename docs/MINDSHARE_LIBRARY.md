@@ -38,6 +38,72 @@ documents.
 JACK, the Mindshare Technical Assistant, is read-only. It cannot change consoles,
 gateways, radios, firmware, software, or CAD records.
 
+## Document-derived product definitions
+
+JACK can answer approved short product-definition questions from the indexed
+Mindshare library without asking the conversational model to infer a procedure.
+For example, `What does MRI stand for?` returns `Mindshare Radio Interface`
+only after the matching indexed manual is found. These answers carry source
+evidence and do not relax the documented-procedure, credential, or read-only
+boundaries.
+
+## General technical guidance and suggestions
+
+When no product-specific procedure is needed, JACK may answer ordinary technical
+concept questions from its local general knowledge. Those answers are explicitly
+labeled `General technical guidance` and do not claim Mindshare-document support.
+For a documented product question, JACK may offer one clearly marked suggestion
+only when it logically follows from cited material. He still will not invent or
+recommend exact ports, frequencies, credentials, firmware steps, configuration
+values, or equipment-changing actions without direct approved documentation.
+
+## Supervisor-approved local knowledge
+
+JACK has a local learning ledger in the Reliability Center. A supervisor may
+create a proposed title, recall phrase, and guidance item. New items remain
+pending and cannot affect answers until a supervisor explicitly approves them.
+Approved local guidance is labeled separately from vendor documentation, keeps
+its creator and approver audit fields, records use counts, and can be retired.
+Secret-like values are rejected, and no memory item grants CAD or equipment
+write access or overrides JACK's credential and action boundaries.
+
+## Public company website source
+
+JACK also indexes a fixed allowlist of public pages from `css-mindshare.com`
+once per day. This source is limited to public company, product, download,
+case-study, and FAQ material. PDF links found on the allowlisted Downloads and
+Case Studies pages are collected only when they remain on the CSS Mindshare
+site under its public uploads path and pass PDF and size checks. This includes
+public product literature, data sheets, market papers, and case studies. It
+does not crawl or authenticate to the customer portal, support portal, forms,
+store, or any login-protected area. Website-derived material remains separate
+from Logan County system documents and has no CAD access.
+
+## Conversational streaming
+
+In JACK voice mode, Ollama response tokens are sent through a private NDJSON
+stream. The browser detects complete sentences and queues them to the fixed
+synthetic JACK voice in order, allowing speech to begin before the entire
+answer is complete. The final answer is still audited with its evidence and
+assurance metadata. If streaming fails, the existing complete-answer route is
+used automatically.
+
+The first complete sentence begins promptly. Later short sentences are grouped
+into more natural phrases, and the next audio phrase is synthesized while the
+current phrase is playing. This removes the avoidable generate-play-generate
+gaps without running concurrent inference against the voice model.
+
+JACK asks Ollama to keep the local conversational model warm for two hours
+after use. This avoids a full model reload during a normal supervisor work
+session while still allowing GPU memory to be released after extended idle
+time. A first question after deployment, model replacement, or a long idle
+period can still require a cold model load.
+
+JACK retains its supporting citations in the written answer. In voice mode,
+the browser omits inline document-title and page-number labels so the answer
+sounds conversational; the on-screen supporting-document titles remain
+clickable for approved PDFs.
+
 ## Memorial identity
 
 JACK is named in honor of John Joseph "Jack" Hines III. Its conversational

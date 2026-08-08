@@ -1,10 +1,11 @@
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services.voice_service import prepare_text_for_speech
+from app.services.voice_service import VOICE_CHOICES, prepare_text_for_speech
 
 
 class VoicePageTests(unittest.TestCase):
@@ -16,13 +17,36 @@ class VoicePageTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Voice Lab", response.text)
         self.assertIn("Give MAE a voice", response.text)
+        self.assertIn("RTX 3090 local engine", response.text)
+        self.assertIn("Nicole", response.text)
+        self.assertIn("Fenrir", response.text)
         self.assertIn("/static/js/lcdash-voice.js", response.text)
+
+    def test_local_voice_catalog(self):
+        voice_ids = {voice["id"] for voice in VOICE_CHOICES}
+        self.assertEqual(
+            voice_ids,
+            {
+                "mae-synthetic-female",
+                "jack-synthetic-southern-male",
+                "af_heart",
+                "af_bella",
+                "af_nicole",
+                "af_sarah",
+                "af_kore",
+                "am_adam",
+                "am_fenrir",
+                "am_michael",
+                "am_puck",
+            },
+        )
 
     @patch("app.main.get_voice_status")
     def test_voice_status_endpoint(self, get_status):
         get_status.return_value = {
             "connected": True,
             "tts": {"ready": True},
+            "jack_tts": {"ready": True},
             "stt": {"ready": True},
         }
         response = self.client.get("/api/voice/status")
@@ -52,6 +76,50 @@ class VoicePageTests(unittest.TestCase):
             ),
             "May supports Logan County nine one one and a transferred nine one one call.",
         )
+        self.assertEqual(
+            prepare_text_for_speech("NGA911 protects 911 calls."),
+            "N G A nine one one protects nine one one calls.",
+        )
+        self.assertEqual(
+            prepare_text_for_speech(
+                "Dispatch time is 1523. At 08:05, the unit updated."
+            ),
+            "Dispatch time is fifteen twenty-three. At zero eight oh five, the unit updated.",
+        )
+        self.assertEqual(
+            prepare_text_for_speech("The call was received at 15:00."),
+            "The call was received at fifteen hundred.",
+        )
+        self.assertEqual(
+            prepare_text_for_speech(
+                "## **Executive Summary**\n* **Network:** NGA911 is healthy.\n"
+                "1. Review the [event details](https://example.test/event)."
+            ),
+            "Executive Summary. Network: N G A nine one one is healthy. Review the event details.",
+        )
+
+    def test_jack_uses_fixed_voice_and_prevents_stale_playback(self):
+        script = (Path(__file__).parents[1] / "static/js/lcdash-mindshare.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('voice: "jack-synthetic-southern-male"', script)
+        self.assertIn("speed: 0.92", script)
+        self.assertIn("activeSpeechController.abort()", script)
+        self.assertIn("status.jack_tts.ready", script)
+        self.assertIn("let synthesisChain = Promise.resolve()", script)
+        self.assertIn("const audioPromise = synthesisChain.then", script)
+        self.assertIn("groupedSpeech.length >= 140", script)
+        self.assertIn("function answerForSpeech(text)", script)
+        self.assertIn("answerForSpeech(clean)", script)
+        self.assertIn("/knowledge/documents/mindshare/${item.document_id}", script)
+
+    def test_live_stt_uses_cpu_to_avoid_jack_gpu_contention(self):
+        compose = (Path(__file__).parents[1] / "deploy/compose.yaml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("WHISPER__INFERENCE_DEVICE: cpu", compose)
+        self.assertIn("WHISPER__COMPUTE_TYPE: int8", compose)
+        self.assertIn("WHISPER__CPU_THREADS: 8", compose)
 
 
 if __name__ == "__main__":

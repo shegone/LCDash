@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services.analytics_reporting import (
+    EXCLUDED_DISPATCHER_IDENTITY,
+    _agency_display_label,
     AnalyticsRangeError,
     get_analytics_overview,
     resolve_analytics_window,
@@ -23,6 +25,13 @@ class AnalyticsWindowTests(unittest.TestCase):
         self.assertEqual(window.key, "7d")
         self.assertEqual(window.label, "Last 7 days")
         self.assertEqual((window.end_at - window.start_at).days, 7)
+
+    def test_non_dispatcher_employee_is_explicitly_excluded_from_dispatcher_metrics(self):
+        self.assertEqual(EXCLUDED_DISPATCHER_IDENTITY, "KIM MAYNARD")
+
+    def test_lceoc_is_labeled_as_911_center_administration(self):
+        self.assertEqual(_agency_display_label("LCEOC"), "911 Center / Administrative")
+        self.assertEqual(_agency_display_label("LEASA"), "LEASA")
 
     def test_custom_range_is_inclusive_of_end_date(self):
         window = resolve_analytics_window(
@@ -61,6 +70,7 @@ class AnalyticsWindowTests(unittest.TestCase):
         self.assertEqual(result["metrics"]["total_calls"], 0)
         self.assertEqual(result["station_discipline"], [])
         self.assertEqual(result["station_discipline_groups"], [])
+        self.assertEqual(result["weekday_volume"], [])
         self.assertEqual(result["dispatcher_metrics"]["calls_with_call_taker"], 0)
         self.assertEqual(result["dispatchers"], [])
         self.assertEqual(
@@ -124,6 +134,10 @@ class AnalyticsOverviewRouteTests(unittest.TestCase):
             ],
             "daily_volume": [{"date": "2026-07-26", "label": "Jul 26", "count": 42}],
             "hourly_volume": [{"hour": 0, "label": "12 AM", "count": 2}],
+            "weekday_volume": [
+                {"weekday": 0, "label": "Sunday", "count": 7},
+                {"weekday": 1, "label": "Monday", "count": 9},
+            ],
             "agency_mix": [{"label": "LEASA", "count": 42, "percent": 100.0}],
             "incident_types": [{"label": "Medical", "count": 20, "percent": 47.6}],
             "busiest_units": [

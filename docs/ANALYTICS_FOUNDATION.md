@@ -50,6 +50,22 @@ number of timed samples so small samples are visible. CAD processing is not 911
 phone-answer time. NGA911 integration can later add answer time, call duration,
 abandoned-call, transfer, queue-delay, and callback metrics.
 
+Kim Maynard is excluded by exact normalized name from this Dispatcher / CAD
+Entry section because she is an ambulance-service employee rather than a Logan
+County dispatcher. This reporting rule does not delete her records or alter
+overall call, unit, station, response, or EMS analytics.
+
+For the Calls by Agency display, the stored `LCEOC` agency code is presented as
+`911 Center / Administrative`. This is a display-only label for 911-center and
+administrative call categories; counts and stored source values are unchanged.
+
+## Time-based demand
+
+Calls by Hour and Calls by Day of Week use the completed call's received time,
+converted to Logan County local time. The day-of-week chart includes Sunday
+through Saturday so supervisors can identify the busiest recurring calendar day
+within the selected historical reporting window.
+
 ## Tables
 
 - `lcdash_analytics.calls`

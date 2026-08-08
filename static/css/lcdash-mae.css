@@ -268,6 +268,66 @@
     color: var(--mae-cyan);
 }
 
+.mae-prompt-folder {
+    margin-top: 12px;
+    border: 1px solid rgba(82, 215, 255, .22);
+    border-radius: 14px;
+    background: rgba(4, 21, 38, .62);
+    overflow: hidden;
+}
+
+.mae-prompt-folder summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 13px 14px;
+    color: #e8f7ff;
+    font-weight: 850;
+    cursor: pointer;
+    list-style: none;
+}
+
+.mae-prompt-folder summary::-webkit-details-marker {
+    display: none;
+}
+
+.mae-prompt-folder summary span {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.mae-prompt-folder summary i {
+    color: var(--mae-cyan);
+}
+
+.mae-folder-chevron {
+    transition: transform .18s ease;
+}
+
+.mae-prompt-folder[open] .mae-folder-chevron {
+    transform: rotate(180deg);
+}
+
+.mae-prompt-folder-content {
+    padding: 0 9px 9px;
+    border-top: 1px solid rgba(82, 215, 255, .13);
+}
+
+.mae-prompt-folder-note {
+    padding: 10px 5px 5px;
+    color: #7fa8c8;
+    font-size: .72rem;
+    line-height: 1.35;
+}
+
+.mae-prompt-folder-content button {
+    margin: 5px 0 0;
+    padding: 9px 10px;
+    font-size: .8rem;
+}
+
 .mae-source-note {
     margin-top: 22px;
     padding: 13px;
@@ -765,6 +825,35 @@
     text-align: center;
 }
 
+.mae-analytics-visual {
+    margin-top: 14px;
+    padding: 14px;
+    border: 1px solid rgba(76, 201, 255, .22);
+    border-radius: 14px;
+    background: rgba(5, 20, 35, .72);
+}
+
+.mae-analytics-visual-heading {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.mae-analytics-visual-heading small {
+    color: #8fb7d9;
+}
+
+.mae-analytics-chart-wrap {
+    height: 260px;
+}
+
+.mae-analytics-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
 @media (max-width: 991.98px) {
     .mae-hero,
     .mae-identity {
@@ -811,6 +900,17 @@
         display: inline-flex;
         width: auto;
         margin-right: 6px;
+    }
+
+    .mae-prompt-folder {
+        display: block;
+        margin-top: 14px;
+    }
+
+    .mae-prompt-folder-content button {
+        display: flex;
+        width: 100%;
+        margin-right: 0;
     }
 
     .mae-source-note {

@@ -17,7 +17,18 @@
     .jack-case-result.is-pass { color:#69ffb9; }
     .jack-case-result.is-fail { color:#ff8d8d; }
     .jack-category-row td { color:#ffd66b; font-weight:900; background:rgba(167,121,255,.08); }
+    .jack-memory-form { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .jack-memory-form textarea, .jack-memory-form input {
+        width:100%; color:#fff; background:rgba(3,16,30,.8);
+        border:1px solid rgba(167,121,255,.34); border-radius:10px; padding:10px;
+    }
+    .jack-memory-form .wide { grid-column:1 / -1; }
+    .jack-memory-status { padding:4px 9px; border-radius:999px; font-weight:800; font-size:.72rem; }
+    .jack-memory-status-pending { background:rgba(255,209,102,.18); color:#ffd166; }
+    .jack-memory-status-approved { background:rgba(98,230,173,.18); color:#62e6ad; }
+    .jack-memory-status-rejected, .jack-memory-status-retired { background:rgba(255,141,141,.16); color:#ff8d8d; }
     @media(max-width:900px){.jack-lab-grid{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:900px){.jack-memory-form{grid-template-columns:1fr}.jack-memory-form .wide{grid-column:1}}
 </style>
 
 <section class="mindshare-hero glass">
@@ -100,6 +111,47 @@
 {% endif %}
 
 <section class="glass jack-lab-panel mt-4">
+    <h3>Supervisor-Approved JACK Knowledge</h3>
+    <p class="text-secondary">
+        New guidance starts as pending and cannot affect JACK's answers until a supervisor approves it.
+        Approved items remain separate from vendor manuals and never grant equipment or CAD write access.
+    </p>
+    <form id="jack-memory-form" class="jack-memory-form mb-4">
+        <input name="title" placeholder="Short knowledge title" required>
+        <input name="trigger_text" placeholder="Words or questions that should recall it" required>
+        <textarea class="wide" name="guidance" rows="3" placeholder="The local guidance JACK should remember" required></textarea>
+        <button class="btn btn-info fw-bold" type="submit">Create pending knowledge</button>
+        <div id="jack-memory-form-status" class="text-secondary align-self-center"></div>
+    </form>
+    <div class="table-responsive">
+        <table class="table jack-lab-table">
+            <thead><tr><th>Status</th><th>Title</th><th>Trigger</th><th>Guidance</th><th>Uses</th><th>Review</th></tr></thead>
+            <tbody>
+            {% for item in memory_items %}
+                <tr>
+                    <td><span class="jack-memory-status jack-memory-status-{{ item.status }}">{{ item.status|upper }}</span></td>
+                    <td>{{ item.title }}</td>
+                    <td>{{ item.trigger_text }}</td>
+                    <td>{{ item.guidance }}</td>
+                    <td>{{ item.use_count }}</td>
+                    <td>
+                        {% if item.status == "pending" %}
+                        <button class="btn btn-sm btn-success" data-review-jack-memory="{{ item.memory_id }}" data-decision="approved">Approve</button>
+                        <button class="btn btn-sm btn-outline-danger" data-review-jack-memory="{{ item.memory_id }}" data-decision="rejected">Reject</button>
+                        {% elif item.status == "approved" %}
+                        <button class="btn btn-sm btn-outline-warning" data-review-jack-memory="{{ item.memory_id }}" data-decision="retired">Retire</button>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% else %}
+                <tr><td colspan="6" class="text-secondary">No JACK knowledge candidates yet.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="glass jack-lab-panel mt-4">
     <h3>Recent supervisor feedback</h3>
     <p class="text-secondary">Feedback from JACK answers is stored separately from MAE and never changes manuals automatically.</p>
     <div class="table-responsive">
@@ -122,6 +174,6 @@
     </div>
 </section>
 
-<script src="/static/js/lcdash-mindshare-reliability.js?v=20260727"></script>
+<script src="/static/js/lcdash-mindshare-reliability.js?v=20260803-jack-memory"></script>
 <script>LCDashTime.updateCadDisplayTimes();</script>
 {% endblock %}

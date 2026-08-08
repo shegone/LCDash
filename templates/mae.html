@@ -3,7 +3,7 @@
 {% block title %}MAE | LCDash{% endblock %}
 
 {% block content %}
-<link rel="stylesheet" href="/static/css/lcdash-mae.css?v=20260727-mae-avatar">
+<link rel="stylesheet" href="/static/css/lcdash-mae.css?v=20260803-analytics-studio">
 
 <section class="mae-shell" aria-labelledby="mae-title">
     <header class="mae-hero glass">
@@ -75,6 +75,43 @@
                 <i class="bi bi-journal-text"></i>
                 CentralSquare help
             </button>
+            <details class="mae-prompt-folder">
+                <summary>
+                    <span><i class="bi bi-bar-chart-line-fill"></i> Analytics Studio</span>
+                    <i class="bi bi-chevron-down mae-folder-chevron" aria-hidden="true"></i>
+                </summary>
+                <div class="mae-prompt-folder-content">
+                    <div class="mae-prompt-folder-note">Charts, comparisons, and supervisor reports</div>
+                    <button type="button" data-mae-prompt="Show me a chart of the busiest days of the week for the last 30 days.">
+                        <i class="bi bi-calendar-week"></i>
+                        Busiest weekdays
+                    </button>
+                    <button type="button" data-mae-prompt="Show me a chart of calls by hour for the last 30 days and identify the peak hour.">
+                        <i class="bi bi-clock-history"></i>
+                        Peak hours
+                    </button>
+                    <button type="button" data-mae-prompt="Show me a chart of the top incident types for the last 30 days and summarize the largest categories.">
+                        <i class="bi bi-tags-fill"></i>
+                        Incident mix
+                    </button>
+                    <button type="button" data-mae-prompt="Show me a chart of calls by agency for the last 30 days and explain the workload mix.">
+                        <i class="bi bi-diagram-3-fill"></i>
+                        Agency workload
+                    </button>
+                    <button type="button" data-mae-prompt="Show me a chart of dispatcher call-taker workload for the last 30 days and summarize the distribution.">
+                        <i class="bi bi-headset"></i>
+                        Dispatcher workload
+                    </button>
+                    <button type="button" data-mae-prompt="Show me a chart of the busiest stations for the last 90 days and summarize their call activity.">
+                        <i class="bi bi-building-fill"></i>
+                        Busiest stations
+                    </button>
+                    <button type="button" data-mae-prompt="Show me a chart of the busiest units for the last 30 days and summarize their response activity.">
+                        <i class="bi bi-truck-front-fill"></i>
+                        Busiest units
+                    </button>
+                </div>
+            </details>
             <div class="mae-source-note">
                 <i class="bi bi-info-circle"></i>
                 MAE checks stored analytics for historical questions and requests
@@ -144,5 +181,6 @@
     </div>
 </section>
 
-<script src="/static/js/lcdash-mae.js?v=20260727-mae-avatar"></script>
+<script src="/static/js/chart.umd.min.js?v=4.4.7"></script>
+<script src="/static/js/lcdash-mae.js?v=20260803-custom-analytics"></script>
 {% endblock %}

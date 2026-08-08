@@ -99,3 +99,25 @@ class CentralSquareClient:
             raise CentralSquareAPIError(
                 f"POST request failed: {exc}"
             ) from exc
+
+    def put(
+        self,
+        url: str,
+        json: dict | None = None,
+        params: dict | None = None,
+    ) -> dict:
+        try:
+            response = httpx.put(
+                url,
+                headers=self.headers(),
+                json=json or {},
+                params=params,
+                timeout=30,
+            )
+            response.raise_for_status()
+            return response.json() if response.content else {}
+
+        except httpx.HTTPError as exc:
+            raise CentralSquareAPIError(
+                f"PUT request failed: {exc}"
+            ) from exc

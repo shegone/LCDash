@@ -46,7 +46,11 @@ class MobileFoundationTests(unittest.TestCase):
         self.assertIn("/static/css/lcdash-integrations.css", response.text)
         self.assertIn("/static/js/lcdash-dashboard.js", response.text)
         self.assertIn("/static/js/lcdash-integrations.js", response.text)
-        self.assertIn('const STATIC_CACHE = "lcdash-static-v7"', response.text)
+        self.assertIn('const STATIC_CACHE = "lcdash-static-v8"', response.text)
+
+        registration = self.client.get("/static/js/lcdash-mobile.js")
+        self.assertEqual(registration.status_code, 200)
+        self.assertIn("registration.update()", registration.text)
 
 
 if __name__ == "__main__":

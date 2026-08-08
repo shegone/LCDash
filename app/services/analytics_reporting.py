@@ -20,10 +20,22 @@ PERIOD_OPTIONS = {
 }
 DEFAULT_PERIOD = "30d"
 MAX_CUSTOM_DAYS = 366
+# This person is an ambulance-service employee, not a Logan County dispatcher.
+# Keep the historical call records, but exclude the exact normalized identity
+# from Dispatcher / CAD Entry workload and processing-time reporting.
+EXCLUDED_DISPATCHER_IDENTITY = "KIM MAYNARD"
+AGENCY_DISPLAY_LABELS = {
+    "LCEOC": "911 Center / Administrative",
+}
 
 
 class AnalyticsRangeError(ValueError):
     """Raised when an analytics date range is invalid."""
+
+
+def _agency_display_label(value: object) -> str:
+    label = str(value or "Unknown").strip() or "Unknown"
+    return AGENCY_DISPLAY_LABELS.get(label.upper(), label)
 
 
 @dataclass(frozen=True)
@@ -147,6 +159,7 @@ def _empty_overview(window: AnalyticsWindow, message: str) -> dict:
         "dispatchers": [],
         "daily_volume": [],
         "hourly_volume": [],
+        "weekday_volume": [],
         "agency_mix": [],
         "incident_types": [],
         "busiest_units": [],
@@ -166,6 +179,7 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
     params = {
         "window_start": window.start_at,
         "window_end": window.end_at,
+        "excluded_dispatcher_identity": EXCLUDED_DISPATCHER_IDENTITY,
     }
 
     metrics_row = repository.fetchone(
@@ -239,6 +253,7 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
             WHERE call_received_at >= %(window_start)s
               AND call_received_at < %(window_end)s
               AND BTRIM(call_taker) <> ''
+              AND UPPER(BTRIM(call_taker)) <> %(excluded_dispatcher_identity)s
         ),
         call_processing AS (
             SELECT
@@ -313,6 +328,7 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
             WHERE call_received_at >= %(window_start)s
               AND call_received_at < %(window_end)s
               AND BTRIM(call_taker) <> ''
+              AND UPPER(BTRIM(call_taker)) <> %(excluded_dispatcher_identity)s
         ),
         call_processing AS (
             SELECT
@@ -471,6 +487,39 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
         for hour in range(24)
     ]
 
+    weekday_rows = repository.fetchall(
+        """
+        SELECT
+            EXTRACT(DOW FROM call_received_at AT TIME ZONE 'America/New_York')::integer
+                AS local_weekday,
+            COUNT(*) AS call_count
+        FROM lcdash_analytics.calls
+        WHERE call_received_at >= %(window_start)s
+          AND call_received_at < %(window_end)s
+        GROUP BY local_weekday
+        ORDER BY local_weekday
+        """,
+        params,
+    )
+    weekday_lookup = {int(row[0]): int(row[1]) for row in weekday_rows}
+    weekday_labels = [
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+    ]
+    weekday_volume = [
+        {
+            "weekday": weekday,
+            "label": weekday_labels[weekday],
+            "count": weekday_lookup.get(weekday, 0),
+        }
+        for weekday in range(7)
+    ]
+
     agency_rows = repository.fetchall(
         """
         SELECT
@@ -491,7 +540,7 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
     )
     agency_mix = [
         {
-            "label": row[0],
+            "label": _agency_display_label(row[0]),
             "count": int(row[1]),
             "percent": round((int(row[1]) / total_calls) * 100, 1)
             if total_calls
@@ -799,6 +848,7 @@ def _query_overview(repository: AnalyticsRepository, window: AnalyticsWindow) ->
         "dispatchers": dispatchers,
         "daily_volume": daily_volume,
         "hourly_volume": hourly_volume,
+        "weekday_volume": weekday_volume,
         "agency_mix": agency_mix,
         "incident_types": incident_types,
         "busiest_units": busiest_units,

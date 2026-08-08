@@ -72,6 +72,8 @@
         window.addEventListener("load", function () {
             navigator.serviceWorker.register("/static/service-worker.js", {
                 scope: "/"
+            }).then(function (registration) {
+                return registration.update();
             }).catch(function () {
                 // The dashboard remains fully functional if installation support is unavailable.
             });

@@ -1,0 +1,36 @@
+.nga-standalone-logo {
+    width: 74px;
+    height: 74px;
+    margin: 0 auto 12px;
+    display: grid;
+    place-items: center;
+    border-radius: 20px;
+    background: linear-gradient(145deg, rgba(72, 216, 255, .22), rgba(60, 98, 255, .12));
+    border: 1px solid rgba(72, 216, 255, .35);
+    color: #51dcff;
+    font-size: 2rem;
+}
+
+.nga-standalone-sponsor {
+    margin: auto 14px 18px;
+    padding: 14px;
+    border: 1px solid rgba(72, 216, 255, .18);
+    border-radius: 12px;
+    background: rgba(5, 17, 31, .58);
+}
+
+.nga-standalone-sponsor span {
+    display: block;
+    color: #48d8ff;
+    font-size: .58rem;
+    font-weight: 950;
+    letter-spacing: 1px;
+}
+
+.nga-standalone-sponsor strong {
+    display: block;
+    color: #93adbf;
+    font-size: .7rem;
+    margin-top: 4px;
+}
+.nga-official-brand{display:block;width:104px;height:104px;margin:0 auto 4px}.nga-official-brand img{display:block;width:100%;height:100%;object-fit:contain}.nga-standalone-sponsor small{display:block;color:#607c92;font-size:.55rem;line-height:1.35;margin-top:8px}

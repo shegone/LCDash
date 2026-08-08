@@ -22,10 +22,10 @@ def _callback_url(public_base_url: str, source: str, secret: str) -> str:
     )
 
 
-def _existing_subscription(
+def _existing_subscription_record(
     client: CentralSquareClient,
     callback_url: str,
-) -> int | None:
+) -> dict | None:
     result = client.post(
         f"{settings.system_base_url}/subscriptions/search",
         json={"CallbackURL": callback_url},
@@ -37,10 +37,29 @@ def _existing_subscription(
             isinstance(subscription, dict)
             and subscription.get("CallbackURL") == callback_url
         ):
-            value = subscription.get("WebhookUniqueIdentifier")
-            if isinstance(value, int):
-                return value
+            return subscription
     return None
+
+
+def _existing_subscription(
+    client: CentralSquareClient,
+    callback_url: str,
+) -> int | None:
+    subscription = _existing_subscription_record(client, callback_url)
+    if not subscription:
+        return None
+    value = subscription.get("WebhookUniqueIdentifier")
+    return value if isinstance(value, int) else None
+
+
+def _safe_subscription_summary(subscription: dict | None) -> dict | None:
+    if not subscription:
+        return None
+    return {
+        key: value
+        for key, value in subscription.items()
+        if key != "CallbackURL"
+    }
 
 
 def _create_subscription(
@@ -103,32 +122,120 @@ def register_subscriptions(
     }
 
 
+def inspect_subscriptions(
+    client: CentralSquareClient,
+    public_base_url: str,
+    secret: str,
+) -> dict:
+    if not secret:
+        raise RuntimeError("The CentralSquare webhook secret is not configured.")
+
+    cfs_record = _existing_subscription_record(
+        client,
+        _callback_url(public_base_url, "cfs", secret),
+    )
+    unit_record = _existing_subscription_record(
+        client,
+        _callback_url(public_base_url, "units", secret),
+    )
+    return {
+        "cfs_subscription": _safe_subscription_summary(cfs_record),
+        "unit_subscription": _safe_subscription_summary(unit_record),
+    }
+
+
+def register_unit_subscription(
+    client: CentralSquareClient,
+    public_base_url: str,
+    secret: str,
+    refresh_existing: bool = False,
+) -> dict:
+    if not secret:
+        raise RuntimeError("The CentralSquare webhook secret is not configured.")
+
+    unit_callback = _callback_url(public_base_url, "units", secret)
+    unit_id = _existing_subscription(client, unit_callback)
+    unit_created = unit_id is None
+    if unit_created:
+        unit_id = _create_subscription(
+            client,
+            "/units/subscription",
+            {"CallbackURL": unit_callback},
+        )
+    elif refresh_existing:
+        client.put(
+            (
+                f"{settings.cad_base_url}/units/subscription/"
+                f"{unit_id}"
+            ),
+            json={"CallbackURL": unit_callback},
+        )
+
+    return {
+        "unit_subscription_id": unit_id,
+        "unit_created": unit_created,
+        "unit_refreshed": bool(refresh_existing and not unit_created),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--public-base-url",
         default=DEFAULT_PUBLIC_BASE_URL,
     )
-    parser.add_argument("--agency-id", type=int, required=True)
-    parser.add_argument("--agency-abbreviation", required=True)
-    parser.add_argument("--agency-name", required=True)
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--inspect-only", action="store_true")
+    mode.add_argument("--unit-only", action="store_true")
+    parser.add_argument("--refresh-existing", action="store_true")
+    parser.add_argument("--agency-id", type=int)
+    parser.add_argument("--agency-abbreviation")
+    parser.add_argument("--agency-name")
     parser.add_argument("--agency-ori", default="")
     args = parser.parse_args()
 
-    result = register_subscriptions(
-        client=CentralSquareClient(),
-        public_base_url=args.public_base_url,
-        secret=settings.centralsquare_webhook_secret,
-        dispatch_agency={
-            "UniqueIdentifier": args.agency_id,
-            "Abbreviation": args.agency_abbreviation,
-            "Name": args.agency_name,
-            "ORI": args.agency_ori or None,
-            "RunsDispatch": True,
-            "DispatchedBy": "Dispatch",
-            "PrimaryResponderType": "Dispatch Supervisor",
-        },
-    )
+    client = CentralSquareClient()
+    if args.inspect_only:
+        result = inspect_subscriptions(
+            client,
+            args.public_base_url,
+            settings.centralsquare_webhook_secret,
+        )
+    elif args.unit_only:
+        result = register_unit_subscription(
+            client,
+            args.public_base_url,
+            settings.centralsquare_webhook_secret,
+            refresh_existing=args.refresh_existing,
+        )
+    else:
+        missing = [
+            name
+            for name, value in (
+                ("--agency-id", args.agency_id),
+                ("--agency-abbreviation", args.agency_abbreviation),
+                ("--agency-name", args.agency_name),
+            )
+            if value in (None, "")
+        ]
+        if missing:
+            parser.error(
+                "full registration requires " + ", ".join(missing)
+            )
+        result = register_subscriptions(
+            client=client,
+            public_base_url=args.public_base_url,
+            secret=settings.centralsquare_webhook_secret,
+            dispatch_agency={
+                "UniqueIdentifier": args.agency_id,
+                "Abbreviation": args.agency_abbreviation,
+                "Name": args.agency_name,
+                "ORI": args.agency_ori or None,
+                "RunsDispatch": True,
+                "DispatchedBy": "Dispatch",
+                "PrimaryResponderType": "Dispatch Supervisor",
+            },
+        )
     print(json.dumps(result, indent=2))
 
 

@@ -8,6 +8,7 @@ from app.main import app
 from app.services import station_alert_service
 from app.services.station_alert_service import (
     build_empty_station_alert_snapshot,
+    build_station_alert_announcement,
     build_station_alert_snapshot,
 )
 
@@ -145,7 +146,58 @@ class StationAlertServiceTests(unittest.TestCase):
         self.assertEqual(alert["cfs_number"], "CFS26-30001")
         self.assertEqual(alert["unit_numbers"], ["ENG1", "TNK1"])
         self.assertEqual(alert["dispatch_datetime"], "2026-07-22T15:57:10Z")
+        self.assertEqual(
+            alert["announcement"],
+            "Station 100, respond to 100 MAIN STREET, LOGAN for a structure fire. Time is eleven fifty-seven.",
+        )
         self.assertNotIn("MED1", str(result))
+
+    def test_announcement_supports_multiple_stations(self):
+        announcement = build_station_alert_announcement(
+            {
+                "station_names": ["STA 100", "Station 200"],
+                "location": "911 Mark Spurlock Drive",
+                "incident_description": "Structure Fire",
+                "dispatch_datetime": "2026-07-22T19:23:00Z",
+            }
+        )
+
+        self.assertEqual(
+            announcement,
+            "Stations 100 and 200, respond to 911 Mark Spurlock Drive for a structure fire. Time is fifteen twenty-three.",
+        )
+
+    def test_announcement_uses_natural_twenty_four_hour_speech(self):
+        base_alert = {
+            "station_names": ["STA 100"],
+            "location": "100 Main Street",
+            "incident_description": "Structure Fire",
+        }
+
+        zero_five = build_station_alert_announcement({
+            **base_alert,
+            "dispatch_datetime": "2026-07-22T04:05:00Z",
+        })
+        fifteen_hundred = build_station_alert_announcement({
+            **base_alert,
+            "dispatch_datetime": "2026-07-22T19:00:00Z",
+        })
+
+        self.assertTrue(zero_five.endswith("Time is zero zero oh five."))
+        self.assertTrue(fifteen_hundred.endswith("Time is fifteen hundred."))
+
+    def test_announcement_requires_all_approved_fields(self):
+        base_alert = {
+            "station_names": ["STA 100"],
+            "location": "911 Mark Spurlock Drive",
+            "incident_description": "Structure Fire",
+            "dispatch_datetime": "2026-07-22T19:23:00Z",
+        }
+
+        for missing_field in base_alert:
+            alert = dict(base_alert)
+            alert[missing_field] = [] if missing_field == "station_names" else ""
+            self.assertEqual(build_station_alert_announcement(alert), "")
 
     def test_multiple_selected_stations_merge_units_and_alerts(self):
         result = build_station_alert_snapshot(
@@ -243,6 +295,13 @@ class StationAlertPageTests(unittest.TestCase):
         self.assertIn("endFrequency: 1350", script_response.text)
         self.assertIn("frequency: 1450", script_response.text)
         self.assertIn("lcdash.stationAlerts.stations", script_response.text)
+        self.assertIn('fetch("/api/voice/speech"', script_response.text)
+        self.assertIn('dispatchAudio.addEventListener("ended"', script_response.text)
+        self.assertIn("prepareAnnouncement(pendingAnnouncementText)", script_response.text)
+        self.assertIn("releasePreparedAnnouncement()", script_response.text)
+        self.assertIn("playDispatchTone(alert.announcement)", script_response.text)
+        self.assertIn("announcementRequest.abort()", script_response.text)
+        self.assertIn("lcdash-station-alerts.js?v=0.5.1", response.text)
 
     @patch("app.main.get_live_station_alert_snapshot")
     def test_api_returns_sanitized_station_snapshot_and_no_store(self, snapshot_mock):

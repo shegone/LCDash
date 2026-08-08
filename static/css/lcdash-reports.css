@@ -1,0 +1,278 @@
+.reports-hero {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 24px;
+    padding: 28px;
+    overflow: hidden;
+}
+
+.reports-hero h1 {
+    margin: 4px 0 6px;
+    color: #fff;
+    font-size: clamp(2rem, 4vw, 3rem);
+    font-weight: 950;
+}
+
+.reports-hero p,
+.report-builder-header p,
+.report-catalog-card p {
+    margin: 0;
+    color: #91afc9;
+}
+
+.reports-eyebrow {
+    color: #4cc9ff;
+    font-size: .74rem;
+    font-weight: 900;
+    letter-spacing: 1.35px;
+}
+
+.reports-safety {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    min-width: 230px;
+    padding: 12px 15px;
+    border: 1px solid rgba(105, 255, 185, .3);
+    border-radius: 14px;
+    color: #69ffb9;
+    background: rgba(105, 255, 185, .08);
+}
+
+.reports-safety i { font-size: 1.5rem; }
+.reports-safety strong,
+.reports-safety span { display: block; }
+.reports-safety span { color: #a7c4da; font-size: .78rem; }
+
+.report-catalog {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+    gap: 16px;
+}
+
+.report-catalog-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 15px;
+    padding: 20px;
+}
+
+.report-catalog-card.is-active { border-color: rgba(76, 201, 255, .48); }
+.report-catalog-card.is-placeholder { opacity: .58; }
+
+.report-card-icon {
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    color: #4cc9ff;
+    background: rgba(76, 201, 255, .13);
+    font-size: 1.35rem;
+}
+
+.report-catalog-card h3 { margin: 3px 0 5px; color: #fff; }
+
+.report-ready-chip {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    color: #69ffb9;
+    background: rgba(105, 255, 185, .1);
+    font-size: .68rem;
+    font-weight: 900;
+}
+
+.report-builder { padding: 24px; }
+
+.report-builder-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 22px;
+}
+
+.report-builder-header h2 { color: #fff; margin: 4px 0 5px; }
+
+.report-controls label {
+    display: block;
+    margin-bottom: 6px;
+    color: #9ec0da;
+    font-size: .75rem;
+    font-weight: 850;
+    text-transform: uppercase;
+}
+
+.report-control-row { display: flex; gap: 8px; }
+
+.report-control-row input,
+.report-control-row button,
+.county-report-actions button,
+.county-report-actions a {
+    min-height: 42px;
+    border-radius: 10px;
+    border: 1px solid rgba(76, 201, 255, .3);
+    padding: 8px 13px;
+}
+
+.report-control-row input {
+    color-scheme: dark;
+    color: #fff;
+    background: rgba(5, 16, 30, .8);
+}
+
+.report-control-row button {
+    border: 0;
+    color: #04131f;
+    background: linear-gradient(135deg, #4cc9ff, #69ffb9);
+    font-weight: 900;
+}
+
+.report-definition,
+.report-progress,
+.report-error {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 18px;
+    padding: 13px 15px;
+    border-radius: 12px;
+}
+
+.report-definition {
+    color: #b9d8ed;
+    background: rgba(76, 201, 255, .08);
+    border: 1px solid rgba(76, 201, 255, .18);
+}
+
+.report-definition strong,
+.report-definition span,
+.report-progress strong,
+.report-progress span { display: block; }
+.report-definition span,
+.report-progress span { font-size: .82rem; }
+
+.report-progress {
+    color: #dff8ff;
+    background: rgba(76, 201, 255, .1);
+    border: 1px solid rgba(76, 201, 255, .25);
+}
+
+.report-progress-spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid rgba(76, 201, 255, .18);
+    border-top-color: #4cc9ff;
+    border-radius: 50%;
+    animation: report-spin .85s linear infinite;
+}
+
+@keyframes report-spin { to { transform: rotate(360deg); } }
+
+.report-error {
+    color: #ffbdc9;
+    background: rgba(255, 91, 126, .1);
+    border: 1px solid rgba(255, 91, 126, .3);
+}
+
+.county-report {
+    margin-top: 22px;
+    padding: 26px;
+    border-radius: 16px;
+    color: #152638;
+    background: #f5f8fb;
+}
+
+.county-report-heading {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 15px;
+    padding-bottom: 18px;
+    border-bottom: 2px solid #d8e2eb;
+}
+
+.county-report-mark {
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    border-radius: 15px;
+    color: white;
+    background: #164f83;
+    font-size: 1.5rem;
+}
+
+.county-report-county { color: #164f83; font-size: 1.3rem; font-weight: 950; }
+.county-report-heading h2 { margin: 1px 0; font-size: 1.15rem; }
+.county-report-period { color: #557086; font-weight: 800; }
+
+.county-report-actions { display: flex; gap: 7px; }
+.county-report-actions button,
+.county-report-actions a {
+    min-height: auto;
+    color: #164f83;
+    background: #fff;
+    text-decoration: none;
+    font-weight: 850;
+}
+
+.county-report-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin-top: 20px;
+}
+
+.county-report-section.ems { grid-column: 2; }
+.county-report-section h3 { margin: 0 0 7px; font-size: .92rem; }
+.county-report-section table { width: 100%; border-collapse: collapse; }
+.county-report-section th,
+.county-report-section td { padding: 7px 9px; border: 1px solid #c8d3dd; }
+.county-report-section th:last-child,
+.county-report-section td:last-child { text-align: right; width: 110px; }
+.county-report-section thead { color: #fff; }
+.county-report-section.fire thead { background: #b84a48; }
+.county-report-section.law thead { background: #4f81bd; }
+.county-report-section.ems thead { background: #84a946; }
+.county-report-section tbody tr:nth-child(even) { background: #eaf0f5; }
+.county-report-section tfoot { font-size: 1.02rem; background: #fff; }
+
+.county-report-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    margin-top: 18px;
+    padding-top: 12px;
+    border-top: 1px solid #d8e2eb;
+    color: #60798e;
+    font-size: .75rem;
+}
+
+@media (max-width: 900px) {
+    .reports-hero,
+    .report-builder-header { align-items: stretch; flex-direction: column; }
+    .reports-safety { min-width: 0; }
+    .county-report-grid { grid-template-columns: 1fr; }
+    .county-report-section.ems { grid-column: 1; }
+    .county-report-heading { grid-template-columns: auto 1fr; }
+    .county-report-actions { grid-column: 1 / -1; }
+}
+
+@media print {
+    body * { visibility: hidden !important; }
+    #county-report-output,
+    #county-report-output * { visibility: visible !important; }
+    #county-report-output {
+        position: absolute;
+        inset: 0;
+        margin: 0;
+        padding: 0;
+        border-radius: 0;
+    }
+    .county-report-actions { display: none !important; }
+}

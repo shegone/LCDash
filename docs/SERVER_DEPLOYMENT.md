@@ -8,8 +8,10 @@ LCDash runs as a private Docker Compose platform on the Logan County server.
 - `lcdash-postgres` - dedicated PostgreSQL analytics database
 - `lcdash-analytics-worker` - recurring CentralSquare completed-call collector
 - `lcdash-postgres-backup` - daily compressed database backup
-- `lcdash-ollama` - private local AI API with Vulkan acceleration
+- `lcdash-offsite-backup-sync` - encrypted Google Drive backup copy
+- `lcdash-ollama` - private local AI API with NVIDIA GPU acceleration
 - `lcdash-open-webui` - authenticated browser interface for local AI
+- `lcdash-cloudflared` - authenticated Cloudflare Tunnel connector for public access
 
 ## Security model
 
@@ -17,30 +19,44 @@ LCDash runs as a private Docker Compose platform on the Logan County server.
 - Open WebUI is published only on server loopback port `3000`.
 - PostgreSQL and Ollama are not published to the host network.
 - CentralSquare, database, and Open WebUI secrets are mounted as owner-only files.
+- The Cloudflare tunnel token is mounted from the owner-only
+  `/srv/lcdash-platform/secrets/cloudflare_tunnel_token` file.
 - Live public-safety data remains inaccessible from the LAN until LCDash has login,
   role-based permissions, redaction, and audited HTTPS access.
 
 ## Server paths
 
 ```text
-/home/ted/lcdash
-/home/ted/lcdash-platform/secrets
-/home/ted/lcdash-platform/backups
-/home/ted/lcdash-platform/legacy-reference
+/srv/lcdash-platform/current
+/srv/lcdash-platform/secrets
+/srv/lcdash-data/backups
+/srv/lcdash-data/documents
 ```
 
 The exact credential record is:
 
 ```text
-/home/ted/lcdash-platform/secrets/platform-credentials.txt
+/srv/lcdash-platform/secrets/platform-credentials.txt
 ```
 
 It must remain mode `600` and must never be committed to GitHub.
 
+## Production network assignment
+
+The production host currently receives `14.1.1.227/24` on `eno1` through
+DHCP from the local gateway. Ubuntu is not configured with a local static
+address. Preserve reliable access by creating and documenting a DHCP
+reservation for `.227` in the authorized gateway or DHCP service.
+
+Do not change the live server to a locally static address until the subnet,
+gateway, DNS servers, usable address range, and address ownership have been
+confirmed. A network-address change can interrupt the Cloudflare tunnel,
+CentralSquare webhook delivery, SSH access, and local integrations.
+
 ## Start or update
 
 ```bash
-cd /home/ted/lcdash
+cd /srv/lcdash-platform/current
 docker compose -f deploy/compose.yaml up -d --build
 ```
 
@@ -54,7 +70,7 @@ E:\Projects\LCDash\scripts\deploy_server.ps1
 
 The deployment tool:
 
-1. Requires the `feature/authentication` branch.
+1. Requires the `deployment/ubuntu-nvidia-227` branch during migration.
 2. Refuses to deploy uncommitted files.
 3. Confirms Windows and GitHub point to the same commit.
 4. Packages only Git-tracked files.
@@ -66,7 +82,7 @@ The deployment tool:
 ## Check status
 
 ```bash
-cd /home/ted/lcdash
+cd /srv/lcdash-platform/current
 docker compose -f deploy/compose.yaml ps
 ```
 
@@ -78,7 +94,7 @@ Create an SSH tunnel from the Windows workstation:
 ssh -i "$env:USERPROFILE\.ssh\lcdash_server_ed25519" `
     -L 8010:127.0.0.1:8010 `
     -L 3000:127.0.0.1:3000 `
-    ted@14.1.1.177
+    administrator@14.1.1.227
 ```
 
 Then open:
@@ -96,20 +112,53 @@ overlaps the previous collection window, and upserts records to avoid duplicates
 Database backups are created daily under:
 
 ```text
-/home/ted/lcdash-platform/backups/postgresql
+/srv/lcdash-data/backups/postgresql
 ```
 
 The default retention period is 30 days.
 
+### Encrypted off-machine backups
+
+The `lcdash-offsite-backup-sync` service copies approved recovery artifacts to
+the existing `lcdash-backup:server-227` rclone crypt remote once per day.
+Encryption occurs locally before Google Drive receives file contents or names.
+
+Included:
+
+- compressed PostgreSQL backups;
+- verified Open WebUI snapshots;
+- approved knowledge snapshots;
+- JACK recovery exports; and
+- recovery manifests.
+
+Excluded:
+
+- `/srv/lcdash-platform/secrets`;
+- the protected credential record;
+- raw live CAD payloads; and
+- recordings and model files.
+
+The latest result is recorded locally in:
+
+```text
+/srv/lcdash-data/backups/.offsite-sync-status
+```
+
 ## Local AI
 
-Open WebUI connects to Ollama only over the private Docker network. Ollama uses the
-server's Radeon integrated GPU through Vulkan when supported.
+Open WebUI connects to Ollama only over the private Docker network. Ollama and
+Speaches use the server's NVIDIA RTX 3090 through the NVIDIA Container Toolkit.
 
 Installed baseline models:
 
-- `qwen3:8b` - fast general questions and future dashboard assistance
-- `gpt-oss:20b` - higher-quality reasoning and tool-oriented workflows
+- `qwen3.5:27b` - primary higher-quality MAE model
+- `qwen3.5:9b` - faster general chat and fallback model
+- `qwen3:8b` - retained compatibility fallback
+- `nomic-embed-text` - local knowledge embeddings
+- `deepdml/faster-whisper-large-v3-turbo-ct2` - primary local speech recognition
+- `Systran/faster-distil-whisper-small.en` - fast speech-recognition fallback
+- `speaches-ai/Kokoro-82M-v1.0-ONNX` - local speech generation
+- `nvidia/parakeet-tdt-0.6b-v3` - on-demand speech benchmark
 
 Open WebUI provides the general-purpose browser interface. A dedicated API key is
 stored in the protected credential record for future authorized integrations.
@@ -125,9 +174,9 @@ lcdash_analytics.jack_evaluation_runs
 The complete manual-grounded baseline can be run from the server with:
 
 ```bash
-cd /home/ted/lcdash
+cd /srv/lcdash-platform/current
 python scripts/jack_reliability_baseline.py \
-    --output /home/ted/lcdash-platform/backups/jack-baseline.json
+    --output /srv/lcdash-data/backups/jack-baseline.json
 ```
 
 The runner calls the local LCDash API sequentially and does not change
@@ -139,7 +188,7 @@ The production stack provides authenticated, read-only webhook receivers for
 CentralSquare CFS and unit changes. The secret is mounted from:
 
 ```text
-/home/ted/lcdash-platform/secrets/centralsquare_webhook_secret
+/srv/lcdash-platform/secrets/centralsquare_webhook_secret
 ```
 
 Delivery metadata is stored in:
@@ -152,9 +201,13 @@ Raw CentralSquare webhook payloads are not stored in that table. See
 `docs/REALTIME_EVENTS.md` for the receiver URLs, Cloudflare boundary, activation
 checklist, and subscription requirements.
 
-The production CFS and unit subscriptions are active. Their identifiers and the
-callback secret are recorded only in:
+The controlled cutover to `.227` was completed on July 29, 2026. The
+`lcdash-supervisor` Cloudflare tunnel now terminates on `.227`, and the old
+`.177` tunnel connector is stopped but preserved for rollback. Existing
+CentralSquare subscriptions continue to use the same public callback URLs, so
+no subscription endpoint change was required. Their identifiers and callback
+secret are recorded only in:
 
 ```text
-/home/ted/lcdash-platform/secrets/platform-credentials.txt
+/srv/lcdash-platform/secrets/platform-credentials.txt
 ```

@@ -1,5 +1,8 @@
 import unittest
+import json
+import tempfile
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -11,6 +14,8 @@ from app.services.map_service import (
     location_freshness,
     valid_coordinates,
 )
+from app.services.gis_reference_service import get_reference_layer
+from app.config.settings import settings
 from app.services.unit_service import normalize_unit
 
 
@@ -153,6 +158,46 @@ class MapServiceTests(unittest.TestCase):
         self.assertEqual(result["features"], [])
 
 
+class GISReferenceLayerTests(unittest.TestCase):
+    def test_reference_layer_removes_unapproved_source_properties(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            original_directory = settings.gis_reference_dir
+            settings.gis_reference_dir = temporary_directory
+            try:
+                Path(temporary_directory, "roads.geojson").write_text(
+                    json.dumps(
+                        {
+                            "type": "FeatureCollection",
+                            "features": [
+                                {
+                                    "type": "Feature",
+                                    "geometry": {
+                                        "type": "LineString",
+                                        "coordinates": [[-82.01, 37.84], [-82.02, 37.85]],
+                                    },
+                                    "properties": {
+                                        "LSt_Name": "Main",
+                                        "RoadClass": "Local",
+                                        "NGUID": "source-id-not-for-browser",
+                                        "ESN_L": "private-routing-data",
+                                    },
+                                }
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+
+                layer = get_reference_layer("roads")
+            finally:
+                settings.gis_reference_dir = original_directory
+
+        self.assertEqual(layer["type"], "FeatureCollection")
+        self.assertEqual(layer["features"][0]["properties"], {"name": "Main", "class": "Local"})
+        self.assertNotIn("NGUID", str(layer))
+        self.assertNotIn("ESN_L", str(layer))
+
+
 class MapPageTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
@@ -214,6 +259,11 @@ class MapPageTests(unittest.TestCase):
         self.assertEqual(response.headers["cache-control"], "no-store")
         self.assertEqual(payload["type"], "FeatureCollection")
         self.assertNotIn("raw", str(payload).lower())
+
+    def test_unavailable_reference_layer_returns_not_found(self):
+        response = self.client.get("/api/operations/map/reference/roads")
+
+        self.assertEqual(response.status_code, 404)
 
     @patch("app.main.get_live_map_snapshot")
     def test_disconnected_map_page_keeps_empty_map_shell(self, snapshot_mock):

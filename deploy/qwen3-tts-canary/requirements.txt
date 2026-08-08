@@ -1,0 +1,4 @@
+fastapi==0.115.12
+qwen-tts
+soundfile==0.13.1
+uvicorn[standard]==0.34.3

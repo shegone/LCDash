@@ -13,6 +13,7 @@
     const voiceDetail = document.getElementById("mae-voice-detail");
     const voicePlayer = document.getElementById("mae-voice-player");
     const maeAvatarSource = "/static/img/mae/mae-neutral.jpg";
+    const maeRequestTimeoutMs = 130000;
     const history = [];
     const entities = {
         cfs_numbers: [],
@@ -36,6 +37,8 @@
     let speechDetected = false;
     let discardRecording = false;
     let activeAudioUrl = "";
+    let activeSpeechController = null;
+    let activeSpeechRequest = 0;
 
     function setStatus(cardId, online, text) {
         const card = document.getElementById(cardId);
@@ -126,26 +129,17 @@
         });
     }
 
-    async function speakAnswer(text) {
+    async function requestSpeechAudio(text, signal) {
         const spokenText = String(text || "").trim().slice(0, 2500);
-        if (!spokenText) return;
-
-        if (voiceModeActive) {
-            setMicrophoneEnabled(false);
-            setVoiceState(
-                "speaking",
-                "MAE is speaking",
-                "The microphone is paused to prevent an echo."
-            );
-        }
-
+        if (!spokenText) return null;
         const response = await fetch("/api/voice/speech", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
             cache: "no-store",
+            signal: signal,
             body: JSON.stringify({
                 text: spokenText,
-                voice: "af_heart",
+                voice: "mae-synthetic-female",
                 speed: 1.0,
                 response_format: "mp3"
             })
@@ -155,7 +149,11 @@
             throw new Error(payload.detail || "MAE could not generate speech.");
         }
 
-        const audioBlob = await response.blob();
+        return response.blob();
+    }
+
+    async function playSpeechAudio(audioBlob, requestId) {
+        if (!audioBlob || requestId !== activeSpeechRequest) return;
         if (activeAudioUrl) URL.revokeObjectURL(activeAudioUrl);
         activeAudioUrl = URL.createObjectURL(audioBlob);
         voicePlayer.src = activeAudioUrl;
@@ -168,6 +166,25 @@
             const playPromise = voicePlayer.play();
             if (playPromise) playPromise.catch(reject);
         });
+    }
+
+    async function speakAnswer(text) {
+        activeSpeechRequest += 1;
+        const requestId = activeSpeechRequest;
+        if (activeSpeechController) activeSpeechController.abort();
+        activeSpeechController = new AbortController();
+        if (voicePlayer) {
+            voicePlayer.pause();
+            voicePlayer.removeAttribute("src");
+            voicePlayer.load();
+        }
+        if (voiceModeActive) {
+            setMicrophoneEnabled(false);
+            setVoiceState("speaking", "MAE is speaking", "The microphone is paused to prevent an echo.");
+        }
+        const audioBlob = await requestSpeechAudio(text, activeSpeechController.signal);
+        await playSpeechAudio(audioBlob, requestId);
+        if (requestId === activeSpeechRequest) activeSpeechController = null;
     }
 
     async function transcribeRecording(blob) {
@@ -363,6 +380,9 @@
     function endVoiceMode() {
         voiceModeActive = false;
         stopListeningCycle(true);
+        activeSpeechRequest += 1;
+        if (activeSpeechController) activeSpeechController.abort();
+        activeSpeechController = null;
         if (voicePlayer) {
             voicePlayer.pause();
             voicePlayer.removeAttribute("src");
@@ -566,6 +586,76 @@
         return controls;
     }
 
+    function buildAnalyticsVisualization(spec) {
+        if (!spec || !Array.isArray(spec.points) || !spec.points.length) return null;
+        const panel = document.createElement("section");
+        panel.className = "mae-analytics-visual";
+        const heading = document.createElement("div");
+        heading.className = "mae-analytics-visual-heading";
+        heading.innerHTML = `<strong>${spec.title}</strong><small>${spec.period_label} Â· aggregate completed calls</small>`;
+        const chartWrap = document.createElement("div");
+        chartWrap.className = "mae-analytics-chart-wrap";
+        const canvas = document.createElement("canvas");
+        chartWrap.appendChild(canvas);
+        const actions = document.createElement("div");
+        actions.className = "mae-analytics-actions";
+
+        const saveButton = document.createElement("button");
+        saveButton.type = "button";
+        saveButton.className = "mae-read-aloud";
+        saveButton.innerHTML = '<i class="bi bi-pin-angle"></i> Save to Analytics';
+        saveButton.addEventListener("click", async function () {
+            saveButton.disabled = true;
+            try {
+                const response = await fetch("/api/analytics/widgets", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    cache: "no-store",
+                    body: JSON.stringify({title: spec.title, view_key: spec.view_key})
+                });
+                const payload = await response.json().catch(function () { return {}; });
+                if (!response.ok) throw new Error(payload.detail || "Widget could not be saved.");
+                saveButton.innerHTML = '<i class="bi bi-check-circle"></i> Saved to Analytics';
+            } catch (error) {
+                saveButton.disabled = false;
+                window.alert(error.message || "Widget could not be saved.");
+            }
+        });
+        actions.appendChild(saveButton);
+        panel.append(heading, chartWrap, actions);
+
+        window.setTimeout(function () {
+            if (typeof Chart === "undefined") return;
+            new Chart(canvas, {
+                type: spec.chart_type || "bar",
+                data: {
+                    labels: spec.points.map(function (point) { return point.label; }),
+                    datasets: [{
+                        label: "Calls",
+                        data: spec.points.map(function (point) { return point.value; }),
+                        backgroundColor: spec.chart_type === "doughnut"
+                            ? ["#4cc9ff", "#69ffb9", "#ffd66b", "#a78bfa", "#ff7b9c", "#5eead4"]
+                            : "rgba(76, 201, 255, .55)",
+                        borderColor: "#4cc9ff",
+                        borderWidth: 1,
+                        tension: .3,
+                        fill: spec.chart_type === "line"
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {legend: {display: spec.chart_type === "doughnut"}},
+                    scales: spec.chart_type === "doughnut" ? {} : {
+                        x: {ticks: {color: "#8fb7d9"}, grid: {color: "rgba(143,183,217,.08)"}},
+                        y: {beginAtZero: true, ticks: {color: "#8fb7d9", precision: 0}, grid: {color: "rgba(143,183,217,.1)"}}
+                    }
+                }
+            });
+        }, 0);
+        return panel;
+    }
+
     function addMessage(role, content, payload) {
         const responsePayload = payload || {};
         const article = document.createElement("article");
@@ -616,6 +706,9 @@
         const choices = buildChoices(responsePayload.choices);
         if (choices) bubble.appendChild(choices);
 
+        const visualization = buildAnalyticsVisualization(responsePayload.analytics_visualization);
+        if (visualization) bubble.appendChild(visualization);
+
         const assurance = buildAssurance(responsePayload.assurance);
         if (assurance) bubble.appendChild(assurance);
 
@@ -635,6 +728,56 @@
         if (role === "assistant") {
             const feedback = buildFeedback(responsePayload.interaction_id);
             if (feedback) bubble.appendChild(feedback);
+
+            const hasAnalyticsSource = Array.isArray(sources) && sources.some(function (source) {
+                return source.name === "PostgreSQL analytics" && source.available !== false;
+            });
+            if (hasAnalyticsSource) {
+                const reportButton = document.createElement("button");
+                reportButton.type = "button";
+                reportButton.className = "mae-read-aloud";
+                reportButton.innerHTML = '<i class="bi bi-file-earmark-pdf"></i> Download analytics PDF';
+                reportButton.addEventListener("click", async function () {
+                    reportButton.disabled = true;
+                    reportButton.innerHTML = '<i class="bi bi-arrow-repeat"></i> Preparing report...';
+                    const periods = {
+                        "Last 24 hours": "24h", "Last 7 days": "7d", "Last 30 days": "30d",
+                        "Last 90 days": "90d", "Last 365 days": "365d"
+                    };
+                    const analyticsSource = sources.find(function (source) {
+                        return source.name === "PostgreSQL analytics";
+                    });
+                    try {
+                        const response = await fetch("/api/mae/analytics-report", {
+                            method: "POST",
+                            headers: {"Content-Type": "application/json"},
+                            cache: "no-store",
+                            body: JSON.stringify({
+                                period: (responsePayload.analytics_visualization || {}).period_key || periods[analyticsSource.detail] || "30d",
+                                view_key: (responsePayload.analytics_visualization || {}).view_key || ""
+                            })
+                        });
+                        if (!response.ok) {
+                            const error = await response.json().catch(function () { return {}; });
+                            throw new Error(error.detail || "MAE could not prepare the analytics report.");
+                        }
+                        const blob = await response.blob();
+                        const link = document.createElement("a");
+                        link.href = URL.createObjectURL(blob);
+                        link.download = "mae-analytics-report.pdf";
+                        document.body.appendChild(link);
+                        link.click();
+                        link.remove();
+                        window.setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
+                    } catch (error) {
+                        window.alert(error.message || "MAE could not prepare the analytics report.");
+                    } finally {
+                        reportButton.disabled = false;
+                        reportButton.innerHTML = '<i class="bi bi-file-earmark-pdf"></i> Download analytics PDF';
+                    }
+                });
+                bubble.appendChild(reportButton);
+            }
 
             const readButton = document.createElement("button");
             readButton.type = "button";
@@ -670,10 +813,106 @@
         if (busy) messages.scrollTop = messages.scrollHeight;
     }
 
+    async function fetchCompleteAnswer(question, requestHistory, signal) {
+        const response = await fetch("/api/mae/chat", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            cache: "no-store",
+            signal: signal,
+            body: JSON.stringify({question: question, history: requestHistory, entities: entities})
+        });
+        const responseText = await response.text();
+        let payload = {};
+        try {
+            payload = responseText ? JSON.parse(responseText) : {};
+        } catch (parseError) {
+            throw new Error("MAE's secure connection returned an invalid response. Please try the question again.");
+        }
+        if (!response.ok) throw new Error(payload.detail || "MAE could not complete the inquiry.");
+        return payload;
+    }
+
+    async function fetchStreamedAnswer(question, requestHistory, signal) {
+        const response = await fetch("/api/mae/chat/stream", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            cache: "no-store",
+            signal: signal,
+            body: JSON.stringify({question: question, history: requestHistory, entities: entities})
+        });
+        if (!response.ok || !response.body) throw new Error("MAE's response stream is unavailable.");
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let wireBuffer = "";
+        let speechBuffer = "";
+        let groupedSpeech = "";
+        let synthesisChain = Promise.resolve();
+        let speechChain = Promise.resolve();
+        let payload = null;
+        let streamedSpeech = false;
+        activeSpeechRequest += 1;
+        const speechRequestId = activeSpeechRequest;
+        if (activeSpeechController) activeSpeechController.abort();
+        activeSpeechController = new AbortController();
+        if (voicePlayer) { voicePlayer.pause(); voicePlayer.removeAttribute("src"); voicePlayer.load(); }
+
+        function queueSpeechChunk(sentence) {
+            const clean = sentence.trim();
+            if (!clean || !voiceModeActive) return;
+            streamedSpeech = true;
+            setMicrophoneEnabled(false);
+            setVoiceState("speaking", "MAE is speaking", "The next part of the answer is being prepared.");
+            const audioPromise = synthesisChain.then(function () {
+                if (!voiceModeActive || speechRequestId !== activeSpeechRequest) return null;
+                return requestSpeechAudio(clean, activeSpeechController.signal);
+            });
+            synthesisChain = audioPromise.then(function () { return undefined; });
+            speechChain = speechChain.then(function () { return audioPromise; }).then(function (audioBlob) {
+                if (!voiceModeActive) return undefined;
+                return playSpeechAudio(audioBlob, speechRequestId);
+            });
+        }
+        function acceptSentence(sentence) {
+            if (!streamedSpeech) { queueSpeechChunk(sentence); return; }
+            groupedSpeech = `${groupedSpeech} ${sentence}`.trim();
+            if (groupedSpeech.length >= 140) { queueSpeechChunk(groupedSpeech); groupedSpeech = ""; }
+        }
+        function consumeEvent(event) {
+            if (event.type === "token") {
+                speechBuffer += String(event.text || "");
+                let match = speechBuffer.match(/^([\s\S]*?[.!?])(?=\s|$)/);
+                while (match) {
+                    acceptSentence(match[1]);
+                    speechBuffer = speechBuffer.slice(match[1].length).trimStart();
+                    match = speechBuffer.match(/^([\s\S]*?[.!?])(?=\s|$)/);
+                }
+            } else if (event.type === "complete") payload = event.payload || {};
+            else if (event.type === "error") throw new Error(event.detail || "MAE could not complete the inquiry.");
+        }
+        while (true) {
+            const part = await reader.read();
+            wireBuffer += decoder.decode(part.value || new Uint8Array(), {stream: !part.done});
+            const lines = wireBuffer.split("\n");
+            wireBuffer = lines.pop() || "";
+            lines.filter(Boolean).forEach(function (line) { consumeEvent(JSON.parse(line)); });
+            if (part.done) break;
+        }
+        if (wireBuffer.trim()) consumeEvent(JSON.parse(wireBuffer));
+        if (!payload) throw new Error("MAE's response stream ended early.");
+        groupedSpeech = `${groupedSpeech} ${speechBuffer}`.trim();
+        if (groupedSpeech) queueSpeechChunk(groupedSpeech);
+        if (!streamedSpeech && payload.answer) queueSpeechChunk(payload.answer);
+        await speechChain;
+        if (speechRequestId === activeSpeechRequest) activeSpeechController = null;
+        return payload;
+    }
+
     async function ask(question, options) {
         if (!question) return;
         const settings = options || {};
         let answerToSpeak = "";
+        let alreadySpoken = false;
         addMessage("user", question);
         const requestHistory = history.slice(-8);
         history.push({role: "user", content: question});
@@ -689,36 +928,23 @@
         const controller = new AbortController();
         const timeoutId = window.setTimeout(function () {
             controller.abort();
-        }, 30000);
+        }, maeRequestTimeoutMs);
 
         try {
-            const response = await fetch("/api/mae/chat", {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                cache: "no-store",
-                signal: controller.signal,
-                body: JSON.stringify({
-                    question: question,
-                    history: requestHistory,
-                    entities: entities
-                })
-            });
-            const responseText = await response.text();
-            let payload = {};
-
-            try {
-                payload = responseText ? JSON.parse(responseText) : {};
-            } catch (parseError) {
-                throw new Error(
-                    "MAE's secure connection returned an invalid response. " +
-                    "Please try the question again."
-                );
-            }
-
-            if (!response.ok) {
-                throw new Error(
-                    payload.detail || "MAE could not complete the inquiry."
-                );
+            let payload;
+            if (settings.speakResponse && voiceModeActive) {
+                try {
+                    payload = await fetchStreamedAnswer(question, requestHistory, controller.signal);
+                    alreadySpoken = true;
+                } catch (streamError) {
+                    if (streamError.name === "AbortError") throw streamError;
+                    setVoiceState("processing", "MAE is completing the answer", "The standard private response path is being used.");
+                    payload = await fetchCompleteAnswer(question, requestHistory, controller.signal);
+                    await speakAnswer(payload.answer);
+                    alreadySpoken = true;
+                }
+            } else {
+                payload = await fetchCompleteAnswer(question, requestHistory, controller.signal);
             }
             mergeEntities(payload.entities);
             addMessage("assistant", payload.answer, payload);
@@ -735,7 +961,7 @@
             setBusy(false);
         }
 
-        if (settings.speakResponse && voiceModeActive && answerToSpeak) {
+        if (settings.speakResponse && voiceModeActive && answerToSpeak && !alreadySpoken) {
             try {
                 await speakAnswer(answerToSpeak);
             } catch (error) {

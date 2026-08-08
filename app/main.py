@@ -2,6 +2,8 @@ import asyncio
 import base64
 import binascii
 import json
+from queue import Queue
+from threading import Thread
 import secrets
 from typing import Literal
 
@@ -24,6 +26,10 @@ from app.services.map_service import (
     build_empty_map_snapshot,
     get_live_map_snapshot,
 )
+from app.services.gis_reference_service import (
+    available_reference_layers,
+    get_reference_layer,
+)
 from app.services.heatmap_service import (
     ALLOWED_HEATMAP_HOURS,
     build_empty_heatmap_snapshot,
@@ -39,6 +45,18 @@ from app.services.analytics_reporting import (
     AnalyticsRangeError,
     PERIOD_OPTIONS,
     get_analytics_overview,
+)
+from app.services.mae_analytics_report_service import build_analytics_report
+from app.services.county_commission_report_service import (
+    CountyCommissionReportBusyError,
+    build_county_commission_pdf,
+    get_county_commission_job,
+    start_county_commission_job,
+)
+from app.services.mae_analytics_visualization_service import (
+    list_saved_widgets,
+    retire_widget,
+    save_widget,
 )
 from app.services.mae_service import (
     MAEServiceError,
@@ -82,6 +100,11 @@ from app.services.mindshare_evaluation_service import (
     list_mindshare_evaluation_cases,
     run_mindshare_evaluation_case,
 )
+from app.services.jack_memory_service import (
+    create_jack_memory_candidate,
+    list_jack_memory_items,
+    review_jack_memory,
+)
 from app.services.voice_service import (
     VOICE_CHOICES,
     VoiceServiceError,
@@ -98,6 +121,19 @@ from app.services.realtime_service import (
     event_broker,
     get_realtime_health,
     process_webhook_event,
+)
+from app.services.nga911_intelligence_service import (
+    NGA911ProviderError,
+    get_nga911_counties,
+    get_nga911_county_detail,
+    get_nga911_intelligence_overview,
+    get_nga911_logan_event,
+    get_nga911_logan_operations,
+)
+from app.services.nga911_nova_service import (
+    NOVAServiceError,
+    ask_nova,
+    get_nova_status,
 )
 
 app = FastAPI(
@@ -131,7 +167,30 @@ class MAEChatRequest(BaseModel):
     )
 
 
+class MAEAnalyticsReportRequest(BaseModel):
+    period: str = Field(default="30d", pattern="^(24h|7d|30d|90d|365d)$")
+    view_key: str = Field(default="", max_length=40)
+
+
+class AnalyticsWidgetRequest(BaseModel):
+    title: str = Field(default="", max_length=200)
+    view_key: str = Field(min_length=3, max_length=40)
+
+
+class AnalyticsWidgetRetireRequest(BaseModel):
+    widget_id: int = Field(gt=0)
+
+
+class CountyCommissionReportRequest(BaseModel):
+    month: str = Field(pattern=r"^\d{4}-\d{2}$")
+
+
 class MindshareChatRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=4000)
+    history: list[MAEHistoryMessage] = Field(default_factory=list, max_length=6)
+
+
+class NOVAChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
     history: list[MAEHistoryMessage] = Field(default_factory=list, max_length=6)
 
@@ -171,6 +230,18 @@ class MAEMemoryCreateRequest(BaseModel):
 
 
 class MAEMemoryReviewRequest(BaseModel):
+    memory_id: int = Field(gt=0)
+    decision: str = Field(min_length=7, max_length=20)
+
+
+class JackMemoryCreateRequest(BaseModel):
+    title: str = Field(min_length=3, max_length=200)
+    trigger_text: str = Field(min_length=3, max_length=1000)
+    guidance: str = Field(min_length=3, max_length=4000)
+    source_interaction_id: str = Field(default="", max_length=36)
+
+
+class JackMemoryReviewRequest(BaseModel):
     memory_id: int = Field(gt=0)
     decision: str = Field(min_length=7, max_length=20)
 
@@ -399,12 +470,6 @@ async def receive_centralsquare_webhook(
             detail="Webhook payload must be valid JSON.",
         ) from exc
 
-    if not isinstance(payload, (dict, list)):
-        raise HTTPException(
-            status_code=422,
-            detail="Webhook payload must be a JSON object or array.",
-        )
-
     result = await asyncio.to_thread(
         process_webhook_event,
         source,
@@ -543,6 +608,24 @@ def map_api(response: Response):
         return get_live_map_snapshot()
     except CentralSquareAPIError as exc:
         return build_empty_map_snapshot(str(exc))
+
+
+@app.get("/api/operations/map/reference")
+def map_reference_catalog_api(response: Response):
+    """List only reviewed, locally mounted GIS reference layers."""
+    response.headers["Cache-Control"] = "private, max-age=3600"
+    return {"layers": available_reference_layers()}
+
+
+@app.get("/api/operations/map/reference/{layer}")
+def map_reference_layer_api(layer: str, response: Response):
+    """Serve one minimized static GIS layer; source archives remain private."""
+    reference_layer = get_reference_layer(layer)
+    if reference_layer is None:
+        raise HTTPException(status_code=404, detail="GIS reference layer not available")
+
+    response.headers["Cache-Control"] = "private, max-age=3600"
+    return reference_layer
 
 
 def _validated_heatmap_hours(hours: int) -> int:
@@ -819,6 +902,63 @@ def analytics_overview_api(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@app.post("/api/mae/analytics-report")
+def mae_analytics_report_api(report_request: MAEAnalyticsReportRequest):
+    """Create an aggregate-only supervisor download from verified analytics."""
+    try:
+        snapshot = get_analytics_overview(period=report_request.period)
+    except AnalyticsRangeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not snapshot.get("available"):
+        raise HTTPException(
+            status_code=503,
+            detail="Historical analytics are not available for this report.",
+        )
+
+    try:
+        report = build_analytics_report(snapshot, report_request.view_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return Response(
+        content=report,
+        media_type="application/pdf",
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": "attachment; filename=mae-analytics-report.pdf",
+        },
+    )
+
+
+@app.get("/api/analytics/widgets")
+def analytics_widgets_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    return {"items": list_saved_widgets()}
+
+
+@app.post("/api/analytics/widgets")
+def analytics_widget_save_api(widget: AnalyticsWidgetRequest, request: Request):
+    try:
+        result = save_widget(
+            title=widget.title,
+            view_key=widget.view_key,
+            created_by=_authenticated_user_email(request),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not result.get("saved"):
+        raise HTTPException(status_code=503, detail=result.get("message") or "Widget could not be saved.")
+    return result
+
+
+@app.post("/api/analytics/widgets/retire")
+def analytics_widget_retire_api(widget: AnalyticsWidgetRetireRequest):
+    result = retire_widget(widget_id=widget.widget_id)
+    if not result.get("saved"):
+        raise HTTPException(status_code=404, detail=result.get("message") or "Widget not found.")
+    return result
+
+
 @app.get("/analytics")
 def analytics_page(
     request: Request,
@@ -848,6 +988,7 @@ def analytics_page(
         context={
             "database_status": database_status,
             "analytics_snapshot": analytics_snapshot,
+            "saved_widgets": list_saved_widgets(),
             "period_options": [
                 (key, value[0]) for key, value in PERIOD_OPTIONS.items()
             ],
@@ -855,6 +996,58 @@ def analytics_page(
             "version": "0.3.0",
         },
         headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/reports")
+def reports_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="reports.html",
+        context={"version": "0.4.0"},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/api/reports/county-commission/jobs")
+def county_commission_job_start_api(
+    report_request: CountyCommissionReportRequest,
+):
+    try:
+        return start_county_commission_job(report_request.month)
+    except CountyCommissionReportBusyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/reports/county-commission/jobs/{job_id}")
+def county_commission_job_api(job_id: str, response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    job = get_county_commission_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Monthly report job not found.")
+    return job
+
+
+@app.get("/api/reports/county-commission/jobs/{job_id}/pdf")
+def county_commission_job_pdf_api(job_id: str):
+    job = get_county_commission_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Monthly report job not found.")
+    if job.get("status") != "complete" or not job.get("result"):
+        raise HTTPException(status_code=409, detail="Monthly report is not complete.")
+    report = job["result"]
+    month = report.get("month") or "monthly"
+    return Response(
+        content=build_county_commission_pdf(report),
+        media_type="application/pdf",
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": (
+                f'attachment; filename="logan-county-commission-{month}.pdf"'
+            ),
+        },
     )
 
 
@@ -911,6 +1104,164 @@ def knowledge_page(request: Request):
         },
         headers={"Cache-Control": "no-store"},
     )
+
+
+@app.get("/api/nga911/v1/intelligence/overview")
+def nga911_intelligence_overview_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return get_nga911_intelligence_overview()
+    except NGA911ProviderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/api/nga911/v1/counties")
+def nga911_counties_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return {"schema_version": "nga911-counties.v1", "synthetic_data": True, "counties": get_nga911_counties()}
+    except NGA911ProviderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/api/nga911/v1/counties/{county_id}")
+def nga911_county_api(county_id: str, response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        detail = get_nga911_county_detail(county_id)
+    except NGA911ProviderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if detail is None:
+        raise HTTPException(status_code=404, detail="NGA911 demonstration county not found")
+    return detail
+
+
+@app.get("/api/nga911/v1/director/operations")
+def nga911_director_operations_api(response: Response, days: int = 14):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return get_nga911_logan_operations(days)
+    except NGA911ProviderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/api/nga911/v1/director/events/{event_id}")
+def nga911_director_event_api(event_id: str, response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    event = get_nga911_logan_event(event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="NGA911 demonstration event not found")
+    return {"schema_version": "nga911-director-event.v1", "synthetic_data": True, "event": event}
+
+
+@app.get("/nga911")
+@app.get("/nga911-intelligence")
+def nga911_intelligence_page(request: Request):
+    try:
+        overview = get_nga911_intelligence_overview()
+    except NGA911ProviderError as exc:
+        overview = {
+            "synthetic_data": False,
+            "environment_label": "PROVIDER NOT CONFIGURED",
+            "generated_at": "",
+            "connection": {
+                "status": "unavailable",
+                "status_label": "GOVCLOUD CONNECTION UNAVAILABLE",
+            },
+            "summary": {},
+            "counties": [],
+            "intelligence": [],
+            "service_events": [],
+            "capabilities": [],
+            "error": str(exc),
+        }
+
+    return templates.TemplateResponse(
+        request=request,
+        name="nga911_intelligence.html",
+        context={
+            "overview": overview,
+            "standalone": request.url.path == "/nga911",
+            "version": "0.1.0",
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/nga911/counties/{county_id}")
+@app.get("/nga911-intelligence/counties/{county_id}")
+def nga911_county_page(county_id: str, request: Request):
+    try:
+        detail = get_nga911_county_detail(county_id)
+    except NGA911ProviderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if detail is None:
+        raise HTTPException(status_code=404, detail="NGA911 demonstration county not found")
+    return templates.TemplateResponse(
+        request=request,
+        name="nga911_county.html",
+        context={
+            "detail": detail,
+            "standalone": request.url.path.startswith("/nga911/counties/"),
+            "version": "0.2.0",
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/nga911/operations")
+@app.get("/nga911-intelligence/operations")
+def nga911_director_operations_page(request: Request, days: int = 14):
+    operations = get_nga911_logan_operations(days)
+    return templates.TemplateResponse(
+        request=request,
+        name="nga911_operations.html",
+        context={"operations": operations, "standalone": request.url.path == "/nga911/operations", "version": "0.3.0"},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/nga911/events/{event_id}")
+@app.get("/nga911-intelligence/events/{event_id}")
+def nga911_director_event_page(event_id: str, request: Request):
+    event = get_nga911_logan_event(event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="NGA911 demonstration event not found")
+    return templates.TemplateResponse(
+        request=request,
+        name="nga911_event.html",
+        context={"event": event, "standalone": request.url.path.startswith("/nga911/events/"), "version": "0.3.0"},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/nga911/nova")
+@app.get("/nga911-intelligence/nova")
+def nga911_nova_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="nga911_nova.html",
+        context={"standalone": request.url.path == "/nga911/nova", "version": "0.1.0"},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/nga911/v1/nova/status")
+def nga911_nova_status_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    return get_nova_status()
+
+
+@app.post("/api/nga911/v1/nova/chat")
+def nga911_nova_chat_api(chat_request: NOVAChatRequest, response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return ask_nova(
+            chat_request.question,
+            [message.model_dump() for message in chat_request.history],
+        )
+    except NOVAServiceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.get("/knowledge/documents/{library_key}/{document_id}")
@@ -991,6 +1342,7 @@ def mindshare_reliability_page(request: Request):
             "evaluation_cases": list_mindshare_evaluation_cases(),
             "evaluation_summary": get_mindshare_evaluation_summary(),
             "feedback_items": list_jack_feedback(),
+            "memory_items": list_jack_memory_items(),
             "version": "0.4.0",
         },
         headers={"Cache-Control": "no-store"},
@@ -1141,6 +1493,48 @@ def mindshare_chat_api(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+@app.post("/api/mindshare/chat/stream")
+def mindshare_chat_stream_api(chat_request: MindshareChatRequest, request: Request):
+    events: Queue[dict] = Queue()
+    history = [message.model_dump() for message in chat_request.history]
+    user_email = _authenticated_user_email(request)
+
+    def run() -> None:
+        try:
+            result = ask_mindshare(
+                chat_request.question,
+                history,
+                token_callback=lambda token: events.put({"type": "token", "text": token}),
+            )
+            audit = record_jack_interaction(
+                user_email=user_email,
+                question=chat_request.question,
+                result=result,
+            )
+            result["interaction_id"] = audit.get("interaction_id") or ""
+            result["audit_saved"] = bool(audit.get("saved"))
+            events.put({"type": "complete", "payload": result})
+        except MindshareServiceError as exc:
+            events.put({"type": "error", "detail": str(exc)})
+        finally:
+            events.put({"type": "done"})
+
+    Thread(target=run, daemon=True).start()
+
+    def stream():
+        while True:
+            event = events.get()
+            yield json.dumps(event, separators=(",", ":")) + "\n"
+            if event["type"] == "done":
+                break
+
+    return StreamingResponse(
+        stream(),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache, no-store", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.post("/api/mindshare/feedback")
 def mindshare_feedback_api(
     feedback_request: MindshareFeedbackRequest,
@@ -1161,6 +1555,60 @@ def mindshare_feedback_api(
         raise HTTPException(
             status_code=503,
             detail=result.get("message") or "JACK feedback could not be saved.",
+        )
+    return result
+
+
+@app.get("/api/mindshare/memory")
+def jack_memory_api(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    return {"items": list_jack_memory_items()}
+
+
+@app.post("/api/mindshare/memory")
+def jack_memory_create_api(
+    memory_request: JackMemoryCreateRequest,
+    request: Request,
+    response: Response,
+):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        result = create_jack_memory_candidate(
+            title=memory_request.title,
+            trigger_text=memory_request.trigger_text,
+            guidance=memory_request.guidance,
+            created_by=_authenticated_user_email(request),
+            source_interaction_id=memory_request.source_interaction_id or None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not result.get("saved"):
+        raise HTTPException(
+            status_code=503,
+            detail=result.get("message") or "JACK memory candidate could not be saved.",
+        )
+    return result
+
+
+@app.post("/api/mindshare/memory/review")
+def jack_memory_review_api(
+    memory_request: JackMemoryReviewRequest,
+    request: Request,
+    response: Response,
+):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        result = review_jack_memory(
+            memory_id=memory_request.memory_id,
+            decision=memory_request.decision,
+            reviewed_by=_authenticated_user_email(request),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not result.get("saved"):
+        raise HTTPException(
+            status_code=404,
+            detail=result.get("message") or "JACK memory candidate not found.",
         )
     return result
 
@@ -1236,6 +1684,50 @@ def mae_chat_api(
         return result
     except MAEServiceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/api/mae/chat/stream")
+def mae_chat_stream_api(chat_request: MAEChatRequest, request: Request):
+    events: Queue[dict] = Queue()
+    history = [message.model_dump() for message in chat_request.history]
+    entities = chat_request.entities.model_dump()
+    user_email = _authenticated_user_email(request)
+
+    def run() -> None:
+        try:
+            result = ask_mae(
+                chat_request.question,
+                history,
+                entities,
+                token_callback=lambda token: events.put({"type": "token", "text": token}),
+            )
+            audit = record_mae_interaction(
+                user_email=user_email,
+                question=chat_request.question,
+                result=result,
+            )
+            result["interaction_id"] = audit.get("interaction_id") or ""
+            result["audit_saved"] = bool(audit.get("saved"))
+            events.put({"type": "complete", "payload": result})
+        except MAEServiceError as exc:
+            events.put({"type": "error", "detail": str(exc)})
+        finally:
+            events.put({"type": "done"})
+
+    Thread(target=run, daemon=True).start()
+
+    def stream():
+        while True:
+            event = events.get()
+            yield json.dumps(event, separators=(",", ":")) + "\n"
+            if event["type"] == "done":
+                break
+
+    return StreamingResponse(
+        stream(),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache, no-store", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post("/api/mae/feedback")
