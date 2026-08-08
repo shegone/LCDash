@@ -17,9 +17,12 @@ lazily on first request, mirroring the other cloud provider adapters.
 from __future__ import annotations
 
 from functools import cached_property
+import logging
 from typing import Any, Protocol
 
 import boto3
+
+logger = logging.getLogger(__name__)
 
 
 APPROVED_REGION = "us-east-1"
@@ -89,6 +92,21 @@ def fetch_map_tile(
             Tileset=tileset, Z=zoom, X=tile_x, Y=tile_y
         )
     except Exception as exc:  # provider payloads never leave this frame
+        # Log the failure CLASS and a bounded message so a persistent tile
+        # outage is diagnosable. Satellite tiles were failing 502 on every
+        # request with nothing in the logs, because the cause was discarded
+        # here. The exception text is truncated and no provider payload,
+        # credential, or response body is emitted -- only enough to tell an
+        # AccessDenied apart from a throttle, timeout, or bad tileset.
+        logger.warning(
+            "map_tile_request_failed tileset=%s z=%s x=%s y=%s error=%s detail=%.200s",
+            tileset,
+            zoom,
+            tile_x,
+            tile_y,
+            type(exc).__name__,
+            str(exc),
+        )
         raise MapTileUnavailable("map_tile_request_failed") from exc
 
     blob = response.get("Blob")
