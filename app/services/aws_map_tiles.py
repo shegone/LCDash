@@ -88,8 +88,13 @@ def fetch_map_tile(
     tileset = resolve_tileset(style)
     zoom, tile_x, tile_y = validate_tile_coordinates(z, x, y)
     try:
+        # geo-maps GetTile types Z/X/Y as strings (they are URI path segments).
+        # Passing the validated ints straight through failed boto3's own
+        # parameter validation before any request was made, so every satellite
+        # tile returned 502. Validate as ints for the bounds checks above, then
+        # send strings.
         response = client.get_tile(
-            Tileset=tileset, Z=zoom, X=tile_x, Y=tile_y
+            Tileset=tileset, Z=str(zoom), X=str(tile_x), Y=str(tile_y)
         )
     except Exception as exc:  # provider payloads never leave this frame
         # Log the failure CLASS and a bounded message so a persistent tile

@@ -407,5 +407,88 @@ class MapPageTests(unittest.TestCase):
         self.assertNotIn("unpkg.com", response.text)
 
 
+
+
+class MapTileParameterTypeTests(unittest.TestCase):
+    """geo-maps GetTile types Z/X/Y as strings.
+
+    Passing the validated ints straight through failed boto3's own parameter
+    validation before any request left the process, so every satellite tile
+    returned 502 and satellite view never worked. Lock the wire types.
+    """
+
+    def test_get_tile_receives_string_coordinates(self):
+        from app.services.aws_map_tiles import fetch_map_tile
+
+        captured = {}
+
+        class _Client:
+            def get_tile(self, **kwargs):
+                captured.update(kwargs)
+                return {"Blob": b"tile-bytes", "ContentType": "image/jpeg"}
+
+        payload, content_type = fetch_map_tile(
+            _Client(), style="satellite", z=11, x=556, y=791
+        )
+
+        self.assertEqual(payload, b"tile-bytes")
+        self.assertEqual(content_type, "image/jpeg")
+        self.assertEqual(captured["Tileset"], "raster.satellite")
+        for key in ("Z", "X", "Y"):
+            self.assertIsInstance(captured[key], str, f"{key} must be a string")
+        self.assertEqual((captured["Z"], captured["X"], captured["Y"]), ("11", "556", "791"))
+
+    def test_invalid_coordinates_are_still_rejected_before_the_call(self):
+        from app.services.aws_map_tiles import MapTileUnavailable, fetch_map_tile
+
+        class _Client:
+            def get_tile(self, **kwargs):  # pragma: no cover - must not run
+                raise AssertionError("out-of-range coordinates must not reach AWS")
+
+        with self.assertRaises(MapTileUnavailable):
+            fetch_map_tile(_Client(), style="satellite", z=11, x=999999, y=1)
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class MapTileParameterTypeTests(unittest.TestCase):
+    """geo-maps GetTile types Z/X/Y as strings.
+
+    Passing the validated ints straight through failed boto3's own parameter
+    validation before any request left the process, so every satellite tile
+    returned 502 and satellite view never worked. Lock the wire types.
+    """
+
+    def test_get_tile_receives_string_coordinates(self):
+        from app.services.aws_map_tiles import fetch_map_tile
+
+        captured = {}
+
+        class _Client:
+            def get_tile(self, **kwargs):
+                captured.update(kwargs)
+                return {"Blob": b"tile-bytes", "ContentType": "image/jpeg"}
+
+        payload, content_type = fetch_map_tile(
+            _Client(), style="satellite", z=11, x=556, y=791
+        )
+
+        self.assertEqual(payload, b"tile-bytes")
+        self.assertEqual(content_type, "image/jpeg")
+        self.assertEqual(captured["Tileset"], "raster.satellite")
+        for key in ("Z", "X", "Y"):
+            self.assertIsInstance(captured[key], str, f"{key} must be a string")
+        self.assertEqual((captured["Z"], captured["X"], captured["Y"]), ("11", "556", "791"))
+
+    def test_invalid_coordinates_are_still_rejected_before_the_call(self):
+        from app.services.aws_map_tiles import MapTileUnavailable, fetch_map_tile
+
+        class _Client:
+            def get_tile(self, **kwargs):  # pragma: no cover - must not run
+                raise AssertionError("out-of-range coordinates must not reach AWS")
+
+        with self.assertRaises(MapTileUnavailable):
+            fetch_map_tile(_Client(), style="satellite", z=11, x=999999, y=1)
+

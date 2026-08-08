@@ -79,8 +79,12 @@ class FetchMapTileTests(unittest.TestCase):
         )
         self.assertEqual(payload, b"\x89PNG-fake-bytes")
         self.assertEqual(content_type, "image/png")
+        # Z/X/Y go to geo-maps as strings: they are URI path segments, and
+        # boto3 rejected the integers this previously asserted before the
+        # request left the process, which is why every satellite tile 502'd.
         self.assertEqual(
-            client.calls, [{"Tileset": "raster.satellite", "Z": 5, "X": 3, "Y": 2}]
+            client.calls,
+            [{"Tileset": "raster.satellite", "Z": "5", "X": "3", "Y": "2"}],
         )
 
     def test_reads_a_streaming_body_if_the_sdk_returns_one(self):
