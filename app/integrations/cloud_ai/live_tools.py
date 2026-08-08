@@ -12,7 +12,13 @@ Every tool reads only the already-polled, already-sanitized CAD snapshot
 (``CloudCadDisplayState.calls`` / ``.units``, the same ``CALL_FIELDS`` /
 ``UNIT_FIELDS`` the dashboard and map render) or the analytics overview
 (``get_analytics_overview``). Nothing here makes a new CentralSquare API
-call.
+call. ``search_calls``/``search_units`` add structured, server-validated
+filtering over that same snapshot (see
+``docs/planning/MAE_FULL_READ_API_TOOLSET_2026-08-08.md`` sections 2.1/2.4);
+they do not reach the live CentralSquare search endpoints -- that would
+require calling the connector directly, which this registry has no access
+to (it is constructed from the polled snapshot and an analytics function
+only), and is left as later work.
 """
 
 from __future__ import annotations
@@ -26,10 +32,24 @@ MAX_ACTIVE_CALLS = 50
 MAX_DETAIL_COMMAND_LOG_ENTRIES = 40
 MAX_BUSIEST_ROWS = 5
 MAX_INCIDENT_TYPE_ROWS = 10
+MAX_SEARCH_CALL_RESULTS = 50
+MAX_SEARCH_UNIT_RESULTS = 100
 
 _ANALYTICS_PERIOD_KEYS = {"24h", "7d", "30d", "90d", "365d"}
 _MIN_HOURS = 1
 _MAX_HOURS = 8784  # 366 days, matches analytics_reporting.MAX_CUSTOM_DAYS
+
+# search_calls / search_units filter keys, each mapped to its allowed Python
+# type(s). Any key in a request that is not in the relevant set is rejected
+# outright -- this is the "unknown filter keys rejected" server-side gate.
+_SEARCH_CALLS_STRING_FILTERS = ("incident_code", "agency", "status", "priority", "location", "unit_number")
+_SEARCH_CALLS_INT_FILTERS = ("priority_min", "priority_max")
+_SEARCH_CALLS_ALLOWED_KEYS = frozenset(
+    _SEARCH_CALLS_STRING_FILTERS + _SEARCH_CALLS_INT_FILTERS + ("limit",)
+)
+_SEARCH_UNITS_STRING_FILTERS = ("agency", "unit_type", "status", "station")
+_SEARCH_UNITS_ALLOWED_KEYS = frozenset(_SEARCH_UNITS_STRING_FILTERS + ("limit",))
+_MAX_FILTER_STRING_LENGTH = 128
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +133,61 @@ def _top_rows(rows: Any, limit: int) -> list[dict[str, Any]]:
         if len(out) >= limit:
             break
     return out
+
+
+def _reject_unknown_keys(tool_input: Mapping[str, Any], allowed: frozenset[str]) -> None:
+    unknown = sorted(set(tool_input) - allowed)
+    if unknown:
+        raise _ToolInputError(f"unknown filter key(s): {', '.join(unknown)}")
+
+
+def _optional_str_filter(tool_input: Mapping[str, Any], key: str) -> str | None:
+    value = tool_input.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise _ToolInputError(f"{key} must be a string")
+    value = value.strip()
+    if not value:
+        return None
+    if len(value) > _MAX_FILTER_STRING_LENGTH:
+        raise _ToolInputError(f"{key} must be at most {_MAX_FILTER_STRING_LENGTH} characters")
+    return value
+
+
+def _optional_int_filter(tool_input: Mapping[str, Any], key: str) -> int | None:
+    value = tool_input.get(key)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise _ToolInputError(f"{key} must be an integer")
+    return value
+
+
+def _optional_limit(tool_input: Mapping[str, Any], *, default: int, maximum: int) -> int:
+    value = tool_input.get("limit")
+    if value is None:
+        return default
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise _ToolInputError("limit must be an integer")
+    if not (1 <= value <= maximum):
+        raise _ToolInputError(f"limit must be between 1 and {maximum}")
+    return value
+
+
+def _contains(haystack: Any, needle: str) -> bool:
+    return needle.lower() in str(haystack or "").lower()
+
+
+def _equals_ci(value: Any, needle: str) -> bool:
+    return str(value or "").strip().lower() == needle.strip().lower()
+
+
+def _priority_as_int(priority: Any) -> int | None:
+    try:
+        return int(str(priority).strip())
+    except (TypeError, ValueError):
+        return None
 
 
 class LiveToolRegistry:
@@ -213,6 +288,136 @@ class LiveToolRegistry:
         payload.update(_detail_call(match))
         return LiveToolResult("get_call_detail", source, payload)
 
+    # -- search_calls -------------------------------------------------------
+
+    def _search_calls(self, tool_input: Mapping[str, Any]) -> LiveToolResult:
+        _reject_unknown_keys(tool_input, _SEARCH_CALLS_ALLOWED_KEYS)
+
+        incident_code = _optional_str_filter(tool_input, "incident_code")
+        agency = _optional_str_filter(tool_input, "agency")
+        status = _optional_str_filter(tool_input, "status")
+        priority = _optional_str_filter(tool_input, "priority")
+        location = _optional_str_filter(tool_input, "location")
+        unit_number = _optional_str_filter(tool_input, "unit_number")
+        priority_min = _optional_int_filter(tool_input, "priority_min")
+        priority_max = _optional_int_filter(tool_input, "priority_max")
+        if priority_min is not None and priority_max is not None and priority_min > priority_max:
+            raise _ToolInputError("priority_min must be <= priority_max")
+        limit = _optional_limit(tool_input, default=MAX_SEARCH_CALL_RESULTS, maximum=MAX_SEARCH_CALL_RESULTS)
+
+        freshness = str(self._cad_status.get("freshness") or "unknown")
+        available = freshness not in {"disabled", "awaiting-success", "stale"}
+        source = LiveDataSource(
+            name="CentralSquare CAD (current read-only snapshot)",
+            kind="live",
+            detail="Filtered search over the active-call snapshot",
+            available=available,
+        )
+        if not available:
+            return LiveToolResult("search_calls", source, {"available": False, "count": 0, "calls": []})
+
+        def matches(call: Mapping[str, Any]) -> bool:
+            if incident_code and not (
+                _contains(call.get("incident_code"), incident_code)
+                or _contains(call.get("incident_description"), incident_code)
+            ):
+                return False
+            if agency and not _equals_ci(call.get("agency"), agency):
+                return False
+            if status and not _equals_ci(call.get("status"), status):
+                return False
+            if priority and not _equals_ci(call.get("priority"), priority):
+                return False
+            if location and not (
+                _contains(call.get("location_label"), location) or _contains(call.get("city"), location)
+            ):
+                return False
+            if priority_min is not None or priority_max is not None:
+                call_priority = _priority_as_int(call.get("priority"))
+                if call_priority is None:
+                    return False
+                if priority_min is not None and call_priority < priority_min:
+                    return False
+                if priority_max is not None and call_priority > priority_max:
+                    return False
+            if unit_number:
+                assigned = call.get("assigned_units") or ()
+                if not any(_contains(unit.get("unit_number"), unit_number) for unit in assigned):
+                    return False
+            return True
+
+        matched = [call for call in self._cad_state.calls if matches(call)]
+        bounded = matched[:limit]
+        return LiveToolResult(
+            "search_calls",
+            source,
+            {
+                "available": True,
+                "count": len(matched),
+                "returned": len(bounded),
+                "truncated": len(matched) > len(bounded),
+                "calls": [_summarize_call(c) for c in bounded],
+            },
+        )
+
+    # -- search_units ---------------------------------------------------
+
+    def _search_units(self, tool_input: Mapping[str, Any]) -> LiveToolResult:
+        _reject_unknown_keys(tool_input, _SEARCH_UNITS_ALLOWED_KEYS)
+
+        agency = _optional_str_filter(tool_input, "agency")
+        unit_type = _optional_str_filter(tool_input, "unit_type")
+        status = _optional_str_filter(tool_input, "status")
+        station = _optional_str_filter(tool_input, "station")
+        limit = _optional_limit(tool_input, default=MAX_SEARCH_UNIT_RESULTS, maximum=MAX_SEARCH_UNIT_RESULTS)
+
+        freshness = str(self._cad_status.get("freshness") or "unknown")
+        available = freshness not in {"disabled", "awaiting-success", "stale"}
+        source = LiveDataSource(
+            name="CentralSquare CAD (current read-only snapshot)",
+            kind="live",
+            detail="Filtered search over the current unit roster",
+            available=available,
+        )
+        if not available:
+            return LiveToolResult("search_units", source, {"available": False, "count": 0, "units": []})
+
+        def matches(unit: Mapping[str, Any]) -> bool:
+            if agency and not _equals_ci(unit.get("agency"), agency):
+                return False
+            if unit_type and not _contains(unit.get("unit_type"), unit_type):
+                return False
+            if status and not _equals_ci(unit.get("status"), status):
+                return False
+            if station and not _contains(unit.get("station"), station):
+                return False
+            return True
+
+        units = tuple(self._cad_state.units)
+        matched = [unit for unit in units if matches(unit)]
+        bounded = matched[:limit]
+        return LiveToolResult(
+            "search_units",
+            source,
+            {
+                "available": True,
+                "count": len(matched),
+                "returned": len(bounded),
+                "truncated": len(matched) > len(bounded),
+                "units": [
+                    {
+                        "unit_number": str(u.get("unit_number") or ""),
+                        "agency": str(u.get("agency") or ""),
+                        "unit_type": str(u.get("unit_type") or ""),
+                        "status": str(u.get("status") or ""),
+                        "station": str(u.get("station") or ""),
+                        "assignment_cfs_number": str(u.get("assignment_cfs_number") or ""),
+                    }
+                    for u in bounded
+                ],
+            },
+        )
+
     # -- get_analytics_summary ----------------------------------------------
 
     def _get_analytics_summary(self, tool_input: Mapping[str, Any]) -> LiveToolResult:
@@ -280,6 +485,8 @@ LiveToolRegistry._HANDLERS = {
     "list_active_calls": LiveToolRegistry._list_active_calls,
     "get_call_detail": LiveToolRegistry._get_call_detail,
     "get_analytics_summary": LiveToolRegistry._get_analytics_summary,
+    "search_calls": LiveToolRegistry._search_calls,
+    "search_units": LiveToolRegistry._search_units,
 }
 
 
@@ -320,6 +527,79 @@ TOOL_SPECS: tuple[Mapping[str, Any], ...] = (
                         }
                     },
                     "required": ["cfs_number"],
+                }
+            },
+        }
+    },
+    {
+        "toolSpec": {
+            "name": "search_calls",
+            "description": (
+                "Search the current read-only active-call snapshot with structured "
+                "filters, combinable in one call: incident_code (substring match "
+                "against incident code/description), agency (exact match), status "
+                "(exact match), priority (exact match), priority_min/priority_max "
+                "(integer range, e.g. set priority_max to find only the highest-"
+                "priority calls -- lower numbers are higher priority), location "
+                "(substring match against address or city), and unit_number "
+                "(matches calls with an assigned unit whose number contains this "
+                "text). All filters are optional and are ANDed together; omit all "
+                "of them to match every call in the snapshot. Returns a count of "
+                "all matches plus up to `limit` (default and max 50) summarized "
+                "call records. Unknown filter keys or wrong-typed values are "
+                "rejected with an error instead of run. Use get_call_detail for "
+                "the full record of one matched call."
+            ),
+            "inputSchema": {
+                "json": {
+                    "type": "object",
+                    "properties": {
+                        "incident_code": {"type": "string", "maxLength": 128},
+                        "agency": {"type": "string", "maxLength": 128},
+                        "status": {"type": "string", "maxLength": 128},
+                        "priority": {"type": "string", "maxLength": 128},
+                        "priority_min": {"type": "integer"},
+                        "priority_max": {"type": "integer"},
+                        "location": {"type": "string", "maxLength": 128},
+                        "unit_number": {"type": "string", "maxLength": 128},
+                        "limit": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": MAX_SEARCH_CALL_RESULTS,
+                        },
+                    },
+                }
+            },
+        }
+    },
+    {
+        "toolSpec": {
+            "name": "search_units",
+            "description": (
+                "Search the current read-only unit roster with structured filters, "
+                "combinable in one call: agency (exact match), unit_type (substring "
+                "match), status (exact match), station (substring match). All "
+                "filters are optional and are ANDed together; omit all of them to "
+                "list the whole roster. Returns a count of all matches plus up to "
+                "`limit` (default and max 100) unit records with unit_number, "
+                "agency, unit_type, status, station, and assignment_cfs_number. "
+                "Unknown filter keys or wrong-typed values are rejected with an "
+                "error instead of run."
+            ),
+            "inputSchema": {
+                "json": {
+                    "type": "object",
+                    "properties": {
+                        "agency": {"type": "string", "maxLength": 128},
+                        "unit_type": {"type": "string", "maxLength": 128},
+                        "status": {"type": "string", "maxLength": 128},
+                        "station": {"type": "string", "maxLength": 128},
+                        "limit": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": MAX_SEARCH_UNIT_RESULTS,
+                        },
+                    },
                 }
             },
         }

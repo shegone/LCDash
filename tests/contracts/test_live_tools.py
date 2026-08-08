@@ -40,29 +40,60 @@ def _call(**overrides):
     return call
 
 
+def _unit(**overrides):
+    unit = {
+        "unit_number": "MED31",
+        "agency": "LEASA",
+        "unit_type": "Medic",
+        "status": "Available",
+        "station": "Station 3",
+        "assignment_cfs_number": "",
+    }
+    unit.update(overrides)
+    return unit
+
+
 class _CadState:
-    def __init__(self, calls):
+    def __init__(self, calls, units=()):
         self.calls = tuple(calls)
-        self.units = ()
+        self.units = tuple(units)
 
 
-def _registry(calls=(), freshness="fresh", analytics_overview_fn=None):
+def _registry(calls=(), units=(), freshness="fresh", analytics_overview_fn=None):
     return LiveToolRegistry(
-        cad_state=_CadState(calls),
+        cad_state=_CadState(calls, units),
         cad_status={"freshness": freshness, "age_seconds": 5},
         analytics_overview_fn=analytics_overview_fn,
     )
 
 
 class ToolSpecsTests(unittest.TestCase):
-    def test_exactly_three_read_only_tools_and_no_write_tool(self):
+    def test_expected_read_only_tools_and_no_write_tool(self):
         names = {spec["toolSpec"]["name"] for spec in TOOL_SPECS}
         self.assertEqual(
-            names, {"list_active_calls", "get_call_detail", "get_analytics_summary"}
+            names,
+            {
+                "list_active_calls",
+                "get_call_detail",
+                "get_analytics_summary",
+                "search_calls",
+                "search_units",
+            },
         )
         for spec in TOOL_SPECS:
             blob = str(spec).lower()
-            for forbidden in ("dispatch", "acknowledge", "page", "write", "update_call"):
+            for forbidden in (
+                "dispatch",
+                "acknowledge",
+                "page",
+                "write",
+                "update_call",
+                "run_command",
+                "subscribe",
+                "trigger_tone",
+                "send_alert",
+                "send_message",
+            ):
                 self.assertNotIn(forbidden, blob)
 
 
@@ -200,6 +231,174 @@ class GetAnalyticsSummaryTests(unittest.TestCase):
         self.assertEqual(len(result.payload["busiest_stations"]), 5)
         self.assertEqual(len(result.payload["busiest_units"]), 5)
         self.assertEqual(len(result.payload["incident_types"]), 10)
+
+
+class SearchCallsTests(unittest.TestCase):
+    def test_no_filters_returns_everything(self):
+        registry = _registry(calls=[_call(), _call(cfs_number="CFS26-00001", agency="LCSO")])
+        result = registry.execute("search_calls", {})
+        self.assertTrue(result.payload["available"])
+        self.assertEqual(result.payload["count"], 2)
+        self.assertEqual(len(result.payload["calls"]), 2)
+        self.assertFalse(result.payload["truncated"])
+
+    def test_filters_by_agency_exact_case_insensitive(self):
+        registry = _registry(calls=[_call(agency="LEASA"), _call(cfs_number="CFS26-00001", agency="LCSO")])
+        result = registry.execute("search_calls", {"agency": "leasa"})
+        self.assertEqual(result.payload["count"], 1)
+        self.assertEqual(result.payload["calls"][0]["agency"], "LEASA")
+
+    def test_filters_by_incident_code_substring(self):
+        registry = _registry(
+            calls=[
+                _call(incident_code="MEDICAL", incident_description="Medical Call"),
+                _call(cfs_number="CFS26-00001", incident_code="TRAFFIC", incident_description="MVA"),
+            ]
+        )
+        result = registry.execute("search_calls", {"incident_code": "med"})
+        self.assertEqual(result.payload["count"], 1)
+
+    def test_filters_by_location_substring_matches_label_or_city(self):
+        registry = _registry(
+            calls=[
+                _call(location_label="314 HUDGINS STREET", city="LOGAN"),
+                _call(cfs_number="CFS26-00001", location_label="1 MAIN ST", city="CHAPMANVILLE"),
+            ]
+        )
+        result = registry.execute("search_calls", {"location": "chapman"})
+        self.assertEqual(result.payload["count"], 1)
+        self.assertEqual(result.payload["calls"][0]["city"], "CHAPMANVILLE")
+
+    def test_filters_by_unit_number_substring(self):
+        registry = _registry(
+            calls=[
+                _call(assigned_units=({"unit_number": "MED31", "status": "Assigned"},)),
+                _call(cfs_number="CFS26-00001", assigned_units=({"unit_number": "ENG12", "status": "Assigned"},)),
+            ]
+        )
+        result = registry.execute("search_calls", {"unit_number": "med"})
+        self.assertEqual(result.payload["count"], 1)
+
+    def test_priority_range_filters_high_priority_only(self):
+        registry = _registry(
+            calls=[
+                _call(priority=1),
+                _call(cfs_number="CFS26-00001", priority=20),
+                _call(cfs_number="CFS26-00002", priority="not-a-number"),
+            ]
+        )
+        result = registry.execute("search_calls", {"priority_max": 5})
+        self.assertEqual(result.payload["count"], 1)
+        self.assertEqual(result.payload["calls"][0]["cfs_number"], "CFS26-25863")
+
+    def test_priority_min_greater_than_max_is_rejected(self):
+        registry = _registry(calls=[_call()])
+        result = registry.execute("search_calls", {"priority_min": 10, "priority_max": 1})
+        self.assertIn("error", result.payload)
+
+    def test_combined_filters_are_anded(self):
+        registry = _registry(
+            calls=[
+                _call(agency="LEASA", status="On Scene"),
+                _call(cfs_number="CFS26-00001", agency="LEASA", status="Dispatched"),
+                _call(cfs_number="CFS26-00002", agency="LCSO", status="On Scene"),
+            ]
+        )
+        result = registry.execute("search_calls", {"agency": "LEASA", "status": "On Scene"})
+        self.assertEqual(result.payload["count"], 1)
+        self.assertEqual(result.payload["calls"][0]["cfs_number"], "CFS26-25863")
+
+    def test_unknown_filter_key_is_rejected(self):
+        registry = _registry(calls=[_call()])
+        result = registry.execute("search_calls", {"dispatch_now": True})
+        self.assertIn("error", result.payload)
+
+    def test_wrong_typed_filter_is_rejected(self):
+        registry = _registry(calls=[_call()])
+        result = registry.execute("search_calls", {"agency": 123})
+        self.assertIn("error", result.payload)
+        result = registry.execute("search_calls", {"priority_min": "high"})
+        self.assertIn("error", result.payload)
+
+    def test_limit_bounds_are_enforced(self):
+        registry = _registry(calls=[_call()])
+        result = registry.execute("search_calls", {"limit": 0})
+        self.assertIn("error", result.payload)
+        result = registry.execute("search_calls", {"limit": 51})
+        self.assertIn("error", result.payload)
+
+    def test_results_bounded_by_limit_with_truncation_flag(self):
+        registry = _registry(calls=[_call(cfs_number=f"CFS26-{i:05d}") for i in range(75)])
+        result = registry.execute("search_calls", {})
+        self.assertEqual(result.payload["count"], 75)
+        self.assertEqual(len(result.payload["calls"]), 50)
+        self.assertTrue(result.payload["truncated"])
+
+    def test_unavailable_snapshot_returns_empty_without_error(self):
+        registry = _registry(calls=[_call()], freshness="stale")
+        result = registry.execute("search_calls", {"agency": "LEASA"})
+        self.assertFalse(result.payload["available"])
+        self.assertEqual(result.payload["calls"], [])
+
+
+class SearchUnitsTests(unittest.TestCase):
+    def test_no_filters_returns_whole_roster(self):
+        registry = _registry(units=[_unit(), _unit(unit_number="ENG12", agency="LCSO")])
+        result = registry.execute("search_units", {})
+        self.assertTrue(result.payload["available"])
+        self.assertEqual(result.payload["count"], 2)
+
+    def test_filters_by_agency_exact_and_status(self):
+        registry = _registry(
+            units=[
+                _unit(unit_number="MED31", agency="LEASA", status="Available"),
+                _unit(unit_number="MED32", agency="LEASA", status="Out of Service"),
+                _unit(unit_number="ENG12", agency="LCSO", status="Available"),
+            ]
+        )
+        result = registry.execute("search_units", {"agency": "leasa", "status": "available"})
+        self.assertEqual(result.payload["count"], 1)
+        self.assertEqual(result.payload["units"][0]["unit_number"], "MED31")
+
+    def test_filters_by_unit_type_and_station_substring(self):
+        registry = _registry(
+            units=[
+                _unit(unit_type="Medic Unit", station="Station 3"),
+                _unit(unit_number="ENG12", unit_type="Engine", station="Station 7"),
+            ]
+        )
+        result = registry.execute("search_units", {"unit_type": "medic", "station": "3"})
+        self.assertEqual(result.payload["count"], 1)
+
+    def test_unknown_filter_key_is_rejected(self):
+        registry = _registry(units=[_unit()])
+        result = registry.execute("search_units", {"dispatch": True})
+        self.assertIn("error", result.payload)
+
+    def test_wrong_typed_filter_is_rejected(self):
+        registry = _registry(units=[_unit()])
+        result = registry.execute("search_units", {"station": 12})
+        self.assertIn("error", result.payload)
+
+    def test_limit_bounds_are_enforced(self):
+        registry = _registry(units=[_unit()])
+        result = registry.execute("search_units", {"limit": 0})
+        self.assertIn("error", result.payload)
+        result = registry.execute("search_units", {"limit": 101})
+        self.assertIn("error", result.payload)
+
+    def test_results_bounded_by_limit_with_truncation_flag(self):
+        registry = _registry(units=[_unit(unit_number=f"U{i:04d}") for i in range(150)])
+        result = registry.execute("search_units", {})
+        self.assertEqual(result.payload["count"], 150)
+        self.assertEqual(len(result.payload["units"]), 100)
+        self.assertTrue(result.payload["truncated"])
+
+    def test_unavailable_snapshot_returns_empty_without_error(self):
+        registry = _registry(units=[_unit()], freshness="stale")
+        result = registry.execute("search_units", {})
+        self.assertFalse(result.payload["available"])
+        self.assertEqual(result.payload["units"], [])
 
 
 class UnknownToolTests(unittest.TestCase):
