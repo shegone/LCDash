@@ -141,6 +141,36 @@ class ContractDriftTests(unittest.TestCase):
         self.assertNotIn("phase2_analytics_import_runtime", header)
 
 
+class DatabaseUrlResolutionTests(unittest.TestCase):
+    """The on-prem container exports DATABASE_URL_FILE, not DATABASE_URL."""
+
+    def _resolve(self, environment):
+        from app.tools.phase2_analytics_export_source import resolve_database_url
+
+        return resolve_database_url(environment)
+
+    def test_direct_variable_wins(self):
+        self.assertEqual(
+            self._resolve({"DATABASE_URL": "postgresql://direct"}), "postgresql://direct"
+        )
+
+    def test_secret_file_is_read_when_variable_is_absent(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as directory:
+            secret = Path(directory) / "database_url"
+            secret.write_text("postgresql://from-secret\n", encoding="utf-8")
+            self.assertEqual(
+                self._resolve({"DATABASE_URL_FILE": str(secret)}),
+                "postgresql://from-secret",
+            )
+
+    def test_missing_sources_resolve_empty_rather_than_raising(self):
+        self.assertEqual(self._resolve({}), "")
+        self.assertEqual(self._resolve({"DATABASE_URL_FILE": "/nonexistent"}), "")
+
+
 class JsonScalarTests(unittest.TestCase):
     def test_naive_timestamp_is_treated_as_utc_not_local(self):
         # Silently shifting a naive timestamp by the local offset would corrupt
