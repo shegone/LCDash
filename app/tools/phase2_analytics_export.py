@@ -41,8 +41,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Mapping
 
-from app.tools.phase2_analytics_import import TABLE_PLANS, validate_row
-from app.tools.phase2_analytics_import_runtime import (
+from app.tools.phase2_analytics_contract import (
     APPROVED_BUCKET,
     APPROVED_PREFIX,
     BUNDLE_SCHEMA,
@@ -50,6 +49,7 @@ from app.tools.phase2_analytics_import_runtime import (
     MAX_ENCRYPTED_BYTES,
     canonical,
 )
+from app.tools.phase2_analytics_import import TABLE_PLANS, validate_row
 
 APPROVED_SOURCE = {
     "authoritative": True,

@@ -26,8 +26,8 @@ import os
 import sys
 from datetime import datetime, timezone
 
+from app.tools.phase2_analytics_contract import canonical
 from app.tools.phase2_analytics_export import build_bundle
-from app.tools.phase2_analytics_import_runtime import canonical
 
 # A backfill takes everything; source_collected_at is bounded by these.
 DEFAULT_WINDOW_START = datetime(2000, 1, 1, tzinfo=timezone.utc)

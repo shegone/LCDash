@@ -100,6 +100,47 @@ def _window():
     }
 
 
+class ContractDriftTests(unittest.TestCase):
+    """The export side keeps dependency-free copies so stage 1 can run on a
+    server without boto3/cryptography. They must never diverge from the
+    reviewed importer runtime."""
+
+    def test_contract_constants_match_the_importer_runtime(self):
+        from app.tools import phase2_analytics_contract as contract
+        from app.tools import phase2_analytics_import_runtime as runtime
+
+        for name in (
+            "ENVELOPE_SCHEMA",
+            "BUNDLE_SCHEMA",
+            "APPROVED_BUCKET",
+            "APPROVED_PREFIX",
+            "MAX_ENCRYPTED_BYTES",
+        ):
+            self.assertEqual(
+                getattr(contract, name), getattr(runtime, name), f"{name} drifted"
+            )
+
+    def test_canonical_encoding_matches_the_importer_runtime(self):
+        from app.tools import phase2_analytics_contract as contract
+        from app.tools import phase2_analytics_import_runtime as runtime
+
+        sample = {"b": 1, "a": ["x", {"z": None, "y": True}], "u": "café"}
+        self.assertEqual(contract.canonical(sample), runtime.canonical(sample))
+
+    def test_stage_one_avoids_unavailable_third_party_imports(self):
+        # The on-prem container has psycopg and the stdlib only; a boto3 or
+        # cryptography import at module scope would break the real export.
+        from pathlib import Path
+
+        source = Path("app/tools/phase2_analytics_export_source.py").read_text(
+            encoding="utf-8"
+        )
+        header = source.split("def ", 1)[0]
+        self.assertNotIn("import boto3", header)
+        self.assertNotIn("cryptography", header)
+        self.assertNotIn("phase2_analytics_import_runtime", header)
+
+
 class JsonScalarTests(unittest.TestCase):
     def test_naive_timestamp_is_treated_as_utc_not_local(self):
         # Silently shifting a naive timestamp by the local offset would corrupt
