@@ -216,6 +216,7 @@ class CloudCadDisplayBridgeTests(unittest.TestCase):
                         "creator": "",
                     },
                 ),
+                "reporter": {"name": "", "phone": "", "how_reported": ""},
             },
         )
         self.assertEqual(units[0]["unit_number"], "MED10")

@@ -52,7 +52,7 @@ class HeatmapRouteWiringTests(unittest.TestCase):
             for node in ast.walk(handler)
             if isinstance(node, ast.Call)
             and isinstance(node.func, ast.Name)
-            and node.func.id == "get_live_heatmap_snapshot"
+            and node.func.id == "_current_heatmap_snapshot"
         ]
         self.assertEqual(len(calls), 1)
         forwarded = {

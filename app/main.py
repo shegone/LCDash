@@ -20,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config.settings import settings
 from app.core.county_branding import branding_for_tenant_context
 from app.core.tenancy import TenantContext
+from app.core.county_profiles import resolve_county_profile
 from app.auth.oauth import get_access_token, CentralSquareAuthError
 from app.services.cad_service import get_call_detail
 from app.services.operations_service import (
@@ -49,6 +50,7 @@ from app.services.aws_map_tiles import (
 from app.services.heatmap_service import (
     ALLOWED_HEATMAP_HOURS,
     build_empty_heatmap_snapshot,
+    build_heatmap_snapshot,
     get_live_heatmap_snapshot,
     validate_heatmap_hours,
 )
@@ -174,6 +176,7 @@ from app.integrations.cad.centralsquare import (
     CentralSquareCadAdapter as CentralSquareClient,
 )
 from app.integrations.cad.cloud_read_runtime import build_cloud_cad_runtime
+from app.integrations.cad.cloud_read_connector import CloudCadConnectorError
 from app.services.realtime_service import (
     browser_event,
     event_broker,
@@ -257,6 +260,23 @@ def _current_operations_snapshot() -> dict:
     if settings.deployment_mode == "synthetic-disconnected":
         return build_empty_operations_snapshot()
     return get_live_operations_snapshot()
+
+
+def _current_heatmap_snapshot(hours, tenant_context=None):
+    if _cloud_cad_bridge_enabled():
+        # A failed/oversized historical CAD read must degrade to an honest
+        # "unavailable" heat map, never 500 a supervisor's page. The cloud
+        # connector raises CloudCadConnectorError (not CentralSquareAPIError,
+        # which the routes catch), so absorb it here at the single choke point.
+        try:
+            raw_calls = cloud_cad_runtime.search_recent_calls(hours)
+        except CloudCadConnectorError:
+            return build_empty_heatmap_snapshot(hours)
+        county_profile = resolve_county_profile(tenant_context) if tenant_context is not None else None
+        return build_heatmap_snapshot(raw_calls, hours, county_profile=county_profile)
+    if settings.deployment_mode == "synthetic-disconnected":
+        return build_empty_heatmap_snapshot(hours)
+    return get_live_heatmap_snapshot(hours, tenant_context=tenant_context)
 
 
 def _current_unit_snapshot(tenant_context: TenantContext | None = None) -> dict:
@@ -944,7 +964,7 @@ def heatmap_api(
     response.headers["Cache-Control"] = "no-store"
 
     try:
-        return get_live_heatmap_snapshot(
+        return _current_heatmap_snapshot(
             selected_hours,
             tenant_context=tenant_context,
         )
@@ -1193,7 +1213,7 @@ def heatmap_page(
     selected_hours = _validated_heatmap_hours(hours)
 
     try:
-        heatmap_data = get_live_heatmap_snapshot(
+        heatmap_data = _current_heatmap_snapshot(
             selected_hours,
             tenant_context=tenant_context,
         )

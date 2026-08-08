@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import logging
 import math
@@ -261,6 +261,31 @@ def _address_coordinates(item: Mapping[str, Any]) -> tuple[float | None, float |
     return latitude, longitude
 
 
+def _normalize_reporter(item: Mapping[str, Any]) -> Mapping[str, str]:
+    reporter = item.get("Reporter") or item.get("Caller") or item.get("reporter")
+    if not isinstance(reporter, Mapping):
+        reporter = {}
+    first = _text(reporter.get("First"))
+    last = _text(reporter.get("Last"))
+    name = _text(reporter.get("FreeformFullName")) or " ".join(
+        part for part in (first, last) if part
+    )
+    phone = _text(
+        reporter.get("ContactPhoneNumber")
+        or reporter.get("FromPhoneNumber")
+        or reporter.get("PhoneNumber")
+    )
+
+    def _strip(value: str) -> str:
+        return "".join(character for character in value if character >= " " or character == "\t")[:256]
+
+    return {
+        "name": _strip(name),
+        "phone": _strip(phone),
+        "how_reported": _choice(reporter.get("HowReported"), "Description", "Name", "Code"),
+    }
+
+
 def _normalize_assigned_units(item: Mapping[str, Any]) -> tuple[Mapping[str, str], ...]:
     units = item.get("Unit") or item.get("Units") or item.get("assigned_units")
     normalized = []
@@ -309,6 +334,7 @@ def _normalize_calls(items: list[Mapping[str, Any]]) -> tuple[Mapping[str, Any],
                     "city": _choice(item.get("City") or item.get("city"), "Description", "Name", "Code", "Abbreviation"),
                     "assigned_units": assigned,
                     "command_logs": command_logs,
+                    "reporter": _normalize_reporter(item),
                     "latitude": latitude,
                     "longitude": longitude,
                 }
@@ -413,6 +439,43 @@ class CloudCadReadPoller:
         self._operation_counts["search_units"] += 1
         units = self._connector.search_units({}, skip=0, limit=100)
         return calls, units
+
+    def search_recent_calls(self, hours: int, now: datetime | None = None) -> list:
+        """Read-only windowed historical CFS search via the same authenticated
+        connector the poller uses. Returns raw CAD call dicts (unnormalized), like
+        on-prem heatmap_service._get_historical_calls. Empty list if not enabled."""
+        if not self._enabled or self._connector is None:
+            return []
+        end = now or self._clock()
+        start = end - timedelta(hours=hours)
+        body = {
+            "RecordCreatedFrom": start.astimezone(timezone.utc).isoformat(),
+            "RecordCreatedTo": end.astimezone(timezone.utc).isoformat(),
+            "OrderByField": "Created",
+            "OrderByDirection": "Descending",
+        }
+        calls_by_number: dict[str, Mapping[str, Any]] = {}
+        skip = 0
+        for _page_number in range(10):
+            self._operation_counts["search_calls"] += 1
+            result = self._connector.search_calls(body, skip=skip, limit=100)
+            page_calls = result.get("cfs_cores") or result.get("CFSCore") or []
+            if not isinstance(page_calls, list):
+                page_calls = []
+            for raw_call in page_calls:
+                if not isinstance(raw_call, dict):
+                    continue
+                cfs_number = str(raw_call.get("CFSNumber") or "")
+                if cfs_number:
+                    calls_by_number[cfs_number] = raw_call
+            if len(page_calls) < 100 or not result.get("next"):
+                break
+            skip += len(page_calls)
+        else:
+            raise CloudCadConnectorError(
+                "search_pagination_exceeded", "search_calls"
+            )
+        return list(calls_by_number.values())
 
     async def poll_once(self) -> None:
         if not self._enabled or self._connector is None:

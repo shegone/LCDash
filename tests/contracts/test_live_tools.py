@@ -1,8 +1,9 @@
 """Network-free contracts for the read-only MAE tool registry.
 
 These tools are the boundary that keeps tool-calling read-only: this file
-asserts the allowlist holds (no raw/reporter fields leak, no write tool
-exists) and that bad input never raises into the caller.
+asserts no write tool exists and that bad input never raises into the caller.
+Reporter/caller info and full command logs are deliberately exposed (Ted:
+"do not limit any pulled information"); only ``raw`` is stripped for budget.
 """
 
 import unittest
@@ -33,7 +34,7 @@ def _call(**overrides):
             },
         ),
         "raw": {"Should": "NeverLeak"},
-        "reporter": {"Name": "Should Never Leak"},
+        "reporter": {"name": "Jane Caller", "phone": "3045551212"},
     }
     call.update(overrides)
     return call
@@ -73,9 +74,11 @@ class ListActiveCallsTests(unittest.TestCase):
         self.assertTrue(result.payload["available"])
         call = result.payload["calls"][0]
         self.assertNotIn("raw", call)
-        self.assertNotIn("reporter", call)
+        # command_logs omitted from the list view for token budget only.
         self.assertNotIn("command_logs", call)
-        self.assertNotIn("latitude", call)
+        # Reporter/caller info and coordinates are deliberately included.
+        self.assertEqual(call["reporter"], {"name": "Jane Caller", "phone": "3045551212"})
+        self.assertEqual(call["latitude"], 37.85)
         self.assertEqual(call["cfs_number"], "CFS26-25863")
         self.assertEqual(call["assigned_units"], [{"unit_number": "MED31", "status": "Assigned"}])
 
@@ -92,14 +95,18 @@ class ListActiveCallsTests(unittest.TestCase):
 
 
 class GetCallDetailTests(unittest.TestCase):
-    def test_found_call_includes_coordinates_and_command_log(self):
+    def test_found_call_includes_coordinates_command_log_and_reporter(self):
         registry = _registry(calls=[_call()])
         result = registry.execute("get_call_detail", {"cfs_number": "cfs26-25863"})
         self.assertTrue(result.payload["found"])
         self.assertEqual(result.payload["latitude"], 37.85)
         self.assertEqual(len(result.payload["command_logs"]), 1)
+        # De-limited: reporter/caller info is now exposed via get_call_detail.
+        self.assertEqual(
+            result.payload["reporter"], {"name": "Jane Caller", "phone": "3045551212"}
+        )
+        # raw is still stripped for context budget.
         self.assertNotIn("raw", result.payload)
-        self.assertNotIn("reporter", result.payload)
 
     def test_not_found_reports_cleanly(self):
         registry = _registry(calls=[_call()])
@@ -116,15 +123,15 @@ class GetCallDetailTests(unittest.TestCase):
         result = registry.execute("get_call_detail", {})
         self.assertIn("error", result.payload)
 
-    def test_command_log_bounded_to_last_twenty(self):
+    def test_command_log_bounded_to_last_forty(self):
         logs = tuple(
             {"timestamp": f"t{i}", "unit_number": "MED31", "status": "s", "text": "x"}
-            for i in range(30)
+            for i in range(50)
         )
         registry = _registry(calls=[_call(command_logs=logs)])
         result = registry.execute("get_call_detail", {"cfs_number": "CFS26-25863"})
-        self.assertEqual(len(result.payload["command_logs"]), 20)
-        self.assertEqual(result.payload["command_logs"][-1]["timestamp"], "t29")
+        self.assertEqual(len(result.payload["command_logs"]), 40)
+        self.assertEqual(result.payload["command_logs"][-1]["timestamp"], "t49")
 
 
 class GetAnalyticsSummaryTests(unittest.TestCase):

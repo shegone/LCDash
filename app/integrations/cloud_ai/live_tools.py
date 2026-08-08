@@ -23,7 +23,7 @@ from typing import Any, Callable, Mapping, Sequence
 from .live_data import CFS_PATTERN, LiveDataSource
 
 MAX_ACTIVE_CALLS = 50
-MAX_COMMAND_LOG_ENTRIES = 20
+MAX_DETAIL_COMMAND_LOG_ENTRIES = 40
 MAX_BUSIEST_ROWS = 5
 MAX_INCIDENT_TYPE_ROWS = 10
 
@@ -70,23 +70,33 @@ def _summarize_call(call: Mapping[str, Any]) -> dict[str, Any]:
         field: call.get(field, "") for field in _CALL_SUMMARY_FIELDS
     }
     summary["assigned_units"] = _summarize_units(call.get("assigned_units") or ())
+    summary["latitude"] = call.get("latitude")
+    summary["longitude"] = call.get("longitude")
+    reporter = call.get("reporter")
+    summary["reporter"] = dict(reporter) if isinstance(reporter, Mapping) else {}
+    # command_logs are intentionally omitted from the list view for token
+    # budget, NOT as a data limit -- the full log is available per call via
+    # get_call_detail.
     return summary
 
 
 def _detail_call(call: Mapping[str, Any]) -> dict[str, Any]:
-    detail = _summarize_call(call)
-    detail["latitude"] = call.get("latitude")
-    detail["longitude"] = call.get("longitude")
-    logs = tuple(call.get("command_logs") or ())
-    detail["command_logs"] = [
-        {
-            "timestamp": str(entry.get("timestamp") or ""),
-            "unit_number": str(entry.get("unit_number") or ""),
-            "status": str(entry.get("status") or ""),
-            "text": str(entry.get("text") or ""),
-        }
-        for entry in logs[-MAX_COMMAND_LOG_ENTRIES:]
-    ]
+    # De-limited: include every field present in the call dict except ``raw``
+    # (kept out only for context budget), so nothing pulled from CAD is hidden.
+    detail: dict[str, Any] = {}
+    for key in call:
+        if key == "raw":
+            continue
+        value = call.get(key)
+        if key == "assigned_units":
+            detail[key] = [dict(unit) for unit in (value or ())]
+        elif key == "command_logs":
+            logs = tuple(value or ())
+            detail[key] = [dict(entry) for entry in logs[-MAX_DETAIL_COMMAND_LOG_ENTRIES:]]
+        elif key == "reporter":
+            detail[key] = dict(value) if isinstance(value, Mapping) else value
+        else:
+            detail[key] = value
     return detail
 
 
@@ -284,8 +294,9 @@ TOOL_SPECS: tuple[Mapping[str, Any], ...] = (
             "description": (
                 "List every call in the current read-only active-call snapshot, with "
                 "cfs_number, incident description, location, priority, agency, status, "
-                "call_datetime, and assigned units. Use this to answer questions about "
-                "what is happening right now."
+                "call_datetime, assigned units, coordinates, and reporter/caller info. "
+                "Full command-log history for a call is available via get_call_detail. "
+                "Use this to answer questions about what is happening right now."
             ),
             "inputSchema": {"json": {"type": "object", "properties": {}}},
         }
@@ -295,8 +306,9 @@ TOOL_SPECS: tuple[Mapping[str, Any], ...] = (
             "name": "get_call_detail",
             "description": (
                 "Get full detail for one specific active call by its CFS number "
-                "(format CFSnn-nnnnnn), including coordinates and recent command-log "
-                "entries. Only works for calls currently in the active snapshot."
+                "(format CFSnn-nnnnnn), including coordinates, reporter/caller info "
+                "(name and phone), beat/zone/city, and the full command-log history. "
+                "Only works for calls currently in the active snapshot."
             ),
             "inputSchema": {
                 "json": {

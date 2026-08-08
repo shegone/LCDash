@@ -75,6 +75,7 @@ CALL_FIELDS = (
     "city",
     "assigned_units",
     "command_logs",
+    "reporter",
     "latitude",
     "longitude",
 )

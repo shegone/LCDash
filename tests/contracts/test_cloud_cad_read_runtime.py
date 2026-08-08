@@ -170,6 +170,50 @@ class CloudCadReadRuntimeTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, "only the reviewed"):
             provider.get_credentials(SECRET_ARN)
 
+    def test_search_recent_calls_paginates_and_dedupes_raw_calls(self):
+        first_page = [{"CFSNumber": f"CFS26-{index:05d}"} for index in range(100)]
+        second_page = [
+            {"CFSNumber": "CFS26-00000", "PrimaryResponseAgency": {"Abbreviation": "FIRE"}},
+            {"CFSNumber": "CFS26-99999"},
+        ]
+        pages = [
+            {"cfs_cores": first_page, "next": "more"},
+            {"cfs_cores": second_page, "next": "misleading"},
+        ]
+        seen = []
+
+        class PagingConnector:
+            def search_calls(self, body, *, skip, limit):
+                seen.append((dict(body), skip, limit))
+                return pages[len(seen) - 1]
+
+        now = datetime(2026, 8, 5, 12, 0, tzinfo=timezone.utc)
+        runtime = CloudCadReadPoller(
+            PagingConnector(), enabled=True, poll_seconds=30, clock=lambda: now
+        )
+
+        raw_calls = runtime.search_recent_calls(8, now=now)
+
+        # 100 unique from page one plus one new number; the duplicate is replaced.
+        self.assertEqual(len(raw_calls), 101)
+        self.assertEqual([entry[1] for entry in seen], [0, 100])
+        self.assertEqual([entry[2] for entry in seen], [100, 100])
+        body = seen[0][0]
+        self.assertEqual(body["RecordCreatedFrom"], "2026-08-05T04:00:00+00:00")
+        self.assertEqual(body["RecordCreatedTo"], "2026-08-05T12:00:00+00:00")
+        self.assertEqual(body["OrderByField"], "Created")
+        self.assertEqual(body["OrderByDirection"], "Descending")
+        updated = next(call for call in raw_calls if call["CFSNumber"] == "CFS26-00000")
+        self.assertEqual(updated["PrimaryResponseAgency"]["Abbreviation"], "FIRE")
+        self.assertEqual(
+            runtime.status(now=now)["operation_counts"]["search_calls"], 2
+        )
+
+    def test_search_recent_calls_returns_empty_when_disabled(self):
+        settings = SimpleNamespace(cloud_cad_enabled=False)
+        runtime = build_cloud_cad_runtime(settings)
+        self.assertEqual(runtime.search_recent_calls(8), [])
+
     def test_status_endpoint_is_no_store_and_uses_only_fixed_view_model(self):
         source = (Path(__file__).parents[2] / "app" / "main.py").read_text(
             encoding="utf-8"

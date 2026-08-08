@@ -288,5 +288,53 @@ class HeatmapPageTests(unittest.TestCase):
         self.assertIn("/map/heatmap?hours=8", response.text)
 
 
+class CurrentHeatmapSnapshotBridgeTests(unittest.TestCase):
+    def test_bridge_enabled_sources_recent_history_from_connector(self):
+        raw_calls = [raw_call("CFS1"), raw_call("CFS2")]
+        fake_runtime = Mock()
+        fake_runtime.search_recent_calls.return_value = raw_calls
+        with patch("app.main._cloud_cad_bridge_enabled", return_value=True), patch(
+            "app.main.cloud_cad_runtime", fake_runtime
+        ):
+            from app.main import _current_heatmap_snapshot
+
+            snapshot = _current_heatmap_snapshot(8, tenant_context=None)
+
+        fake_runtime.search_recent_calls.assert_called_once_with(8)
+        self.assertTrue(snapshot["cad_connected"])
+        self.assertEqual(snapshot["summary"]["records_returned"], 2)
+
+    def test_bridge_disabled_synthetic_returns_empty(self):
+        with patch("app.main._cloud_cad_bridge_enabled", return_value=False), patch(
+            "app.main.settings.deployment_mode", "synthetic-disconnected"
+        ):
+            from app.main import _current_heatmap_snapshot
+
+            snapshot = _current_heatmap_snapshot(8)
+
+        self.assertFalse(snapshot["cad_connected"])
+        self.assertEqual(snapshot["features"], [])
+
+    def test_connector_error_degrades_to_empty_not_500(self):
+        # A failed/oversized historical CAD read must degrade to an honest
+        # empty heat map, never raise into the route (which only catches
+        # CentralSquareAPIError, not CloudCadConnectorError).
+        from app.integrations.cad.cloud_read_connector import CloudCadConnectorError
+
+        fake_runtime = Mock()
+        fake_runtime.search_recent_calls.side_effect = CloudCadConnectorError(
+            "search_pagination_exceeded", "search_calls"
+        )
+        with patch("app.main._cloud_cad_bridge_enabled", return_value=True), patch(
+            "app.main.cloud_cad_runtime", fake_runtime
+        ):
+            from app.main import _current_heatmap_snapshot
+
+            snapshot = _current_heatmap_snapshot(8, tenant_context=None)
+
+        self.assertFalse(snapshot["cad_connected"])
+        self.assertEqual(snapshot["features"], [])
+
+
 if __name__ == "__main__":
     unittest.main()
