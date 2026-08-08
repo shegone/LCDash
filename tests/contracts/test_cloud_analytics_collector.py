@@ -16,6 +16,7 @@ class _FakeConnector:
     def __init__(self):
         self.searches = []
         self.analytics = []
+        self.unit_searches = []
 
     def search_calls(self, body, *, skip=0, limit=100):
         self.searches.append((dict(body), skip, limit))
@@ -25,15 +26,40 @@ class _FakeConnector:
         self.analytics.append(cfs_number)
         return {"CFSNumber": cfs_number}
 
+    def search_units(self, body, *, skip=0, limit=100):
+        self.unit_searches.append((dict(body), skip, limit))
+        return {"Units": []}
+
 
 class AdapterShapeTests(unittest.TestCase):
-    def test_adapter_exposes_only_the_two_read_methods(self):
+    def test_adapter_exposes_only_the_required_read_methods(self):
         public = {
             name
             for name in dir(CollectorReadOnlyCadClient)
             if not name.startswith("_")
         }
-        self.assertEqual(public, {"search_cfs_core", "get_cfs_analytics"})
+        self.assertEqual(
+            public, {"search_cfs_core", "get_cfs_analytics", "search_units"}
+        )
+
+    def test_every_cad_attribute_the_collector_touches_is_implemented(self):
+        # A live run failed because search_units is reached indirectly, via
+        # build_roster_map -> get_all_units, and a source grep for direct
+        # client.* calls missed it. Assert the real call graph instead.
+        import inspect
+
+        from app.services import analytics_collector, unit_service
+
+        sources = "\n".join(
+            inspect.getsource(module) for module in (analytics_collector, unit_service)
+        )
+        adapter = CollectorReadOnlyCadClient(_FakeConnector())
+        for attribute in ("search_cfs_core", "get_cfs_analytics", "search_units"):
+            if f"client.{attribute}(" in sources:
+                self.assertTrue(
+                    hasattr(adapter, attribute),
+                    f"collector calls client.{attribute} but the adapter lacks it",
+                )
 
     def test_no_write_or_command_method_exists(self):
         for forbidden in (

@@ -34,9 +34,11 @@ from app.services.analytics_database import AnalyticsRepository
 class CollectorReadOnlyCadClient:
     """Adapts the cloud read connector to the collector's client interface.
 
-    ``run_analytics_sync`` duck-types its ``client`` and calls exactly two
-    methods. Implementing only those keeps the write surface structurally
-    empty rather than relying on the collector to behave.
+    ``run_analytics_sync`` duck-types its ``client`` and reaches exactly three
+    read operations: two directly, plus ``search_units`` indirectly through
+    ``build_roster_map`` -> ``get_all_units``. Implementing only those keeps
+    the write surface structurally empty rather than relying on the collector
+    to behave.
     """
 
     def __init__(self, connector: Any) -> None:
@@ -49,6 +51,12 @@ class CollectorReadOnlyCadClient:
 
     def get_cfs_analytics(self, cfs_number: str) -> Any:
         return self._connector.get_cfs_analytics(cfs_number)
+
+    def search_units(
+        self, body: Mapping[str, Any], *, skip: int = 0, limit: int = 100
+    ) -> Any:
+        """Needed by the unit-roster lookup inside run_analytics_sync."""
+        return self._connector.search_units(body, skip=skip, limit=limit)
 
 
 def collect(*, lookback_hours: int | None = None) -> dict:
