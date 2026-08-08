@@ -1258,5 +1258,77 @@ class MAEGuardrailTests(unittest.TestCase):
         self.assertEqual(result["assurance"]["confidence"], "high")
 
 
+class MAEToolCallingRoutingTests(unittest.TestCase):
+    """The flag-gated tool-calling loop runs strictly between the _verified_*
+    fast-paths and the plain LLM fallback, and only for operational questions.
+    With the flag off, behavior must be identical to before."""
+
+    _LIVE_SOURCE = {"name": "CentralSquare live operations", "kind": "live",
+                    "detail": "snap", "available": True, "timestamp": ""}
+    _DOC_SOURCE = {"name": "CentralSquare documentation", "kind": "document",
+                   "detail": "doc", "available": True, "timestamp": ""}
+    _TOOL_RESULT = {
+        "answer": "The oldest active call is CFS26-1 with MED31 on scene.",
+        "sources": [_LIVE_SOURCE],
+        "model": "qwen3.6:27b",
+        "generated_at": "2026-08-08T12:00:00-04:00",
+        "write_access": False,
+        "research": {"live_verified": True},
+    }
+
+    def _fallback_post(self):
+        resp = unittest.mock.Mock()
+        resp.raise_for_status.return_value = None
+        resp.json.return_value = {"message": {"content": "PLAIN FALLBACK ANSWER."}}
+        return resp
+
+    @patch("app.services.mae_service.run_mae_tool_loop")
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service._build_read_context")
+    def test_flag_off_never_calls_tool_loop(self, ctx_mock, post_mock, loop_mock):
+        ctx_mock.return_value = ([], [self._LIVE_SOURCE])
+        post_mock.return_value = self._fallback_post()
+        with patch.object(mae_service.settings, "mae_tool_calling_enabled", False):
+            result = ask_mae("which incident has been open longest")
+        loop_mock.assert_not_called()
+        self.assertEqual(result["answer"], "PLAIN FALLBACK ANSWER.")
+
+    @patch("app.services.mae_service.run_mae_tool_loop")
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service._build_read_context")
+    def test_flag_on_operational_uses_tool_loop_before_fallback(self, ctx_mock, post_mock, loop_mock):
+        ctx_mock.return_value = ([], [self._LIVE_SOURCE])
+        loop_mock.return_value = dict(self._TOOL_RESULT)
+        post_mock.return_value = self._fallback_post()
+        with patch.object(mae_service.settings, "mae_tool_calling_enabled", True):
+            result = ask_mae("which incident has been open longest")
+        loop_mock.assert_called_once()
+        self.assertEqual(result["answer"], self._TOOL_RESULT["answer"])
+        post_mock.assert_not_called()  # tool answer won; plain fallback skipped
+
+    @patch("app.services.mae_service.run_mae_tool_loop")
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service._build_read_context")
+    def test_flag_on_knowledge_question_skips_tool_loop(self, ctx_mock, post_mock, loop_mock):
+        ctx_mock.return_value = ([], [self._DOC_SOURCE])  # no live/historical source
+        post_mock.return_value = self._fallback_post()
+        with patch.object(mae_service.settings, "mae_tool_calling_enabled", True):
+            result = ask_mae("how do I configure a radio channel plan")
+        loop_mock.assert_not_called()
+        self.assertEqual(result["answer"], "PLAIN FALLBACK ANSWER.")
+
+    @patch("app.services.mae_service.run_mae_tool_loop")
+    @patch("app.services.mae_service.httpx.post")
+    @patch("app.services.mae_service._build_read_context")
+    def test_flag_on_but_loop_returns_none_falls_through(self, ctx_mock, post_mock, loop_mock):
+        ctx_mock.return_value = ([], [self._LIVE_SOURCE])
+        loop_mock.return_value = None  # model called no tool / errored
+        post_mock.return_value = self._fallback_post()
+        with patch.object(mae_service.settings, "mae_tool_calling_enabled", True):
+            result = ask_mae("which incident has been open longest")
+        loop_mock.assert_called_once()
+        self.assertEqual(result["answer"], "PLAIN FALLBACK ANSWER.")
+
+
 if __name__ == "__main__":
     unittest.main()

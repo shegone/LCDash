@@ -24,6 +24,7 @@ from app.services.mae_analytics_visualization_service import (
     build_requested_visualization,
 )
 from app.services.mae_tool_registry import get_mae_tool_catalog
+from app.services.mae_tool_loop import run_mae_tool_loop
 from app.services.operations_service import (
     get_live_operations_snapshot,
     get_live_unit_snapshot,
@@ -3125,6 +3126,16 @@ def get_mae_status() -> dict:
     }
 
 
+def _has_operational_sources(sources: list[dict]) -> bool:
+    """True when retrieval attached live CAD or historical analytics context --
+    i.e. the question is operational, so the tool-calling loop is worth running.
+    Knowledge-only questions (document/memory sources) skip the loop and keep
+    the existing document-answer path."""
+    return any(
+        source.get("kind") in {"live", "historical"} for source in (sources or [])
+    )
+
+
 def ask_mae(
     question: str,
     history: list[dict] | None = None,
@@ -3289,6 +3300,37 @@ def ask_mae(
             "generation_ms": 0,
         }
         return final_response
+
+    # Read-only LLM tool-calling: for operational questions the deterministic
+    # _verified_* fast-paths above did not answer, let the model fetch data via
+    # read-only tools. Flag-gated; returns None (falls through to the plain
+    # fallback below) if disabled, non-operational, the model calls no tool, or
+    # Ollama errors -- so this can only add answers, never remove or break one.
+    if settings.mae_tool_calling_enabled and _has_operational_sources(sources):
+        tool_generation_started = perf_counter()
+        tool_response = run_mae_tool_loop(
+            clean_question,
+            conversation_history,
+            token_callback=token_callback,
+        )
+        if tool_response is not None:
+            tool_sources = tool_response.get("sources") or []
+            final_response = _finalize_mae_response(
+                tool_response,
+                routing_question,
+                context,
+                tool_sources,
+            )
+            final_response["timing"] = {
+                "total_ms": max(int((perf_counter() - request_started) * 1000), 0),
+                "retrieval_ms": retrieval_ms,
+                "generation_ms": max(
+                    int((perf_counter() - tool_generation_started) * 1000),
+                    0,
+                ),
+            }
+            return final_response
+
     payload = {
         "model": settings.mae_model,
         "messages": _ollama_messages(

@@ -138,6 +138,23 @@ class Settings:
         "MAE_REQUEST_TIMEOUT_SECONDS",
         120,
     )
+    # Read-only LLM tool-calling for MAE. Off by default; enable only after a
+    # flag-off deploy is verified and the live Ollama build is smoke-tested.
+    mae_tool_calling_enabled: bool = _env_bool(
+        "MAE_TOOL_CALLING_ENABLED",
+        False,
+    )
+    mae_tool_max_rounds: int = _env_int(
+        "MAE_TOOL_MAX_ROUNDS",
+        5,
+    )
+    # Tool payloads (call lists, command logs) are larger than the plain
+    # context, so the tool loop runs with a wider context window than the
+    # 8192 used for the context-stuffed fallback.
+    mae_tool_context_tokens: int = _env_int(
+        "MAE_TOOL_CONTEXT_TOKENS",
+        32768,
+    )
     knowledge_source_dir: str = _env(
         "KNOWLEDGE_SOURCE_DIR",
         "knowledge/centralsquare",
