@@ -37,6 +37,9 @@ from app.services.mae_live_tools import MaeLiveToolRegistry, tool_specs
 LOCAL_TIMEZONE = ZoneInfo("America/New_York")
 MAX_HISTORY_MESSAGES = 8
 MAX_MESSAGE_LENGTH = 4000
+# Default mirrors settings.mae_tool_response_tokens; kept as a module constant
+# for tests/back-compat, but the live value is always read from settings so it
+# can be tuned without a redeploy.
 TOOL_LOOP_RESPONSE_TOKENS = 400
 
 _THINKING_BLOCK = re.compile(r"<think(?:ing)?>.*?</think(?:ing)?>", re.IGNORECASE | re.DOTALL)
@@ -133,10 +136,15 @@ def run_mae_tool_loop(
             "stream": False,
             "think": False,
             "tools": specs,
+            # Explicit per-request keep_alive: keeps the 27B model resident
+            # across rounds/questions regardless of what else calls Ollama
+            # (embeddings, the plain-fallback model) in between, so a
+            # dispatcher never eats a cold-load mid tool-call loop.
+            "keep_alive": settings.mae_tool_keep_alive,
             "options": {
                 "temperature": 0.2,
                 "num_ctx": settings.mae_tool_context_tokens,
-                "num_predict": TOOL_LOOP_RESPONSE_TOKENS,
+                "num_predict": settings.mae_tool_response_tokens,
             },
         }
         try:

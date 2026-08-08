@@ -150,10 +150,51 @@ class Settings:
     )
     # Tool payloads (call lists, command logs) are larger than the plain
     # context, so the tool loop runs with a wider context window than the
-    # 8192 used for the context-stuffed fallback.
+    # 8192 used for the context-stuffed fallback. 16384 comfortably covers a
+    # full multi-round conversation with the tightened list/roster bounds
+    # below (see mae_tool_max_active_calls, mae_tool_max_units_per_group)
+    # with headroom to spare, while avoiding the extra KV-cache memory and
+    # attention cost of the previous 32768 default on a 27B model.
     mae_tool_context_tokens: int = _env_int(
         "MAE_TOOL_CONTEXT_TOKENS",
-        32768,
+        16384,
+    )
+    # How long Ollama keeps the tool-calling model resident in memory after
+    # a request. Passed explicitly on every tool-loop request (rather than
+    # relying solely on the server-wide OLLAMA_KEEP_ALIVE env var) so a
+    # 27B-model reload/eviction from an unrelated concurrent request (e.g.
+    # embeddings, the plain-fallback model call) can never silently cost a
+    # dispatcher a 10s+ cold load mid tool-call loop.
+    mae_tool_keep_alive: str = _env(
+        "MAE_TOOL_KEEP_ALIVE",
+        "30m",
+    )
+    # Max tokens the model may generate per tool-loop round. Applies to both
+    # tool-call rounds (which normally emit far fewer tokens) and the final
+    # answer round.
+    mae_tool_response_tokens: int = _env_int(
+        "MAE_TOOL_RESPONSE_TOKENS",
+        400,
+    )
+    # Row caps for tool payloads (mae_live_tools.py). These bound ROW COUNTS
+    # only -- every field on a returned row is still included in full (no PII
+    # or data redaction; see mae_live_tools.py's data policy docstring).
+    # Every row here is reprocessed by the model on every subsequent round of
+    # a multi-tool question (observed: a 2-tool question took ~54s vs ~6s for
+    # one tool), so trimming default row counts has an outsized, compounding
+    # latency benefit. get_call_detail (single-call drill-down) is exempt --
+    # its full field set, including reporter and command logs, is preserved.
+    mae_tool_max_active_calls: int = _env_int(
+        "MAE_TOOL_MAX_ACTIVE_CALLS",
+        20,
+    )
+    mae_tool_max_units_per_group: int = _env_int(
+        "MAE_TOOL_MAX_UNITS_PER_GROUP",
+        40,
+    )
+    mae_tool_max_command_log_entries: int = _env_int(
+        "MAE_TOOL_MAX_COMMAND_LOG_ENTRIES",
+        40,
     )
     knowledge_source_dir: str = _env(
         "KNOWLEDGE_SOURCE_DIR",

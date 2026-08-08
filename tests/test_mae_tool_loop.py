@@ -138,6 +138,19 @@ class ToolLoopTests(unittest.TestCase):
             self.assertFalse(call.kwargs["json"]["stream"])
             self.assertFalse(call.kwargs["json"]["think"])
 
+    @patch("app.services.mae_tool_loop.MaeLiveToolRegistry")
+    @patch("app.services.mae_tool_loop.httpx.post")
+    def test_keep_alive_and_response_tokens_are_settings_driven(self, post_mock, registry_cls):
+        registry_cls.return_value = _FakeRegistry()
+        post_mock.side_effect = [_resp(_tool_call_msg()), _resp(_final_msg("Answer."))]
+        with patch.object(tool_loop.settings, "mae_tool_keep_alive", "45m"), \
+                patch.object(tool_loop.settings, "mae_tool_response_tokens", 250):
+            run_mae_tool_loop("q", [])
+        for call in post_mock.call_args_list:
+            body = call.kwargs["json"]
+            self.assertEqual(body["keep_alive"], "45m")
+            self.assertEqual(body["options"]["num_predict"], 250)
+
     def test_empty_question_returns_none_without_calling_ollama(self):
         with patch("app.services.mae_tool_loop.httpx.post") as post_mock:
             self.assertIsNone(run_mae_tool_loop("   ", []))

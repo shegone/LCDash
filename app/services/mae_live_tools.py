@@ -25,6 +25,7 @@ import re
 from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
+from app.config.settings import settings
 from app.services.analytics_reporting import (
     DEFAULT_PERIOD,
     PERIOD_OPTIONS,
@@ -40,9 +41,14 @@ from app.services.operations_service import (
 LOCAL_TIMEZONE = ZoneInfo("America/New_York")
 CFS_PATTERN = re.compile(r"^CFS\d{2}-\d{4,6}$", re.IGNORECASE)
 
-MAX_ACTIVE_CALLS = 50
-MAX_COMMAND_LOG_ENTRIES = 40
-MAX_UNITS_PER_GROUP = 60
+# Row-count bounds are settings-driven (app/config/settings.py) so they can be
+# tuned without a redeploy. These bound ROW COUNTS only -- every field on a
+# returned row is still included in full; see the module docstring's data
+# policy note. Read at import time (module-level, matching prior behavior);
+# tests patch these names directly.
+MAX_ACTIVE_CALLS = settings.mae_tool_max_active_calls
+MAX_COMMAND_LOG_ENTRIES = settings.mae_tool_max_command_log_entries
+MAX_UNITS_PER_GROUP = settings.mae_tool_max_units_per_group
 MAX_BUSIEST_ROWS = 10
 
 # Lean per-call fields for the list tool. command_logs and reporter are
@@ -179,7 +185,8 @@ class MaeLiveToolRegistry:
 
     def _list_active_calls(self, _args: dict) -> LiveToolResult:
         snapshot = get_live_operations_snapshot()
-        calls = [c for c in (snapshot.get("calls") or []) if isinstance(c, dict)][:MAX_ACTIVE_CALLS]
+        all_calls = [c for c in (snapshot.get("calls") or []) if isinstance(c, dict)]
+        calls = all_calls[:MAX_ACTIVE_CALLS]
         source = self._source(
             "CentralSquare live operations",
             "live",
@@ -187,11 +194,19 @@ class MaeLiveToolRegistry:
             True,
             str(snapshot.get("last_updated") or ""),
         )
+        # Report the TRUE total separately from how many rows are returned.
+        # The snapshot is sorted by (priority, time), so a truncated list keeps
+        # the most urgent calls and can omit the oldest routine one -- reporting
+        # the trimmed length as "count" would let the model state a wrong active
+        # total or a wrong "longest open" call. dashboard_stats carries the
+        # authoritative active_calls and oldest_call_datetime for those answers.
         return LiveToolResult(
             "list_active_calls",
             source,
             {
-                "count": len(calls),
+                "count": len(all_calls),
+                "returned": len(calls),
+                "truncated": len(calls) < len(all_calls),
                 "dashboard_stats": snapshot.get("dashboard_stats"),
                 "calls": [_summarize_call(c) for c in calls],
             },
@@ -297,7 +312,12 @@ def tool_specs() -> list[dict]:
                     "List the current active CAD calls (CFS number, incident type, "
                     "location, priority, agency, status, time, assigned units) plus "
                     "dashboard totals. Use for anything about what is happening now. "
-                    "For a single call's full detail or command log, use get_call_detail."
+                    f"Returns the {MAX_ACTIVE_CALLS} most urgent calls (sorted by "
+                    "priority, then oldest first) and sets truncated=true when there "
+                    "are more. 'count' is the true active total; when truncated, use "
+                    "dashboard_stats for totals and for oldest_call_datetime rather "
+                    "than inferring them from the returned rows. For a single call's "
+                    "full detail or command log, use get_call_detail."
                 ),
                 "parameters": {"type": "object", "properties": {}},
             },

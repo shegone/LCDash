@@ -66,12 +66,37 @@ class ListActiveCallsTests(unittest.TestCase):
         self.assertEqual(result.payload["count"], 1)
 
     @patch("app.services.mae_live_tools.get_live_operations_snapshot")
-    def test_bounded_to_fifty_calls(self, snap_mock):
+    def test_bounded_to_max_active_calls(self, snap_mock):
         snap_mock.return_value = {
             "calls": [_call(cfs_number=f"CFS26-{i:05d}") for i in range(80)]
         }
         result = MaeLiveToolRegistry().execute("list_active_calls", {})
-        self.assertEqual(len(result.payload["calls"]), 50)
+        self.assertEqual(len(result.payload["calls"]), live_tools.MAX_ACTIVE_CALLS)
+
+
+    @patch("app.services.mae_live_tools.get_live_operations_snapshot")
+    def test_truncated_list_reports_the_true_total_not_the_trimmed_length(self, snap_mock):
+        # The snapshot is sorted by (priority, time), so trimming keeps the most
+        # urgent calls and can drop the oldest routine one. Reporting the trimmed
+        # length as "count" would let MAE state a wrong active total or a wrong
+        # "longest open" call.
+        total = live_tools.MAX_ACTIVE_CALLS + 7
+        snap_mock.return_value = {
+            "dashboard_stats": {"active_calls": total, "oldest_call_datetime": "2026-08-08T01:00:00Z"},
+            "calls": [_call(cfs_number=f"CFS26-{i:05d}") for i in range(total)],
+        }
+        result = MaeLiveToolRegistry().execute("list_active_calls", {})
+        self.assertEqual(result.payload["count"], total)
+        self.assertEqual(result.payload["returned"], live_tools.MAX_ACTIVE_CALLS)
+        self.assertTrue(result.payload["truncated"])
+        self.assertEqual(result.payload["dashboard_stats"]["active_calls"], total)
+
+    @patch("app.services.mae_live_tools.get_live_operations_snapshot")
+    def test_untruncated_list_is_not_flagged(self, snap_mock):
+        snap_mock.return_value = {"dashboard_stats": {}, "calls": [_call()]}
+        result = MaeLiveToolRegistry().execute("list_active_calls", {})
+        self.assertFalse(result.payload["truncated"])
+        self.assertEqual(result.payload["count"], 1)
 
 
 class GetCallDetailTests(unittest.TestCase):
