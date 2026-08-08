@@ -348,6 +348,35 @@ class MapPageTests(unittest.TestCase):
         response = self.client.get("/map")
         self.assertIn('href="/map"', response.text)
 
+    @patch("app.main.get_live_map_snapshot")
+    def test_map_page_cache_busts_the_map_script(self, snapshot_mock):
+        snapshot_mock.return_value = self.map_data
+
+        response = self.client.get("/map")
+
+        self.assertRegex(response.text, r"/static/js/lcdash-map\.js\?v=[\w-]+")
+
+    def test_satellite_layer_falls_back_to_street_map_on_tile_failure(self):
+        # Regression test: the "Street map / Satellite (flyover)" toggle
+        # switches Leaflet base layers correctly (that part of Leaflet's
+        # radio-driven layer control was never broken), but a satellite
+        # tile that fails to load upstream (e.g. a missing geo-maps:GetTile
+        # permission or an Amazon Location outage) used to leave the map
+        # blank/grey with no feedback -- indistinguishable from the toggle
+        # "not working". The script must listen for Leaflet's tileerror
+        # event, revert to the street layer, and tell the user why.
+        script = (Path(__file__).resolve().parents[1] / "static" / "js" / "lcdash-map.js").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('satelliteLayer.on("tileerror"', script)
+        self.assertIn("map.removeLayer(satelliteLayer)", script)
+        self.assertIn("streetLayer.addTo(map)", script)
+        self.assertIn(
+            "Satellite imagery could not be loaded right now, so the street map is shown instead.",
+            script,
+        )
+
     @patch("app.main.get_call_detail")
     def test_incident_map_safely_encodes_cad_text(self, call_detail_mock):
         call_detail_mock.return_value = {

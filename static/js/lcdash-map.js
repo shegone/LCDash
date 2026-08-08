@@ -38,6 +38,17 @@
         }
     ).addTo(map);
 
+    function showMapNotice(message) {
+        if (document.getElementById("map-satellite-notice")) return;
+        const notice = document.createElement("div");
+        notice.id = "map-satellite-notice";
+        notice.className = "map-warning mb-3";
+        notice.setAttribute("role", "status");
+        notice.setAttribute("aria-live", "polite");
+        notice.textContent = message;
+        mapElement.insertAdjacentElement("beforebegin", notice);
+    }
+
     // Satellite imagery comes from Amazon Location through the application's
     // signed tile proxy, so no AWS credential is exposed to the browser. The
     // layer is offered only when the deployment reports it is available,
@@ -56,6 +67,27 @@
                     attribution: "Imagery &copy; Amazon Location Service"
                 }
             );
+
+            // The style-availability check above only confirms this
+            // deployment is configured to offer satellite tiles -- it does
+            // not confirm the upstream Amazon Location call actually
+            // succeeds (e.g. a missing geo-maps:GetTile permission or a
+            // provider outage). Without this handler, a selected satellite
+            // layer that fails to load looks identical to the toggle simply
+            // "not working": the basemap goes blank/grey with no feedback.
+            // Fail back to the street map and say so instead of leaving the
+            // user staring at an unexplained blank map.
+            let satelliteTileFailureHandled = false;
+            satelliteLayer.on("tileerror", function () {
+                if (satelliteTileFailureHandled || !map.hasLayer(satelliteLayer)) return;
+                satelliteTileFailureHandled = true;
+                map.removeLayer(satelliteLayer);
+                if (!map.hasLayer(streetLayer)) streetLayer.addTo(map);
+                showMapNotice(
+                    "Satellite imagery could not be loaded right now, so the street map is shown instead."
+                );
+            });
+
             referenceLayerControl.addBaseLayer(satelliteLayer, "Satellite (flyover)");
         })
         .catch(function () {
