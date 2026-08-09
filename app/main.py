@@ -11,6 +11,7 @@ import secrets
 import uuid
 from datetime import datetime, timezone
 from typing import Annotated, Literal
+from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, Response, UploadFile
 from starlette.concurrency import run_in_threadpool
@@ -887,6 +888,43 @@ def identity_whoami_api(request: Request) -> dict[str, object]:
     """Report the caller's own resolved identity. Never anyone else's."""
 
     return pilot_identity_badge(request)
+
+
+# The ALB stores its OIDC session in AWSELBAuthSessionCookie-N, split across
+# numbered cookies when the token set is large. Expiring them is what actually
+# ends the session in front of this app; four covers the observed maximum with
+# headroom, and expiring a cookie that was never set is harmless.
+_ALB_SESSION_COOKIES = tuple(f"AWSELBAuthSessionCookie-{index}" for index in range(4))
+
+
+@app.get("/logout")
+def sign_out(request: Request):
+    """Sign out of the ALB session AND Cognito, in that order.
+
+    Doing only the first is the trap: the ALB would bounce the browser to
+    Cognito, Cognito would still hold a valid session, and the user would be
+    signed straight back in without a password -- a sign-out button that
+    visibly does nothing on a shared dispatch workstation. So the cookies are
+    expired here and the browser is then sent to Cognito's own logout
+    endpoint, which clears its session and returns to the configured page.
+    """
+
+    if not settings.alb_identity_hosted_ui_url or not settings.alb_identity_client_id:
+        raise HTTPException(status_code=503, detail="Sign-out is not configured.")
+
+    logout_target = settings.alb_identity_signed_out_url or "/"
+    destination = (
+        f"{settings.alb_identity_hosted_ui_url}/logout"
+        f"?client_id={quote(settings.alb_identity_client_id, safe='')}"
+        f"&logout_uri={quote(logout_target, safe='')}"
+    )
+    response = RedirectResponse(destination, status_code=303)
+    response.headers["Cache-Control"] = "no-store"
+    for cookie_name in _ALB_SESSION_COOKIES:
+        # delete_cookie must mirror the attributes the ALB set, or the
+        # browser keeps the original cookie and the session survives.
+        response.delete_cookie(cookie_name, path="/", httponly=True, secure=True)
+    return response
 
 
 def _require_pilot_admin(request: Request) -> AlbIdentity:

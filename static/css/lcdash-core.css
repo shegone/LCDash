@@ -265,6 +265,29 @@ a {
     background: rgba(60, 40, 8, .65);
 }
 
+.topbar-signout {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-right: 20px;
+    padding: 8px 14px;
+    border: 1px solid rgba(126, 168, 211, .35);
+    border-radius: 999px;
+    color: #b9d8ed;
+    font-size: .82rem;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.topbar-signout:hover,
+.topbar-signout:focus-visible {
+    border-color: rgba(255, 91, 126, .55);
+    background: rgba(60, 12, 22, .5);
+    color: #ffbdc9;
+}
+
 .topbar-identity-unverified .bi,
 .topbar-identity-unverified .topbar-identity-role {
     color: #ffc046;

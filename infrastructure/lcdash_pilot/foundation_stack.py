@@ -230,6 +230,18 @@ class Phase1FoundationStack(cdk.Stack):
                 "LCDASH_CLOUD_AI_UPLOADS_DATA_SOURCE_ID": parameters[
                     "cloud_ai_uploads_data_source_id"
                 ].value_as_string,
+                # Sign-out needs Cognito's hosted-UI origin: expiring the ALB
+                # session cookie alone leaves Cognito's session intact, which
+                # would sign the next person in without a password.
+                "LCDASH_ALB_IDENTITY_HOSTED_UI_URL": cdk.Fn.join(
+                    "",
+                    [
+                        "https://",
+                        parameters["cognito_domain_prefix"].value_as_string,
+                        f".auth.{APPROVED_REGION}.amazoncognito.com",
+                    ],
+                ),
+                "LCDASH_ALB_IDENTITY_SIGNED_OUT_URL": f"https://{PILOT_DOMAIN_NAME}/",
                 "LCDASH_CLOUD_AI_GENERATION_MODEL_ID": "us.amazon.nova-pro-v1:0",
                 "LCDASH_CLOUD_AI_MAX_OUTPUT_TOKENS": "400",
                 "LCDASH_CLOUD_AI_RETRIEVAL_RESULT_LIMIT": "5",

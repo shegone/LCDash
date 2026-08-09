@@ -116,6 +116,17 @@ class Settings:
     ).strip()
     alb_identity_user_pool_id: str = _env("LCDASH_ALB_IDENTITY_USER_POOL_ID").strip()
     alb_identity_client_id: str = _env("LCDASH_ALB_IDENTITY_CLIENT_ID").strip()
+    # Cognito hosted-UI origin and the post-sign-out landing page. Sign-out
+    # needs BOTH: expiring the ALB session cookie only ends the ALB's session,
+    # while Cognito's own session would silently sign the next person straight
+    # back in without a password. Blank disables the sign-out control rather
+    # than offering a button that half-works.
+    alb_identity_hosted_ui_url: str = _env(
+        "LCDASH_ALB_IDENTITY_HOSTED_UI_URL"
+    ).strip().rstrip("/")
+    alb_identity_signed_out_url: str = _env(
+        "LCDASH_ALB_IDENTITY_SIGNED_OUT_URL"
+    ).strip()
     cloud_cad_enabled: bool = _env_bool("LCDASH_CLOUD_CAD_ENABLED", False)
     cloud_cad_mode: str = _env(
         "LCDASH_CLOUD_CAD_MODE", "synthetic-disconnected"
