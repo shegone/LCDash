@@ -595,6 +595,7 @@ class Phase1FoundationStack(cdk.Stack):
 
         self._grant_content_access(task_role, content_bucket)
         self._grant_document_library_read(task_role)
+        self._grant_pilot_access_administration(task_role, user_pool)
         self._grant_managed_providers(
             task_role,
             parameters["cloud_ai_knowledge_base_id"],
@@ -1032,6 +1033,38 @@ class Phase1FoundationStack(cdk.Stack):
             iam.PolicyStatement(
                 actions=["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
                 resources=[bucket.arn_for_objects("logan-synthetic/reports/*")],
+            )
+        )
+
+    def _grant_pilot_access_administration(
+        self, role: iam.Role, user_pool: cognito.UserPool
+    ) -> None:
+        """The user-administration page's exact verbs, on this pool only.
+
+        The task role had NO Cognito permissions before this (the app only
+        verified tokens, which needs none). This grant is the admin page's
+        capability set and nothing more: list/inspect users, create an
+        invited user, move group membership, disable and enable. Deliberately
+        absent: AdminDeleteUser (accounts are disabled and retained for
+        audit, matching scripts/sync_cognito_users.py), AdminSetUserPassword
+        (the app must never know or set a password), and every pool-level
+        mutation (UpdateUserPool and friends change authentication policy and
+        belong to the deploy pipeline, not to a page).
+        """
+        role.add_to_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "cognito-idp:ListUsers",
+                    "cognito-idp:ListUsersInGroup",
+                    "cognito-idp:AdminListGroupsForUser",
+                    "cognito-idp:AdminGetUser",
+                    "cognito-idp:AdminCreateUser",
+                    "cognito-idp:AdminAddUserToGroup",
+                    "cognito-idp:AdminRemoveUserFromGroup",
+                    "cognito-idp:AdminDisableUser",
+                    "cognito-idp:AdminEnableUser",
+                ],
+                resources=[user_pool.user_pool_arn],
             )
         )
 

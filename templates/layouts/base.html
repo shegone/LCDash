@@ -94,6 +94,14 @@
                 {{ nav_item("/integrations/health", "bi-heart-pulse-fill", "Integration Health", current_path == "/integrations/health") }}
                 {{ nav_item("/voice", "bi-mic-fill", "Voice Lab", current_path == "/voice") }}
                 {{ nav_item("/mae/reliability", "bi-shield-check", "MAE Reliability", current_path == "/mae/reliability") }}
+                {#- Admin-only link. The identity global resolves through the
+                    same verified seam as authorization, so this cannot show
+                    for a role the server would refuse; the route 403s
+                    regardless, the gate here is only to avoid advertising. -#}
+                {% set nav_identity = pilot_identity_badge(request) if pilot_identity_badge is defined else {"role": ""} %}
+                {% if nav_identity.role == "admin" %}
+                {{ nav_item("/admin/users", "bi-people-fill", "User Admin", current_path == "/admin/users") }}
+                {% endif %}
             </div>
         </section>
     </nav>

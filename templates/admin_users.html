@@ -1,0 +1,102 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}User Administration | LCDash{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="/static/css/lcdash-admin.css?v=20260809-admin-users">
+
+<div class="command-page">
+<section class="admin-users-hero glass">
+    <div>
+        <div class="admin-eyebrow">PILOT ACCESS</div>
+        <h1>User Administration</h1>
+        <p>
+            Manage who can sign in to the LCDash cloud pilot: send Cognito invites,
+            set roles, and enable or disable accounts.
+        </p>
+    </div>
+    <div class="admin-safety">
+        <i class="bi bi-shield-lock-fill" aria-hidden="true"></i>
+        <div><strong>Disable, never delete</strong><span>Accounts are retained for audit</span></div>
+    </div>
+</section>
+
+<section class="admin-panel glass mt-4" aria-labelledby="admin-invite-title">
+    <div class="admin-panel-header">
+        <div>
+            <div class="admin-eyebrow">NEW ACCOUNT</div>
+            <h2 id="admin-invite-title">Invite a User</h2>
+            <p>Cognito emails a temporary password; the account appears below as invite pending.</p>
+        </div>
+    </div>
+
+    <form id="admin-invite-form" class="admin-invite-form">
+        <div class="admin-invite-field">
+            <label for="admin-invite-email">Email address</label>
+            <input
+                id="admin-invite-email"
+                name="email"
+                type="email"
+                required
+                autocomplete="off"
+                placeholder="name@911logan.com"
+            >
+        </div>
+        <div class="admin-invite-field">
+            <label for="admin-invite-role">Role</label>
+            <select id="admin-invite-role" name="role">
+                <option value="user">User</option>
+                <option value="supervisor" selected>Supervisor</option>
+                <option value="admin">Admin</option>
+            </select>
+        </div>
+        <button id="admin-invite-submit" type="submit">
+            <i class="bi bi-envelope-plus" aria-hidden="true"></i> Send invite
+        </button>
+    </form>
+
+    <p id="admin-invite-feedback" class="admin-invite-feedback" aria-live="polite" hidden></p>
+</section>
+
+<section class="admin-panel glass mt-4" aria-labelledby="admin-users-title">
+    <div class="admin-panel-header">
+        <div>
+            <div class="admin-eyebrow">PILOT COHORT</div>
+            <h2 id="admin-users-title">Accounts</h2>
+            <p>Everyone in the Cognito user pool, whether or not they have signed in yet.</p>
+        </div>
+    </div>
+
+    <div id="admin-users-loading" class="admin-progress" aria-live="polite">
+        <div class="admin-progress-spinner" aria-hidden="true"></div>
+        <div><strong>Loading accounts&hellip;</strong></div>
+    </div>
+
+    <div id="admin-users-error" class="admin-error" hidden></div>
+
+    <p id="admin-users-empty" class="admin-empty" hidden>
+        No accounts exist in the pilot user pool yet. Send the first invite above.
+    </p>
+
+    <div id="admin-users-table-wrap" class="admin-users-table-wrap" hidden>
+        <table class="admin-users-table">
+            <caption class="visually-hidden">
+                LCDash pilot accounts with role, status, creation date, and account actions
+            </caption>
+            <thead>
+                <tr>
+                    <th scope="col">Email</th>
+                    <th scope="col">Role</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Created</th>
+                    <th scope="col">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="admin-users-tbody"></tbody>
+        </table>
+    </div>
+</section>
+
+<script src="/static/js/lcdash-admin-users.js?v=20260809-admin-users"></script>
+</div>
+{% endblock %}

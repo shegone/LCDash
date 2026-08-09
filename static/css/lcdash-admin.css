@@ -1,0 +1,318 @@
+/* Admin: pilot user administration (/admin/users).
+   Follows the dark glass conventions from lcdash-core.css / lcdash-reports.css:
+   cyan #4cc9ff accents, rgba(76, 201, 255, ...) borders and fills, .glass panels. */
+
+.admin-users-hero {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 24px;
+    padding: 28px;
+    overflow: hidden;
+}
+
+.admin-users-hero h1 {
+    margin: 4px 0 6px;
+    color: #fff;
+    font-size: clamp(2rem, 4vw, 3rem);
+    font-weight: 950;
+}
+
+.admin-users-hero p,
+.admin-panel-header p,
+.admin-empty {
+    margin: 0;
+    color: #91afc9;
+}
+
+.admin-eyebrow {
+    color: #4cc9ff;
+    font-size: .74rem;
+    font-weight: 900;
+    letter-spacing: 1.35px;
+}
+
+.admin-safety {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    min-width: 230px;
+    padding: 12px 15px;
+    border: 1px solid rgba(105, 255, 185, .3);
+    border-radius: 14px;
+    color: var(--lcdash-green, #69ffb9);
+    background: rgba(105, 255, 185, .08);
+}
+
+.admin-safety i { font-size: 1.5rem; }
+.admin-safety strong,
+.admin-safety span { display: block; }
+.admin-safety span { color: #a7c4da; font-size: .78rem; }
+
+.admin-panel { padding: 24px; }
+
+.admin-panel-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 22px;
+}
+
+.admin-panel-header h2 { color: #fff; margin: 4px 0 5px; }
+
+/* Invite form */
+
+.admin-invite-form {
+    display: flex;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 18px;
+}
+
+.admin-invite-field label {
+    display: block;
+    margin-bottom: 6px;
+    color: #9ec0da;
+    font-size: .75rem;
+    font-weight: 850;
+    text-transform: uppercase;
+}
+
+.admin-invite-field input,
+.admin-invite-field select {
+    min-height: 42px;
+    min-width: 180px;
+    border-radius: 10px;
+    border: 1px solid rgba(76, 201, 255, .3);
+    padding: 8px 13px;
+    color-scheme: dark;
+    color: #fff;
+    background: rgba(5, 16, 30, .8);
+}
+
+.admin-invite-field input { min-width: 260px; }
+
+.admin-invite-form button {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 42px;
+    border: 0;
+    border-radius: 10px;
+    padding: 8px 16px;
+    color: #04131f;
+    background: linear-gradient(135deg, #4cc9ff, #69ffb9);
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.admin-invite-form button:disabled { opacity: .55; cursor: default; }
+
+.admin-invite-form input:focus-visible,
+.admin-invite-form select:focus-visible,
+.admin-invite-form button:focus-visible,
+.admin-role-select:focus-visible,
+.admin-row-action:focus-visible {
+    outline: 3px solid rgba(85, 212, 255, .62);
+    outline-offset: 2px;
+}
+
+.admin-invite-feedback {
+    margin: 16px 0 0;
+    padding: 11px 14px;
+    border-radius: 12px;
+    font-size: .88rem;
+}
+
+.admin-invite-feedback.is-success {
+    color: var(--lcdash-green, #69ffb9);
+    background: rgba(105, 255, 185, .08);
+    border: 1px solid rgba(105, 255, 185, .3);
+}
+
+.admin-invite-feedback.is-error {
+    color: #ffbdc9;
+    background: rgba(255, 91, 126, .1);
+    border: 1px solid rgba(255, 91, 126, .3);
+}
+
+/* Loading / error / empty states (matches the saved-templates pattern) */
+
+.admin-progress,
+.admin-error,
+.admin-empty {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 18px;
+    padding: 13px 15px;
+    border-radius: 12px;
+}
+
+.admin-progress {
+    color: #dff8ff;
+    background: rgba(76, 201, 255, .1);
+    border: 1px solid rgba(76, 201, 255, .25);
+}
+
+.admin-progress-spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid rgba(76, 201, 255, .18);
+    border-top-color: #4cc9ff;
+    border-radius: 50%;
+    animation: admin-spin .85s linear infinite;
+}
+
+@keyframes admin-spin { to { transform: rotate(360deg); } }
+
+.admin-error {
+    color: #ffbdc9;
+    background: rgba(255, 91, 126, .1);
+    border: 1px solid rgba(255, 91, 126, .3);
+}
+
+.admin-empty {
+    color: #b9d8ed;
+    background: rgba(76, 201, 255, .08);
+    border: 1px solid rgba(76, 201, 255, .18);
+}
+
+/* User table */
+
+.admin-users-table-wrap { margin-top: 18px; }
+
+.admin-users-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .88rem;
+}
+
+.admin-users-table th {
+    text-align: left;
+    padding: 8px 12px;
+    color: #7ea8d3;
+    font-size: .74rem;
+    font-weight: 900;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-bottom: 1px solid rgba(76, 201, 255, .3);
+}
+
+.admin-users-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(76, 201, 255, .12);
+    color: #dff8ff;
+    vertical-align: middle;
+}
+
+.admin-cell-email { font-weight: 700; word-break: break-all; }
+.admin-cell-created { color: #91afc9; white-space: nowrap; }
+
+.admin-users-table tr.is-busy td {
+    opacity: .5;
+    transition: opacity .15s ease;
+}
+
+/* Status chips */
+
+.admin-status-chip {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: .7rem;
+    font-weight: 900;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.admin-status-chip.is-active {
+    color: #4cc9ff;
+    background: rgba(76, 201, 255, .13);
+    border: 1px solid rgba(76, 201, 255, .35);
+}
+
+.admin-status-chip.is-pending {
+    color: var(--lcdash-yellow, #ffd66b);
+    background: rgba(255, 214, 107, .1);
+    border: 1px solid rgba(255, 214, 107, .35);
+}
+
+.admin-status-chip.is-disabled {
+    color: #ff8d9b;
+    background: rgba(255, 91, 126, .1);
+    border: 1px solid rgba(255, 91, 126, .3);
+}
+
+/* Per-row controls */
+
+.admin-role-select {
+    min-height: 34px;
+    border-radius: 8px;
+    border: 1px solid rgba(76, 201, 255, .3);
+    padding: 4px 8px;
+    color-scheme: dark;
+    color: #dff8ff;
+    background: rgba(5, 16, 30, .8);
+    font-size: .82rem;
+}
+
+.admin-row-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.admin-row-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border: 1px solid rgba(76, 201, 255, .35);
+    border-radius: 9px;
+    color: #dff8ff;
+    background: rgba(76, 201, 255, .12);
+    font-size: .8rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.admin-row-action:disabled { opacity: .55; cursor: default; }
+
+.admin-row-action.is-danger {
+    color: #ffbdc9;
+    border-color: rgba(255, 91, 126, .35);
+    background: rgba(255, 91, 126, .1);
+}
+
+.admin-row-action.is-danger.is-confirming {
+    color: #04131f;
+    border-color: transparent;
+    background: var(--lcdash-red, #ff6b78);
+    font-weight: 900;
+}
+
+.admin-row-note {
+    margin-top: 6px;
+    font-size: .76rem;
+}
+
+.admin-row-note.is-error { color: #ffbdc9; }
+.admin-row-note.is-success { color: var(--lcdash-green, #69ffb9); }
+
+/* Responsive: table scrolls horizontally in its container below 900px */
+
+@media (max-width: 900px) {
+    .admin-users-hero,
+    .admin-panel-header { align-items: stretch; flex-direction: column; }
+    .admin-safety { min-width: 0; }
+    .admin-invite-form { align-items: stretch; flex-direction: column; }
+    .admin-invite-field input,
+    .admin-invite-field select { min-width: 0; width: 100%; }
+    .admin-users-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .admin-users-table { min-width: 720px; }
+}

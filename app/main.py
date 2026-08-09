@@ -26,6 +26,7 @@ from app.core.cloud_pilot_roles import (
     PilotRole,
     resolve_pilot_role,
 )
+from app.services.pilot_access_service import PilotAccessError, PilotAccessService
 from app.core.county_branding import branding_for_tenant_context
 from app.core.tenancy import TenantContext
 from app.core.county_profiles import resolve_county_profile
@@ -882,6 +883,127 @@ def identity_whoami_api(request: Request) -> dict[str, object]:
     """Report the caller's own resolved identity. Never anyone else's."""
 
     return pilot_identity_badge(request)
+
+
+def _require_pilot_admin(request: Request) -> AlbIdentity:
+    """Admit only a verified admin; everyone else gets the same 403.
+
+    User administration is the one capability the admin role adds over
+    supervisor (cloud_pilot_roles: "pilot access review"), so this gate takes
+    the verified identity directly from the seam rather than a role string a
+    template could have mislabeled. The uniform 403 deliberately does not
+    reveal whether the page exists to non-admins.
+    """
+
+    resolved = _resolve_pilot_identity(request)
+    if resolved is None:
+        raise HTTPException(status_code=403, detail="Administrator sign-in is required.")
+    identity, role = resolved
+    if role != PilotRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Administrator sign-in is required.")
+    return identity
+
+
+def _pilot_access_service() -> "PilotAccessService":
+    if not settings.alb_identity_user_pool_id:
+        raise HTTPException(status_code=503, detail="User administration is not configured.")
+    return PilotAccessService(
+        settings.alb_identity_user_pool_id,
+        region=settings.alb_identity_region or "us-east-1",
+    )
+
+
+class AdminInviteRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    role: str = Field(max_length=20)
+
+
+class AdminRoleRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    role: str = Field(max_length=20)
+
+
+class AdminUserActionRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+
+
+@app.get("/admin/users")
+def admin_users_page(request: Request):
+    _require_pilot_admin(request)
+    return templates.TemplateResponse(
+        request=request,
+        name="admin_users.html",
+        context={"version": "0.1.0"},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/admin/users")
+def admin_users_list_api(request: Request):
+    _require_pilot_admin(request)
+    try:
+        return {"users": _pilot_access_service().list_users()}
+    except PilotAccessError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/admin/users")
+def admin_users_invite_api(payload: AdminInviteRequest, request: Request):
+    identity = _require_pilot_admin(request)
+    try:
+        record = _pilot_access_service().invite_user(payload.email, payload.role)
+    except PilotAccessError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    logger.info(
+        "Pilot access: %s invited %s as %s",
+        identity.email or identity.subject, payload.email, payload.role,
+    )
+    return record
+
+
+@app.post("/api/admin/users/role")
+def admin_users_role_api(payload: AdminRoleRequest, request: Request):
+    identity = _require_pilot_admin(request)
+    try:
+        record = _pilot_access_service().set_role(
+            payload.email, payload.role,
+            acting_subject=identity.email or identity.subject,
+        )
+    except PilotAccessError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return record
+
+
+@app.post("/api/admin/users/disable")
+def admin_users_disable_api(payload: AdminUserActionRequest, request: Request):
+    identity = _require_pilot_admin(request)
+    try:
+        _pilot_access_service().disable_user(
+            payload.email, acting_subject=identity.email or identity.subject,
+        )
+    except PilotAccessError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True}
+
+
+@app.post("/api/admin/users/enable")
+def admin_users_enable_api(payload: AdminUserActionRequest, request: Request):
+    _require_pilot_admin(request)
+    try:
+        _pilot_access_service().enable_user(payload.email)
+    except PilotAccessError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True}
+
+
+@app.post("/api/admin/users/resend-invite")
+def admin_users_resend_invite_api(payload: AdminUserActionRequest, request: Request):
+    _require_pilot_admin(request)
+    try:
+        _pilot_access_service().resend_invite(payload.email)
+    except PilotAccessError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True}
 
 
 def _alb_user_tenant_context(request: Request | None) -> TenantContext | None:
