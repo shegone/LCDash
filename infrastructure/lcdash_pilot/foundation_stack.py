@@ -509,11 +509,16 @@ class Phase1FoundationStack(cdk.Stack):
         cdk.CfnOutput(self, "ApplicationUrl", value=f"https://{PILOT_DOMAIN_NAME}")
         cdk.CfnOutput(
             self,
+            # Output name is legacy and kept for continuity with the deployment
+            # runbooks. Authoritative DNS is Cloudflare; Hostinger is registrar
+            # only, and editing DNS there is prohibited and would have no effect.
             "HostingerApplicationCnameTarget",
             value=load_balancer.load_balancer_dns_name,
             description=(
-                "After foundation deployment, create a Hostinger CNAME for aws.logan911.com "
-                "to this ALB hostname and validate it externally."
+                "After foundation deployment, create a DNS-only CNAME for "
+                "aws.logan911.com to this ALB hostname in authoritative Cloudflare "
+                "DNS -- never in Hostinger, which is registrar only -- and validate "
+                "it externally."
             ),
         )
 

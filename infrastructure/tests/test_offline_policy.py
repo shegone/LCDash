@@ -17,7 +17,7 @@ class OfflinePolicyTests(unittest.TestCase):
         expected = {
             "region": "us-east-1",
             "pilot_domain": "aws.logan911.com",
-            "dns_provider": "hostinger-managed",
+            "dns_provider": "cloudflare-authoritative-hostinger-registrar",
             "route53_records": 0,
             "certificate_validation": "external-dns-two-stage",
             "prefix": "lcdash-p1-logan-use1",

@@ -13,14 +13,14 @@
       "order": 1,
       "stack": "lcdash-p1-logan-use1-certificate",
       "purpose": "request ACM certificate for aws.logan911.com",
-      "human_hold": "add exact ACM validation CNAME in Hostinger and confirm certificate status ISSUED"
+      "human_hold": "add exact ACM validation CNAME in authoritative Cloudflare DNS (never in Hostinger, which is registrar only) and confirm certificate status ISSUED"
     },
     {
       "order": 2,
       "stack": "lcdash-p1-logan-use1-foundation",
       "purpose": "create the synthetic disconnected pilot foundation",
       "requires": "issued certificate ARN from stack 1",
-      "human_hold": "add Hostinger aws CNAME to HostingerApplicationCnameTarget and verify HTTPS and Cognito"
+      "human_hold": "add DNS-only Cloudflare aws CNAME pointing at the HostingerApplicationCnameTarget output value (output name is legacy; the record belongs in Cloudflare, never Hostinger) and verify HTTPS and Cognito"
     }
   ],
   "service_activation": {
