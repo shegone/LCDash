@@ -36,9 +36,13 @@ class MAEPageTests(unittest.TestCase):
             "Show me a chart of the busiest days of the week for the last 30 days.",
             response.text,
         )
-        self.assertIn(
-            "/static/js/lcdash-mae.js?v=20260807-live-data-fix",
+        # The chat script must be cache-busted, but pinning a specific
+        # version string makes every future bump a test edit for no safety
+        # gain -- what matters is that a version is present at all, so a
+        # browser cannot serve a stale script after a deploy.
+        self.assertRegex(
             response.text,
+            r"/static/js/lcdash-mae\.js\?v=[0-9]{8}-[a-z0-9-]+",
         )
         self.assertIn("/static/img/mae/mae-neutral.jpg", response.text)
         self.assertIn('alt="MAE virtual assistant"', response.text)

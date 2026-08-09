@@ -1783,7 +1783,7 @@
     }
 
     if (cloudMode) {
-        setStatus("mae-ai-status", true, "Citation-only advisory");
+        setStatus("mae-ai-status", true, "Documents, CAD & analytics");
         setStatus("mae-db-status", true, "Available for analytics questions");
         setStatus("mae-cad-status", true, "Read-only live status");
         loadCloudVoiceProfile();

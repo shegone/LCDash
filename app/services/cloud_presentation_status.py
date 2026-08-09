@@ -89,8 +89,16 @@ def build_cloud_presentation_status(
         )
 
     if rag_available:
-        advisory_label = "CITATION-ONLY AVAILABLE"
-        advisory_notice = "MAE may answer from approved retrieved citations and has no action tools."
+        # "citation-only ... no action tools" was true when written and false
+        # from rev 38 onward: MAE reads live CAD and analytics through
+        # read-only tools, and admin-uploaded documents joined the citation
+        # pool on 2026-08-09. What has never changed, and is the part this
+        # banner exists to state, is that every tool is a READ.
+        advisory_label = "READ-ONLY ADVISORY AVAILABLE"
+        advisory_notice = (
+            "MAE may answer from approved document citations and from read-only "
+            "live CAD and analytics tools. No tool can dispatch, page, or write to CAD."
+        )
     else:
         advisory_label = "ADVISORY PROVIDER UNAVAILABLE"
         advisory_notice = (
