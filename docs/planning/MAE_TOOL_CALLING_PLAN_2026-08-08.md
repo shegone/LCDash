@@ -241,9 +241,25 @@ what shipped, rev number, digest, verification notes.
    "python app.py" --context account=862772137583 --context
    region=us-east-1 --parameters PilotImageDigest=<new digest>
    --method=prepare-change-set --change-set-name <name>
-   --require-approval never`. **Review scope**: must touch only
-   `AWS::ECS::Service` + `AWS::ECS::TaskDefinition` (env-var additions
-   ride the task definition). Anything else → STOP and ask Ted.
+   --require-approval never`. **Review scope** (corrected 2026-08-09): a
+   digest bump legitimately touches FIVE resources, because the analytics
+   collector added later in `4154210` runs the same application image:
+   - `AWS::ECS::TaskDefinition` (web) — new revision, `Replacement: True`
+   - `AWS::ECS::Service` — points at the new revision
+   - `AWS::ECS::TaskDefinition` (analytics collector) — same
+     `PilotImageDigest` parameter, so also a new revision
+   - `AWS::Events::Rule` (collector schedule) — `Targets` re-reference the
+     new collector revision, `RequiresRecreation: Never`
+   - `AWS::IAM::Policy` (collector events role) — `PolicyDocument`
+     re-references it, `RequiresRecreation: Never`
+
+   Verify each non-web change is caused by `PilotImageDigest` or by a
+   `ResourceReference` to the collector task definition — `describe-change-set
+   --query 'Changes[].ResourceChange.Details[].[Target.Name,
+   Target.RequiresRecreation,ChangeSource,CausingEntity]'` shows this. Anything
+   touching the database, ALB, Cognito, VPC, or security groups → STOP and ask
+   Ted. The original rule named only the first two and became unsatisfiable the
+   moment the collector started sharing the image.
 6. Execute, poll stack to UPDATE_COMPLETE, confirm rollout COMPLETED and
    running task digest matches.
 7. First deploy ships with the flag **off** — verify no behavior change
