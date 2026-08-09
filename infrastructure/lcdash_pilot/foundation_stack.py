@@ -31,6 +31,52 @@ from .config import (
 )
 
 
+# Wording for the two emails Cognito sends to users. Both are deliberately
+# explicit about what the message is and why it arrived, because the defaults are
+# indistinguishable from phishing: an unexpected email containing a password,
+# from a domain that has never written to the recipient before. Staff at a 911
+# centre are trained to distrust exactly that, and the right response to a real
+# phishing attempt and to these defaults looked identical.
+#
+# Sent as HTML: with SES as the sending account Cognito delivers these as HTML,
+# so plain newlines would collapse into one run-on paragraph.
+#
+# {username} and {####} are Cognito substitutions. The invitation REQUIRES both;
+# the sign-in code message requires {####}. Removing either breaks deployment.
+INVITE_EMAIL_SUBJECT = "Your new LCDash account (Logan County 911)"
+INVITE_EMAIL_BODY = (
+    "<p>Logan County 911 has created an LCDash account for you.</p>"
+    "<p>LCDash is the Logan County 911 operations dashboard. An administrator set "
+    "this account up for you, so this message may be unexpected: you did not sign "
+    "up for it yourself.</p>"
+    # The visible link text is the full URL rather than "click here" on purpose:
+    # being able to see the destination before clicking is exactly how a recipient
+    # tells this apart from a phishing message.
+    "<p><strong>Sign in at:</strong> "
+    '<a href="https://aws.logan911.com">https://aws.logan911.com</a></p>'
+    "<p><strong>Username:</strong> {username}<br>"
+    "<strong>Temporary password:</strong> {####}</p>"
+    "<p>That temporary password expires in 24 hours. When you sign in you will "
+    "choose your own password, and then enter a short code that we email to this "
+    "same address. There is no app to install.</p>"
+    "<p>If you were not expecting this, or you are not sure why you would have an "
+    "LCDash account, do not use the password above. Please contact Logan County "
+    "911 and tell them you received this message.</p>"
+)
+
+SIGN_IN_CODE_SUBJECT = "Your LCDash sign-in code"
+SIGN_IN_CODE_BODY = (
+    "<p>Your LCDash sign-in code is <strong>{####}</strong></p>"
+    "<p>You are receiving this because a correct username and password were just "
+    "entered for LCDash, the Logan County 911 operations dashboard. Entering this "
+    "code is the second step that confirms it was you.</p>"
+    "<p>The code expires in a few minutes and can only be used once.</p>"
+    "<p>If you did not just try to sign in, someone else may have your password. "
+    "Do not share this code with anyone. Please contact Logan County 911 so the "
+    "account can be secured.</p>"
+)
+
+
 class Phase1FoundationStack(cdk.Stack):
     """One non-authoritative pilot cell with no operational integrations."""
 
@@ -363,6 +409,10 @@ class Phase1FoundationStack(cdk.Stack):
                 # send if the ARN names an identity that is not verified.
                 ses_verified_domain=PILOT_MAIL_DOMAIN,
             ),
+            user_invitation=cognito.UserInvitationConfig(
+                email_subject=INVITE_EMAIL_SUBJECT,
+                email_body=INVITE_EMAIL_BODY,
+            ),
             sign_in_aliases=cognito.SignInAliases(email=True),
             # Email MFA and email account recovery cannot share an address: a
             # user whose MFA is by email cannot also receive a password-reset
@@ -383,6 +433,18 @@ class Phase1FoundationStack(cdk.Stack):
             ),
             removal_policy=cdk.RemovalPolicy.DESTROY,
         )
+        # The sign-in code message has no L2 property -- UserPool exposes
+        # user_invitation and user_verification but nothing for email MFA -- so it
+        # is set on the underlying resource. Deliberately not left at the Cognito
+        # default, which says only "Your authentication code is 123456" with no
+        # indication of what system sent it or what to do if you were not signing
+        # in. Note there is intentionally NO link in this one: a message that
+        # carries a code and also invites a click is the exact shape of a
+        # credential-harvesting email.
+        pool_resource = user_pool.node.default_child
+        pool_resource.email_authentication_subject = SIGN_IN_CODE_SUBJECT
+        pool_resource.email_authentication_message = SIGN_IN_CODE_BODY
+
         # Group names must match COGNITO_GROUP_ROLE_MAP in
         # app/core/cloud_pilot_roles.py exactly; a test asserts both directions,
         # because resolve_pilot_role denies any group it does not recognize.

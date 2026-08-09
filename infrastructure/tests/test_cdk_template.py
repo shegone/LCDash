@@ -513,6 +513,51 @@ class CdkTemplateTests(unittest.TestCase):
         )
         self.assertNotIn("identity/no-reply@", joined)
 
+    def test_user_emails_explain_themselves_and_carry_required_substitutions(self):
+        """Both user-facing emails must say what they are and who sent them.
+
+        The Cognito defaults read as phishing: an unexpected message containing a
+        password, or a bare "Your authentication code is 123456" naming no system
+        at all. Staff at a 911 centre are trained to distrust exactly that, and a
+        recipient could not distinguish the defaults from an attack.
+
+        The substitution assertions are not cosmetic -- Cognito rejects an
+        invitation template missing {username} or {####}, and a sign-in code
+        message missing {####}, so losing one breaks deployment rather than
+        quietly sending a broken email.
+        """
+        pool = next(
+            resource
+            for resource in self.template.to_json()["Resources"].values()
+            if resource["Type"] == "AWS::Cognito::UserPool"
+        )
+        properties = pool["Properties"]
+
+        invite = properties["AdminCreateUserConfig"]["InviteMessageTemplate"]
+        self.assertIn("LCDash", invite["EmailSubject"])
+        self.assertIn("{username}", invite["EmailMessage"])
+        self.assertIn("{####}", invite["EmailMessage"])
+        # Identifies the sender, explains why it arrived unexpectedly, and says
+        # what to do if the recipient was not expecting it.
+        for expected in ("Logan County 911", "administrator", "not expecting"):
+            with self.subTest(invite=expected):
+                self.assertIn(expected, invite["EmailMessage"])
+        # A real, visible link to the application's own hostname.
+        self.assertIn('href="https://aws.logan911.com"', invite["EmailMessage"])
+
+        code_subject = properties["EmailAuthenticationSubject"]
+        code_message = properties["EmailAuthenticationMessage"]
+        self.assertIn("LCDash", code_subject)
+        self.assertIn("{####}", code_message)
+        for expected in ("Logan County 911", "did not just try to sign in"):
+            with self.subTest(code=expected):
+                self.assertIn(expected, code_message)
+
+        # Deliberately NO link in the code email. A message that carries a
+        # one-time code and also invites a click is the exact shape of a
+        # credential-harvesting email, so this asserts the absence.
+        self.assertNotIn("href=", code_message)
+
     def test_cognito_groups_are_named_read_only_roles_without_iam_roles(self):
         self.template.resource_count_is("AWS::Cognito::UserPoolGroup", 3)
         resources = self.template.to_json()["Resources"]
