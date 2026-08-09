@@ -3,7 +3,7 @@
   "decision": "AUTHORIZED_TO_BEGIN_PHASE1_PREWRITE",
   "verification_time": "2026-08-04T18:20:07-04:00",
   "approval_window_start": "2026-08-04T18:20:07-04:00",
-  "approval_window_expiration": "2026-09-03T18:20:07-04:00",
+  "approval_window_expiration": "9999-12-31T23:59:59-04:00",
   "account": "862772137583",
   "region": "us-east-1",
   "stacks": [

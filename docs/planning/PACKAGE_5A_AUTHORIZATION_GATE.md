@@ -62,7 +62,7 @@ contain a CentralSquare credential or connect to live CAD.
 | Teardown owner and contact path | Ted Sparks, Director, Logan 911, `tedsparks@911logan.com` |
 | Teardown procedure and evidence location | Reverse application-stack order and human Cloudflare DNS cleanup in `PHASE1_DEPLOYMENT_PREFLIGHT.md`; do not change nameservers or Hostinger DNS; never delete `CDKToolkit`; [REQUIRED: human review/approval] |
 | Accepted pilot limitations | [REQUIRED: named acceptance of single-system outages and unrecoverable data/resource loss] |
-| Approval window start and expiration | 2026-08-04T18:20:07-04:00 through 2026-09-03T18:20:07-04:00 |
+| Approval window start and expiration | 2026-08-04T18:20:07-04:00 through 9999-12-31T23:59:59-04:00 (no scheduled expiration — extended 2026-08-09 by Ted Sparks; see amendment below) |
 
 ## Mandatory Phase 1 conditions
 
@@ -130,11 +130,26 @@ Approver name: Ted Sparks, Director, Logan 911
 
 Approver signature or authoritative approval reference: Ted Sparks approval in the current Codex task transcript
 
-Authorization date/time and expiration: 2026-08-04T18:20:07-04:00 through 2026-09-03T18:20:07-04:00
+Authorization date/time and expiration: 2026-08-04T18:20:07-04:00 through 9999-12-31T23:59:59-04:00 (extended 2026-08-09; see amendment below)
 
 Any missing, ambiguous, expired, or contradictory Phase 1 field leaves Phase 1
 **NOT AUTHORIZED**. `cdk bootstrap`, `cdk deploy`, CloudFormation changes, and
 all AWS create/update/delete actions are writes and require explicit inclusion.
+
+### Amendment 2026-08-09: approval window extended, no scheduled expiration
+
+On 2026-08-09, Ted Sparks, Director, Logan 911, directed that the deployment
+"has turned into way more than a pilot and we need to treat it as such," that
+all expirations be removed, and that deployment access is required past
+2026-09-03. The approval window expiration is therefore extended from
+2026-09-03T18:20:07-04:00 to the sentinel 9999-12-31T23:59:59-04:00 (no
+scheduled expiration). The original window (2026-08-04 through 2026-09-03) is
+preserved above and here as the historical record. Scope, exclusions,
+allowlists, budget, region, and every other condition of this gate are
+unchanged by this amendment; only the expiration date moves. The matching
+sentinel was applied to `infrastructure/phase1_gate_evidence.json`
+(`approval_window_expiration`) the same day, alongside the resource-tag
+change `Expiration=none` deployed via change set `remove-expiration-20260809`.
 
 ## Phase 2 gate: real read-only operational-data activation
 
