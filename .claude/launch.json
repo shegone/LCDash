@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "lcdash-local",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-c",
+        "import os; os.environ.update(LCDASH_DEPLOYMENT_MODE='synthetic-disconnected', LCDASH_TENANT='logan-synthetic', LCDASH_CLOUD_CAD_ENABLED='false', LCDASH_ALB_IDENTITY_ENABLED='false', LCDASH_DATABASE_HOST='localhost', LCDASH_DATABASE_PORT='5432', LCDASH_DATABASE_NAME='lcdash', LCDASH_DATABASE_USERNAME='local', LCDASH_DATABASE_PASSWORD='local'); import uvicorn; uvicorn.run('app.main:app', host='127.0.0.1', port=8011)"
+      ],
+      "port": 8011
+    }
+  ]
+}
