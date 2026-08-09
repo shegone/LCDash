@@ -21,6 +21,12 @@
     "remove them after testing. Revisit when the sanitized 'user' tier exists --",
     "the non-county accounts here are the ones it was conceived for.",
     "",
+    "There are two admins on purpose. ted@911logan.com was added 2026-08-08 to",
+    "exercise the full new-account path end to end: administrator-created invite,",
+    "first-time password set, then MFA by emailed code. tedsparks@911logan.com was",
+    "already CONFIRMED with a password from 2026-08-05, so it can only test the",
+    "returning-user half of the flow, not the invite half.",
+    "",
     "The 'name' values below are placeholders taken verbatim from each email's",
     "local part. Real names were not on the Cognito accounts and have not been",
     "guessed; replace them as they become known.",
@@ -30,6 +36,7 @@
   ],
   "users": [
     { "email": "tedsparks@911logan.com", "name": "Ted Sparks", "role": "admin" },
+    { "email": "ted@911logan.com", "name": "Ted Sparks (new-account test)", "role": "admin" },
 
     { "email": "acrum@911logan.com", "name": "acrum", "role": "supervisor" },
     { "email": "ccline@911logan.com", "name": "ccline", "role": "supervisor" },
