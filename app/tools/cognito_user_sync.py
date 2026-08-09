@@ -285,15 +285,24 @@ def plan_user_sync(
     enabled_now = [
         email for email, state in current_by_email.items() if state.enabled
     ]
+    # Refuse a MAJORITY mass-disable, not merely a total one. The first version of
+    # this guard only tripped when every enabled user would be disabled, and that
+    # turned out to be nearly useless: run against a pool of 20 users with one
+    # name in the approved file, it happily planned 19 disables, because the one
+    # surviving account meant "not everyone". A guard that only fires at 100%
+    # does not protect against 95%.
     if (
         enabled_now
-        and set(would_disable) == set(enabled_now)
+        and len(would_disable) > max(1, len(enabled_now) // 2)
         and not allow_disabling_everyone
     ):
+        share = f"{len(would_disable)} of {len(enabled_now)}"
         refusals.append(
-            f"This plan would disable every enabled user ({len(enabled_now)}), "
-            "locking everyone out. That usually means the approved-users file is "
-            "empty or truncated. Re-run with allow_disabling_everyone if intended."
+            f"This plan would disable {share} enabled users, which is most of "
+            "them. That usually means the approved-users file is incomplete "
+            "rather than that this many people genuinely lost access. Compare the "
+            "file against the pool listing above, and re-run with "
+            "allow_disabling_everyone only once the removals are all intended."
         )
 
     return SyncPlan(

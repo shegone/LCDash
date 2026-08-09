@@ -375,7 +375,8 @@ class LockoutGuardTests(unittest.TestCase):
             ],
         )
         self.assertFalse(plan.safe_to_apply)
-        self.assertTrue(any("every enabled user" in r for r in plan.refusals))
+        self.assertTrue(any("2 of 2" in r for r in plan.refusals))
+        self.assertTrue(any("most of them" in r for r in plan.refusals))
 
     def test_lockout_can_be_overridden_deliberately(self):
         plan = plan_user_sync(
@@ -390,6 +391,59 @@ class LockoutGuardTests(unittest.TestCase):
             allow_disabling_everyone=True,
         )
         self.assertTrue(plan.safe_to_apply)
+
+    def test_disabling_most_but_not_all_users_is_refused(self):
+        """Regression: the first version of this guard only fired at 100%.
+
+        Run against the real pool -- 20 users, one name in the approved file --
+        it planned 19 disables without complaint, because the single surviving
+        account meant "not everyone". A guard that only trips at 100% does not
+        protect against 95%, which is the case that actually happened.
+        """
+        approved = [
+            ApprovedUser(email="keep@911logan.com", name="K", role=PilotRole.ADMIN)
+        ]
+        current = [
+            CognitoUserState(
+                email="keep@911logan.com",
+                enabled=True,
+                groups=frozenset({"lcdash-pilot-admin"}),
+            )
+        ] + [
+            CognitoUserState(
+                email=f"other{index}@911logan.com",
+                enabled=True,
+                groups=frozenset(),
+            )
+            for index in range(19)
+        ]
+        plan = plan_user_sync(approved, current)
+        self.assertFalse(plan.safe_to_apply)
+        self.assertTrue(any("19 of 20" in r for r in plan.refusals))
+
+    def test_disabling_a_minority_of_users_is_allowed(self):
+        """Ordinary offboarding must not need an override flag."""
+        approved = [
+            ApprovedUser(
+                email=f"keep{index}@911logan.com", name="K", role=PilotRole.USER
+            )
+            for index in range(8)
+        ]
+        current = [
+            CognitoUserState(
+                email=f"keep{index}@911logan.com",
+                enabled=True,
+                groups=frozenset({"lcdash-pilot-user"}),
+            )
+            for index in range(8)
+        ] + [
+            CognitoUserState(
+                email="gone@911logan.com", enabled=True, groups=frozenset()
+            )
+        ]
+        plan = plan_user_sync(approved, current)
+        self.assertTrue(plan.safe_to_apply)
+        self.assertEqual(_kinds(plan), [("disable_user", "gone@911logan.com", None)])
 
     def test_disabling_some_but_not_all_users_is_allowed(self):
         plan = plan_user_sync(
