@@ -411,6 +411,23 @@ class Phase1FoundationStack(cdk.Stack):
                 domain_prefix=parameters["cognito_domain_prefix"].value_as_string
             ),
         )
+        # Per-user identity settings are attached here rather than in the
+        # container definition above, because the application must be told which
+        # load balancer and user pool to trust and neither exists yet at that
+        # point. Adding them afterwards avoids reordering the whole stack.
+        # The load balancer ARN is the value the application compares against
+        # the "signer" field of each forwarded assertion, so a token minted by
+        # any other load balancer is rejected.
+        for name, value in {
+            "LCDASH_ALB_IDENTITY_ENABLED": parameters[
+                "alb_identity_enabled"
+            ].value_as_string,
+            "LCDASH_ALB_IDENTITY_REGION": self.region,
+            "LCDASH_ALB_IDENTITY_LOAD_BALANCER_ARN": load_balancer.load_balancer_arn,
+            "LCDASH_ALB_IDENTITY_USER_POOL_ID": user_pool.user_pool_id,
+            "LCDASH_ALB_IDENTITY_CLIENT_ID": user_pool_client.user_pool_client_id,
+        }.items():
+            container.add_environment(name, value)
         https_listener = load_balancer.add_listener(
             "HttpsListener",
             port=443,
@@ -740,6 +757,19 @@ class Phase1FoundationStack(cdk.Stack):
                 description=(
                     "Immutable digest published to the Phase 1 ECR repository. "
                     "NOT_PUBLISHED is the dormant initial placeholder only."
+                ),
+            ),
+            "alb_identity_enabled": cdk.CfnParameter(
+                self,
+                "AlbIdentityEnabled",
+                type="String",
+                allowed_values=["true", "false"],
+                default="false",
+                description=(
+                    "Set to true only in a separately reviewed update to derive "
+                    "per-user identity and role from the ALB's verified OIDC "
+                    "headers. While false, every request keeps the previous "
+                    "deployment-wide viewer identity."
                 ),
             ),
             "analytics_collector_enabled": cdk.CfnParameter(

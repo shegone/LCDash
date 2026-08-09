@@ -3,10 +3,12 @@ import base64
 import binascii
 from contextlib import asynccontextmanager
 import json
+import logging
 import re
 from queue import Queue
 from threading import Thread
 import secrets
+import uuid
 from datetime import datetime, timezone
 from typing import Annotated, Literal
 
@@ -18,6 +20,8 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
 from app.config.settings import settings
+from app.core.alb_identity import resolve_alb_identity
+from app.core.cloud_pilot_roles import PilotAuthorizationDenied, resolve_pilot_role
 from app.core.county_branding import branding_for_tenant_context
 from app.core.tenancy import TenantContext
 from app.core.county_profiles import resolve_county_profile
@@ -302,6 +306,8 @@ async def application_lifespan(application: FastAPI):
     finally:
         await cloud_cad_runtime.stop()
 
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="LCDash",
@@ -774,10 +780,65 @@ def active_calls_api():
         }
 
 
-def get_trusted_tenant_context() -> TenantContext | None:
-    """Deployment/identity composition seam; never derives tenant from a request."""
+def _alb_user_tenant_context(request: Request | None) -> TenantContext | None:
+    """Build a per-user context from cryptographically verified ALB headers.
+
+    The tenant binding still comes from deployment configuration -- only the
+    *subject and roles* come from the request, and only after both the load
+    balancer's ES256 assertion and Cognito's RS256 access token have been
+    verified. An unverifiable request yields ``None`` so the caller denies
+    rather than assuming a role.
+    """
+
+    if request is None or not settings.alb_identity_enabled:
+        return None
+
+    identity = resolve_alb_identity(
+        request.headers,
+        region=settings.alb_identity_region,
+        expected_alb_arn=settings.alb_identity_load_balancer_arn,
+        user_pool_id=settings.alb_identity_user_pool_id,
+        expected_client_id=settings.alb_identity_client_id or None,
+    )
+    if identity is None:
+        return None
+
+    try:
+        role = resolve_pilot_role(identity.groups)
+    except PilotAuthorizationDenied:
+        # An unrecognized group is a denial, not a downgrade to viewer.
+        logger.warning("Denied ALB identity: group claim did not map to a pilot role.")
+        return None
+
+    try:
+        return TenantContext(
+            tenant_id=settings.tenant_id,
+            subject=identity.subject,
+            identity_source="alb-cognito",
+            roles=frozenset({str(role)}),
+            request_id=str(uuid.uuid4()),
+            authenticated_at=datetime.now(timezone.utc),
+        )
+    except ValueError:
+        return None
+
+
+def get_trusted_tenant_context(request: Request = None) -> TenantContext | None:
+    """Identity composition seam.
+
+    Identity is derived from a request only when that request carries an
+    ALB-signed assertion whose ``signer`` matches this deployment's load
+    balancer. Unverified request input is never trusted. When per-user identity
+    is disabled or unavailable, this falls back to the deployment-wide context
+    that predates it, which carries the least-privileged role.
+    """
     if settings.deployment_mode != "synthetic-disconnected" or not settings.tenant_id:
         return None
+
+    user_context = _alb_user_tenant_context(request)
+    if user_context is not None:
+        return user_context
+
     try:
         return TenantContext(
             tenant_id=settings.tenant_id,

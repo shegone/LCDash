@@ -106,6 +106,16 @@ class Settings:
     debug: bool = _env("LCDASH_DEBUG", "true").lower() == "true"
     deployment_mode: str = _env("LCDASH_DEPLOYMENT_MODE", "on-prem").strip().lower()
     tenant_id: str = _env("LCDASH_TENANT", "logan-synthetic").strip().lower()
+    # Per-user identity recovered from ALB-signed OIDC headers. Ships dormant:
+    # until this is enabled every request keeps the previous deployment-wide
+    # viewer identity, so turning it on is a deliberate, reversible step.
+    alb_identity_enabled: bool = _env_bool("LCDASH_ALB_IDENTITY_ENABLED", False)
+    alb_identity_region: str = _env("LCDASH_ALB_IDENTITY_REGION", "us-east-1").strip()
+    alb_identity_load_balancer_arn: str = _env(
+        "LCDASH_ALB_IDENTITY_LOAD_BALANCER_ARN"
+    ).strip()
+    alb_identity_user_pool_id: str = _env("LCDASH_ALB_IDENTITY_USER_POOL_ID").strip()
+    alb_identity_client_id: str = _env("LCDASH_ALB_IDENTITY_CLIENT_ID").strip()
     cloud_cad_enabled: bool = _env_bool("LCDASH_CLOUD_CAD_ENABLED", False)
     cloud_cad_mode: str = _env(
         "LCDASH_CLOUD_CAD_MODE", "synthetic-disconnected"

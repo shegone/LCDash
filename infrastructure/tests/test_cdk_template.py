@@ -304,6 +304,66 @@ class CdkTemplateTests(unittest.TestCase):
             self.assertNotIn("ApplicationTaskRole", attached_role)
             self.assertNotIn("AnalyticsCollectorTaskRole", attached_role)
 
+    def test_alb_identity_is_wired_to_this_deployments_own_alb_and_pool(self):
+        """The app must be told which ALB and pool to trust, and ship dormant.
+
+        The load balancer ARN is what the application compares against the
+        ``signer`` field of each forwarded assertion, so if it were ever wired
+        to a literal or to another stack's balancer, forged identity headers
+        would verify. It must be a reference to this stack's own resources.
+        """
+        template = self.template.to_json()
+        task = next(
+            resource
+            for resource in template["Resources"].values()
+            if resource["Type"] == "AWS::ECS::TaskDefinition"
+        )
+        web = task["Properties"]["ContainerDefinitions"][0]
+        environment = {item["Name"]: item["Value"] for item in web["Environment"]}
+
+        # Dormant by default: enabling per-user identity is a reviewed change.
+        self.assertEqual(
+            environment["LCDASH_ALB_IDENTITY_ENABLED"], {"Ref": "AlbIdentityEnabled"}
+        )
+        self.assertEqual(
+            template["Parameters"]["AlbIdentityEnabled"]["Default"], "false"
+        )
+
+        # Each trust anchor resolves to a resource in this stack, not a literal.
+        for key in (
+            "LCDASH_ALB_IDENTITY_LOAD_BALANCER_ARN",
+            "LCDASH_ALB_IDENTITY_USER_POOL_ID",
+            "LCDASH_ALB_IDENTITY_CLIENT_ID",
+        ):
+            value = environment[key]
+            self.assertIsInstance(value, dict, f"{key} must be a resource reference")
+            self.assertTrue(
+                {"Ref", "Fn::GetAtt"} & value.keys(),
+                f"{key} must reference a stack resource, got {value!r}",
+            )
+
+        alb_logical_ids = [
+            name
+            for name, resource in template["Resources"].items()
+            if resource["Type"] == "AWS::ElasticLoadBalancingV2::LoadBalancer"
+        ]
+        self.assertEqual(len(alb_logical_ids), 1)
+        self.assertEqual(
+            environment["LCDASH_ALB_IDENTITY_LOAD_BALANCER_ARN"],
+            {"Ref": alb_logical_ids[0]},
+        )
+
+        pool_logical_ids = [
+            name
+            for name, resource in template["Resources"].items()
+            if resource["Type"] == "AWS::Cognito::UserPool"
+        ]
+        self.assertEqual(len(pool_logical_ids), 1)
+        self.assertEqual(
+            environment["LCDASH_ALB_IDENTITY_USER_POOL_ID"],
+            {"Ref": pool_logical_ids[0]},
+        )
+
     def test_cloud_cad_read_poll_reference_is_enabled_and_exactly_scoped(self):
         template = self.template.to_json()
         task = next(

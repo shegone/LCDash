@@ -88,7 +88,14 @@ class CloudDashboardUnitsPresentationTests(unittest.TestCase):
         self.assertIn("403", statements[0])
         self.assertEqual(statements[1], "_authorize_centralsquare_webhook(request)")
 
-    def test_cloud_tenant_context_comes_only_from_deployment_configuration(self):
+    def test_cloud_tenant_binding_comes_only_from_deployment_configuration(self):
+        """The tenant a request is scoped to is never negotiable by the caller.
+
+        Per-user identity (subject and role) does come from the request, but
+        only by way of an ALB-signed assertion that ``resolve_alb_identity``
+        verifies. The tenant binding itself stays pinned to deployment
+        configuration, so a request can never reach another county's data.
+        """
         main_source = (ROOT / "app" / "main.py").read_text(encoding="utf-8")
         settings_source = (ROOT / "app" / "config" / "settings.py").read_text(encoding="utf-8")
         tree = ast.parse(main_source)
@@ -100,8 +107,46 @@ class CloudDashboardUnitsPresentationTests(unittest.TestCase):
         source = ast.unparse(handler)
         self.assertIn('settings.tenant_id', source)
         self.assertIn('TenantContext(', source)
-        self.assertNotIn('Request', source)
+        # The tenant must never be read off the request.
+        self.assertNotIn('request.headers', source)
+        self.assertNotIn('request.query_params', source)
+        self.assertNotIn('request.cookies', source)
         self.assertIn('tenant_id: str = _env("LCDASH_TENANT", "logan-synthetic")', settings_source)
+
+    def test_request_derived_identity_is_always_cryptographically_verified(self):
+        """Identity may come from a request only through the verifying seam.
+
+        Replaces a blanket ban on touching the request, which made per-user
+        roles impossible. What actually matters is that no code path turns raw
+        header input into a role: header parsing belongs to
+        ``app.core.alb_identity`` and role mapping to ``resolve_pilot_role``.
+        """
+        main_source = (ROOT / "app" / "main.py").read_text(encoding="utf-8")
+        tree = ast.parse(main_source)
+        resolver = next(
+            node for node in tree.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "_alb_user_tenant_context"
+        )
+        source = ast.unparse(resolver)
+
+        # Headers reach the verifier and nothing else parses them here.
+        self.assertIn('resolve_alb_identity(', source)
+        self.assertIn('request.headers', source)
+        self.assertNotIn('request.headers[', source)
+        self.assertNotIn('request.headers.get(', source)
+
+        # The signer check is what proves provenance, so the ARN must be passed.
+        self.assertIn('expected_alb_arn=settings.alb_identity_load_balancer_arn', source)
+        self.assertIn('user_pool_id=settings.alb_identity_user_pool_id', source)
+
+        # Roles come from the deny-by-default mapper, never from claims directly.
+        self.assertIn('resolve_pilot_role(identity.groups)', source)
+        self.assertIn('PilotAuthorizationDenied', source)
+
+        # A rejected or unverifiable identity must not fall through to a role.
+        self.assertNotIn("roles=frozenset({'viewer'})", source)
+        self.assertIn('return None', source)
 
 
 if __name__ == "__main__":

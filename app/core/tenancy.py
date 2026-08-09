@@ -28,7 +28,14 @@ def _validate_identifier(label: str, value: str) -> None:
 
 @dataclass(frozen=True, slots=True)
 class TenantContext:
-    """Trusted identity and deployment binding; never built from request input."""
+    """Trusted identity and deployment binding.
+
+    The ``tenant_id`` binding always comes from deployment configuration and is
+    never negotiable by a caller. ``subject`` and ``roles`` may originate from a
+    request, but only by way of an assertion whose signature has been verified
+    and whose signer has been confirmed to be this deployment's load balancer
+    (see ``app.core.alb_identity``). Unverified request input is never trusted.
+    """
 
     tenant_id: str
     subject: str

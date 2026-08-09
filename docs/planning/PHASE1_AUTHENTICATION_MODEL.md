@@ -35,6 +35,40 @@ review role when both are assigned; it never changes the fixed tenant. No group
 authorizes CAD access, paging, station alerts, acknowledgements, subscriptions,
 public warning, EMS delivery, or another operational output.
 
+## How per-user identity reaches the application
+
+The load balancer authenticates the user; the application must still learn
+*which* user, because a single shared role cannot support differentiated access.
+Identity is recovered in `app/core/alb_identity.py` and requires two independent
+verifications, since neither forwarded header is both trustworthy and complete:
+
+| Header | Signed by | Verified how | Supplies |
+| --- | --- | --- | --- |
+| `x-amzn-oidc-data` | The load balancer (ES256) | Signature checked against the regional ALB public key named by `kid`, **and** the `signer` field asserted equal to this deployment's load-balancer ARN | Provenance, `sub`, `email` |
+| `x-amzn-oidc-accesstoken` | The Cognito user pool (RS256) | Signature checked against the pool JWKS; issuer, `token_use=access`, expiry, and `client_id` all confirmed | `cognito:groups` |
+
+Both are required. The ALB assertion is what proves a request actually arrived
+through the load balancer rather than being forged by anything else able to
+reach the container; the `signer` check is the load-bearing part of that proof.
+The Cognito access token is the only carrier of group membership, because the
+ALB does not forward ID-token claims and the Cognito userInfo endpoint omits
+`cognito:groups`.
+
+Constraints that this design deliberately keeps:
+
+- The tenant binding remains fixed by `LCDASH_TENANT` and is never read from a
+  request. Only `subject` and `roles` are request-derived.
+- Group claims are mapped by `resolve_pilot_role`, which is deny-by-default: an
+  unrecognized group denies the request outright rather than degrading to
+  `viewer`. A verification failure, a missing group claim, and a missing
+  configuration value all deny for the same reason.
+- Identity headers travel unencrypted between the load balancer and the task,
+  because the target group is HTTP. Ingress on the task port is restricted to
+  the load balancer's security group, which is the compensating control.
+- The capability ships behind `LCDASH_ALB_IDENTITY_ENABLED`, default off. While
+  disabled, every request keeps the previous deployment-wide `viewer` identity,
+  so enabling it is a deliberate and reversible step.
+
 ## Login and session policy
 
 - Email is the sign-in identifier and verified email is the only account-recovery
