@@ -50,19 +50,32 @@ class MaeCloudChatPresentationTests(unittest.TestCase):
         self.assertIn("_deny_unscoped_cloud_advisory_state()", chat.split("@app.", 2)[1])
         self.assertIn("_deny_unscoped_cloud_advisory_state()", stream.split("@app.", 2)[1])
 
-    def test_cloud_presentation_discloses_excluded_capabilities(self):
+    def test_cloud_presentation_discloses_capabilities_and_boundary(self):
+        """The page must describe what cloud MAE actually does today.
+
+        The original assertion pinned "no memory, feedback, tools, reports,
+        widgets" -- true when written, false after tool-calling (rev 38),
+        report templates, widgets, and voice all shipped; the greeting kept
+        telling users MAE "cannot use CAD data" while she answered live CAD
+        questions daily. What must never soften is the write boundary, so
+        that is pinned in BOTH user-visible texts.
+        """
         template = self.read("templates/mae.html")
 
-        self.assertIn(
-            "no memory,\n                feedback, tools, reports, widgets, or CAD write/dispatch actions",
-            template,
-        )
-        # Document answers still require citations; live CAD/analytics
-        # answers are a distinct, separately-disclosed capability that does
-        # not carry a document citation (see verified_live_advisory.py).
-        self.assertIn("approved retrieved documents (with citations)", template)
-        self.assertIn("CAD access\n                is read-only", template)
-        self.assertIn("Cloud conversational voice and transcription are not enabled", template)
+        # The greeting owns the capability story...
+        for capability in ("active\n                            calls", "analytics", "citations", "voice"):
+            self.assertIn(capability, template)
+        # ...and both greeting and source note state the read-only boundary.
+        self.assertIn("I can never dispatch, page, set off tones", template)
+        self.assertIn("no dispatch, paging, tones, or CAD writes", template)
+        self.assertIn("strictly read-only", template)
+        # Document answers still require citations; uploads are disclosed as
+        # part of the citation pool now that /admin/knowledge exists.
+        self.assertIn("cited approved documents", template)
+        self.assertIn("uploaded to the knowledge library", template)
+        # Voice starts gated until the status endpoint proves readiness --
+        # the button may not default to available.
+        self.assertIn('id="mae-voice-toggle" type="button"\n                    {% if cloud_mode %}disabled', template)
 
 
 if __name__ == "__main__":

@@ -135,9 +135,11 @@
         voiceToggle.title = voiceReady
             ? "Start a private voice conversation with MAE"
             : "Conversational voice is disabled until speech synthesis and transcription are both ready";
-        if (!voiceReady) {
-            voiceToggle.querySelector("small").textContent = "Unavailable - transcription gate not complete";
-        }
+        // Always replace the template's "Checking voice availability…"
+        // placeholder: an enabled button must not keep an unavailable label.
+        voiceToggle.querySelector("small").textContent = voiceReady
+            ? "Talk naturally with MAE"
+            : "Unavailable - transcription gate not complete";
     }
 
     function setVoiceState(state, title, detail) {

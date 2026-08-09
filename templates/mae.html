@@ -38,12 +38,16 @@
             </div>
         </div>
         <div class="mae-hero-actions">
+            {#- Starts disabled in cloud mode; loadVoiceStatus() enables it
+                once /api/voice/status reports both synthesis and
+                transcription ready, so the pre-JS default never offers a
+                microphone the backend cannot serve. -#}
             <button class="mae-voice-launch" id="mae-voice-toggle" type="button"
-                    {% if cloud_mode %}disabled title="Cloud conversational voice and transcription are not enabled"{% endif %}>
+                    {% if cloud_mode %}disabled title="Checking voice availability"{% endif %}>
                 <i class="bi bi-mic-fill"></i>
                 <span>
                     <strong>Start voice mode</strong>
-                    <small>{% if cloud_mode %}Cloud conversation unavailable{% else %}Talk naturally with MAE{% endif %}</small>
+                    <small>{% if cloud_mode %}Checking voice availability…{% else %}Talk naturally with MAE{% endif %}</small>
                 </span>
             </button>
             <div class="mae-guardrail">
@@ -134,10 +138,12 @@
             <div class="mae-source-note">
                 <i class="bi bi-info-circle"></i>
                 {% if cloud_mode %}
-                Cloud MAE answers from approved retrieved documents (with citations) or from
-                live CAD and analytics data for operational questions. It has no memory,
-                feedback, tools, reports, widgets, or CAD write/dispatch actions — CAD access
-                is read-only.
+                Cloud MAE answers from live CAD reads, the historical analytics
+                warehouse, and cited approved documents — including documents an
+                administrator has uploaded to the knowledge library. She can
+                preview and save analytics reports and widgets. CAD access is
+                strictly read-only: no dispatch, paging, tones, or CAD writes,
+                ever. <a href="/knowledge">View the Knowledge Library</a>.
                 {% else %}
                 MAE checks stored analytics for historical questions and requests
                 live CAD data only when current information is needed. Procedural
@@ -157,8 +163,14 @@
                         <div class="mae-message-name">MAE</div>
                         <p>
                             {% if cloud_mode %}
-                            I can answer only when approved cloud documents provide citation support.
-                            I cannot use CAD data or perform actions.
+                            Hi, I’m MAE. Ask me about what’s happening right now — active
+                            calls, unit status, response times, call history — or about
+                            trends and analytics over any period. I answer procedural
+                            questions from the approved document library with citations,
+                            I can build an analytics report you can save and export as a
+                            PDF, and you can talk to me by voice. Everything I see is
+                            read-only: I can never dispatch, page, set off tones, or
+                            change anything in CAD.
                             {% else %}
                             I’m ready to help with approved read-only operational awareness and
                             historical analysis. Ask me about active calls, units,
@@ -214,5 +226,5 @@
 
 <script src="/static/js/chart.umd.min.js?v=4.4.7"></script>
 <script src="/static/js/lcdash-voice-capture.js?v=20260807-cloud-voice"></script>
-<script src="/static/js/lcdash-mae.js?v=20260807-live-data-fix"></script>
+<script src="/static/js/lcdash-mae.js?v=20260809-voice-label"></script>
 {% endblock %}
