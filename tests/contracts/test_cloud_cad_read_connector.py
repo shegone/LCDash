@@ -34,6 +34,31 @@ class FakeResponse:
         return self.payload
 
 
+@dataclass
+class FakeRawResponse:
+    """A reply whose body is not JSON, like the httpx response the WAF produces."""
+
+    status_code: int
+    text: str
+    headers: dict[str, str] | None = None
+
+    def __post_init__(self):
+        self.headers = self.headers or {}
+
+    def json(self):
+        raise ValueError("not json")
+
+
+# Verbatim shape of the block the CentralSquare F5 WAF returned on 2026-08-08
+# for documented-but-refused filter parameters (IncidentCode, Beat): a SUCCESS
+# status carrying an HTML page.
+WAF_HTML = (
+    "<html><head><title>Request Rejected</title></head><body>The requested URL "
+    "was rejected. Please consult with your administrator.<br><br>Your support "
+    "ID is: 10968924947214390874</body></html>"
+)
+
+
 class FakeTransport:
     def __init__(self, responses):
         self.responses = deque(responses)
@@ -217,6 +242,110 @@ class CloudCadReadConnectorTests(unittest.TestCase):
         self.assertNotIn("synthetic-token", rendered)
         self.assertEqual(captured.exception.status_code, 403)
         self.assertIsNone(captured.exception.__cause__)
+
+    def test_html_on_success_status_is_diagnosed_without_polluting_the_error(self):
+        """The WAF-block shape: HTTP 200 whose body is an HTML rejection page.
+
+        Two properties must hold at once. The diagnostics hook receives enough
+        to see the cause in a log -- status, content type, and the page text.
+        The EXCEPTION stays sanitized, because it can surface to callers and to
+        the AI advisory: no body, no chained traceback.
+        """
+        seen = []
+        connector, _, _ = self.connector(
+            [
+                FakeResponse(200, {"access_token": "synthetic-token", "expires_in": 900}),
+                FakeRawResponse(200, WAF_HTML, {"Content-Type": "text/html; charset=utf-8"}),
+            ],
+            enabled=True,
+            diagnostics=seen.append,
+        )
+        with self.assertRaises(CloudCadConnectorError) as captured:
+            connector.search_calls({"IncidentCode": "MOVEUP"})
+
+        error = captured.exception
+        self.assertEqual(error.code, "invalid_json_response")
+        # The status now travels with the error, so a caller can tell a
+        # disguised 200-block from genuinely malformed data.
+        self.assertEqual(error.status_code, 200)
+        self.assertIsNone(error.__cause__)
+        rendered = json.dumps(dict(error.to_dict())) + str(error)
+        self.assertNotIn("Request Rejected", rendered)
+        self.assertNotIn("support ID", rendered)
+
+        [detail] = seen
+        self.assertEqual(detail["operation"], "search_calls")
+        self.assertEqual(detail["status_code"], 200)
+        self.assertIn("text/html", detail["content_type"])
+        self.assertEqual(detail["body_length"], len(WAF_HTML))
+        self.assertIn("Request Rejected", detail["body_prefix"])
+
+    def test_truncated_json_body_is_never_quoted_into_diagnostics(self):
+        """A body that CLAIMS to be JSON but fails to parse is usually cut-off
+        real data. Call records must not leak into logs, so only the length and
+        headers are reported for those."""
+        seen = []
+        connector, _, _ = self.connector(
+            [
+                FakeResponse(200, {"access_token": "synthetic-token", "expires_in": 900}),
+                FakeRawResponse(
+                    200,
+                    '{"cfs_cores": [{"reporter": "SENSITIVE-NAME", "location":',
+                    {"content-type": "application/json"},
+                ),
+            ],
+            enabled=True,
+            diagnostics=seen.append,
+        )
+        with self.assertRaises(CloudCadConnectorError):
+            connector.search_calls({})
+        [detail] = seen
+        self.assertNotIn("body_prefix", detail)
+        self.assertNotIn("SENSITIVE-NAME", json.dumps(dict(detail)))
+        self.assertEqual(detail["content_type"], "application/json")
+        self.assertGreater(detail["body_length"], 0)
+
+    def test_token_endpoint_diagnostics_never_include_a_body(self):
+        seen = []
+        connector, _, _ = self.connector(
+            [FakeRawResponse(200, WAF_HTML, {"content-type": "text/html"})],
+            enabled=True,
+            diagnostics=seen.append,
+        )
+        with self.assertRaises(CloudCadConnectorError) as captured:
+            connector.search_calls({})
+        self.assertEqual(captured.exception.code, "invalid_token_response")
+        [detail] = seen
+        self.assertEqual(detail["operation"], "authenticate")
+        self.assertNotIn("body_prefix", detail)
+
+    def test_a_failing_diagnostics_hook_never_displaces_the_real_error(self):
+        def broken_hook(detail):
+            raise RuntimeError("hook exploded")
+
+        connector, _, _ = self.connector(
+            [
+                FakeResponse(200, {"access_token": "synthetic-token", "expires_in": 900}),
+                FakeRawResponse(200, WAF_HTML, {"content-type": "text/html"}),
+            ],
+            enabled=True,
+            diagnostics=broken_hook,
+        )
+        with self.assertRaises(CloudCadConnectorError) as captured:
+            connector.search_calls({})
+        self.assertEqual(captured.exception.code, "invalid_json_response")
+
+    def test_no_diagnostics_hook_still_raises_the_sanitized_error(self):
+        connector, _, _ = self.connector(
+            [
+                FakeResponse(200, {"access_token": "synthetic-token", "expires_in": 900}),
+                FakeRawResponse(200, WAF_HTML, {"content-type": "text/html"}),
+            ],
+            enabled=True,
+        )
+        with self.assertRaises(CloudCadConnectorError) as captured:
+            connector.search_calls({})
+        self.assertEqual(captured.exception.code, "invalid_json_response")
 
     def test_exact_endpoint_and_polling_envelope_is_mandatory(self):
         transport = FakeTransport([])

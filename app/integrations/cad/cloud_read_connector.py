@@ -109,6 +109,7 @@ class CloudCentralSquareReadConnector:
         enabled: bool = False,
         sleeper: Callable[[float], None] = time.sleep,
         clock: Callable[[], float] = time.time,
+        diagnostics: Callable[[Mapping[str, Any]], None] | None = None,
     ) -> None:
         self._validate_envelope(config, from_header)
         self._config = config
@@ -118,6 +119,15 @@ class CloudCentralSquareReadConnector:
         self._enabled = enabled
         self._sleeper = sleeper
         self._clock = clock
+        # Operator-facing hook, injected like sleeper/clock because this module
+        # deliberately owns no logger. It receives a small sanitized mapping when
+        # upstream answers with something other than JSON; the EXCEPTION stays
+        # payload-free because it can surface to callers and to the AI advisory,
+        # while the hook feeds logs that only operators read. Without this, a
+        # firewall block dressed as HTTP 200 + HTML reduces to the opaque string
+        # "invalid_json_response" -- which is exactly how the WAF finding of
+        # 2026-08-08 stayed invisible until probed by hand.
+        self._diagnostics = diagnostics
         self._access_token: str | None = None
         self._access_token_expires_at: float = 0.0
 
@@ -141,6 +151,43 @@ class CloudCentralSquareReadConnector:
     def _require_enabled(self) -> None:
         if not self._enabled:
             raise CloudCadConnectorError("connector_disabled", "startup")
+
+    def _report_non_json(
+        self, operation: str, response: HttpResponse, *, include_body: bool
+    ) -> None:
+        """Hand a sanitized description of a non-JSON reply to the diagnostics hook.
+
+        The body prefix is quoted ONLY when upstream itself labels the body as
+        something other than JSON (an HTML firewall or proxy page). A body that
+        claims to be JSON but fails to parse is usually truncated real data, and
+        call records must never leak into logs; for those, length and headers
+        are enough to diagnose. The token endpoint never quotes a body at all.
+        """
+        if self._diagnostics is None:
+            return
+        try:
+            headers = {
+                str(key).lower(): str(value)
+                for key, value in dict(response.headers).items()
+            }
+        except Exception:
+            headers = {}
+        content_type = headers.get("content-type", "")
+        detail: dict[str, Any] = {
+            "operation": operation,
+            "status_code": getattr(response, "status_code", None),
+            "content_type": content_type,
+        }
+        body = getattr(response, "text", None)
+        if isinstance(body, str):
+            detail["body_length"] = len(body)
+            if include_body and "json" not in content_type.lower():
+                detail["body_prefix"] = body[:300]
+        try:
+            self._diagnostics(MappingProxyType(detail))
+        except Exception:
+            # Diagnostics must never displace the real error.
+            pass
 
     @staticmethod
     def _retry_delay(attempt: int, response: HttpResponse) -> float:
@@ -202,9 +249,16 @@ class CloudCentralSquareReadConnector:
         )
         try:
             payload = response.json()
-        except Exception as exc:
+        except Exception:
+            # from None is deliberate: this exception can surface to callers,
+            # so it must not chain a traceback that embeds the response. The
+            # diagnostics hook (never the exception) carries the detail, and
+            # for the token endpoint it excludes the body entirely.
+            self._report_non_json("authenticate", response, include_body=False)
             raise CloudCadConnectorError(
-                "invalid_token_response", "authenticate"
+                "invalid_token_response",
+                "authenticate",
+                status_code=response.status_code,
             ) from None
         token = payload.get("access_token") if isinstance(payload, dict) else None
         if not isinstance(token, str) or not token:
@@ -256,8 +310,20 @@ class CloudCentralSquareReadConnector:
         )
         try:
             return response.json()
-        except Exception as exc:
-            raise CloudCadConnectorError("invalid_json_response", operation) from None
+        except Exception:
+            # A success status carrying a non-JSON body is how the CentralSquare
+            # WAF expresses a block (HTTP 200 + an HTML "Request Rejected" page),
+            # so this path is a disguised upstream rejection, not merely bad
+            # data. The sanitized exception stays payload-free by design; the
+            # injected diagnostics hook records status, content type, length and
+            # -- only for bodies upstream itself labels non-JSON -- a short
+            # prefix, so the cause is visible in operator logs.
+            self._report_non_json(operation, response, include_body=True)
+            raise CloudCadConnectorError(
+                "invalid_json_response",
+                operation,
+                status_code=response.status_code,
+            ) from None
 
     @staticmethod
     def _page(skip: int, limit: int) -> Mapping[str, int]:

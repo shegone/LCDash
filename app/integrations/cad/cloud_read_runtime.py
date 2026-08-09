@@ -537,6 +537,26 @@ class CloudCadReadPoller:
         self._task = None
 
 
+def _log_connector_diagnostics(detail: Mapping[str, Any]) -> None:
+    """Log what CentralSquare actually returned when it was not JSON.
+
+    The connector module deliberately owns no logger, so it hands a sanitized
+    mapping here. This line is the difference between an operator seeing the
+    WAF's "Request Rejected" page in CloudWatch and seeing only the opaque code
+    "invalid_json_response" -- the 2026-08-08 IncidentCode/Beat block was
+    invisible for exactly this reason.
+    """
+    LOGGER.warning(
+        "CentralSquare returned a non-JSON body: operation=%s status=%s "
+        "content_type=%s body_length=%s body_prefix=%r",
+        detail.get("operation"),
+        detail.get("status_code"),
+        detail.get("content_type"),
+        detail.get("body_length"),
+        detail.get("body_prefix", ""),
+    )
+
+
 def build_cloud_cad_connector(runtime_settings: Any):
     """Return the authenticated read-only connector, or None when disabled.
 
@@ -553,6 +573,7 @@ def build_cloud_cad_connector(runtime_settings: Any):
         secret_provider=SecretsManagerCredentialProvider(config.secret_reference),
         transport=HttpxReadTransport(),
         enabled=True,
+        diagnostics=_log_connector_diagnostics,
     )
 
 
