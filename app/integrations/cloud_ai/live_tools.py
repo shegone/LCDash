@@ -57,6 +57,32 @@ MAX_HISTORY_RESULTS_DEFAULT = 200
 # payload so a large lookup table doesn't blow the tool-response token budget.
 MAX_CONFIG_LIST_ITEMS = 200
 
+# get_cad_configurations: what an empty or refused lookup actually means, spelled
+# out for the model. Both were learned from live probes on 2026-08-09 after MAE
+# told a supervisor "the CAD system does not have any incident types defined"
+# while 200 coded calls sat in an unfiltered result: the servable IncidentType
+# table is genuinely unpopulated in this CAD (incident codes live on the calls
+# themselves), and most configuration names never reach CAD at all -- a firewall
+# in front of it refuses them by exact token, disguised as HTTP 200 HTML, which
+# surfaces here as invalid_json_response. Without these notes the model reads
+# "empty table" as "the concept does not exist" and an opaque refusal as absence
+# of data, and answers with a confident fabrication either way.
+_EMPTY_CONFIGURATION_NOTE = (
+    "This lookup table exists but is unpopulated in this CAD deployment. That "
+    "does NOT mean no such values are in use: values like incident types live "
+    "on the calls themselves. To answer 'what kinds of X are there', use "
+    "get_analytics_summary (its incident_types rows are the types actually "
+    "used) or examine calls from list_active_calls/search_call_history. Do not "
+    "tell the user the CAD system has none defined."
+)
+_REJECTED_CONFIGURATION_NOTE = (
+    "A firewall in front of CAD refused this configuration NAME before CAD saw "
+    "it; this says nothing about whether the data exists. Do not retry other "
+    "guessed names. To answer 'what kinds of X are there', use "
+    "get_analytics_summary (incident_types) or examine calls from "
+    "list_active_calls/search_call_history."
+)
+
 _UNAVAILABLE_MESSAGE = "live CAD query is unavailable"
 
 _ANALYTICS_PERIOD_KEYS = {"24h", "7d", "30d", "90d", "365d"}
@@ -305,6 +331,22 @@ def _bound_configuration_value(value: Any) -> tuple[Any, bool]:
             truncated = truncated or sub_truncated
         return out_map, truncated
     return value, False
+
+
+def _configuration_has_entries(value: Any) -> bool:
+    """True if the configuration payload carries any actual data.
+
+    CAD wraps results in envelope keys (e.g. ``{"IncidentType": []}``), so a
+    non-empty dict is not evidence of content -- only a scalar, or a container
+    that eventually reaches one, is.
+    """
+    if isinstance(value, Mapping):
+        return any(_configuration_has_entries(item) for item in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_configuration_has_entries(item) for item in value)
+    if value is None:
+        return False
+    return value != ""
 
 
 class LiveToolRegistry:
@@ -829,14 +871,21 @@ class LiveToolRegistry:
                 detail=f"get_configurations failed: {error.code}",
                 available=False,
             )
+            error_payload: dict[str, Any] = {
+                "available": False,
+                "error": f"CAD configuration query failed: {error.code}",
+                "configuration": configuration,
+            }
+            # invalid_json_response on this endpoint is the firewall's exact-
+            # token allowlist answering with an HTML page (see the note's
+            # rationale above); without the steer the model reads it as the
+            # data not existing.
+            if error.code == "invalid_json_response":
+                error_payload["note"] = _REJECTED_CONFIGURATION_NOTE
             return LiveToolResult(
                 "get_cad_configurations",
                 source,
-                {
-                    "available": False,
-                    "error": f"CAD configuration query failed: {error.code}",
-                    "configuration": configuration,
-                },
+                error_payload,
             )
         except Exception:
             source = LiveDataSource(
@@ -862,15 +911,18 @@ class LiveToolRegistry:
             detail=f"get_configurations {configuration}",
             available=True,
         )
+        payload: dict[str, Any] = {
+            "available": True,
+            "configuration": configuration,
+            "truncated": truncated,
+            "result": bounded_result,
+        }
+        if not _configuration_has_entries(result):
+            payload["note"] = _EMPTY_CONFIGURATION_NOTE
         return LiveToolResult(
             "get_cad_configurations",
             source,
-            {
-                "available": True,
-                "configuration": configuration,
-                "truncated": truncated,
-                "result": bounded_result,
-            },
+            payload,
         )
 
     # -- get_analytics_summary ----------------------------------------------
@@ -1206,14 +1258,20 @@ TOOL_SPECS: tuple[Mapping[str, Any], ...] = (
             "name": "get_cad_configurations",
             "description": (
                 "Look up one named CentralSquare CAD system configuration/lookup "
-                "table (e.g. CADUnitStatus, IncidentType) by making a live query to "
-                "the CAD system -- NOT the current snapshot. Use this only when the "
-                "question is about CAD's own reference/configuration data (what "
-                "status codes exist, what incident types are defined, etc.), not "
-                "about a specific call or unit. `configuration` must be a valid "
+                "table (e.g. Agencies, Station) by making a live query to the CAD "
+                "system -- NOT the current snapshot. Use this only when the "
+                "question is about CAD's own reference/configuration data, not "
+                "about a specific call or unit. Do NOT use it to answer 'what "
+                "incident types are there?' -- lookup tables here may be "
+                "unpopulated even though values are in daily use on the calls, "
+                "and a firewall refuses most guessed table names; for the kinds "
+                "of incidents actually occurring, use get_analytics_summary "
+                "(incident_types) instead. `configuration` must be a valid "
                 "identifier (letters/digits/underscore, not starting with a digit) "
                 "of at most 64 characters. Any list nested in the result is capped "
-                "at 200 entries, with `truncated` set to true if anything was cut."
+                "at 200 entries, with `truncated` set to true if anything was cut. "
+                "If the payload carries a `note`, it corrects the obvious "
+                "misreading of that result -- follow it."
             ),
             "inputSchema": {
                 "json": {
@@ -1222,7 +1280,7 @@ TOOL_SPECS: tuple[Mapping[str, Any], ...] = (
                         "configuration": {
                             "type": "string",
                             "maxLength": 64,
-                            "description": "e.g. CADUnitStatus, IncidentType",
+                            "description": "e.g. Agencies, Station",
                         },
                     },
                     "required": ["configuration"],

@@ -1037,6 +1037,96 @@ class GetCadConfigurationsTests(unittest.TestCase):
         )
         self.assertIn("error", result.payload)
 
+    # -- empty / firewall-refused lookups must carry a corrective note -------
+    #
+    # Live probes (2026-08-09) showed the two results a model most misreads:
+    # the servable IncidentType table is genuinely empty even though incident
+    # codes are on every call, and most guessed names are refused by a firewall
+    # in front of CAD as HTTP 200 HTML (surfacing as invalid_json_response).
+    # Both drove MAE to tell a supervisor "the CAD system does not have any
+    # incident types defined" while 200 coded calls sat in the result.
+
+    def test_empty_lookup_result_carries_corrective_note(self):
+        for empty in (
+            {"IncidentType": []},  # the exact live shape observed
+            {},
+            [],
+            {"Envelope": {"Inner": []}},
+            {"IncidentType": [], "Other": None},
+        ):
+            with self.subTest(result=empty):
+                connector = _FakeCadConnector(config_result=empty)
+                registry = _registry(cad_connector=connector)
+                result = registry.execute(
+                    "get_cad_configurations", {"configuration": "IncidentType"}
+                )
+                self.assertTrue(result.payload["available"])
+                self.assertIn("note", result.payload)
+                self.assertIn("unpopulated", result.payload["note"])
+                self.assertIn("get_analytics_summary", result.payload["note"])
+
+    def test_populated_lookup_result_carries_no_note(self):
+        for populated in (
+            {"Values": [{"Code": "AVAIL"}]},
+            {"Agencies": [{"UniqueIdentifier": 13}]},
+            {"Count": 0},  # a scalar, even falsy, is data -- not an empty table
+        ):
+            with self.subTest(result=populated):
+                connector = _FakeCadConnector(config_result=populated)
+                registry = _registry(cad_connector=connector)
+                result = registry.execute(
+                    "get_cad_configurations", {"configuration": "CADUnitStatus"}
+                )
+                self.assertTrue(result.payload["available"])
+                self.assertNotIn("note", result.payload)
+
+    def test_firewall_refusal_carries_steering_note(self):
+        connector = _FakeCadConnector(
+            config_error=CloudCadConnectorError(
+                "invalid_json_response", "get_configurations", status_code=200
+            )
+        )
+        registry = _registry(cad_connector=connector)
+        result = registry.execute(
+            "get_cad_configurations", {"configuration": "IncidentTypes"}
+        )
+        self.assertFalse(result.payload["available"])
+        self.assertIn("note", result.payload)
+        self.assertIn("firewall", result.payload["note"])
+        self.assertIn("get_analytics_summary", result.payload["note"])
+        # And it must tell the model not to keep guessing names: every guess
+        # is logged by the firewall and repeated triggers can block the IP.
+        self.assertIn("Do not retry", result.payload["note"])
+
+    def test_other_connector_errors_carry_no_steering_note(self):
+        """Auth failures and timeouts are NOT the firewall; steering the model
+        toward analytics there would mask a real outage."""
+        for code in ("token_request_failed", "request_failed", "upstream_rejected"):
+            with self.subTest(code=code):
+                connector = _FakeCadConnector(
+                    config_error=CloudCadConnectorError(code, "get_configurations")
+                )
+                registry = _registry(cad_connector=connector)
+                result = registry.execute(
+                    "get_cad_configurations", {"configuration": "CADUnitStatus"}
+                )
+                self.assertFalse(result.payload["available"])
+                self.assertNotIn("note", result.payload)
+
+    def test_spec_steers_incident_type_questions_to_analytics(self):
+        spec = next(
+            s["toolSpec"] for s in TOOL_SPECS
+            if s["toolSpec"]["name"] == "get_cad_configurations"
+        )
+        self.assertIn("get_analytics_summary", spec["description"])
+        # The old spec named IncidentType as its own example, actively inviting
+        # the empty-table misreading this fix exists to prevent.
+        self.assertNotIn("IncidentType", spec["description"])
+        self.assertNotIn(
+            "IncidentType",
+            spec["inputSchema"]["json"]["properties"]["configuration"]["description"],
+        )
+
 
 class UnknownToolTests(unittest.TestCase):
     def test_unknown_tool_name_is_an_error_payload_not_an_exception(self):
