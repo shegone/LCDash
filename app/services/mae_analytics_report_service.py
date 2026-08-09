@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+from pathlib import Path
 from textwrap import shorten
 
 from reportlab.graphics.charts.barcharts import VerticalBarChart
@@ -10,7 +11,8 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.lib.utils import ImageReader
+from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.services.mae_analytics_visualization_service import (
     build_visualization,
@@ -34,6 +36,37 @@ def _chart(title: str, rows: list[dict], limit: int = 8) -> Drawing:
     return drawing
 
 
+# The same Logan County 911 logo the dashboard shows (Ted asked for it on the
+# report heading too). Resolved relative to the app's working directory, like
+# StaticFiles(directory="static") in app/main.py.
+_LOGO_PATH = Path("static/img/logan911-logo.png")
+_LOGO_HEIGHT = 0.62 * inch
+
+
+def _report_heading(styles) -> list:
+    """Title block, with the county logo beside it when the file is present.
+
+    A missing or unreadable logo must never block a report -- the heading
+    degrades to text-only rather than raising.
+    """
+    title = Paragraph("Logan County 911 - MAE Analytics Report", styles["Title"])
+    subtitle = Paragraph("Supervisor-requested aggregate analytics report", styles["Italic"])
+    try:
+        width, height = ImageReader(str(_LOGO_PATH)).getSize()
+        logo = Image(str(_LOGO_PATH), width=_LOGO_HEIGHT * (width / height), height=_LOGO_HEIGHT)
+    except Exception:
+        return [title, subtitle]
+    heading = Table(
+        [[logo, [title, subtitle]]],
+        colWidths=[_LOGO_HEIGHT * (width / height) + 10, None],
+    )
+    heading.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (0, 0), 0),
+    ]))
+    return [heading]
+
+
 def build_analytics_report(snapshot: dict, view_key: str = "") -> bytes:
     """Return a PDF containing only verified aggregate analytics values."""
     output = BytesIO()
@@ -41,8 +74,7 @@ def build_analytics_report(snapshot: dict, view_key: str = "") -> bytes:
     styles = getSampleStyleSheet()
     metrics = snapshot.get("metrics") or {}
     story = [
-        Paragraph("Logan County 911 - MAE Analytics Report", styles["Title"]),
-        Paragraph("Supervisor-requested aggregate analytics report", styles["Italic"]), Spacer(1, 12),
+        *_report_heading(styles), Spacer(1, 12),
         Paragraph(f"Reporting window: {snapshot.get('period_label') or 'Selected period'}", styles["BodyText"]),
         Paragraph(f"Generated: {(snapshot.get('generated_at') or '').replace('T', ' ')}", styles["BodyText"]), Spacer(1, 12),
     ]
