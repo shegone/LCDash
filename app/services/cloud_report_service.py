@@ -9,6 +9,8 @@ import json
 import re
 import uuid
 
+from app.core.cloud_pilot_roles import ROLE_PRECEDENCE
+
 
 ALLOWED_METRICS = frozenset({
     "call_count", "average_response_seconds", "unit_commitment_minutes",
@@ -18,7 +20,11 @@ ALLOWED_DIMENSIONS = frozenset({
     "day", "hour", "nature", "agency", "jurisdiction", "disposition",
 })
 ALLOWED_PERIODS = frozenset({"24h", "7d", "30d", "90d", "365d"})
-ALLOWED_VISIBILITY = frozenset({"viewer", "dispatcher", "supervisor", "admin"})
+# The three real pilot roles (see app/core/cloud_pilot_roles.py). This list
+# previously carried the pre-rebuild names "viewer" and "dispatcher" -- roles
+# nobody can hold since the 2026-08-08 auth rebuild -- while omitting "user",
+# which is real. A template shared with a dead role name is invisible forever.
+ALLOWED_VISIBILITY = frozenset({"user", "supervisor", "admin"})
 _TITLE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 .,'()/-]{2,99}$")
 
 
@@ -115,9 +121,32 @@ def safe_template_record(template: ReportTemplate) -> dict[str, Any]:
     return record
 
 
+def _roles_seen_by(viewer_roles: frozenset[str]) -> frozenset[str]:
+    """Expand a viewer's roles down the pilot hierarchy.
+
+    Admin is defined as supervisor access plus access review, so a template
+    shared with supervisors must not vanish for admins. Exact-match visibility
+    did exactly that on the first real save (2026-08-09): the save button
+    marks templates ``visible_to_roles=["supervisor"]``, Ted saved one as
+    admin, and the list showed him nothing. Roles outside the pilot hierarchy
+    expand to nothing extra -- they still match only themselves.
+    """
+    seen = set(viewer_roles)
+    for role in viewer_roles:
+        rank = ROLE_PRECEDENCE.get(role)
+        if rank is not None:
+            seen.update(
+                str(other) for other, other_rank in ROLE_PRECEDENCE.items()
+                if other_rank >= rank
+            )
+    return frozenset(seen)
+
+
 def template_visible(template: ReportTemplate, *, tenant_id: str,
                      roles: frozenset[str]) -> bool:
-    return template.tenant_id == tenant_id and bool(roles.intersection(template.visible_to_roles))
+    if template.tenant_id != tenant_id:
+        return False
+    return bool(_roles_seen_by(roles).intersection(template.visible_to_roles))
 
 
 class PostgresReportTemplateStore:

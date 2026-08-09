@@ -64,6 +64,48 @@ class CloudReportServiceTests(unittest.TestCase):
             template, tenant_id="logan-synthetic", roles=frozenset({"viewer"})
         ))
 
+    def test_visibility_respects_the_role_hierarchy(self):
+        """Admin is supervisor-plus, so supervisor templates must not vanish
+        for admins. Bit Ted on the first real save (2026-08-09): the save
+        button marks templates visible to supervisor, he saved as admin, and
+        the new list page showed him nothing."""
+        supervisor_template = create_report_template(
+            tenant_id="logan-synthetic", title="Calls by nature",
+            intent=self.intent(), author_subject="tedsparks@911logan.com",
+            visible_to_roles=("supervisor",),
+        )
+        for viewer_roles, expected in (
+            ({"admin"}, True),          # the actual failure
+            ({"supervisor"}, True),
+            ({"user"}, False),          # hierarchy goes one way only
+            ({"viewer"}, False),        # roles outside the hierarchy: exact-match
+        ):
+            with self.subTest(roles=viewer_roles):
+                self.assertEqual(
+                    template_visible(
+                        supervisor_template,
+                        tenant_id="logan-synthetic",
+                        roles=frozenset(viewer_roles),
+                    ),
+                    expected,
+                )
+
+        user_template = create_report_template(
+            tenant_id="logan-synthetic", title="Calls by hour",
+            intent=self.intent(), author_subject="tedsparks@911logan.com",
+            visible_to_roles=("user",),
+        )
+        self.assertTrue(template_visible(
+            user_template, tenant_id="logan-synthetic", roles=frozenset({"admin"})
+        ))
+        self.assertTrue(template_visible(
+            user_template, tenant_id="logan-synthetic", roles=frozenset({"supervisor"})
+        ))
+        # Hierarchy never crosses tenants.
+        self.assertFalse(template_visible(
+            supervisor_template, tenant_id="other-county", roles=frozenset({"admin"})
+        ))
+
     def test_unsafe_template_visibility_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "unauthorized"):
             create_report_template(
