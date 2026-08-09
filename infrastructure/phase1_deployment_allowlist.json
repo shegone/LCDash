@@ -100,7 +100,7 @@
   },
   "resource_type_counts": {
     "lcdash-p1-logan-use1-certificate": {
-      "AWS::CertificateManager::Certificate": 1
+      "AWS::CertificateManager::Certificate": 2
     },
     "lcdash-p1-logan-use1-foundation": {
       "AWS::Budgets::Budget": 2,
