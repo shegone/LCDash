@@ -73,8 +73,17 @@ class AdminUsersRouteTests(unittest.TestCase):
                 with self.subTest(identity=identity and identity.email, path=path):
                     response = self.client.request(method, path, json=body)
                     self.assertEqual(response.status_code, 403)
-                    self.assertEqual(
-                        response.json()["detail"], "Administrator sign-in is required."
+                    # Supervisors and unverifiable callers are stopped by the
+                    # admin gate. The restricted `user` role never reaches it:
+                    # the sanitized-tier path allowlist denies admin paths
+                    # first, which is a stricter layer, not a weaker one.
+                    self.assertIn(
+                        response.json()["detail"],
+                        {
+                            "Administrator sign-in is required.",
+                            "This view is not available on your account. "
+                            "Ask an administrator if you need access.",
+                        },
                     )
         self.service.list_users.assert_not_called()
         self.service.invite_user.assert_not_called()

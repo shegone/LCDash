@@ -47,14 +47,22 @@ ROLE_PRECEDENCE = {
     PilotRole.ADMIN: 10,
 }
 
-# The restricted tier. When the sanitized build lands, this is the set that
-# narrows; supervisor and admin are deliberately unrestricted.
+# The restricted tier, as scoped by Ted on 2026-08-09: the dashboard, station
+# alerts, the GIS map, and the heat map -- addresses, call types, and
+# responding unit numbers, with no route to call detail. Analytics and the
+# document library were in this set while the tier was hypothetical; both were
+# excluded when it was actually specified, so they are gone rather than left
+# here contradicting the thing that enforces them.
+#
+# ENFORCEMENT DOES NOT LIVE HERE. app/core/sanitized_tier.py holds the path
+# allowlist and the field allowlist that the application actually applies;
+# this map is the vocabulary, not the gate. Keep the two in agreement.
 USER_PERMISSIONS = frozenset(
     {
         "pilot.readiness.view",
         "dashboard.synthetic.view",
-        "analytics.synthetic.view",
-        "documents.approved.view",
+        "station.alerts.view",
+        "map.view",
     }
 )
 SUPERVISOR_PERMISSIONS = USER_PERMISSIONS | {

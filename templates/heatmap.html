@@ -287,6 +287,8 @@
     </div>
 </div>
 
+{% if restricted %}{% include "components/restricted_view_banner.html" %}{% endif %}
+
 <div class="command-safety-banner p-3 mb-4" role="note">
     <strong class="text-success">Read-only cloud history boundary.</strong>
     This view cannot query an unapproved source, update CAD, or trigger operational outputs.

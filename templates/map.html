@@ -304,6 +304,8 @@
     </div>
 </div>
 
+{% if restricted %}{% include "components/restricted_view_banner.html" %}{% endif %}
+
 <div class="command-safety-banner p-3 mb-4" role="note">
     <strong class="text-success">Read-only cloud map boundary.</strong>
     This view cannot update CAD, acknowledge incidents, dispatch units, or trigger operational outputs.
@@ -367,6 +369,9 @@
                 <label class="form-check-label" for="show-units">Show units</label>
             </div>
         </div>
+        {#- Agency and priority are not in the sanitized map properties, so for
+            the restricted tier these would be permanently empty selects. -#}
+        {% if not restricted %}
         <div class="col-12 col-md-2">
             <label class="map-control-label" for="map-agency-filter">Agency</label>
             <select class="form-select form-select-sm" id="map-agency-filter"></select>
@@ -375,6 +380,7 @@
             <label class="map-control-label" for="map-priority-filter">Priority</label>
             <select class="form-select form-select-sm" id="map-priority-filter"></select>
         </div>
+        {% endif %}
         <div class="col-12 col-md-2">
             <label class="map-control-label" for="map-status-filter">Status</label>
             <select class="form-select form-select-sm" id="map-status-filter"></select>
@@ -400,11 +406,19 @@
 </section>
 
 <section class="map-legend mb-3" aria-label="Map symbol legend">
+    {#- Priority never reaches the restricted tier, so every call pin there is
+        drawn in the "other calls" colour. Listing priority bands would describe
+        a distinction the map is not making. -#}
+    {% if restricted %}
+    <span class="legend-item"><span class="legend-dot" style="background:#69ffb9" aria-hidden="true"></span> Active call</span>
+    <span class="legend-item"><span class="legend-unit" aria-hidden="true"></span> CAD unit</span>
+    {% else %}
     <span class="legend-item"><span class="legend-dot" style="background:#ff4c4c" aria-hidden="true"></span> Priority 1–10</span>
     <span class="legend-item"><span class="legend-dot" style="background:#ffd66b" aria-hidden="true"></span> Priority 15</span>
     <span class="legend-item"><span class="legend-dot" style="background:#4cc9ff" aria-hidden="true"></span> Priority 20</span>
     <span class="legend-item"><span class="legend-dot" style="background:#69ffb9" aria-hidden="true"></span> Other calls</span>
     <span class="legend-item"><span class="legend-unit" aria-hidden="true"></span> CAD unit</span>
+    {% endif %}
 </section>
 
 {% if map_data.cad_connected and not map_data.features %}
@@ -426,9 +440,26 @@
     aria-describedby="operations-map-description map-filter-status"
 ></div>
 
+{#- The /map route hands this template the unreduced GeoJSON -- only
+    /api/operations/map passes through the field allowlist, which is where
+    cfs_number and detail_url are dropped. Embedding the route's copy would put
+    every call's CFS number in the page source for the restricted tier, so it
+    gets an empty feature collection and lcdash-map.js fetches the sanitized one
+    instead. Reproducing the allowlist here in Jinja would make the reduction
+    two things to keep in step. -#}
+{% if restricted %}
+<script type="application/json" id="map-data">{{ {
+    "cad_connected": map_data.cad_connected|default(false, true),
+    "roster_warning": map_data.roster_warning|default("", true),
+    "generated_at": map_data.generated_at|default("", true),
+    "features": [],
+    "sanitized_pending": true
+}|tojson }}</script>
+{% else %}
 <script type="application/json" id="map-data">{{ map_data|tojson }}</script>
+{% endif %}
 <script src="/static/vendor/leaflet/leaflet.js"></script>
-<script src="/static/js/lcdash-map.js?v=20260808-satellite-tileerror-fallback"></script>
+<script src="/static/js/lcdash-map.js?v=20260809-sanitized-tier"></script>
 <script>
     LCDashTime.updateCadDisplayTimes();
     LCDashTime.startRefreshCountdown({

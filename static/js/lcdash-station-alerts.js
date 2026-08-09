@@ -213,7 +213,10 @@
 
             const location = document.createElement("div");
             location.className = "text-light";
-            location.textContent = alert.location || "Location unavailable";
+            // The restricted tier's alerts carry the address as
+            // `location_label` (app/core/sanitized_tier.py) rather than the
+            // `location` the unreduced snapshot uses.
+            location.textContent = alert.location || alert.location_label || "Location unavailable";
 
             row.append(incident, units, location);
             container.appendChild(row);

@@ -34,6 +34,8 @@
     }
 </style>
 <section class="command-page" data-cloud-station-alerts="true">
+    {% if restricted %}{% include "components/restricted_view_banner.html" %}{% endif %}
+
     <div class="glass p-4 mb-4">
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
             <div>
@@ -103,19 +105,31 @@
             </div>
         </div>
         <div id="station-alert-message" class="text-secondary small mt-3">
+            {%- if restricted -%}
+            "Test Full Alert" enables browser audio and plays the tone once, using sample data.
+            Real alerts for this view carry the address, call type, and responding units only.
+            {%- else -%}
             "Test Full Alert" enables browser audio and plays the tone and spoken announcement once, using sample data.
+            {%- endif -%}
         </div>
     </div>
 
+    {#- station_units names crews, which the sanitizer empties outright, so the
+        roster tile and panel are dropped for the restricted tier instead of
+        being shown permanently at zero. -#}
     <div class="row g-4 mb-4">
-        <div class="col-md-4"><div class="glass p-4 h-100"><div class="eyebrow">SELECTED STATIONS</div><div id="station-name" class="fs-4 fw-bold">{{ selected_stations|join(", ") if selected_stations else "None selected" }}</div></div></div>
+        <div class="col-md-{{ 6 if restricted else 4 }}"><div class="glass p-4 h-100"><div class="eyebrow">SELECTED STATIONS</div><div id="station-name" class="fs-4 fw-bold">{{ selected_stations|join(", ") if selected_stations else "None selected" }}</div></div></div>
+        {% if not restricted %}
         <div class="col-md-4"><div class="glass p-4 h-100"><div class="eyebrow">DISPLAYED UNITS</div><div id="station-unit-count" class="fs-2 fw-bold">{{ alert_data.station_units|length }}</div></div></div>
-        <div class="col-md-4"><div class="glass p-4 h-100"><div class="eyebrow">VISIBLE ASSIGNMENTS</div><div id="station-active-count" class="fs-2 fw-bold">{{ alert_data.alerts|length }}</div></div></div>
+        {% endif %}
+        <div class="col-md-{{ 6 if restricted else 4 }}"><div class="glass p-4 h-100"><div class="eyebrow">VISIBLE ASSIGNMENTS</div><div id="station-active-count" class="fs-2 fw-bold">{{ 0 if restricted else alert_data.alerts|length }}</div></div></div>
     </div>
 
     <div class="row g-4">
+        {% if not restricted %}
         <div class="col-xl-5"><div class="glass p-4 h-100"><div class="eyebrow">READ-ONLY ROSTER</div><h2 class="h4">Station Units</h2><div id="station-units-list"></div></div></div>
-        <div class="col-xl-7"><div class="glass p-4 h-100"><div class="eyebrow">READ-ONLY ASSIGNMENTS</div><h2 class="h4">Current Assignments</h2><div id="station-current-alerts"></div></div></div>
+        {% endif %}
+        <div class="col-xl-{{ 12 if restricted else 7 }}"><div class="glass p-4 h-100"><div class="eyebrow">READ-ONLY ASSIGNMENTS</div><h2 class="h4">Current Assignments</h2><div id="station-current-alerts"></div></div></div>
     </div>
 </section>
 
@@ -127,10 +141,15 @@
             <div id="alert-incident-title" class="dispatch-incident">INCIDENT</div>
             <div id="alert-location" class="dispatch-location">Location unavailable</div>
             <div id="alert-sound-notice" class="text-warning fw-bold mt-2"></div>
+            {#- CFS number and assignment time are not in the sanitized alert
+                fields, so for the restricted tier those two boxes would sit
+                permanently at "Unavailable". -#}
             <div class="row g-3 mt-3">
-                <div class="col-md-4"><div class="dispatch-meta-box"><div class="eyebrow">UNITS</div><div id="alert-units" class="fs-4 fw-bold">—</div></div></div>
+                <div class="col-md-{{ 12 if restricted else 4 }}"><div class="dispatch-meta-box"><div class="eyebrow">UNITS</div><div id="alert-units" class="fs-4 fw-bold">—</div></div></div>
+                {% if not restricted %}
                 <div class="col-md-4"><div class="dispatch-meta-box"><div class="eyebrow">CFS NUMBER</div><div id="alert-cfs-number" class="fs-5 fw-bold">—</div></div></div>
                 <div class="col-md-4"><div class="dispatch-meta-box"><div class="eyebrow">ASSIGNMENT TIME</div><div id="alert-dispatch-time" class="fs-5 fw-bold">—</div></div></div>
+                {% endif %}
             </div>
             <div id="alert-map" role="img" aria-label="Incident location map"></div>
             <div id="alert-map-unavailable" class="alert-map-unavailable" hidden>
@@ -152,7 +171,23 @@
     </div>
 </div>
 
+{#- Same reason as the map: the /station-alerts route's payload has not been
+    through the field allowlist, so for the restricted tier the page ships the
+    station list and selection only, and the JS polls the sanitized
+    /api/operations/station-alerts for the alerts themselves. -#}
+{% if restricted %}
+<script id="station-alert-data" type="application/json">{{ {
+    "connected": alert_data.connected|default(false, true),
+    "generated_at": alert_data.generated_at|default("", true),
+    "selected_stations": alert_data.selected_stations|default(selected_stations, true)|default([], true),
+    "stations": alert_data.stations|default([], true),
+    "station_units": [],
+    "alerts": [],
+    "sanitized_view": true
+}|tojson }}</script>
+{% else %}
 <script id="station-alert-data" type="application/json">{{ alert_data|tojson }}</script>
+{% endif %}
 <script src="/static/vendor/leaflet/leaflet.js"></script>
-<script src="/static/js/lcdash-station-alerts-cloud.js?v=0.5.0"></script>
+<script src="/static/js/lcdash-station-alerts-cloud.js?v=0.6.0-sanitized-tier"></script>
 {% endblock %}

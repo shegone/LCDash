@@ -117,14 +117,24 @@
         row.className = "cloud-station-row";
         const identity = document.createElement("div");
         const title = document.createElement("strong");
-        title.textContent = alert.incident_description || "Assignment event";
+        title.textContent = alert.incident_description || alert.incident_code || "Assignment event";
         const detail = document.createElement("div");
         detail.className = "text-secondary small";
-        detail.textContent = [alert.cfs_number, alert.location, (alert.unit_numbers || []).join(", ")].filter(Boolean).join(" · ");
+        // The restricted tier's alerts (app/core/sanitized_tier._ALERT_FIELDS)
+        // carry no cfs_number and no dispatch_datetime. Each part drops out on
+        // its own when absent, so the row degrades to "call type / address ·
+        // units" without printing empty separators. `location_label` is
+        // accepted as well because the map payload names the same field that
+        // way.
+        detail.textContent = [
+            alert.cfs_number,
+            alert.location || alert.location_label,
+            (alert.unit_numbers || []).join(", ")
+        ].filter(Boolean).join(" · ");
         identity.append(title, detail);
         const time = document.createElement("span");
         time.className = "text-secondary small";
-        time.textContent = formatTime(alert.dispatch_datetime);
+        time.textContent = alert.dispatch_datetime ? formatTime(alert.dispatch_datetime) : "";
         row.append(identity, time);
         return row;
     }
@@ -664,7 +674,13 @@
         selectedStations.every(function (station, index) {
             return station.toLowerCase() === String(snapshotStations[index] || "").toLowerCase();
         });
-    if (snapshotMatches) {
+    if (initialData.sanitized_view === true) {
+        // The page ships this tier no alerts at all -- the route's payload has
+        // not been reduced -- so the first real list has to be fetched now
+        // rather than at the first five-second poll.
+        firstSnapshot = true;
+        loadSnapshot();
+    } else if (snapshotMatches) {
         detectNewAssignments(initialData.alerts);
     } else if (selectedStations.length) {
         loadSnapshot();

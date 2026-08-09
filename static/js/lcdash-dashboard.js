@@ -13,6 +13,14 @@
     let realtimeRefreshTimer = null;
     let realtimeSource = null;
 
+    // The restricted `user` tier receives a reduced snapshot: address, call
+    // type, and responding unit numbers, with no CFS number, priority, agency,
+    // status or timestamps (app/core/sanitized_tier.py). The server marks it
+    // with `sanitized_view`; the template marks the empty feed pending so the
+    // first fill happens immediately rather than at the 30-second tick.
+    let sanitizedView =
+        document.getElementById("incident-feed-content")?.dataset.sanitizedPending === "true";
+
     function element(id) {
         return document.getElementById(id);
     }
@@ -52,11 +60,39 @@
         return Number.isFinite(parsed) && parsed > 0 ? parsed : 999;
     }
 
+    // Address of a call. The sanitizer emits `location_label`; the unreduced
+    // snapshot renames the same CAD field to `location`. Reading both means the
+    // feed does not depend on which shape arrived.
+    function callLocation(call) {
+        return safeText(call?.location_label) || safeText(call?.location);
+    }
+
     function callKey(call, index) {
-        return safeText(call?.cfs_number, "unknown-call-" + index);
+        const cfsNumber = safeText(call?.cfs_number);
+        if (cfsNumber) {
+            return cfsNumber;
+        }
+
+        // Without a CFS number there is no stable identifier, so identity falls
+        // back to what the sanitized record does carry. Two simultaneous calls
+        // of the same type at the same address collapse into one key; the index
+        // keeps them apart at the cost of re-rendering when the order changes.
+        const descriptor = [callLocation(call), safeText(call?.incident_code)]
+            .filter(Boolean)
+            .join("|");
+        return descriptor ? descriptor + "#" + index : "unknown-call-" + index;
     }
 
     function callFingerprint(call) {
+        if (sanitizedView) {
+            return JSON.stringify({
+                location_label: callLocation(call),
+                incident_code: safeText(call?.incident_code),
+                incident_description: safeText(call?.incident_description),
+                assigned_units: Array.isArray(call?.assigned_units) ? call.assigned_units : []
+            });
+        }
+
         return JSON.stringify({
             cfs_number: safeText(call?.cfs_number),
             incident_code: safeText(call?.incident_code),
@@ -327,7 +363,60 @@
         return row;
     }
 
+    // The reduced card for the restricted tier. It is a `div`, not a link:
+    // without a CFS number there is nothing to link to, and a hollow
+    // `/calls/` href would be a dead route as well as a 403.
+    function createRestrictedIncidentCard(call, index, animateUpdate) {
+        const column = createElement("div", "col-xl-4 col-lg-6");
+        const card = createElement(
+            "div",
+            "incident-card" + (animateUpdate ? " is-updated" : "")
+        );
+        const header = createElement("div", "mb-2");
+
+        column.dataset.cfsNumber = callKey(call, index);
+        column.dataset.callFingerprint = callFingerprint(call);
+
+        header.append(
+            createElement("div", "incident-code", safeText(call.incident_code, "UNKNOWN")),
+            createElement("div", "incident-title", safeText(call.incident_description, "Incident"))
+        );
+
+        const location = createElement("div", "incident-location mt-3");
+        location.append(
+            createIcon("bi-geo-alt-fill"),
+            document.createTextNode(" " + safeText(callLocation(call), "Location not returned"))
+        );
+
+        const unitBlock = createElement("div", "mt-3");
+        unitBlock.append(createElement("div", "label mb-2", "RESPONDING UNITS"));
+        const unitList = createElement("div", "cloud-unit-list");
+        const assignedUnits = Array.isArray(call.assigned_units) ? call.assigned_units : [];
+        const unitNumbers = assignedUnits
+            .map(function (unit) { return safeText(unit?.unit_number); })
+            .filter(Boolean);
+
+        if (unitNumbers.length) {
+            unitNumbers.forEach(function (unitNumber) {
+                const chip = createElement("span", "cloud-unit-chip");
+                chip.append(createIcon("bi-truck-front-fill"), document.createTextNode(" " + unitNumber));
+                unitList.append(chip);
+            });
+        } else {
+            unitList.append(createElement("span", "text-secondary", "No units assigned"));
+        }
+        unitBlock.append(unitList);
+
+        card.append(header, location, unitBlock);
+        column.append(card);
+        return column;
+    }
+
     function createIncidentCard(call, index, animateUpdate) {
+        if (sanitizedView) {
+            return createRestrictedIncidentCard(call, index, animateUpdate);
+        }
+
         const priority = safePriority(call.priority);
         const column = createElement("div", "col-xl-4 col-lg-6");
         const link = createElement("a", "incident-card-link");
@@ -541,6 +630,25 @@
         });
     }
 
+    // `cloud_presentation_status` is not part of the sanitized payload, so a
+    // reduced snapshot has to describe its own freshness from the fields that
+    // do survive. Without this the restricted dashboard would fail the
+    // `may_display_snapshot` check on every poll and never render anything.
+    function resolveSource(data) {
+        const source = data.cloud_presentation_status?.source;
+        if (source) {
+            return source;
+        }
+        if (data.sanitized_view !== true) {
+            return {};
+        }
+        return {
+            connected: data.connected === true,
+            may_display_snapshot: true,
+            label: safeText(data.system_status, "VERIFIED READ-ONLY")
+        };
+    }
+
     function applySnapshot(data) {
         const stats = data.dashboard_stats || {};
         const activeCalls = safeCount(stats.active_calls);
@@ -554,8 +662,13 @@
         element("on-scene-calls-value").textContent = onSceneCalls;
 
         updateHighPriority(highPriorityCalls);
-        updateOldestCall(safeText(stats.oldest_call_datetime));
-        updateAgencySummary(stats.agency_summary);
+        // Oldest-call age and the agency breakdown are outside the sanitized
+        // stat set and their sections are not in the restricted page at all,
+        // so there is nothing to update and nothing to blank out.
+        if (!sanitizedView) {
+            updateOldestCall(safeText(stats.oldest_call_datetime));
+            updateAgencySummary(stats.agency_summary);
+        }
         updateIncidentFeed(data.calls);
 
         const lastUpdatedElement = element("last-updated");
@@ -565,7 +678,7 @@
         }
 
         LCDashTime.updateCallElapsedTimers();
-        const source = data.cloud_presentation_status?.source || {};
+        const source = resolveSource(data);
         applySourceStatus(source);
         if (source.may_display_snapshot) {
             const ageMilliseconds = Math.max(0, Number(source.age_seconds || 0) * 1000);
@@ -605,8 +718,9 @@
             }
 
             const data = await response.json();
+            sanitizedView = data.sanitized_view === true;
 
-            const source = data.cloud_presentation_status?.source || {};
+            const source = resolveSource(data);
             if (!source.may_display_snapshot) {
                 applySourceStatus(source);
                 return;
@@ -764,6 +878,11 @@
     });
 
     startRealtimeEvents();
+    // A restricted feed is served empty and filled from the sanitized endpoint,
+    // so it has to be fetched now rather than after the first countdown.
+    if (sanitizedView) {
+        refreshDashboard();
+    }
     timerTick();
     window.setInterval(timerTick, 1000);
 })();

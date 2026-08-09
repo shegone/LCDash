@@ -72,7 +72,12 @@ class MapRouteWiringTests(unittest.TestCase):
         self.assertEqual(caught_names, {"CentralSquareAPIError"})
 
     def test_map_api_and_page_forward_exact_trusted_context(self):
-        self._assert_route("map_api", ["response", "tenant_context"])
+        # ``request`` joined the signature when the sanitized tier landed:
+        # the reducer needs the caller's verified role to decide whether call
+        # pins keep their identifiers. The load-bearing assertions below are
+        # unchanged -- trusted context is still last, Depends-injected,
+        # defaulted to None, and forwarded to get_live_map_snapshot.
+        self._assert_route("map_api", ["response", "request", "tenant_context"])
         self._assert_route("gis_map", ["request", "tenant_context"])
         for blocked_mock in self.blocked_mocks:
             blocked_mock.assert_not_called()

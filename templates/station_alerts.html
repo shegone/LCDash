@@ -399,6 +399,8 @@
 </style>
 
 <div class="station-alert-shell">
+    {% if restricted %}{% include "components/restricted_view_banner.html" %}{% endif %}
+
     <div class="glass station-hero mb-4">
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
             <div>
@@ -627,7 +629,27 @@
     </div>
 </div>
 
+{#- The /station-alerts route hands this template the unreduced payload; only
+    /api/operations/station-alerts passes through the field allowlist. The
+    restricted tier therefore gets the station list and selection only, and the
+    JS polls the sanitized endpoint for the assignments themselves. -#}
+{% if restricted %}
+<script id="station-alert-data" type="application/json">{{ {
+    "connected": alert_data.connected|default(false, true),
+    "generated_at": alert_data.generated_at|default("", true),
+    "selected_stations": alert_data.selected_stations|default(selected_stations, true)|default([], true),
+    "stations": alert_data.stations|default([], true),
+    "station_units": [],
+    "alerts": [],
+    "sanitized_view": true
+}|tojson }}</script>
+{% else %}
 <script id="station-alert-data" type="application/json">{{ alert_data|tojson }}</script>
+{% endif %}
 <script src="/static/vendor/leaflet/leaflet.js"></script>
+{#- Version pinned at 0.5.1 by tests/contracts/test_cloud_station_alerts.py. The
+    only change to that file for this tier is a defensive `location_label`
+    fallback with no effect on the on-prem render, so the pin stands rather than
+    the test being rewritten around it. -#}
 <script src="/static/js/lcdash-station-alerts.js?v=0.5.1"></script>
 {% endblock %}

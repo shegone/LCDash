@@ -11,6 +11,24 @@
 
 {% set current_path = request.url.path %}
 
+{#- The identity global resolves through the same verified seam as
+    authorization, so nothing gated here can show for a role the server would
+    refuse; every gated route also 403s on its own. The gates below exist only
+    to avoid advertising what the caller cannot open. -#}
+{% set nav_identity = pilot_identity_badge(request) if pilot_identity_badge is defined else {"role": ""} %}
+
+{#- The restricted `user` tier (app/core/sanitized_tier.py): dashboard, station
+    alerts, GIS map and heat map only. Everything else is denied by the path
+    allowlist, so showing it in the sidebar would only offer dead links.
+
+    `verified` is load-bearing, not decoration. The badge reports role "user"
+    for the UNVERIFIED fallback too, and the server deliberately does NOT
+    restrict unverified callers -- so keying on the role alone hid the
+    navigation while the endpoints still served full, unsanitized data. That
+    is the worst of both: it looks restricted and isn't. Restriction here must
+    mean exactly what it means server-side, a verified user-role caller. -#}
+{% set restricted = nav_identity.verified and nav_identity.role == "user" %}
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -69,13 +87,19 @@
             <div class="nav-section-label" id="nav-operations">Operations</div>
             <div class="nav flex-column">
                 {{ nav_item("/dashboard", "bi-speedometer2", "Dashboard", current_path == "/dashboard") }}
+                {% if not restricted %}
                 {{ nav_item("/active-calls", "bi-telephone-fill", "Active Calls", current_path == "/active-calls" or current_path.startswith("/calls/")) }}
                 {{ nav_item("/units", "bi-truck", "Units", current_path == "/units") }}
+                {% endif %}
                 {{ nav_item("/station-alerts", "bi-bell-fill", "Station Alerts", current_path == "/station-alerts") }}
+                {#- The heat map has no sidebar entry of its own for any role; it
+                    is reached through the view tabs on the GIS Map page, which
+                    stay in place for the restricted tier. -#}
                 {{ nav_item("/map", "bi-map", "GIS Map", current_path == "/map" or current_path.startswith("/map/")) }}
             </div>
         </section>
 
+        {% if not restricted %}
         <section class="nav-section" aria-labelledby="nav-intelligence">
             <div class="nav-section-label" id="nav-intelligence">Intelligence</div>
             <div class="nav flex-column">
@@ -94,17 +118,13 @@
                 {{ nav_item("/integrations/health", "bi-heart-pulse-fill", "Integration Health", current_path == "/integrations/health") }}
                 {{ nav_item("/voice", "bi-mic-fill", "Voice Lab", current_path == "/voice") }}
                 {{ nav_item("/mae/reliability", "bi-shield-check", "MAE Reliability", current_path == "/mae/reliability") }}
-                {#- Admin-only link. The identity global resolves through the
-                    same verified seam as authorization, so this cannot show
-                    for a role the server would refuse; the route 403s
-                    regardless, the gate here is only to avoid advertising. -#}
-                {% set nav_identity = pilot_identity_badge(request) if pilot_identity_badge is defined else {"role": ""} %}
                 {% if nav_identity.role == "admin" %}
                 {{ nav_item("/admin/users", "bi-people-fill", "User Admin", current_path == "/admin/users") }}
                 {{ nav_item("/admin/knowledge", "bi-cloud-arrow-up-fill", "Knowledge Uploads", current_path == "/admin/knowledge") }}
                 {% endif %}
             </div>
         </section>
+        {% endif %}
     </nav>
 </aside>
 

@@ -16,12 +16,13 @@ from urllib.parse import quote
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, Response, UploadFile
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
-from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
 from app.config.settings import settings
 from app.core.alb_identity import AlbIdentity, resolve_alb_identity
+from app.core import sanitized_tier
 from app.core.cloud_pilot_roles import (
     PilotAuthorizationDenied,
     PilotRole,
@@ -647,8 +648,40 @@ def active_calls_test():
         }
 
 
+def _is_restricted_caller(request: Request) -> bool:
+    """True when the verified caller holds the restricted role.
+
+    Unverified callers are NOT restricted here, matching the middleware and
+    ``_sanitize_for_tier``: the deployment-wide fallback is a separate concern
+    and silently sanitizing it would hide real breakage.
+    """
+
+    resolved = _resolve_pilot_identity(request)
+    if resolved is None:
+        return False
+    _identity, role = resolved
+    return sanitized_tier.restricts(role)
+
+
+def _sanitize_for_tier(request: Request, payload, reducer):
+    """Reduce a payload when the caller holds the restricted role.
+
+    The path allowlist decides WHETHER this tier may call an endpoint; this
+    decides WHAT comes back. Both are needed: several allowed views are
+    powered by endpoints that otherwise return full CAD records including
+    reporter details.
+    """
+
+    resolved = _resolve_pilot_identity(request)
+    if resolved is None:
+        return payload
+    _identity, role = resolved
+    if not sanitized_tier.restricts(role):
+        return payload
+    return reducer(payload)
+
 @app.get("/api/operations/snapshot")
-def operations_snapshot_api(response: Response):
+def operations_snapshot_api(response: Response, request: Request):
     response.headers["Cache-Control"] = "no-store"
 
     try:
@@ -656,7 +689,7 @@ def operations_snapshot_api(response: Response):
         presentation = _cloud_presentation_status()
         source = presentation["source"]
 
-        return {
+        payload = {
             "connected": source["connected"],
             "system_status": source["label"],
             "cad_status": "Connected" if source["connected"] else "Disconnected",
@@ -668,13 +701,15 @@ def operations_snapshot_api(response: Response):
     except CentralSquareAPIError as exc:
         snapshot = build_empty_operations_snapshot()
 
-        return {
+        payload = {
             "connected": False,
             "system_status": "Unknown",
             "cad_status": "Disconnected",
             "error": str(exc),
             **snapshot,
         }
+
+    return _sanitize_for_tier(request, payload, sanitized_tier.sanitize_operations_snapshot)
 
 
 @app.post(
@@ -888,6 +923,48 @@ def identity_whoami_api(request: Request) -> dict[str, object]:
     """Report the caller's own resolved identity. Never anyone else's."""
 
     return pilot_identity_badge(request)
+
+
+@app.middleware("http")
+async def restrict_sanitized_tier(request: Request, call_next):
+    """Deny-by-default path gate for the restricted ``user`` role.
+
+    A middleware rather than a dependency on each route: there are well over a
+    hundred routes and more arrive every release, so per-route gating means
+    each new one is reachable by this tier until somebody remembers to add a
+    guard. Here the default is denial, and opening a path is the deliberate
+    act (see sanitized_tier._USER_ALLOWED_EXACT).
+
+    Only the restricted tier is affected; supervisors, admins, and the
+    unauthenticated fallback path are untouched, so this cannot change who
+    else can reach what.
+    """
+
+    # Allowed paths short-circuit BEFORE identity is resolved. Verifying the
+    # ALB assertion costs a signature check, and doing it on every static
+    # asset to reach a decision that is "allow" for every role would be pure
+    # overhead. Denied-for-user paths pay the cost, and they verify again in
+    # their own dependency anyway.
+    if sanitized_tier.is_path_allowed_for_user(request.url.path):
+        return await call_next(request)
+
+    resolved = _resolve_pilot_identity(request)
+    if resolved is not None:
+        _identity, role = resolved
+        if sanitized_tier.restricts(role):
+            logger.info(
+                "Sanitized tier denied %s for %s", request.url.path, role
+            )
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "detail": (
+                        "This view is not available on your account. "
+                        "Ask an administrator if you need access."
+                    )
+                },
+            )
+    return await call_next(request)
 
 
 def _alb_session_cookie_names() -> tuple[str, ...]:
@@ -1289,6 +1366,7 @@ def units_api(
 @app.get("/api/operations/map")
 def map_api(
     response: Response,
+    request: Request,
     tenant_context: Annotated[
         TenantContext | None,
         Depends(get_trusted_tenant_context),
@@ -1297,9 +1375,10 @@ def map_api(
     response.headers["Cache-Control"] = "no-store"
 
     try:
-        return get_live_map_snapshot(tenant_context=tenant_context)
+        payload = get_live_map_snapshot(tenant_context=tenant_context)
     except CentralSquareAPIError as exc:
-        return build_empty_map_snapshot(str(exc))
+        payload = build_empty_map_snapshot(str(exc))
+    return _sanitize_for_tier(request, payload, sanitized_tier.sanitize_map_snapshot)
 
 
 @app.get("/api/operations/map/reference")
@@ -1410,6 +1489,7 @@ def heatmap_api(
 @app.get("/api/operations/station-alerts")
 def station_alerts_api(
     response: Response,
+    request: Request,
     station: list[str] = Query(default=[]),
     tenant_context: Annotated[
         TenantContext | None,
@@ -1420,17 +1500,19 @@ def station_alerts_api(
 
     if settings.deployment_mode == "synthetic-disconnected":
         if not _cloud_cad_bridge_enabled():
-            return build_empty_station_alert_snapshot(
+            payload = build_empty_station_alert_snapshot(
                 station,
                 "Approved cloud assignment source unavailable.",
             )
-        snapshot = build_cloud_unit_snapshot(cloud_cad_runtime.state)
-        return build_station_alert_snapshot(snapshot, station)
-
-    try:
-        return get_live_station_alert_snapshot(station)
-    except CentralSquareAPIError as exc:
-        return build_empty_station_alert_snapshot(station, str(exc))
+        else:
+            snapshot = build_cloud_unit_snapshot(cloud_cad_runtime.state)
+            payload = build_station_alert_snapshot(snapshot, station)
+    else:
+        try:
+            payload = get_live_station_alert_snapshot(station)
+        except CentralSquareAPIError as exc:
+            payload = build_empty_station_alert_snapshot(station, str(exc))
+    return _sanitize_for_tier(request, payload, sanitized_tier.sanitize_station_alerts)
 
 
 @app.get("/dashboard")
@@ -1443,6 +1525,13 @@ def dashboard(request: Request):
         snapshot = build_empty_operations_snapshot()
 
     stats = snapshot["dashboard_stats"]
+    # The page route renders calls into the HTML itself, so it must reduce
+    # them exactly as /api/operations/snapshot does. Gating the markup alone
+    # would still ship reporter details in the page source.
+    restricted = _is_restricted_caller(request)
+    calls = snapshot["calls"]
+    if restricted:
+        calls = [sanitized_tier.sanitize_call(call) for call in calls]
 
     return templates.TemplateResponse(
         request=request,
@@ -1456,11 +1545,12 @@ def dashboard(request: Request):
             "assigned_units": stats["assigned_units"],
             "on_scene_calls": stats.get("on_scene_calls", 0),
             "high_priority_calls": stats["high_priority_calls"],
-            "oldest_call_datetime": stats.get("oldest_call_datetime", ""),
-            "agency_summary": stats["agency_summary"],
+            "oldest_call_datetime": "" if restricted else stats.get("oldest_call_datetime", ""),
+            "agency_summary": [] if restricted else stats["agency_summary"],
             "version": "0.3.0",
-            "calls": snapshot["calls"],
+            "calls": calls,
             "last_updated": snapshot["last_updated"],
+            "sanitized_view": restricted,
         },
     )
 
@@ -1607,6 +1697,13 @@ def gis_map(
     except CentralSquareAPIError as exc:
         map_data = build_empty_map_snapshot(str(exc))
 
+    # map.html inlines each feature's properties, which in the full payload
+    # include cfs_number and detail_url -- the route to call detail this tier
+    # must not have. Reduce before the template ever sees them.
+    restricted = _is_restricted_caller(request)
+    if restricted:
+        map_data = {**map_data, **sanitized_tier.sanitize_map_snapshot(map_data)}
+
     features = map_data["features"]
     call_features = [
         feature
@@ -1624,6 +1721,7 @@ def gis_map(
         name="map.html",
         context={
             "map_data": map_data,
+            "sanitized_view": restricted,
             "summary": map_data["summary"],
             "call_features": call_features,
             "unit_features": unit_features,
@@ -1697,11 +1795,17 @@ def station_alerts_page(
         except CentralSquareAPIError as exc:
             alert_data = build_empty_station_alert_snapshot(station, str(exc))
 
+    # Same reason as the dashboard: this template inlines the alert payload.
+    restricted = _is_restricted_caller(request)
+    if restricted:
+        alert_data = sanitized_tier.sanitize_station_alerts(alert_data)
+
     return templates.TemplateResponse(
         request=request,
         name=("station_alerts_cloud.html" if cloud_station_alerts else "station_alerts.html"),
         context={
             "alert_data": alert_data,
+            "sanitized_view": restricted,
             "selected_stations": alert_data.get("selected_stations", station),
             "cloud_station_alerts": cloud_station_alerts,
             "cad_status": "Connected" if alert_data["connected"] else "Disconnected",

@@ -14,7 +14,7 @@
     data-cloud-presentation="{{ 'true' if cloud_presentation else 'false' }}"
 >
     <div>
-        <div class="page-eyebrow">Supervisor Operations</div>
+        <div class="page-eyebrow">{{ "Restricted Operations View" if restricted else "Supervisor Operations" }}</div>
         <h1 class="wallboard-title">LCDash Operations Dashboard</h1>
         <div class="wallboard-subtitle">
             Logan County 911 verified read-only picture from CentralSquare CAD
@@ -41,6 +41,8 @@
         </div>
     </div>
 </div>
+
+{% if restricted %}{% include "components/restricted_view_banner.html" %}{% endif %}
 
 <div class="alert alert-info mb-4" role="status">
     <strong>{{ cloud_presentation_status.source.label }}</strong>
@@ -104,9 +106,11 @@
                 <div class="realtime-detail" id="realtime-last-event">
                     30-second backup active
                 </div>
+                {%- if not restricted %}
                 <a class="realtime-health-link" href="/integrations/health">
                     Delivery health
                 </a>
+                {%- endif %}
             </div>
 
             <div class="ops-status-item">
@@ -147,9 +151,15 @@
     </div>
 </section>
 
+{#- The restricted tier gets aggregate counts only. Oldest-call age is not in
+    the sanitized stat set (app/core/sanitized_tier._DASHBOARD_STAT_FIELDS), so
+    its tile is dropped rather than rendered empty, and the remaining three
+    widen to fill the row. -#}
+{% set kpi_column = "col-6 col-xl-4" if restricted else "col-6 col-xl-3" %}
+
 <section class="row g-3 mb-4" aria-label="Current operations metrics">
 
-    <div class="col-6 col-xl-3">
+    <div class="{{ kpi_column }}">
         <div class="glass dashboard-kpi accent-kpi">
             <div class="kpi-topline">
                 <div class="kpi-label">ACTIVE CALLS</div>
@@ -160,7 +170,7 @@
         </div>
     </div>
 
-    <div class="col-6 col-xl-3">
+    <div class="{{ kpi_column }}">
         <div class="glass dashboard-kpi">
             <div class="kpi-topline">
                 <div class="kpi-label">ASSIGNED UNITS</div>
@@ -171,7 +181,7 @@
         </div>
     </div>
 
-    <div class="col-6 col-xl-3">
+    <div class="{{ kpi_column }}">
         <div class="glass dashboard-kpi">
             <div class="kpi-topline">
                 <div class="kpi-label">CALLS ON SCENE</div>
@@ -182,6 +192,7 @@
         </div>
     </div>
 
+    {% if not restricted %}
     <div class="col-6 col-xl-3">
         <div
             class="glass dashboard-kpi {% if oldest_call_datetime %}alert-kpi{% endif %}"
@@ -206,9 +217,12 @@
             {% endif %}
         </div>
     </div>
+    {% endif %}
 
 </section>
 
+{#- Agency breakdown is deliberately outside the sanitized stat set. -#}
+{% if not restricted %}
 <section class="glass agency-summary mb-4" aria-labelledby="agency-summary-heading">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
         <div>
@@ -230,13 +244,20 @@
         </div>
     </div>
 </section>
+{% endif %}
 
 <section class="glass p-4 incident-feed-wrap" aria-labelledby="active-incident-heading">
 
     <div class="feed-header d-flex justify-content-between align-items-center flex-wrap gap-3">
         <div>
             <h2 class="h5 text-warning mb-0" id="active-incident-heading">Active Incident Feed</h2>
-            <div class="text-secondary">Sorted by CAD priority and call age</div>
+            <div class="text-secondary">
+                {%- if restricted -%}
+                Address, call type, and responding unit numbers
+                {%- else -%}
+                Sorted by CAD priority and call age
+                {%- endif -%}
+            </div>
         </div>
 
         <div class="d-flex gap-2 flex-wrap" aria-label="Incident feed status">
@@ -248,8 +269,21 @@
         </div>
     </div>
 
-    <div id="incident-feed-content">
-        {% if calls %}
+    {#- The /dashboard route hands this template the unreduced snapshot; only
+        /api/operations/snapshot passes through the field allowlist. So for the
+        restricted tier nothing is rendered from `calls` here at all -- the feed
+        is marked pending and lcdash-dashboard.js fills it from the sanitized
+        endpoint on load. Rendering the full records and hiding fields would
+        still put them in the page source. -#}
+    <div
+        id="incident-feed-content"
+        {% if restricted %}data-sanitized-pending="true"{% endif %}
+    >
+        {% if restricted %}
+        <div class="text-center text-secondary py-5" role="status" aria-live="polite">
+            Loading the restricted incident feed...
+        </div>
+        {% elif calls %}
         <div class="row g-4" id="incident-card-grid">
             {% for call in calls %}
                 <div
@@ -272,5 +306,5 @@
 {% endblock %}
 
 {% block page_scripts %}
-<script src="/static/js/lcdash-dashboard.js?v=20260807-cad-time-fix"></script>
+<script src="/static/js/lcdash-dashboard.js?v=20260809-sanitized-tier"></script>
 {% endblock %}
