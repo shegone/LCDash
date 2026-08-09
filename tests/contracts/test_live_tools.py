@@ -89,16 +89,32 @@ def _raw_cad_call(cfs_number: str, **overrides) -> dict:
 class _FakeCadConnector:
     """Records calls; returns pre-baked pages/results or raises pre-baked errors."""
 
-    def __init__(self, *, search_pages=None, config_result=None, search_error=None, config_error=None):
+    def __init__(
+        self,
+        *,
+        search_pages=None,
+        config_result=None,
+        search_error=None,
+        config_error=None,
+        waf_reject_keys=None,
+    ):
         self._search_pages = list(search_pages or [])
         self._config_result = config_result
         self._search_error = search_error
         self._config_error = config_error
+        # Mirrors the production CentralSquare firewall observed 2026-08-08: a
+        # request whose body carries one of these keys is answered with HTTP 200
+        # and an HTML page, which the connector raises as invalid_json_response.
+        self._waf_reject_keys = frozenset(waf_reject_keys or ())
         self.search_calls_requests: list[dict] = []
         self.get_configurations_requests: list[str] = []
 
     def search_calls(self, body, *, skip=0, limit=100):
         self.search_calls_requests.append({"body": dict(body), "skip": skip, "limit": limit})
+        if self._waf_reject_keys and self._waf_reject_keys & set(body):
+            raise CloudCadConnectorError(
+                "invalid_json_response", "search_calls", status_code=200
+            )
         if self._search_error is not None:
             raise self._search_error
         page = self._search_pages.pop(0) if self._search_pages else []
@@ -665,6 +681,144 @@ class SearchCallHistoryTests(unittest.TestCase):
             },
         )
         self.assertIn("error", result.payload)
+
+    # -- firewall-rejected native filters -----------------------------------
+    # The production CentralSquare WAF refuses some DOCUMENTED body parameters
+    # (IncidentCode, Beat observed 2026-08-08) with HTTP 200 + HTML, which the
+    # connector raises as invalid_json_response. The tool must degrade to
+    # local filtering rather than failing -- and must degrade HONESTLY.
+
+    def test_waf_rejected_incident_code_falls_back_to_local_filtering(self):
+        page = [
+            _raw_cad_call("CFS26-00001"),  # MEDICAL
+            _raw_cad_call(
+                "CFS26-00002",
+                IncidentCode={"Code": "TSTOP", "Description": "Traffic Stop"},
+            ),
+            _raw_cad_call("CFS26-00003"),  # MEDICAL
+        ]
+        connector = _FakeCadConnector(
+            search_pages=[page], waf_reject_keys={"IncidentCode"}
+        )
+        registry = _registry(cad_connector=connector)
+        result = registry.execute(
+            "search_call_history",
+            {
+                "created_from": "2026-08-01T00:00:00Z",
+                "created_to": "2026-08-02T00:00:00Z",
+                "incident_code": "MEDICAL",
+            },
+        )
+        payload = result.payload
+        self.assertTrue(payload["available"])
+        # First attempt carried the native filter; the retry dropped it.
+        self.assertEqual(len(connector.search_calls_requests), 2)
+        self.assertIn("IncidentCode", connector.search_calls_requests[0]["body"])
+        self.assertNotIn("IncidentCode", connector.search_calls_requests[1]["body"])
+        # The filter still took effect -- locally.
+        self.assertEqual(payload["returned"], 2)
+        self.assertTrue(
+            all(call["incident_code"] == "MEDICAL" for call in payload["calls"])
+        )
+        # And the degradation is declared, not hidden.
+        self.assertEqual(
+            payload["native_filter_fallback"]["filters"], ["incident_code"]
+        )
+
+    def test_waf_fallback_combined_with_truncation_warns_about_undercount(self):
+        page = [_raw_cad_call(f"CFS26-{i:05d}") for i in range(100)]
+        connector = _FakeCadConnector(
+            search_pages=[page], waf_reject_keys={"IncidentCode"}
+        )
+        registry = _registry(cad_connector=connector)
+        result = registry.execute(
+            "search_call_history",
+            {
+                "created_from": "2026-08-01T00:00:00Z",
+                "created_to": "2026-08-02T00:00:00Z",
+                "incident_code": "MEDICAL",
+                "limit": 5,
+            },
+        )
+        self.assertTrue(result.payload["truncated"])
+        self.assertIn("incident_code", result.payload["post_filter_warning"])
+        self.assertIn("truncated", result.payload["post_filter_warning"])
+
+    def test_waf_rejected_beat_filter_is_applied_locally(self):
+        page = [
+            _raw_cad_call("CFS26-00001", Beat={"Code": "1"}),
+            _raw_cad_call("CFS26-00002", Beat={"Code": "2"}),
+        ]
+        connector = _FakeCadConnector(search_pages=[page], waf_reject_keys={"Beat"})
+        registry = _registry(cad_connector=connector)
+        result = registry.execute(
+            "search_call_history",
+            {
+                "created_from": "2026-08-01T00:00:00Z",
+                "created_to": "2026-08-02T00:00:00Z",
+                "beat": "1",
+            },
+        )
+        self.assertTrue(result.payload["available"])
+        self.assertEqual(result.payload["returned"], 1)
+        self.assertEqual(result.payload["native_filter_fallback"]["filters"], ["beat"])
+
+    def test_waf_rejected_dispatch_agency_refuses_rather_than_pretending(self):
+        """dispatch_agency does not survive normalization (only the response
+        agency does), so a local re-application is impossible. Returning
+        unfiltered rows as if filtered would be a silent lie; the tool must say
+        the filter is unavailable instead."""
+        connector = _FakeCadConnector(waf_reject_keys={"DispatchAgencies"})
+        registry = _registry(cad_connector=connector)
+        result = registry.execute(
+            "search_call_history",
+            {
+                "created_from": "2026-08-01T00:00:00Z",
+                "created_to": "2026-08-02T00:00:00Z",
+                "dispatch_agency": "LOGAN",
+            },
+        )
+        self.assertFalse(result.payload["available"])
+        self.assertIn("dispatch_agency", result.payload["error"])
+        # No blind unfiltered retry happened.
+        self.assertEqual(len(connector.search_calls_requests), 1)
+
+    def test_non_waf_connector_error_does_not_trigger_the_fallback(self):
+        connector = _FakeCadConnector(
+            search_error=CloudCadConnectorError(
+                "transport_unavailable", "search_calls", retryable=True
+            )
+        )
+        registry = _registry(cad_connector=connector)
+        result = registry.execute(
+            "search_call_history",
+            {
+                "created_from": "2026-08-01T00:00:00Z",
+                "created_to": "2026-08-02T00:00:00Z",
+                "incident_code": "MEDICAL",
+            },
+        )
+        self.assertFalse(result.payload["available"])
+        self.assertEqual(len(connector.search_calls_requests), 1)
+
+    def test_invalid_json_without_native_filters_stays_an_error(self):
+        """A non-JSON reply on the bare window shape means upstream is truly
+        broken; there is nothing to strip, so no retry loop."""
+        connector = _FakeCadConnector(
+            search_error=CloudCadConnectorError(
+                "invalid_json_response", "search_calls", status_code=200
+            )
+        )
+        registry = _registry(cad_connector=connector)
+        result = registry.execute(
+            "search_call_history",
+            {
+                "created_from": "2026-08-01T00:00:00Z",
+                "created_to": "2026-08-02T00:00:00Z",
+            },
+        )
+        self.assertFalse(result.payload["available"])
+        self.assertEqual(len(connector.search_calls_requests), 1)
 
     def test_old_agency_key_is_rejected_not_silently_ignored(self):
         # "agency" was replaced by dispatch_agency/response_agency (native

@@ -103,6 +103,15 @@ _SEARCH_HISTORY_NATIVE_FILTER_TO_KEY = {
 # _search_call_history for the accuracy implication (undercounting when the
 # fetch was truncated).
 _SEARCH_HISTORY_POST_FILTERS = ("status", "priority")
+# Native filters that can be faithfully re-applied over normalized rows when the
+# CentralSquare firewall refuses them server-side (it answers HTTP 200 with an
+# HTML page for some DOCUMENTED parameters -- observed for IncidentCode and Beat
+# on 2026-08-08). responder and dispatch_agency are deliberately absent: those
+# fields do not survive _normalize_calls (only the response agency does), so a
+# local re-application would silently return unfiltered rows as if filtered.
+_POST_FILTERABLE_NATIVE_ARGS = frozenset(
+    {"incident_code", "location", "beat", "zone", "unit", "response_agency"}
+)
 _SEARCH_HISTORY_ALLOWED_KEYS = frozenset(
     _SEARCH_HISTORY_NATIVE_STRING_FILTERS
     + _SEARCH_HISTORY_POST_FILTERS
@@ -558,12 +567,18 @@ class LiveToolRegistry:
                 raise _ToolInputError(f"closed window must be at most {MAX_HISTORY_WINDOW_DAYS} days")
 
         native_filters: dict[str, str] = {}
+        native_arg_values: dict[str, str] = {}
         for arg_name, api_key in _SEARCH_HISTORY_NATIVE_FILTER_TO_KEY.items():
             value = _optional_str_filter(tool_input, arg_name)
             if value is not None:
                 native_filters[api_key] = value
+                native_arg_values[arg_name] = value
         dispatch_agency = _optional_str_filter(tool_input, "dispatch_agency")
         response_agency = _optional_str_filter(tool_input, "response_agency")
+        if dispatch_agency is not None:
+            native_arg_values["dispatch_agency"] = dispatch_agency
+        if response_agency is not None:
+            native_arg_values["response_agency"] = response_agency
 
         # Not native -- applied as post-filters below, after the fetch.
         status = _optional_str_filter(tool_input, "status")
@@ -610,23 +625,25 @@ class LiveToolRegistry:
         if response_agency is not None:
             body["ResponseAgencies"] = [response_agency]
 
-        calls_by_number: dict[str, Mapping[str, Any]] = {}
-        truncated = False
-        skip = 0
-        try:
+        def fetch(request_body: Mapping[str, Any]) -> tuple[dict[str, Mapping[str, Any]], bool]:
+            found: dict[str, Mapping[str, Any]] = {}
+            hit_cap = False
+            skip = 0
             for _page_number in range(MAX_HISTORY_PAGES):
-                result = self._cad_connector.search_calls(body, skip=skip, limit=HISTORY_PAGE_SIZE)
+                result = self._cad_connector.search_calls(
+                    request_body, skip=skip, limit=HISTORY_PAGE_SIZE
+                )
                 page_calls = _items(result, ("cfs_cores", "CFSCore", "calls", "items"))
                 for raw_call in page_calls:
                     cfs_number = str(raw_call.get("CFSNumber") or raw_call.get("cfs_number") or "")
                     if not cfs_number:
                         continue
-                    if cfs_number not in calls_by_number:
-                        calls_by_number[cfs_number] = raw_call
-                    if len(calls_by_number) >= limit:
-                        truncated = True
+                    if cfs_number not in found:
+                        found[cfs_number] = raw_call
+                    if len(found) >= limit:
+                        hit_cap = True
                         break
-                if truncated:
+                if hit_cap:
                     break
                 page_len = len(page_calls)
                 if page_len < HISTORY_PAGE_SIZE:
@@ -635,42 +652,115 @@ class LiveToolRegistry:
             else:
                 # Exhausted the page cap without a short page -- more rows may
                 # exist upstream than we retrieved.
-                truncated = True
+                hit_cap = True
+            return found, hit_cap
+
+        def error_result(message: str, detail: str) -> LiveToolResult:
+            source = LiveDataSource(
+                name="CentralSquare CAD (live historical search)",
+                kind="live",
+                detail=detail,
+                available=False,
+            )
+            return LiveToolResult(
+                "search_call_history",
+                source,
+                {"available": False, "error": message, "window": window},
+            )
+
+        # The CentralSquare firewall refuses some DOCUMENTED filter parameters
+        # (observed 2026-08-08: IncidentCode, Beat) with HTTP 200 and an HTML
+        # page, surfacing here as invalid_json_response. When that happens the
+        # search retries WITHOUT the optional filters -- the bare window shape is
+        # proven safe -- and applies them locally instead, flagged as a fallback
+        # so the model can say so. Filters whose fields do not survive
+        # normalization (responder; dispatch_agency, since normalized rows keep
+        # only the response agency) are refused honestly rather than silently
+        # returning rows that were never filtered.
+        fallback_filters: dict[str, str] = {}
+        try:
+            calls_by_number, truncated = fetch(body)
         except CloudCadConnectorError as error:
-            source = LiveDataSource(
-                name="CentralSquare CAD (live historical search)",
-                kind="live",
-                detail=f"search_calls failed: {error.code}",
-                available=False,
-            )
-            return LiveToolResult(
-                "search_call_history",
-                source,
-                {"available": False, "error": f"CAD history query failed: {error.code}", "window": window},
-            )
+            if error.code != "invalid_json_response" or not native_arg_values:
+                return error_result(
+                    f"CAD history query failed: {error.code}",
+                    f"search_calls failed: {error.code}",
+                )
+            unfilterable = sorted(set(native_arg_values) - _POST_FILTERABLE_NATIVE_ARGS)
+            if unfilterable:
+                names = ", ".join(unfilterable)
+                return error_result(
+                    (
+                        f"CAD refused this filtered query server-side, and the "
+                        f"{names} filter cannot be applied locally; retry without "
+                        f"{names}"
+                    ),
+                    "upstream refused native filters; local fallback unavailable",
+                )
+            stripped = {
+                key: value
+                for key, value in body.items()
+                if key not in native_filters
+                and key not in ("DispatchAgencies", "ResponseAgencies")
+            }
+            try:
+                calls_by_number, truncated = fetch(stripped)
+            except CloudCadConnectorError as retry_error:
+                return error_result(
+                    f"CAD history query failed: {retry_error.code}",
+                    f"search_calls failed: {retry_error.code}",
+                )
+            except Exception:
+                return error_result(
+                    "unexpected error querying CAD history",
+                    "Unexpected error running the historical search",
+                )
+            fallback_filters = dict(native_arg_values)
         except Exception:
-            source = LiveDataSource(
-                name="CentralSquare CAD (live historical search)",
-                kind="live",
-                detail="Unexpected error running the historical search",
-                available=False,
-            )
-            return LiveToolResult(
-                "search_call_history",
-                source,
-                {"available": False, "error": "unexpected error querying CAD history", "window": window},
+            return error_result(
+                "unexpected error querying CAD history",
+                "Unexpected error running the historical search",
             )
 
         normalized = _normalize_calls(list(calls_by_number.values()))
+
+        def unit_matches(call: Mapping[str, Any], wanted: str) -> bool:
+            for unit in call.get("assigned_units") or ():
+                unit_number = (
+                    unit.get("unit_number") if isinstance(unit, Mapping) else unit
+                )
+                if _equals_ci(unit_number, wanted):
+                    return True
+            return False
 
         def matches(call: Mapping[str, Any]) -> bool:
             if status and not _equals_ci(call.get("status"), status):
                 return False
             if priority and not _equals_ci(call.get("priority"), priority):
                 return False
+            for arg_name, wanted in fallback_filters.items():
+                if arg_name == "incident_code" and not _equals_ci(call.get("incident_code"), wanted):
+                    return False
+                if arg_name == "beat" and not _equals_ci(call.get("beat"), wanted):
+                    return False
+                if arg_name == "zone" and not _equals_ci(call.get("zone"), wanted):
+                    return False
+                if arg_name == "location" and wanted.lower() not in str(
+                    call.get("location_label") or ""
+                ).lower():
+                    return False
+                if arg_name == "unit" and not unit_matches(call, wanted):
+                    return False
+                if arg_name == "response_agency" and not _equals_ci(call.get("agency"), wanted):
+                    return False
             return True
 
-        post_filter_used = bool(status or priority)
+        post_filter_names = sorted(
+            (["status"] if status else [])
+            + (["priority"] if priority else [])
+            + list(fallback_filters)
+        )
+        post_filter_used = bool(post_filter_names)
         filtered = [call for call in normalized if matches(call)] if post_filter_used else normalized
         source = LiveDataSource(
             name="CentralSquare CAD (live historical search)",
@@ -686,9 +776,18 @@ class LiveToolRegistry:
             "window": window,
             "calls": [_summarize_call(c) for c in filtered],
         }
+        if fallback_filters:
+            payload["native_filter_fallback"] = {
+                "filters": sorted(fallback_filters),
+                "note": (
+                    "CAD refused these filters server-side; they were applied "
+                    "locally after fetching instead"
+                ),
+            }
         if post_filter_used and truncated:
+            names = "/".join(post_filter_names)
             payload["post_filter_warning"] = (
-                "status/priority filtered after a truncated fetch; counts may be incomplete"
+                f"{names} filtered after a truncated fetch; counts may be incomplete"
             )
         return LiveToolResult("search_call_history", source, payload)
 
@@ -967,7 +1066,11 @@ TOOL_SPECS: tuple[Mapping[str, Any], ...] = (
             "name": "get_analytics_summary",
             "description": (
                 "Get historical analytics for a time window: total calls, average "
-                "response time, busiest stations/units, top incident types. Provide "
+                "response time, busiest stations/units, top incident types. Counts "
+                "are EXACT, computed by SQL in the local analytics warehouse "
+                "(refreshed from CAD every 30 minutes) -- so PREFER this over "
+                "search_call_history for any \"how many\" or \"most common\" "
+                "question; incident types are the top 10 by call count. Provide "
                 "EITHER hours (an exact integer window ending now, e.g. 8 for the "
                 "last 8 hours) OR period (one of 24h, 7d, 30d, 90d, 365d) -- never both."
             ),
@@ -999,13 +1102,22 @@ TOOL_SPECS: tuple[Mapping[str, Any], ...] = (
                 "closed_from/closed_to (both required together, same ISO-8601 "
                 "format, also capped at 92 days) additionally restrict to calls "
                 "closed in that window. "
+                "For COUNTING or aggregate questions (\"how many medical calls "
+                "last month\", \"most common incident types\") prefer "
+                "get_analytics_summary, which computes exact totals in the local "
+                "analytics warehouse; use this tool to LIST and inspect specific "
+                "historical calls. "
                 "incident_code, location, beat, zone, unit, responder, "
-                "dispatch_agency, and response_agency are NATIVE CentralSquare "
-                "search parameters -- CAD itself filters on them BEFORE the row "
-                "cap is applied, so the cap applies to matching calls, not to the "
-                "first N calls of any type. This is what makes them accurate for "
-                "questions like \"how many medical calls in the last 30 days\": use "
-                "incident_code, not a post-filter, for that. dispatch_agency and "
+                "dispatch_agency, and response_agency are sent to CAD as NATIVE "
+                "search parameters so the row cap applies to matching calls. "
+                "CAD's firewall currently REFUSES some of them server-side "
+                "(incident_code and beat observed); when that happens this tool "
+                "automatically refetches without them and applies them locally, "
+                "declaring it in a `native_filter_fallback` field -- those "
+                "results are correct rows but, when `truncated` is also true, "
+                "the counts are a lower bound. responder and dispatch_agency "
+                "cannot fall back locally and will return an error asking you to "
+                "retry without them if CAD refuses them. dispatch_agency and "
                 "response_agency are each sent to CAD as a single-element list "
                 "(DispatchAgencies/ResponseAgencies). "
                 "status and priority are NOT native CentralSquare search "
