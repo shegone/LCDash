@@ -220,6 +220,56 @@ a {
     color: #7ea8d3;
 }
 
+/* Signed-in identity. The unverified variant is deliberately loud: a silent
+   fallback to the restricted role must not look like a normal sign-in. */
+.topbar-identity {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto;
+    margin-right: 20px;
+    padding: 7px 14px;
+    border: 1px solid rgba(85, 212, 255, .35);
+    border-radius: 999px;
+    background: rgba(12, 32, 56, .75);
+}
+
+.topbar-identity .bi {
+    font-size: 1.1rem;
+    color: var(--lcdash-cyan);
+}
+
+.topbar-identity-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+}
+
+.topbar-identity-name {
+    font-size: .85rem;
+    font-weight: 600;
+    color: #e8f3ff;
+}
+
+.topbar-identity-role {
+    font-size: .72rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--lcdash-cyan);
+}
+
+.topbar-identity-unverified {
+    border-color: rgba(255, 176, 32, .55);
+    background: rgba(60, 40, 8, .65);
+}
+
+.topbar-identity-unverified .bi,
+.topbar-identity-unverified .topbar-identity-role {
+    color: #ffc046;
+}
+
 .glass {
     background:
         linear-gradient(145deg, rgba(20, 42, 70, .90), rgba(10, 25, 44, .92));

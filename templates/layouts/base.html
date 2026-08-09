@@ -118,6 +118,32 @@
             <div class="topbar-subtitle">WV's First NG911 Center</div>
         </div>
 
+        {#- Falls back to the unverified badge rather than vanishing: a render
+            that lost the identity global must look wrong, not look signed in. -#}
+        {% set identity = pilot_identity_badge(request) if pilot_identity_badge is defined else {
+            "verified": false,
+            "name": "Not identified",
+            "role": "user",
+            "role_label": "Restricted (fallback)",
+            "source": "Identity is not wired into this render",
+        } %}
+        <div
+            class="topbar-identity{% if not identity.verified %} topbar-identity-unverified{% endif %}"
+            id="topbar-identity"
+            data-role="{{ identity.role }}"
+            data-verified="{{ 'true' if identity.verified else 'false' }}"
+            title="{{ identity.source }}"
+        >
+            <i
+                class="bi {{ 'bi-person-check-fill' if identity.verified else 'bi-person-dash' }}"
+                aria-hidden="true"
+            ></i>
+            <span class="topbar-identity-text">
+                <span class="topbar-identity-name">{{ identity.name }}</span>
+                <span class="topbar-identity-role">{{ identity.role_label }}</span>
+            </span>
+        </div>
+
         <time class="clock" id="clock" aria-label="Local date and time"></time>
     </header>
 

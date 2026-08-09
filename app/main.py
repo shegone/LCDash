@@ -20,8 +20,12 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
 from app.config.settings import settings
-from app.core.alb_identity import resolve_alb_identity
-from app.core.cloud_pilot_roles import PilotAuthorizationDenied, resolve_pilot_role
+from app.core.alb_identity import AlbIdentity, resolve_alb_identity
+from app.core.cloud_pilot_roles import (
+    PilotAuthorizationDenied,
+    PilotRole,
+    resolve_pilot_role,
+)
 from app.core.county_branding import branding_for_tenant_context
 from app.core.tenancy import TenantContext
 from app.core.county_profiles import resolve_county_profile
@@ -444,6 +448,27 @@ class JackMemoryReviewRequest(BaseModel):
 
 
 def _authenticated_user_email(request: Request) -> str:
+    """Who to attribute a stored action to: report authorship, audit rows.
+
+    The reverse-proxy headers below are trustworthy only behind a front end
+    that overwrites client-supplied copies of them -- Cloudflare Access or
+    oauth2-proxy on-prem. The cloud pilot's load balancer asserts identity in
+    ``x-amzn-oidc-*`` instead and does NOT strip these three, so anything a
+    client sends arrives intact. Trusting them there let any caller forge
+    attribution, including the ``author_subject`` written to the database.
+
+    So when per-user identity is on, the verified assertion is the only
+    accepted answer, and an unverifiable request attributes to nobody rather
+    than to whoever the request claimed to be.
+    """
+
+    if settings.alb_identity_enabled:
+        resolved = _resolve_pilot_identity(request)
+        if resolved is None:
+            return ""
+        identity, _role = resolved
+        return identity.email or identity.subject
+
     for header_name in (
         "cf-access-authenticated-user-email",
         "x-auth-request-email",
@@ -780,14 +805,15 @@ def active_calls_api():
         }
 
 
-def _alb_user_tenant_context(request: Request | None) -> TenantContext | None:
-    """Build a per-user context from cryptographically verified ALB headers.
+def _resolve_pilot_identity(
+    request: Request | None,
+) -> tuple[AlbIdentity, PilotRole] | None:
+    """Verify the request's ALB headers and map them to one pilot role.
 
-    The tenant binding still comes from deployment configuration -- only the
-    *subject and roles* come from the request, and only after both the load
-    balancer's ES256 assertion and Cognito's RS256 access token have been
-    verified. An unverifiable request yields ``None`` so the caller denies
-    rather than assuming a role.
+    Single source of truth for "who is this and what are they". Both the
+    authorization path (``_alb_user_tenant_context``) and the on-screen badge
+    (``pilot_identity_badge``) go through here, so the role a user is shown can
+    never disagree with the role they are actually granted.
     """
 
     if request is None or not settings.alb_identity_enabled:
@@ -809,6 +835,69 @@ def _alb_user_tenant_context(request: Request | None) -> TenantContext | None:
         # An unrecognized group is a denial, not a downgrade to viewer.
         logger.warning("Denied ALB identity: group claim did not map to a pilot role.")
         return None
+
+    return identity, role
+
+
+def pilot_identity_badge(request: Request | None) -> dict[str, object]:
+    """Describe the signed-in user for display, including when there isn't one.
+
+    This exists because ``get_trusted_tenant_context`` deliberately degrades to
+    a deployment-wide ``user`` context when per-user identity cannot be
+    established, and that degradation is otherwise invisible: the pages still
+    render, nothing errors, and the operator has no way to tell an authenticated
+    supervisor apart from an anonymous fallback. Reporting ``verified`` and the
+    source alongside the role makes that difference legible on screen.
+    """
+
+    resolved = _resolve_pilot_identity(request)
+    if resolved is None:
+        return {
+            "verified": False,
+            "name": "Not identified",
+            "role": str(PilotRole.USER),
+            "role_label": "Restricted (fallback)",
+            "source": (
+                "Per-user identity is off"
+                if not settings.alb_identity_enabled
+                else "No verified sign-in on this request"
+            ),
+        }
+
+    identity, role = resolved
+    return {
+        "verified": True,
+        "name": identity.email or identity.subject,
+        "role": str(role),
+        "role_label": str(role).capitalize(),
+        "source": "Verified by load balancer and Cognito",
+    }
+
+
+templates.env.globals["pilot_identity_badge"] = pilot_identity_badge
+
+
+@app.get("/api/identity/whoami")
+def identity_whoami_api(request: Request) -> dict[str, object]:
+    """Report the caller's own resolved identity. Never anyone else's."""
+
+    return pilot_identity_badge(request)
+
+
+def _alb_user_tenant_context(request: Request | None) -> TenantContext | None:
+    """Build a per-user context from cryptographically verified ALB headers.
+
+    The tenant binding still comes from deployment configuration -- only the
+    *subject and roles* come from the request, and only after both the load
+    balancer's ES256 assertion and Cognito's RS256 access token have been
+    verified. An unverifiable request yields ``None`` so the caller denies
+    rather than assuming a role.
+    """
+
+    resolved = _resolve_pilot_identity(request)
+    if resolved is None:
+        return None
+    identity, role = resolved
 
     try:
         return TenantContext(

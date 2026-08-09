@@ -123,30 +123,54 @@ class CloudDashboardUnitsPresentationTests(unittest.TestCase):
         """
         main_source = (ROOT / "app" / "main.py").read_text(encoding="utf-8")
         tree = ast.parse(main_source)
-        resolver = next(
-            node for node in tree.body
+        functions = {
+            node.name: ast.unparse(node)
+            for node in tree.body
             if isinstance(node, ast.FunctionDef)
-            and node.name == "_alb_user_tenant_context"
-        )
-        source = ast.unparse(resolver)
+        }
+
+        # Verification lives in one seam. It gained a second caller when the
+        # identity badge was added, so the seam is asserted here and every
+        # caller is required to go through it.
+        seam = functions['_resolve_pilot_identity']
 
         # Headers reach the verifier and nothing else parses them here.
-        self.assertIn('resolve_alb_identity(', source)
-        self.assertIn('request.headers', source)
-        self.assertNotIn('request.headers[', source)
-        self.assertNotIn('request.headers.get(', source)
+        self.assertIn('resolve_alb_identity(', seam)
+        self.assertIn('request.headers', seam)
+        self.assertNotIn('request.headers[', seam)
+        self.assertNotIn('request.headers.get(', seam)
 
         # The signer check is what proves provenance, so the ARN must be passed.
-        self.assertIn('expected_alb_arn=settings.alb_identity_load_balancer_arn', source)
-        self.assertIn('user_pool_id=settings.alb_identity_user_pool_id', source)
+        self.assertIn('expected_alb_arn=settings.alb_identity_load_balancer_arn', seam)
+        self.assertIn('user_pool_id=settings.alb_identity_user_pool_id', seam)
 
         # Roles come from the deny-by-default mapper, never from claims directly.
-        self.assertIn('resolve_pilot_role(identity.groups)', source)
-        self.assertIn('PilotAuthorizationDenied', source)
+        self.assertIn('resolve_pilot_role(identity.groups)', seam)
+        self.assertIn('PilotAuthorizationDenied', seam)
 
         # A rejected or unverifiable identity must not fall through to a role.
-        self.assertNotIn("roles=frozenset({'viewer'})", source)
-        self.assertIn('return None', source)
+        self.assertNotIn("roles=frozenset({'viewer'})", seam)
+        self.assertIn('return None', seam)
+
+        # No second path may verify, or skip verifying, on its own: the
+        # verifier and the role mapper are reachable from the seam alone.
+        # (This does not forbid reading headers generally -- unrelated code
+        # such as the webhook shared-secret check legitimately does.)
+        for name, source in functions.items():
+            if name == '_resolve_pilot_identity':
+                continue
+            with self.subTest(function=name):
+                self.assertNotIn('resolve_alb_identity(', source)
+                self.assertNotIn('resolve_pilot_role(', source)
+
+        for caller in ('_alb_user_tenant_context', 'pilot_identity_badge'):
+            with self.subTest(caller=caller):
+                self.assertIn('_resolve_pilot_identity(request)', functions[caller])
+
+        # The badge reports what was granted; it must not invent a role.
+        badge = functions['pilot_identity_badge']
+        self.assertNotIn("'role': 'supervisor'", badge)
+        self.assertNotIn("'role': 'admin'", badge)
 
 
 if __name__ == "__main__":
