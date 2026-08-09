@@ -4,21 +4,54 @@
     "scripts/sync_cognito_users.py to make Cognito match it.",
     "",
     "Roles (see app/core/cloud_pilot_roles.py):",
-    "  viewer        - read-only dashboard, analytics, and approved documents",
-    "  supervisor    - the above plus review, evaluation, and AI advisory tools",
-    "  administrator - the above plus pilot access review",
+    "  user          - restricted; the tier the sanitized build narrows",
+    "  supervisor    - UNRESTRICTED read access, including live CAD with patient",
+    "                  and reporter PII",
+    "  admin         - supervisor access plus pilot access review",
     "",
     "No role grants CAD write access, dispatch, paging, or any operational",
     "output. That boundary is enforced in code, not here.",
+    "",
+    "DELIBERATE DECISION, Ted Sparks, 2026-08-08: every current account is set to",
+    "supervisor because this group is the pilot test cohort, including staff from",
+    "two vendors (nga911.com, css-mindshare.com) and three outside agencies",
+    "(boonewv.com, e911.org, leasa.org). Ted was shown that supervisor means",
+    "unrestricted access to live CAD including patient and reporter PII, and chose",
+    "it knowingly so these testers can exercise the real product. He intends to",
+    "remove them after testing. Revisit when the sanitized 'user' tier exists --",
+    "the non-county accounts here are the ones it was conceived for.",
+    "",
+    "The 'name' values below are placeholders taken verbatim from each email's",
+    "local part. Real names were not on the Cognito accounts and have not been",
+    "guessed; replace them as they become known.",
     "",
     "Removing someone from this list disables their account on the next run;",
     "it does not delete it, so the account remains available for audit."
   ],
   "users": [
-    {
-      "email": "tedsparks@911logan.com",
-      "name": "Ted Sparks",
-      "role": "admin"
-    }
+    { "email": "tedsparks@911logan.com", "name": "Ted Sparks", "role": "admin" },
+
+    { "email": "acrum@911logan.com", "name": "acrum", "role": "supervisor" },
+    { "email": "ccline@911logan.com", "name": "ccline", "role": "supervisor" },
+    { "email": "dhensley@911logan.com", "name": "dhensley", "role": "supervisor" },
+    { "email": "dispatch@911logan.com", "name": "dispatch", "role": "supervisor" },
+    { "email": "dispatch1@911logan.com", "name": "dispatch1", "role": "supervisor" },
+    { "email": "jisom@911logan.com", "name": "jisom", "role": "supervisor" },
+    { "email": "jrockel@911logan.com", "name": "jrockel", "role": "supervisor" },
+    { "email": "srosser@911logan.com", "name": "srosser", "role": "supervisor" },
+    { "email": "jmichaloff@logan911.com", "name": "jmichaloff", "role": "supervisor" },
+
+    { "email": "alexmolosh@nga911.com", "name": "alexmolosh", "role": "supervisor" },
+    { "email": "don@nga911.com", "name": "don", "role": "supervisor" },
+    { "email": "jakub.wozniak@nga911.com", "name": "jakub.wozniak", "role": "supervisor" },
+    { "email": "mike.deweese@nga911.com", "name": "mike.deweese", "role": "supervisor" },
+    { "email": "pamela.waters-dial@nga911.com", "name": "pamela.waters-dial", "role": "supervisor" },
+
+    { "email": "jdein@css-mindshare.com", "name": "jdein", "role": "supervisor" },
+    { "email": "rphillips@css-mindshare.com", "name": "rphillips", "role": "supervisor" },
+
+    { "email": "mmayhorn@boonewv.com", "name": "mmayhorn", "role": "supervisor" },
+    { "email": "allen.holder@e911.org", "name": "allen.holder", "role": "supervisor" },
+    { "email": "clilly@leasa.org", "name": "clilly", "role": "supervisor" }
   ]
 }
