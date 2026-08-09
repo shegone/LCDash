@@ -23,6 +23,7 @@ from aws_cdk import (
 from constructs import Construct
 
 from .config import (
+    ALB_SESSION_COOKIE_NAME,
     APPROVED_REGION,
     NAME_PREFIX,
     PILOT_DOMAIN_NAME,
@@ -242,6 +243,7 @@ class Phase1FoundationStack(cdk.Stack):
                     ],
                 ),
                 "LCDASH_ALB_IDENTITY_SIGNED_OUT_URL": f"https://{PILOT_DOMAIN_NAME}/",
+                "LCDASH_ALB_IDENTITY_SESSION_COOKIE": ALB_SESSION_COOKIE_NAME,
                 "LCDASH_CLOUD_AI_GENERATION_MODEL_ID": "us.amazon.nova-pro-v1:0",
                 "LCDASH_CLOUD_AI_MAX_OUTPUT_TOKENS": "400",
                 "LCDASH_CLOUD_AI_RETRIEVAL_RESULT_LIMIT": "5",
@@ -504,6 +506,12 @@ class Phase1FoundationStack(cdk.Stack):
             "",
             ["https://", PILOT_DOMAIN_NAME, "/oauth2/idpresponse"],
         )
+        # Cognito redirects here after clearing its own session. This is the
+        # authenticated application root on purpose: with the ALB session
+        # cookie expired, the load balancer finds no session and sends the
+        # browser to the login page, which is the sign-out confirmation. A
+        # dedicated unauthenticated landing page would need a prohibited
+        # ListenerRule (see the listener below).
         alb_logout_url = cdk.Fn.join(
             "",
             ["https://", PILOT_DOMAIN_NAME, "/"],
@@ -571,6 +579,16 @@ class Phase1FoundationStack(cdk.Stack):
             targets=[service],
             health_check=elbv2.HealthCheck(path="/health"),
         )
+        # NOTE: AWS suggests a dedicated UNauthenticated logout landing page
+        # ("client logout landing pages... cannot be behind an Application
+        # Load Balancer rule that requires authentication"). That would need
+        # an AWS::ElasticLoadBalancingV2::ListenerRule, which
+        # phase1_deployment_allowlist.json PROHIBITS -- deliberately, so this
+        # ALB keeps exactly one path and every path authenticates. The
+        # guardrail wins: sign-out instead lands on the application root,
+        # where the ALB finds no session and hands the browser to the login
+        # page. The user sees the sign-in screen rather than a custom
+        # confirmation page, which is unambiguous and adds no bypass.
         https_listener.add_action(
             "AuthenticateThenForward",
             action=elbv2_actions.AuthenticateCognitoAction(
@@ -580,7 +598,12 @@ class Phase1FoundationStack(cdk.Stack):
                 next=elbv2.ListenerAction.forward([target_group]),
                 on_unauthenticated_request=elbv2.UnauthenticatedAction.AUTHENTICATE,
                 scope="openid email profile",
-                session_cookie_name="LCDashPilotAuth",
+                # Shared with the app as LCDASH_ALB_IDENTITY_SESSION_COOKIE so
+                # sign-out expires the cookies that actually exist. The first
+                # sign-out attempt shipped expiring "AWSELBAuthSessionCookie-N"
+                # -- the AWS default, not this custom name -- so it deleted
+                # nothing and the session survived. One constant, two uses.
+                session_cookie_name=ALB_SESSION_COOKIE_NAME,
                 # The ALB's own session cookie, not a Cognito token, is what
                 # actually gates re-login -- it is checked locally by the ALB
                 # and is independent of the 15-minute access/ID token

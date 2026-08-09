@@ -20,6 +20,12 @@ PILOT_ZONE_NAME = "logan911.com"
 # Hostname serving the application, behind the ALB.
 PILOT_DOMAIN_NAME = f"aws.{PILOT_ZONE_NAME}"
 
+# The ALB's OIDC session cookie name. The load balancer shards it as
+# "<name>-0", "<name>-1", ... up to four parts. Defined here because BOTH the
+# listener that sets it and the application that must expire it on sign-out
+# have to agree; when they did not, sign-out silently did nothing.
+ALB_SESSION_COOKIE_NAME = "LCDashPilotAuth"
+
 # Hostname serving Cognito managed login. Kept on our own domain rather than the
 # Cognito prefix domain for two reasons: a county-owned hostname is what users
 # should be asked to trust with a password, and WebAuthn passkeys bind to a

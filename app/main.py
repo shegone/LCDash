@@ -890,23 +890,38 @@ def identity_whoami_api(request: Request) -> dict[str, object]:
     return pilot_identity_badge(request)
 
 
-# The ALB stores its OIDC session in AWSELBAuthSessionCookie-N, split across
-# numbered cookies when the token set is large. Expiring them is what actually
-# ends the session in front of this app; four covers the observed maximum with
-# headroom, and expiring a cookie that was never set is harmless.
-_ALB_SESSION_COOKIES = tuple(f"AWSELBAuthSessionCookie-{index}" for index in range(4))
+def _alb_session_cookie_names() -> tuple[str, ...]:
+    """Every cookie the ALB may be holding this session in.
+
+    The load balancer shards its OIDC session across ``<name>-0`` .. ``-3``
+    (AWS documents up to four, for cookies over 16K). The base name is
+    included because expiring a cookie that was never set costs nothing,
+    while missing one leaves the session alive.
+    """
+
+    base = settings.alb_identity_session_cookie or "AWSELBAuthSessionCookie"
+    return (base, *(f"{base}-{index}" for index in range(4)))
 
 
 @app.get("/logout")
 def sign_out(request: Request):
     """Sign out of the ALB session AND Cognito, in that order.
 
-    Doing only the first is the trap: the ALB would bounce the browser to
-    Cognito, Cognito would still hold a valid session, and the user would be
-    signed straight back in without a password -- a sign-out button that
-    visibly does nothing on a shared dispatch workstation. So the cookies are
-    expired here and the browser is then sent to Cognito's own logout
-    endpoint, which clears its session and returns to the configured page.
+    Two failures are designed against here, both learned the hard way:
+
+    1. Expiring the ALB cookies alone is not sign-out. The ALB would simply
+       re-authenticate against a Cognito session that is still valid and let
+       the user back in without a password, so the browser is handed off to
+       Cognito's logout endpoint afterwards.
+    2. The cookie names must be the ones this deployment actually uses. The
+       first version expired ``AWSELBAuthSessionCookie-N``, the AWS default,
+       while the listener is configured with a custom
+       ``session_cookie_name`` -- so it deleted nothing at all and the button
+       appeared to do nothing. The name now comes from the stack.
+
+    Cookies are expired under both a host-only and a domain-scoped identity:
+    a browser treats those as different cookies, and deleting the wrong one
+    silently leaves the session intact.
     """
 
     if not settings.alb_identity_hosted_ui_url or not settings.alb_identity_client_id:
@@ -920,10 +935,14 @@ def sign_out(request: Request):
     )
     response = RedirectResponse(destination, status_code=303)
     response.headers["Cache-Control"] = "no-store"
-    for cookie_name in _ALB_SESSION_COOKIES:
-        # delete_cookie must mirror the attributes the ALB set, or the
-        # browser keeps the original cookie and the session survives.
+
+    host = (request.url.hostname or "").strip()
+    for cookie_name in _alb_session_cookie_names():
         response.delete_cookie(cookie_name, path="/", httponly=True, secure=True)
+        if host:
+            response.delete_cookie(
+                cookie_name, path="/", domain=host, httponly=True, secure=True
+            )
     return response
 
 

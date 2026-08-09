@@ -288,6 +288,61 @@ a {
     color: #ffbdc9;
 }
 
+/* Sign-out confirmation page (standalone, no app shell) */
+.signed-out-body {
+    display: grid;
+    place-items: center;
+    min-height: 100vh;
+    margin: 0;
+    padding: 24px;
+}
+
+.signed-out-card {
+    max-width: 460px;
+    padding: 40px 36px;
+    text-align: center;
+}
+
+.signed-out-logo {
+    width: 84px;
+    margin-bottom: 18px;
+}
+
+.signed-out-card h1 {
+    margin: 0 0 14px;
+    font-size: 1.6rem;
+    font-weight: 800;
+}
+
+.signed-out-card p {
+    margin: 0 0 14px;
+    color: #b9d8ed;
+    font-size: .92rem;
+}
+
+.signed-out-shared {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    padding: 11px 14px;
+    border-radius: 12px;
+    background: rgba(76, 201, 255, .08);
+    border: 1px solid rgba(76, 201, 255, .2);
+    color: #dff8ff !important;
+}
+
+.signed-out-action {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 11px 26px;
+    border-radius: 12px;
+    color: #04131f;
+    background: linear-gradient(135deg, #4cc9ff, #69ffb9);
+    font-weight: 800;
+    text-decoration: none;
+}
+
 .topbar-identity-unverified .bi,
 .topbar-identity-unverified .topbar-identity-role {
     color: #ffc046;

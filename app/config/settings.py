@@ -127,6 +127,13 @@ class Settings:
     alb_identity_signed_out_url: str = _env(
         "LCDASH_ALB_IDENTITY_SIGNED_OUT_URL"
     ).strip()
+    # The ALB's session cookie name, supplied by the stack that configures it.
+    # The default is AWS's, but this deployment sets a custom name -- sign-out
+    # first shipped expiring the AWS default and therefore deleted nothing, so
+    # this value must come from the same constant the listener uses.
+    alb_identity_session_cookie: str = _env(
+        "LCDASH_ALB_IDENTITY_SESSION_COOKIE", "AWSELBAuthSessionCookie"
+    ).strip()
     cloud_cad_enabled: bool = _env_bool("LCDASH_CLOUD_CAD_ENABLED", False)
     cloud_cad_mode: str = _env(
         "LCDASH_CLOUD_CAD_MODE", "synthetic-disconnected"

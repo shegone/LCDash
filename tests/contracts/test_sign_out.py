@@ -37,6 +37,7 @@ class SignOutTests(unittest.TestCase):
                 "https://lcdash-p1-logan-use1-20260804.auth.us-east-1.amazoncognito.com",
             ),
             ("alb_identity_signed_out_url", "https://aws.logan911.com/"),
+            ("alb_identity_session_cookie", "LCDashPilotAuth"),
         ):
             patcher = patch.object(settings, name, value)
             self.addCleanup(patcher.stop)
@@ -56,19 +57,64 @@ class SignOutTests(unittest.TestCase):
         self.assertEqual(query["client_id"], ["1example23456789"])
         self.assertEqual(query["logout_uri"], ["https://aws.logan911.com/"])
 
-    def test_logout_expires_every_alb_session_cookie(self):
-        """The ALB splits its session across numbered cookies; leaving any
-        one alive can leave the session usable."""
+    def test_logout_expires_the_configured_cookie_name_not_the_aws_default(self):
+        """The bug that made sign-out do nothing: this deployment sets a
+        custom session_cookie_name, and the first version expired AWS's
+        default name, so it deleted cookies that never existed."""
         response = self.client.get("/logout", follow_redirects=False)
         expired = "".join(response.headers.get_list("set-cookie"))
 
         for index in range(4):
-            self.assertIn(f"AWSELBAuthSessionCookie-{index}=", expired)
-        # Attributes must mirror what the ALB set or the browser keeps the
-        # original cookie.
+            self.assertIn(f"LCDashPilotAuth-{index}=", expired)
+        self.assertNotIn("AWSELBAuthSessionCookie", expired)
         self.assertIn("Path=/", expired)
         self.assertIn("Secure", expired)
         self.assertIn("HttpOnly", expired)
+
+    def test_logout_expires_both_host_only_and_domain_scoped_cookies(self):
+        """A browser treats these as different cookies; expiring only one
+        identity can leave the session alive."""
+        response = self.client.get("/logout", follow_redirects=False)
+        cookies = response.headers.get_list("set-cookie")
+
+        host_only = [c for c in cookies if "LCDashPilotAuth-0=" in c and "Domain=" not in c]
+        domain_scoped = [c for c in cookies if "LCDashPilotAuth-0=" in c and "Domain=" in c]
+        self.assertTrue(host_only)
+        self.assertTrue(domain_scoped)
+
+    def test_cookie_name_follows_settings(self):
+        """Name comes from the stack, so app and listener cannot drift."""
+        with patch.object(settings, "alb_identity_session_cookie", "SomeOtherName"):
+            response = self.client.get("/logout", follow_redirects=False)
+        expired = "".join(response.headers.get_list("set-cookie"))
+        self.assertIn("SomeOtherName-0=", expired)
+
+    def test_no_unauthenticated_landing_page_is_introduced(self):
+        """AWS suggests a dedicated UNauthenticated logout landing page, which
+        would need an ElasticLoadBalancingV2::ListenerRule --
+        phase1_deployment_allowlist.json prohibits that type deliberately, so
+        this ALB keeps exactly one path and every path authenticates.
+        Sign-out therefore lands on the app root, where the ALB finds no
+        session and shows the login page. If a landing page is ever wanted,
+        the prohibition is the decision to revisit first, with Ted."""
+        import json
+        from pathlib import Path
+
+        allowlist = json.loads(
+            (Path(__file__).parents[2] / "infrastructure" / "phase1_deployment_allowlist.json")
+            .read_text(encoding="utf-8")
+        )
+        self.assertIn(
+            "AWS::ElasticLoadBalancingV2::ListenerRule",
+            allowlist["prohibited_resource_types"],
+        )
+        # No bypass route may exist in the app either: a landing page the ALB
+        # still authenticates is unreachable after sign-out, so shipping one
+        # would only be dead code implying a bypass that isn't there.
+        self.assertNotIn(
+            "/signed-out",
+            (Path(__file__).parents[2] / "app" / "main.py").read_text(encoding="utf-8"),
+        )
 
     def test_logout_is_never_cached(self):
         response = self.client.get("/logout", follow_redirects=False)
