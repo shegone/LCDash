@@ -440,21 +440,33 @@ class CdkTemplateTests(unittest.TestCase):
             },
         )
 
-    def test_cognito_pool_requires_strong_password_and_totp_mfa(self):
+    def test_cognito_pool_requires_mfa_by_emailed_code_and_no_authenticator_app(self):
+        """MFA stays mandatory, but the second factor needs no installed app.
+
+        SOFTWARE_TOKEN_MFA is deliberately absent: requiring an authenticator
+        app was the main friction for this user base. EMAIL_OTP keeps two
+        factors while needing nothing installed.
+
+        Account recovery is admin_only rather than verified_email because a user
+        whose MFA arrives by email cannot also receive a password-reset code at
+        that same address -- Cognito would leave them with no valid recovery
+        method. With one administrator, admin-driven reset beats collecting a
+        phone number for everyone purely as a second channel.
+        """
         self.template.has_resource_properties(
             "AWS::Cognito::UserPool",
             {
                 "AdminCreateUserConfig": {"AllowAdminCreateUserOnly": True},
                 "MfaConfiguration": "ON",
-                "EnabledMfas": ["SOFTWARE_TOKEN_MFA"],
+                "EnabledMfas": ["EMAIL_OTP"],
                 "AccountRecoverySetting": {
-                    "RecoveryMechanisms": [
-                        {"Name": "verified_email", "Priority": 1}
-                    ]
+                    "RecoveryMechanisms": [{"Name": "admin_only", "Priority": 1}]
                 },
                 "Policies": {
                     "PasswordPolicy": {
-                        "MinimumLength": 14,
+                        # Shorter than the previous 14 because MFA is still
+                        # required on every sign-in; complexity is unchanged.
+                        "MinimumLength": 10,
                         "RequireLowercase": True,
                         "RequireUppercase": True,
                         "RequireNumbers": True,
@@ -464,6 +476,42 @@ class CdkTemplateTests(unittest.TestCase):
                 },
             },
         )
+        # EMAIL_OTP is only permitted when the pool sends through SES with
+        # EmailSendingAccount=DEVELOPER; Cognito's built-in sender cannot serve
+        # a code on every login.
+        self.template.has_resource_properties(
+            "AWS::Cognito::UserPool",
+            {
+                "UserPoolTier": "ESSENTIALS",
+                "EmailConfiguration": {
+                    "EmailSendingAccount": "DEVELOPER",
+                    "From": "no-reply@logan911.com",
+                },
+            },
+        )
+
+    def test_cognito_ses_source_arn_names_the_verified_domain_not_the_address(self):
+        """SourceArn must name the SES identity that is actually verified.
+
+        identity/<domain> and identity/<address> are different identities. If
+        this named the address while only the domain was verified, Cognito would
+        accept the configuration and then silently fail to deliver MFA codes,
+        locking every user out with no error at deploy time.
+        """
+        pool = next(
+            resource
+            for resource in self.template.to_json()["Resources"].values()
+            if resource["Type"] == "AWS::Cognito::UserPool"
+        )
+        source_arn = pool["Properties"]["EmailConfiguration"]["SourceArn"]
+        joined = "".join(
+            part for part in source_arn["Fn::Join"][1] if isinstance(part, str)
+        )
+        self.assertTrue(
+            joined.endswith(":identity/logan911.com"),
+            f"SourceArn must name the verified domain identity, got {joined!r}",
+        )
+        self.assertNotIn("identity/no-reply@", joined)
 
     def test_cognito_groups_are_named_read_only_roles_without_iam_roles(self):
         self.template.resource_count_is("AWS::Cognito::UserPoolGroup", 3)

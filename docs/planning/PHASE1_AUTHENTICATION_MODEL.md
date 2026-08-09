@@ -80,12 +80,27 @@ Constraints that this design deliberately keeps:
 
 ## Login and session policy
 
-- Email is the sign-in identifier and verified email is the only account-recovery
-  mechanism.
-- MFA is mandatory and software TOTP is the only enabled second factor. SMS MFA
-  is disabled.
-- Passwords require at least 14 characters with uppercase, lowercase, number,
-  and symbol characters. Temporary passwords expire after one day.
+- Email is the sign-in identifier. Account recovery is **administrator-only**:
+  there is no self-service password reset. This is a consequence of email MFA,
+  not an independent choice -- Cognito will not send an MFA code and a
+  password-reset code to the same address, so a user whose second factor arrives
+  by email has no valid self-service recovery route. The alternative was
+  collecting a phone number for every user purely as a recovery channel.
+- MFA is **mandatory**, and the only enabled second factor is a one-time code
+  sent by **email** (`EMAIL_OTP`). Software-token (TOTP) MFA is deliberately not
+  enabled: requiring an authenticator app was the principal source of sign-in
+  friction for this user base. SMS MFA is also disabled, which avoids per-message
+  cost, phone-number collection, and A2P registration.
+- Email MFA requires the **Essentials** feature plan and requires the pool to
+  send through **SES** (`EmailSendingAccount=DEVELOPER`). Cognito's built-in
+  sender caps at roughly 50 messages per day, which a code on every sign-in
+  exhausts quickly. The SES identity is the verified **domain** `logan911.com`
+  rather than the individual from-address, because those are distinct SES
+  identities and naming an unverified one leaves Cognito unable to deliver.
+- Passwords require at least 10 characters with uppercase, lowercase, number,
+  and symbol characters. Temporary passwords expire after one day. The previous
+  minimum was 14; it was shortened because MFA is still required on every
+  sign-in, so the password is no longer the sole barrier to an account.
 - The ALB uses a confidential Cognito client because ALB performs the server-side
   authorization-code exchange. The only OAuth grant is authorization code;
   implicit and client-credentials grants are absent.

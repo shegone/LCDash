@@ -49,7 +49,7 @@ class OfflinePolicyTests(unittest.TestCase):
                 "lcdash-pilot-reviewer",
                 "lcdash-pilot-administrator",
             ],
-            "cognito_mfa": "required-totp",
+            "cognito_mfa": "required-email-otp",
             "cognito_access_token_minutes": 15,
             "cognito_id_token_minutes": 15,
             "cognito_refresh_token_days": 1,

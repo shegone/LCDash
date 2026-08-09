@@ -23,7 +23,8 @@ all passed. Dashboard, Units, Map, and Heatmap share an explicit
 legacy CAD initialization; existing on-premises CAD read behavior is preserved.
 
 Unauthenticated requests redirect to Cognito. The sole current account is the
-read-only reviewer `tedsparks@911logan.com`, with required software-token MFA.
+read-only reviewer `tedsparks@911logan.com`, with required MFA by emailed
+one-time code (no authenticator app).
 For first login, open `https://aws.logan911.com`, follow the Cognito invitation,
 set a permanent password, and enroll an authenticator app. Never place a
 password or MFA seed in chat, logs, Git, or documentation.
@@ -132,11 +133,16 @@ authorization-code exchange. Authorization code is the only OAuth grant;
 implicit and client-credentials flows are absent. The secret is managed by
 Cognito/ALB, is not put in Secrets Manager or the task environment, and is not
 an application, CAD, vendor, or tenant secret. The listener authenticates before
-forwarding and uses a twenty-four-hour session. Cognito requires TOTP MFA, a 14-character
-password with every character class, verified-email-only recovery, 15-minute
-access/ID tokens, one-day rotating refresh tokens, and revocation.
+forwarding and uses a twenty-four-hour session. Cognito requires MFA by emailed
+one-time code (`EMAIL_OTP`; no authenticator app, and software-token MFA is
+deliberately not enabled), a 10-character password with every character class,
+administrator-only account recovery, 15-minute access/ID tokens, one-day rotating
+refresh tokens, and revocation. Email MFA requires the Essentials feature plan and
+SES as the sending account; the SES identity is the verified domain
+`logan911.com`, not the individual from-address.
 
-`lcdash-pilot-viewer` and `lcdash-pilot-reviewer` are named application groups
+`lcdash-pilot-viewer`, `lcdash-pilot-reviewer`, and `lcdash-pilot-administrator`
+are named application groups
 without IAM roles. No identity pool or browser AWS credentials exist. The task
 has one fixed `logan-synthetic` tenant binding; request values, group names, and
 Cognito claims cannot select another tenant. The full design and required

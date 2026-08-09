@@ -52,7 +52,7 @@ cannot be run.
    the expected pilot user pool. Stop on any mismatch.
 3. Inspect only pool, app-client, domain, and group configuration. Do not open a
    user list for discovery or export users. Confirm administrator-created users,
-   required software-token MFA, and the exact target group.
+   required MFA by emailed one-time code, and the exact target group.
 4. Use viewer unless the approval explicitly requires supervisor. Administrator
    requires separate approval and a pre-existing exact group.
 
@@ -65,9 +65,12 @@ cannot be run.
 3. Add the person to exactly one approved group from the table. Do not create a
    group, attach an IAM role, add custom attributes, or change pool/client/MFA
    settings as part of onboarding.
-4. Have the person complete first sign-in and software-token MFA enrollment on
-   their own device. The operator must not observe or retain the MFA seed or
-   one-time codes.
+4. Have the person complete first sign-in on their own device: they set their own
+   password, then confirm the one-time code emailed to their approved address.
+   There is no authenticator app to install and no MFA seed to enroll. The
+   operator must not observe or retain the temporary credential or any one-time
+   code. Note that account recovery is administrator-only, so a locked-out user
+   needs an administrator-driven reset rather than self-service.
 5. Ask the person to verify only the expected synthetic pilot pages. Do not test
    CAD, station alerts, paging, dispatch, public warning, or operational output.
 

@@ -22,7 +22,13 @@ from aws_cdk import (
 )
 from constructs import Construct
 
-from .config import APPROVED_REGION, NAME_PREFIX, PILOT_DOMAIN_NAME
+from .config import (
+    APPROVED_REGION,
+    NAME_PREFIX,
+    PILOT_DOMAIN_NAME,
+    PILOT_MAIL_DOMAIN,
+    PILOT_MAIL_FROM_ADDRESS,
+)
 
 
 class Phase1FoundationStack(cdk.Stack):
@@ -335,15 +341,40 @@ class Phase1FoundationStack(cdk.Stack):
             "UserPool",
             user_pool_name=f"{NAME_PREFIX}-users",
             self_sign_up_enabled=False,
+            # ESSENTIALS is required for email MFA (mfa_second_factor.email) and
+            # is also the tier passkeys need later; LITE cannot enable either.
+            feature_plan=cognito.FeaturePlan.ESSENTIALS,
             mfa=cognito.Mfa.REQUIRED,
             mfa_second_factor=cognito.MfaSecondFactor(
                 sms=False,
-                otp=True,
+                # No authenticator app: MFA is an emailed one-time code instead
+                # of a software token, so nothing has to be installed.
+                otp=False,
+                email=True,
+            ),
+            # Cognito's own sender caps around 50 messages/day, which an MFA
+            # code on every login exhausts quickly. SES is required beyond that
+            # -- see LCDASH_COGNITO_SES_FROM_ADDRESS below.
+            email=cognito.UserPoolEmail.with_ses(
+                from_email=PILOT_MAIL_FROM_ADDRESS,
+                # The SES identity must be the verified DOMAIN, not the single
+                # from-address. These produce different SourceArn values
+                # (identity/<domain> vs identity/<address>), and Cognito cannot
+                # send if the ARN names an identity that is not verified.
+                ses_verified_domain=PILOT_MAIL_DOMAIN,
             ),
             sign_in_aliases=cognito.SignInAliases(email=True),
-            account_recovery=cognito.AccountRecovery.EMAIL_ONLY,
+            # Email MFA and email account recovery cannot share an address: a
+            # user whose MFA is by email cannot also receive a password-reset
+            # code by email. With a single administrator today, admin-driven
+            # reset (no self-service recovery mechanism) is simpler than
+            # collecting phone numbers for everyone to use as a second channel.
+            account_recovery=cognito.AccountRecovery.NONE,
             password_policy=cognito.PasswordPolicy(
-                min_length=14,
+                # Shortened from 14: MFA is still required on every sign-in, so
+                # the password is no longer the only thing standing between an
+                # attacker and this account. Complexity requirements are kept.
+                min_length=10,
                 require_lowercase=True,
                 require_uppercase=True,
                 require_digits=True,
