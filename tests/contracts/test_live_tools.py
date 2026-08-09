@@ -127,7 +127,11 @@ class ToolSpecsTests(unittest.TestCase):
             },
         )
         for spec in TOOL_SPECS:
-            blob = str(spec).lower()
+            # dispatch_agency/DispatchAgencies is a read-only CAD *field* name
+            # (which agency dispatched a historical call), not the forbidden
+            # "dispatch" write operation -- strip it before scanning for the
+            # bare word so the guard still catches an actual dispatch action.
+            blob = str(spec).lower().replace("dispatch_agency", "").replace("dispatchagencies", "")
             for forbidden in (
                 "dispatch",
                 "acknowledge",
@@ -144,7 +148,9 @@ class ToolSpecsTests(unittest.TestCase):
 
     def test_no_forbidden_operation_name_appears_in_any_tool_spec(self):
         for spec in TOOL_SPECS:
-            blob = str(spec).lower()
+            # See note above: dispatch_agency is a read-only field name, not
+            # the forbidden "dispatch" operation.
+            blob = str(spec).lower().replace("dispatch_agency", "").replace("dispatchagencies", "")
             for forbidden in FORBIDDEN_OPERATIONS:
                 self.assertNotIn(forbidden.lower(), blob)
 
@@ -605,9 +611,13 @@ class SearchCallHistoryTests(unittest.TestCase):
         self.assertEqual(len(connector.search_calls_requests), 5)
 
     def test_post_filters_apply_after_fetch_and_reduce_returned_not_count(self):
+        # status/priority are the only remaining post-filters -- agency,
+        # incident_code, etc. are native (sent in the request body and
+        # filtered server-side by CAD), so they can no longer be tested by
+        # feeding an unfiltered page and checking local reduction.
         page = [
-            _raw_cad_call("CFS26-00001", **{"PrimaryResponseAgency": {"Abbreviation": "LEASA"}}),
-            _raw_cad_call("CFS26-00002", **{"PrimaryResponseAgency": {"Abbreviation": "LCSO"}}),
+            _raw_cad_call("CFS26-00001", **{"Status": "On Scene"}),
+            _raw_cad_call("CFS26-00002", **{"Status": "Closed"}),
         ]
         connector = _FakeCadConnector(search_pages=[page])
         registry = _registry(cad_connector=connector)
@@ -616,12 +626,13 @@ class SearchCallHistoryTests(unittest.TestCase):
             {
                 "created_from": "2026-08-01T00:00:00Z",
                 "created_to": "2026-08-02T00:00:00Z",
-                "agency": "LEASA",
+                "status": "On Scene",
             },
         )
         self.assertEqual(result.payload["count"], 2)
         self.assertEqual(result.payload["returned"], 1)
         self.assertFalse(result.payload["truncated"])
+        self.assertNotIn("post_filter_warning", result.payload)
 
     def test_connector_error_is_an_error_payload_not_an_exception(self):
         connector = _FakeCadConnector(search_error=CloudCadConnectorError("upstream_rejected", "search_calls"))
@@ -654,6 +665,173 @@ class SearchCallHistoryTests(unittest.TestCase):
             },
         )
         self.assertIn("error", result.payload)
+
+    def test_old_agency_key_is_rejected_not_silently_ignored(self):
+        # "agency" was replaced by dispatch_agency/response_agency (native
+        # filters); it must not be silently accepted as a no-op.
+        registry = _registry(cad_connector=_FakeCadConnector())
+        result = registry.execute(
+            "search_call_history",
+            {
+                "created_from": "2026-08-01T00:00:00Z",
+                "created_to": "2026-08-02T00:00:00Z",
+                "agency": "LEASA",
+            },
+        )
+        self.assertIn("error", result.payload)
+
+    def test_native_filters_land_in_request_body_with_documented_keys(self):
+        connector = _FakeCadConnector(search_pages=[[]])
+        registry = _registry(cad_connector=connector)
+        result = registry.execute(
+            "search_call_history",
+            {
+                "created_from": "2026-08-01T00:00:00Z",
+                "created_to": "2026-08-02T00:00:00Z",
+                "incident_code": "MEDICAL",
+                "location": "314 HUDGINS STREET",
+                "beat": "B1",
+                "zone": "Z1",
+                "unit": "MED31",
+                "responder": "MED31",
+                "dispatch_agency": "LFD",
+                "response_agency": "LEASA",
+            },
+        )
+        self.assertNotIn("error", result.payload)
+        body = connector.search_calls_requests[0]["body"]
+        self.assertEqual(body["IncidentCode"], "MEDICAL")
+        self.assertEqual(body["Location"], "314 HUDGINS STREET")
+        self.assertEqual(body["Beat"], "B1")
+        self.assertEqual(body["Zone"], "Z1")
+        self.assertEqual(body["Unit"], "MED31")
+        self.assertEqual(body["Responder"], "MED31")
+        self.assertEqual(body["DispatchAgencies"], ["LFD"])
+        self.assertEqual(body["ResponseAgencies"], ["LEASA"])
+        # None of the native args should be sent as status/priority-style
+        # local post-filters -- they belong in the body only.
+        self.assertNotIn("incident_code", body)
+        self.assertNotIn("agency", body)
+
+    def test_closed_window_lands_in_request_body(self):
+        connector = _FakeCadConnector(search_pages=[[]])
+        registry = _registry(cad_connector=connector)
+        result = registry.execute(
+            "search_call_history",
+            {
+                "created_from": "2026-08-01T00:00:00Z",
+                "created_to": "2026-08-02T00:00:00Z",
+                "closed_from": "2026-08-01T00:00:00Z",
+                "closed_to": "2026-08-02T00:00:00Z",
+            },
+        )
+        self.assertNotIn("error", result.payload)
+        body = connector.search_calls_requests[0]["body"]
+        self.assertIn("RecordClosedFrom", body)
+        self.assertIn("RecordClosedTo", body)
+
+    def test_closed_window_requires_both_bounds(self):
+        registry = _registry(cad_connector=_FakeCadConnector())
+        result = registry.execute(
+            "search_call_history",
+            {
+                "created_from": "2026-08-01T00:00:00Z",
+                "created_to": "2026-08-02T00:00:00Z",
+                "closed_from": "2026-08-01T00:00:00Z",
+            },
+        )
+        self.assertIn("error", result.payload)
+
+    def test_closed_window_inverted_is_rejected(self):
+        registry = _registry(cad_connector=_FakeCadConnector())
+        result = registry.execute(
+            "search_call_history",
+            {
+                "created_from": "2026-08-01T00:00:00Z",
+                "created_to": "2026-08-02T00:00:00Z",
+                "closed_from": "2026-08-02T00:00:00Z",
+                "closed_to": "2026-08-01T00:00:00Z",
+            },
+        )
+        self.assertIn("error", result.payload)
+
+    def test_closed_window_over_92_days_is_rejected(self):
+        registry = _registry(cad_connector=_FakeCadConnector())
+        result = registry.execute(
+            "search_call_history",
+            {
+                "created_from": "2026-08-01T00:00:00Z",
+                "created_to": "2026-08-02T00:00:00Z",
+                "closed_from": "2026-01-01T00:00:00Z",
+                "closed_to": "2026-08-01T00:00:00Z",
+            },
+        )
+        self.assertIn("error", result.payload)
+
+    def test_priority_post_filter_reduces_returned_not_count(self):
+        page = [
+            _raw_cad_call("CFS26-00001", **{"Priority": "1"}),
+            _raw_cad_call("CFS26-00002", **{"Priority": "3"}),
+        ]
+        connector = _FakeCadConnector(search_pages=[page])
+        registry = _registry(cad_connector=connector)
+        result = registry.execute(
+            "search_call_history",
+            {
+                "created_from": "2026-08-01T00:00:00Z",
+                "created_to": "2026-08-02T00:00:00Z",
+                "priority": "1",
+            },
+        )
+        self.assertEqual(result.payload["count"], 2)
+        self.assertEqual(result.payload["returned"], 1)
+
+    def test_post_filter_warning_present_only_when_combined_with_truncation(self):
+        page = [_raw_cad_call(f"CFS26-{i:05d}", **{"Status": "On Scene"}) for i in range(100)]
+        connector = _FakeCadConnector(search_pages=[page])
+        registry = _registry(cad_connector=connector)
+        result = registry.execute(
+            "search_call_history",
+            {
+                "created_from": "2026-08-01T00:00:00Z",
+                "created_to": "2026-08-02T00:00:00Z",
+                "status": "On Scene",
+                "limit": 5,
+            },
+        )
+        self.assertTrue(result.payload["truncated"])
+        self.assertIn("post_filter_warning", result.payload)
+        self.assertIn("truncated", result.payload["post_filter_warning"])
+
+    def test_no_post_filter_warning_when_truncated_without_post_filter(self):
+        page = [_raw_cad_call(f"CFS26-{i:05d}") for i in range(100)]
+        connector = _FakeCadConnector(search_pages=[page])
+        registry = _registry(cad_connector=connector)
+        result = registry.execute(
+            "search_call_history",
+            {
+                "created_from": "2026-08-01T00:00:00Z",
+                "created_to": "2026-08-02T00:00:00Z",
+                "limit": 5,
+            },
+        )
+        self.assertTrue(result.payload["truncated"])
+        self.assertNotIn("post_filter_warning", result.payload)
+
+    def test_no_post_filter_warning_when_post_filter_used_without_truncation(self):
+        page = [_raw_cad_call("CFS26-00001", **{"Status": "On Scene"})]
+        connector = _FakeCadConnector(search_pages=[page])
+        registry = _registry(cad_connector=connector)
+        result = registry.execute(
+            "search_call_history",
+            {
+                "created_from": "2026-08-01T00:00:00Z",
+                "created_to": "2026-08-02T00:00:00Z",
+                "status": "On Scene",
+            },
+        )
+        self.assertFalse(result.payload["truncated"])
+        self.assertNotIn("post_filter_warning", result.payload)
 
 
 class GetCadConfigurationsTests(unittest.TestCase):

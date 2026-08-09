@@ -75,13 +75,38 @@ _SEARCH_UNITS_STRING_FILTERS = ("agency", "unit_type", "status", "station")
 _SEARCH_UNITS_ALLOWED_KEYS = frozenset(_SEARCH_UNITS_STRING_FILTERS + ("limit",))
 _MAX_FILTER_STRING_LENGTH = 128
 
-# search_call_history filter keys. incident_code/agency/status are NOT native
-# /cfs_core/search body parameters (see module docstring on
-# _search_call_history) -- they are applied as post-filters over the rows the
-# connector returns, same as search_calls does over the snapshot.
-_SEARCH_HISTORY_STRING_FILTERS = ("incident_code", "agency", "status")
+# search_call_history filter keys. These ARE native POST /cfs_core/search
+# body parameters (see docs/API_KNOWLEDGE_BASE.md "Verified CAD Endpoint
+# Detail" section, ~lines 176-192) and are sent to CAD so filtering happens
+# server-side, before the row cap -- not after it.
+_SEARCH_HISTORY_NATIVE_STRING_FILTERS = (
+    "incident_code",
+    "location",
+    "beat",
+    "zone",
+    "unit",
+    "responder",
+    "dispatch_agency",
+    "response_agency",
+)
+_SEARCH_HISTORY_NATIVE_FILTER_TO_KEY = {
+    "incident_code": "IncidentCode",
+    "location": "Location",
+    "beat": "Beat",
+    "zone": "Zone",
+    "unit": "Unit",
+    "responder": "Responder",
+}
+# status/priority are NOT in the documented native parameter list -- they
+# are applied as post-filters over the rows the connector returns, same as
+# search_calls does over the snapshot. See module docstring on
+# _search_call_history for the accuracy implication (undercounting when the
+# fetch was truncated).
+_SEARCH_HISTORY_POST_FILTERS = ("status", "priority")
 _SEARCH_HISTORY_ALLOWED_KEYS = frozenset(
-    _SEARCH_HISTORY_STRING_FILTERS + ("created_from", "created_to", "limit")
+    _SEARCH_HISTORY_NATIVE_STRING_FILTERS
+    + _SEARCH_HISTORY_POST_FILTERS
+    + ("created_from", "created_to", "closed_from", "closed_to", "limit")
 )
 _GET_CONFIGURATIONS_ALLOWED_KEYS = frozenset({"configuration"})
 
@@ -238,6 +263,13 @@ def _parse_iso_datetime(tool_input: Mapping[str, Any], key: str) -> datetime:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def _optional_iso_datetime(tool_input: Mapping[str, Any], key: str) -> datetime | None:
+    value = tool_input.get(key)
+    if value is None:
+        return None
+    return _parse_iso_datetime(tool_input, key)
 
 
 def _bound_configuration_value(value: Any) -> tuple[Any, bool]:
@@ -515,9 +547,27 @@ class LiveToolRegistry:
         if created_to - created_from > timedelta(days=MAX_HISTORY_WINDOW_DAYS):
             raise _ToolInputError(f"window must be at most {MAX_HISTORY_WINDOW_DAYS} days")
 
-        incident_code = _optional_str_filter(tool_input, "incident_code")
-        agency = _optional_str_filter(tool_input, "agency")
+        closed_from = _optional_iso_datetime(tool_input, "closed_from")
+        closed_to = _optional_iso_datetime(tool_input, "closed_to")
+        if (closed_from is None) != (closed_to is None):
+            raise _ToolInputError("closed_from and closed_to must be provided together")
+        if closed_from is not None and closed_to is not None:
+            if closed_from >= closed_to:
+                raise _ToolInputError("closed_from must be before closed_to")
+            if closed_to - closed_from > timedelta(days=MAX_HISTORY_WINDOW_DAYS):
+                raise _ToolInputError(f"closed window must be at most {MAX_HISTORY_WINDOW_DAYS} days")
+
+        native_filters: dict[str, str] = {}
+        for arg_name, api_key in _SEARCH_HISTORY_NATIVE_FILTER_TO_KEY.items():
+            value = _optional_str_filter(tool_input, arg_name)
+            if value is not None:
+                native_filters[api_key] = value
+        dispatch_agency = _optional_str_filter(tool_input, "dispatch_agency")
+        response_agency = _optional_str_filter(tool_input, "response_agency")
+
+        # Not native -- applied as post-filters below, after the fetch.
         status = _optional_str_filter(tool_input, "status")
+        priority = _optional_str_filter(tool_input, "priority")
         limit = _optional_limit(
             tool_input, default=MAX_HISTORY_RESULTS_DEFAULT, maximum=MAX_HISTORY_RESULTS_DEFAULT
         )
@@ -545,12 +595,20 @@ class LiveToolRegistry:
                 },
             )
 
-        body = {
+        body: dict[str, Any] = {
             "RecordCreatedFrom": window["from"],
             "RecordCreatedTo": window["to"],
             "OrderByField": "Created",
             "OrderByDirection": "Descending",
         }
+        if closed_from is not None and closed_to is not None:
+            body["RecordClosedFrom"] = closed_from.isoformat()
+            body["RecordClosedTo"] = closed_to.isoformat()
+        body.update(native_filters)
+        if dispatch_agency is not None:
+            body["DispatchAgencies"] = [dispatch_agency]
+        if response_agency is not None:
+            body["ResponseAgencies"] = [response_agency]
 
         calls_by_number: dict[str, Mapping[str, Any]] = {}
         truncated = False
@@ -606,36 +664,33 @@ class LiveToolRegistry:
         normalized = _normalize_calls(list(calls_by_number.values()))
 
         def matches(call: Mapping[str, Any]) -> bool:
-            if incident_code and not (
-                _contains(call.get("incident_code"), incident_code)
-                or _contains(call.get("incident_description"), incident_code)
-            ):
-                return False
-            if agency and not _equals_ci(call.get("agency"), agency):
-                return False
             if status and not _equals_ci(call.get("status"), status):
+                return False
+            if priority and not _equals_ci(call.get("priority"), priority):
                 return False
             return True
 
-        filtered = [call for call in normalized if matches(call)]
+        post_filter_used = bool(status or priority)
+        filtered = [call for call in normalized if matches(call)] if post_filter_used else normalized
         source = LiveDataSource(
             name="CentralSquare CAD (live historical search)",
             kind="live",
             detail=f"search_calls window {window['from']} to {window['to']}",
             available=True,
         )
-        return LiveToolResult(
-            "search_call_history",
-            source,
-            {
-                "available": True,
-                "count": len(calls_by_number),
-                "returned": len(filtered),
-                "truncated": truncated,
-                "window": window,
-                "calls": [_summarize_call(c) for c in filtered],
-            },
-        )
+        payload = {
+            "available": True,
+            "count": len(calls_by_number),
+            "returned": len(filtered),
+            "truncated": truncated,
+            "window": window,
+            "calls": [_summarize_call(c) for c in filtered],
+        }
+        if post_filter_used and truncated:
+            payload["post_filter_warning"] = (
+                "status/priority filtered after a truncated fetch; counts may be incomplete"
+            )
+        return LiveToolResult("search_call_history", source, payload)
 
     # -- get_cad_configurations (live connector) -----------------------------
 
@@ -941,15 +996,29 @@ TOOL_SPECS: tuple[Mapping[str, Any], ...] = (
                 "snapshot cannot answer). Requires created_from AND created_to "
                 "(ISO-8601 timestamps, e.g. 2026-08-01T00:00:00Z); the window is "
                 "capped at 92 days and an unbounded query is always rejected. "
-                "incident_code (substring match against incident code/description), "
-                "agency (exact match), and status (exact match) are NOT native "
-                "CentralSquare search parameters -- they are applied as post-filters "
-                "over the rows CAD returns for the time window, so a narrow window "
-                "with a rare filter can still legitimately return zero rows. Results "
+                "closed_from/closed_to (both required together, same ISO-8601 "
+                "format, also capped at 92 days) additionally restrict to calls "
+                "closed in that window. "
+                "incident_code, location, beat, zone, unit, responder, "
+                "dispatch_agency, and response_agency are NATIVE CentralSquare "
+                "search parameters -- CAD itself filters on them BEFORE the row "
+                "cap is applied, so the cap applies to matching calls, not to the "
+                "first N calls of any type. This is what makes them accurate for "
+                "questions like \"how many medical calls in the last 30 days\": use "
+                "incident_code, not a post-filter, for that. dispatch_agency and "
+                "response_agency are each sent to CAD as a single-element list "
+                "(DispatchAgencies/ResponseAgencies). "
+                "status and priority are NOT native CentralSquare search "
+                "parameters -- they are applied as post-filters over the rows CAD "
+                "returns for the time window (and any native filters above), "
+                "which means they can UNDERCOUNT if the fetch itself was truncated "
+                "(see `truncated`): the true count of matching calls may be higher "
+                "than what `returned` shows. When a post-filter is combined with a "
+                "truncated fetch, the response includes a `post_filter_warning` "
+                "field -- treat any status/priority count as a lower bound, not an "
+                "authoritative total, whenever that warning is present. Results "
                 "are deduplicated by CFS number, paginated up to 5 pages of 100 rows "
-                "each, and capped at `limit` (default and max 200) total rows; "
-                "`truncated` is true only when one of those caps -- not a filter -- "
-                "stopped the search before scanning everything in the window."
+                "each, and capped at `limit` (default and max 200) total rows."
             ),
             "inputSchema": {
                 "json": {
@@ -963,9 +1032,52 @@ TOOL_SPECS: tuple[Mapping[str, Any], ...] = (
                             "type": "string",
                             "description": "ISO-8601 window end, e.g. 2026-08-02T00:00:00Z",
                         },
-                        "incident_code": {"type": "string", "maxLength": 128},
-                        "agency": {"type": "string", "maxLength": 128},
-                        "status": {"type": "string", "maxLength": 128},
+                        "closed_from": {
+                            "type": "string",
+                            "description": "Optional ISO-8601 closed-window start; must be paired with closed_to",
+                        },
+                        "closed_to": {
+                            "type": "string",
+                            "description": "Optional ISO-8601 closed-window end; must be paired with closed_from",
+                        },
+                        "incident_code": {
+                            "type": "string",
+                            "maxLength": 128,
+                            "description": "Native filter (IncidentCode)",
+                        },
+                        "location": {
+                            "type": "string",
+                            "maxLength": 128,
+                            "description": "Native filter (Location)",
+                        },
+                        "beat": {"type": "string", "maxLength": 128, "description": "Native filter (Beat)"},
+                        "zone": {"type": "string", "maxLength": 128, "description": "Native filter (Zone)"},
+                        "unit": {"type": "string", "maxLength": 128, "description": "Native filter (Unit)"},
+                        "responder": {
+                            "type": "string",
+                            "maxLength": 128,
+                            "description": "Native filter (Responder)",
+                        },
+                        "dispatch_agency": {
+                            "type": "string",
+                            "maxLength": 128,
+                            "description": "Native filter, sent as a single-element list (DispatchAgencies)",
+                        },
+                        "response_agency": {
+                            "type": "string",
+                            "maxLength": 128,
+                            "description": "Native filter, sent as a single-element list (ResponseAgencies)",
+                        },
+                        "status": {
+                            "type": "string",
+                            "maxLength": 128,
+                            "description": "Post-filter only (not native); may undercount if fetch was truncated",
+                        },
+                        "priority": {
+                            "type": "string",
+                            "maxLength": 128,
+                            "description": "Post-filter only (not native); may undercount if fetch was truncated",
+                        },
                         "limit": {
                             "type": "integer",
                             "minimum": 1,
