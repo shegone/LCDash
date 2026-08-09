@@ -45,9 +45,9 @@ class OfflinePolicyTests(unittest.TestCase):
             "alb_authentication": "cognito",
             "alb_cognito_client_confidential": True,
             "cognito_groups": [
-                "lcdash-pilot-viewer",
-                "lcdash-pilot-reviewer",
-                "lcdash-pilot-administrator",
+                "lcdash-pilot-user",
+                "lcdash-pilot-supervisor",
+                "lcdash-pilot-admin",
             ],
             "cognito_mfa": "required-email-otp",
             "cognito_access_token_minutes": 15,

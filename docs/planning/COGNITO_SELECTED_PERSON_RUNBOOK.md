@@ -9,12 +9,12 @@ cookies, recovery details, or client secrets.
 
 | Application role | Exact Cognito group | Authority |
 | --- | --- | --- |
-| Viewer | `lcdash-pilot-viewer` | View approved synthetic dashboard, readiness, analytics, and documents. |
-| Supervisor | `lcdash-pilot-reviewer` | Viewer access plus read-only review and advisory RAG/voice use. |
-| Administrator | `lcdash-pilot-administrator` | Application access review only; no Cognito, AWS, tenant, or operational administration. |
+| User | `lcdash-pilot-user` | Restricted: approved synthetic dashboard, readiness, analytics, and documents. The tier the sanitized build narrows. |
+| Supervisor | `lcdash-pilot-supervisor` | Unrestricted read-only access, plus review and advisory RAG/voice use. Assign this to county staff who need the full picture. |
+| Admin | `lcdash-pilot-admin` | Supervisor access plus application access review; no Cognito, AWS, tenant, or operational administration. |
 
 The checked-in deployment definition now contains all three groups, including
-`lcdash-pilot-administrator`; a test asserts that the deployed group names match
+`lcdash-pilot-admin`; a test asserts that the deployed group names match
 `COGNITO_GROUP_ROLE_MAP` exactly. Still confirm by read-only inspection that the
 exact group exists in the live pool before assigning it, since the group is
 created by a stack update that may not yet have been applied. Do not create a
@@ -53,8 +53,10 @@ cannot be run.
 3. Inspect only pool, app-client, domain, and group configuration. Do not open a
    user list for discovery or export users. Confirm administrator-created users,
    required MFA by emailed one-time code, and the exact target group.
-4. Use viewer unless the approval explicitly requires supervisor. Administrator
-   requires separate approval and a pre-existing exact group.
+4. Assign `supervisor` to county staff who need the full operational picture;
+   this is the expected role for the existing on-premises user base. Assign
+   `user` for the restricted, sanitized surface. `admin` requires separate
+   approval and is currently held by one person only.
 
 ## Add the selected person
 

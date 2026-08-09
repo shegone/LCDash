@@ -524,9 +524,9 @@ class CdkTemplateTests(unittest.TestCase):
         self.assertEqual(
             set(groups),
             {
-                "lcdash-pilot-viewer",
-                "lcdash-pilot-reviewer",
-                "lcdash-pilot-administrator",
+                "lcdash-pilot-user",
+                "lcdash-pilot-supervisor",
+                "lcdash-pilot-admin",
             },
         )
         for group in groups.values():

@@ -83,7 +83,7 @@ class AdvisoryRagRequest:
     question: str
     allowed_tools: tuple[str, ...] = ()
     persona: str = "mae"
-    roles: tuple[str, ...] = ("viewer",)
+    roles: tuple[str, ...] = ("user",)
 
     def __post_init__(self) -> None:
         _validate_request_identity(self.request_id, self.tenant_id)

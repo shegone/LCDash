@@ -13,28 +13,28 @@ from app.core.cloud_pilot_roles import (
 
 
 class CloudPilotRoleContractTests(unittest.TestCase):
-    def test_deployed_group_names_map_to_viewer_and_supervisor(self):
+    def test_deployed_group_names_map_to_user_and_supervisor(self):
         self.assertEqual(
-            resolve_pilot_role(["lcdash-pilot-viewer"]),
-            PilotRole.VIEWER,
+            resolve_pilot_role(["lcdash-pilot-user"]),
+            PilotRole.USER,
         )
         self.assertEqual(
-            resolve_pilot_role(["lcdash-pilot-reviewer"]),
+            resolve_pilot_role(["lcdash-pilot-supervisor"]),
             PilotRole.SUPERVISOR,
         )
 
-    def test_administrator_requires_exact_reserved_group(self):
+    def test_admin_requires_the_exact_group_name(self):
         self.assertEqual(
-            resolve_pilot_role(["lcdash-pilot-administrator"]),
-            PilotRole.ADMINISTRATOR,
+            resolve_pilot_role(["lcdash-pilot-admin"]),
+            PilotRole.ADMIN,
         )
         with self.assertRaises(PilotAuthorizationDenied):
-            resolve_pilot_role(["administrator"])
+            resolve_pilot_role(["admin"])
 
     def test_highest_exact_role_wins_for_multiple_approved_groups(self):
         self.assertEqual(
             resolve_pilot_role(
-                ["lcdash-pilot-viewer", "lcdash-pilot-reviewer"]
+                ["lcdash-pilot-user", "lcdash-pilot-supervisor"]
             ),
             PilotRole.SUPERVISOR,
         )
@@ -42,9 +42,9 @@ class CloudPilotRoleContractTests(unittest.TestCase):
     def test_missing_malformed_and_unknown_groups_are_denied(self):
         for groups in (
             [],
-            "lcdash-pilot-viewer",
+            "lcdash-pilot-user",
             ["unknown"],
-            ["lcdash-pilot-viewer", "unknown"],
+            ["lcdash-pilot-user", "unknown"],
             [None],
         ):
             with self.subTest(groups=groups):
@@ -54,17 +54,17 @@ class CloudPilotRoleContractTests(unittest.TestCase):
     def test_permissions_are_explicit_and_role_scoped(self):
         self.assertEqual(
             authorize_pilot_permission(
-                ["lcdash-pilot-viewer"], "pilot.readiness.view"
+                ["lcdash-pilot-user"], "pilot.readiness.view"
             ),
-            PilotRole.VIEWER,
+            PilotRole.USER,
         )
         with self.assertRaises(PilotAuthorizationDenied):
             authorize_pilot_permission(
-                ["lcdash-pilot-viewer"], "rag.advisory.query"
+                ["lcdash-pilot-user"], "rag.advisory.query"
             )
         self.assertEqual(
             authorize_pilot_permission(
-                ["lcdash-pilot-reviewer"], "rag.advisory.query"
+                ["lcdash-pilot-supervisor"], "rag.advisory.query"
             ),
             PilotRole.SUPERVISOR,
         )
@@ -85,12 +85,12 @@ class CloudPilotRoleContractTests(unittest.TestCase):
                             permission,
                         )
 
-    def test_unknown_permissions_are_denied_for_administrator(self):
+    def test_unknown_permissions_are_denied_for_admin(self):
         for permission in ("", "aws.manage", "users.create", "station-alert.release"):
             with self.subTest(permission=permission):
                 with self.assertRaises(PilotAuthorizationDenied):
                     authorize_pilot_permission(
-                        ["lcdash-pilot-administrator"], permission
+                        ["lcdash-pilot-admin"], permission
                     )
 
 

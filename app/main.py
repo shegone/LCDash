@@ -844,7 +844,7 @@ def get_trusted_tenant_context(request: Request = None) -> TenantContext | None:
             tenant_id=settings.tenant_id,
             subject="deployment-cell",
             identity_source="deployment-configuration",
-            roles=frozenset({"viewer"}),
+            roles=frozenset({"user"}),
             request_id="deployment-cell",
             authenticated_at=datetime.now(timezone.utc),
         )
@@ -862,7 +862,7 @@ def _deny_unscoped_cloud_advisory_state() -> None:
 
 def _cloud_advisory_roles(tenant_context: TenantContext | None) -> tuple[str, ...]:
     if tenant_context is None or tenant_context.tenant_id != settings.tenant_id:
-        return ("viewer",)
+        return ("user",)
     return tuple(sorted(tenant_context.roles))
 
 

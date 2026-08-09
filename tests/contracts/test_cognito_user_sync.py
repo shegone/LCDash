@@ -53,7 +53,7 @@ class ApprovedUsersFileTests(unittest.TestCase):
         """Governance requires every account to be named."""
         with self.assertRaises(ApprovedUsersError):
             parse_approved_users(
-                {"users": [{"email": "a@b.com", "name": "", "role": "viewer"}]}
+                {"users": [{"email": "a@b.com", "name": "", "role": "user"}]}
             )
 
     def test_malformed_email_is_rejected(self):
@@ -61,7 +61,7 @@ class ApprovedUsersFileTests(unittest.TestCase):
             with self.subTest(email=bad):
                 with self.assertRaises(ApprovedUsersError):
                     parse_approved_users(
-                        {"users": [{"email": bad, "name": "A", "role": "viewer"}]}
+                        {"users": [{"email": bad, "name": "A", "role": "user"}]}
                     )
 
     def test_duplicate_email_is_rejected(self):
@@ -69,7 +69,7 @@ class ApprovedUsersFileTests(unittest.TestCase):
             parse_approved_users(
                 {
                     "users": [
-                        {"email": "a@b.com", "name": "A", "role": "viewer"},
+                        {"email": "a@b.com", "name": "A", "role": "user"},
                         {"email": "A@B.com", "name": "A again", "role": "supervisor"},
                     ]
                 }
@@ -93,34 +93,34 @@ class ApprovedUsersFileTests(unittest.TestCase):
 
     def test_email_is_normalized_to_lowercase(self):
         users = parse_approved_users(
-            {"users": [{"email": "Ted@911Logan.com", "name": "T", "role": "viewer"}]}
+            {"users": [{"email": "Ted@911Logan.com", "name": "T", "role": "user"}]}
         )
         self.assertEqual(users[0].email, "ted@911logan.com")
 
 
 class PlanTests(unittest.TestCase):
-    def _viewer(self, email="new@911logan.com"):
-        return ApprovedUser(email=email, name="New Person", role=PilotRole.VIEWER)
+    def _user(self, email="new@911logan.com"):
+        return ApprovedUser(email=email, name="New Person", role=PilotRole.USER)
 
     def test_absent_user_is_created_and_added_to_their_group(self):
-        plan = plan_user_sync([self._viewer()], [])
+        plan = plan_user_sync([self._user()], [])
         self.assertTrue(plan.safe_to_apply)
         self.assertEqual(
             _kinds(plan),
             [
-                ("create_user", "new@911logan.com", "lcdash-pilot-viewer"),
-                ("add_to_group", "new@911logan.com", "lcdash-pilot-viewer"),
+                ("create_user", "new@911logan.com", "lcdash-pilot-user"),
+                ("add_to_group", "new@911logan.com", "lcdash-pilot-user"),
             ],
         )
 
     def test_matching_state_produces_no_actions(self):
         plan = plan_user_sync(
-            [self._viewer()],
+            [self._user()],
             [
                 CognitoUserState(
                     email="new@911logan.com",
                     enabled=True,
-                    groups=frozenset({"lcdash-pilot-viewer"}),
+                    groups=frozenset({"lcdash-pilot-user"}),
                 )
             ],
         )
@@ -137,31 +137,31 @@ class PlanTests(unittest.TestCase):
                 CognitoUserState(
                     email="tester@911logan.com",
                     enabled=True,
-                    groups=frozenset({"lcdash-pilot-viewer"}),
+                    groups=frozenset({"lcdash-pilot-user"}),
                 )
             ],
         )
         self.assertEqual(
             _kinds(plan),
             [
-                ("remove_from_group", "tester@911logan.com", "lcdash-pilot-viewer"),
-                ("add_to_group", "tester@911logan.com", "lcdash-pilot-reviewer"),
+                ("remove_from_group", "tester@911logan.com", "lcdash-pilot-user"),
+                ("add_to_group", "tester@911logan.com", "lcdash-pilot-supervisor"),
             ],
         )
 
     def test_multiple_managed_groups_are_reduced_to_the_approved_one(self):
         """The single-group rule is repaired, not merely reported."""
         plan = plan_user_sync(
-            [self._viewer("drift@911logan.com")],
+            [self._user("drift@911logan.com")],
             [
                 CognitoUserState(
                     email="drift@911logan.com",
                     enabled=True,
                     groups=frozenset(
                         {
-                            "lcdash-pilot-viewer",
-                            "lcdash-pilot-reviewer",
-                            "lcdash-pilot-administrator",
+                            "lcdash-pilot-user",
+                            "lcdash-pilot-supervisor",
+                            "lcdash-pilot-admin",
                         }
                     ),
                 )
@@ -171,7 +171,7 @@ class PlanTests(unittest.TestCase):
             action.group for action in plan.actions if action.kind == "remove_from_group"
         }
         self.assertEqual(
-            removals, {"lcdash-pilot-reviewer", "lcdash-pilot-administrator"}
+            removals, {"lcdash-pilot-supervisor", "lcdash-pilot-admin"}
         )
         self.assertNotIn(
             "add_to_group", [action.kind for action in plan.actions]
@@ -179,12 +179,12 @@ class PlanTests(unittest.TestCase):
 
     def test_disabled_but_approved_user_is_re_enabled(self):
         plan = plan_user_sync(
-            [self._viewer("back@911logan.com")],
+            [self._user("back@911logan.com")],
             [
                 CognitoUserState(
                     email="back@911logan.com",
                     enabled=False,
-                    groups=frozenset({"lcdash-pilot-viewer"}),
+                    groups=frozenset({"lcdash-pilot-user"}),
                 )
             ],
         )
@@ -194,17 +194,17 @@ class PlanTests(unittest.TestCase):
 
     def test_removed_user_is_disabled_never_deleted(self):
         plan = plan_user_sync(
-            [self._viewer("keep@911logan.com")],
+            [self._user("keep@911logan.com")],
             [
                 CognitoUserState(
                     email="keep@911logan.com",
                     enabled=True,
-                    groups=frozenset({"lcdash-pilot-viewer"}),
+                    groups=frozenset({"lcdash-pilot-user"}),
                 ),
                 CognitoUserState(
                     email="gone@911logan.com",
                     enabled=True,
-                    groups=frozenset({"lcdash-pilot-reviewer"}),
+                    groups=frozenset({"lcdash-pilot-supervisor"}),
                 ),
             ],
         )
@@ -217,12 +217,12 @@ class PlanTests(unittest.TestCase):
 
     def test_already_disabled_removed_user_needs_no_action(self):
         plan = plan_user_sync(
-            [self._viewer("keep@911logan.com")],
+            [self._user("keep@911logan.com")],
             [
                 CognitoUserState(
                     email="keep@911logan.com",
                     enabled=True,
-                    groups=frozenset({"lcdash-pilot-viewer"}),
+                    groups=frozenset({"lcdash-pilot-user"}),
                 ),
                 CognitoUserState(
                     email="gone@911logan.com", enabled=False, groups=frozenset()
@@ -234,12 +234,12 @@ class PlanTests(unittest.TestCase):
     def test_unrecognized_group_is_flagged_not_silently_removed(self):
         """An unknown group makes resolve_pilot_role deny; that needs a human."""
         plan = plan_user_sync(
-            [self._viewer("odd@911logan.com")],
+            [self._user("odd@911logan.com")],
             [
                 CognitoUserState(
                     email="odd@911logan.com",
                     enabled=True,
-                    groups=frozenset({"lcdash-pilot-viewer", "some-other-group"}),
+                    groups=frozenset({"lcdash-pilot-user", "some-other-group"}),
                 )
             ],
         )
@@ -249,12 +249,12 @@ class PlanTests(unittest.TestCase):
 
     def test_pool_state_email_casing_is_matched_case_insensitively(self):
         plan = plan_user_sync(
-            [self._viewer("mixed@911logan.com")],
+            [self._user("mixed@911logan.com")],
             [
                 CognitoUserState(
                     email="Mixed@911Logan.com",
                     enabled=True,
-                    groups=frozenset({"lcdash-pilot-viewer"}),
+                    groups=frozenset({"lcdash-pilot-user"}),
                 )
             ],
         )
@@ -265,17 +265,17 @@ class LockoutGuardTests(unittest.TestCase):
     def test_plan_that_disables_every_enabled_user_is_refused(self):
         """The signature of a truncated approved-users file."""
         plan = plan_user_sync(
-            [ApprovedUser(email="fresh@911logan.com", name="F", role=PilotRole.VIEWER)],
+            [ApprovedUser(email="fresh@911logan.com", name="F", role=PilotRole.USER)],
             [
                 CognitoUserState(
                     email="a@911logan.com",
                     enabled=True,
-                    groups=frozenset({"lcdash-pilot-viewer"}),
+                    groups=frozenset({"lcdash-pilot-user"}),
                 ),
                 CognitoUserState(
                     email="b@911logan.com",
                     enabled=True,
-                    groups=frozenset({"lcdash-pilot-reviewer"}),
+                    groups=frozenset({"lcdash-pilot-supervisor"}),
                 ),
             ],
         )
@@ -284,12 +284,12 @@ class LockoutGuardTests(unittest.TestCase):
 
     def test_lockout_can_be_overridden_deliberately(self):
         plan = plan_user_sync(
-            [ApprovedUser(email="fresh@911logan.com", name="F", role=PilotRole.VIEWER)],
+            [ApprovedUser(email="fresh@911logan.com", name="F", role=PilotRole.USER)],
             [
                 CognitoUserState(
                     email="a@911logan.com",
                     enabled=True,
-                    groups=frozenset({"lcdash-pilot-viewer"}),
+                    groups=frozenset({"lcdash-pilot-user"}),
                 )
             ],
             allow_disabling_everyone=True,
@@ -298,17 +298,17 @@ class LockoutGuardTests(unittest.TestCase):
 
     def test_disabling_some_but_not_all_users_is_allowed(self):
         plan = plan_user_sync(
-            [ApprovedUser(email="a@911logan.com", name="A", role=PilotRole.VIEWER)],
+            [ApprovedUser(email="a@911logan.com", name="A", role=PilotRole.USER)],
             [
                 CognitoUserState(
                     email="a@911logan.com",
                     enabled=True,
-                    groups=frozenset({"lcdash-pilot-viewer"}),
+                    groups=frozenset({"lcdash-pilot-user"}),
                 ),
                 CognitoUserState(
                     email="b@911logan.com",
                     enabled=True,
-                    groups=frozenset({"lcdash-pilot-viewer"}),
+                    groups=frozenset({"lcdash-pilot-user"}),
                 ),
             ],
         )
@@ -358,7 +358,7 @@ class ApplyTests(unittest.TestCase):
         self.assertNotIn("TemporaryPassword", create)
 
         _, grouping = client.calls[1]
-        self.assertEqual(grouping["GroupName"], "lcdash-pilot-reviewer")
+        self.assertEqual(grouping["GroupName"], "lcdash-pilot-supervisor")
 
     def test_apply_refuses_a_plan_carrying_a_refusal(self):
         plan = plan_user_sync([], [])
@@ -368,19 +368,19 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(client.calls, [])
 
     def test_apply_never_calls_a_delete_operation(self):
-        user = ApprovedUser(email="a@911logan.com", name="A", role=PilotRole.VIEWER)
+        user = ApprovedUser(email="a@911logan.com", name="A", role=PilotRole.USER)
         plan = plan_user_sync(
             [user],
             [
                 CognitoUserState(
                     email="a@911logan.com",
                     enabled=True,
-                    groups=frozenset({"lcdash-pilot-viewer"}),
+                    groups=frozenset({"lcdash-pilot-user"}),
                 ),
                 CognitoUserState(
                     email="b@911logan.com",
                     enabled=True,
-                    groups=frozenset({"lcdash-pilot-viewer"}),
+                    groups=frozenset({"lcdash-pilot-user"}),
                 ),
             ],
         )

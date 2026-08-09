@@ -23,11 +23,12 @@ all passed. Dashboard, Units, Map, and Heatmap share an explicit
 legacy CAD initialization; existing on-premises CAD read behavior is preserved.
 
 Unauthenticated requests redirect to Cognito. The sole current account is the
-read-only reviewer `tedsparks@911logan.com`, with required MFA by emailed
+administrator `tedsparks@911logan.com`, with required MFA by emailed
 one-time code (no authenticator app).
 For first login, open `https://aws.logan911.com`, follow the Cognito invitation,
-set a permanent password, and enroll an authenticator app. Never place a
-password or MFA seed in chat, logs, Git, or documentation.
+set a permanent password, then confirm the one-time code emailed to that
+address. There is no authenticator app to enroll. Never place a password or
+one-time code in chat, logs, Git, or documentation.
 
 After signing in, verify the Dashboard, Units, Map, and Heatmap pages load and
 show the expected synthetic/disconnected empty state without a server error.
@@ -141,7 +142,7 @@ refresh tokens, and revocation. Email MFA requires the Essentials feature plan a
 SES as the sending account; the SES identity is the verified domain
 `logan911.com`, not the individual from-address.
 
-`lcdash-pilot-viewer`, `lcdash-pilot-reviewer`, and `lcdash-pilot-administrator`
+`lcdash-pilot-user`, `lcdash-pilot-supervisor`, and `lcdash-pilot-admin`
 are named application groups
 without IAM roles. No identity pool or browser AWS credentials exist. The task
 has one fixed `logan-synthetic` tenant binding; request values, group names, and

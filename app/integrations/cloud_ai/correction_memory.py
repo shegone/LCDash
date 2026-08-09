@@ -119,7 +119,7 @@ def build_correction_candidate(
     """Build from trusted identity; never accept tenant or actor from request JSON."""
     if not isinstance(context, TenantContext) or context.contract_version != TENANCY_CONTRACT_VERSION:
         raise CorrectionMemoryDenied("Trusted tenant context is required.")
-    if not ({"supervisor", "administrator"} & context.roles):
+    if not ({"supervisor", "admin"} & context.roles):
         raise CorrectionMemoryDenied("Correction approval role is required.")
     return CorrectionCandidate(
         correction_id=correction_id,

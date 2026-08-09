@@ -25,9 +25,9 @@ and no identity pool exists.
 
 | Cognito group | Precedence | Permitted Phase 1 purpose |
 | --- | ---: | --- |
-| `lcdash-pilot-viewer` | 20 | View the authenticated synthetic pilot, approved public/reference content, and read-only advisory results. |
-| `lcdash-pilot-reviewer` | 10 | Perform the same read-only review plus evaluation and acceptance review. It adds no tenant, CAD, output, AWS, or administrative authority. |
-| `lcdash-pilot-administrator` | 0 | Perform the same read-only review plus pilot access review. It adds no tenant, CAD, output, AWS, or operational authority. |
+| `lcdash-pilot-user` | 20 | Restricted read-only access: the authenticated synthetic pilot, approved public/reference content, and read-only advisory results. This is the tier the sanitized build narrows. |
+| `lcdash-pilot-supervisor` | 10 | Unrestricted read-only access, including review and evaluation and all operational data fields. It adds no tenant, CAD write, output, AWS, or administrative authority. |
+| `lcdash-pilot-admin` | 0 | Supervisor access plus pilot access review. It adds no tenant, CAD write, output, AWS, or operational authority. |
 
 Group names here must match `COGNITO_GROUP_ROLE_MAP` in
 `app/core/cloud_pilot_roles.py` exactly, and a test asserts it. `resolve_pilot_role`
@@ -69,13 +69,13 @@ Constraints that this design deliberately keeps:
   request. Only `subject` and `roles` are request-derived.
 - Group claims are mapped by `resolve_pilot_role`, which is deny-by-default: an
   unrecognized group denies the request outright rather than degrading to
-  `viewer`. A verification failure, a missing group claim, and a missing
+  `user`. A verification failure, a missing group claim, and a missing
   configuration value all deny for the same reason.
 - Identity headers travel unencrypted between the load balancer and the task,
   because the target group is HTTP. Ingress on the task port is restricted to
   the load balancer's security group, which is the compensating control.
 - The capability ships behind `LCDASH_ALB_IDENTITY_ENABLED`, default off. While
-  disabled, every request keeps the previous deployment-wide `viewer` identity,
+  disabled, every request keeps the previous deployment-wide `user` identity,
   so enabling it is a deliberate and reversible step.
 
 ## Login and session policy

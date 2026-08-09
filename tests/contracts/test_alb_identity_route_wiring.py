@@ -70,7 +70,7 @@ class AlbIdentityRouteWiringTests(unittest.TestCase):
     def test_request_is_injected_and_reviewer_group_becomes_supervisor(self):
         """Proves FastAPI injects the request; otherwise this stays 'viewer'."""
         resolver = self._with_identity(
-            AlbIdentity(subject="user-1", groups=("lcdash-pilot-reviewer",))
+            AlbIdentity(subject="user-1", groups=("lcdash-pilot-supervisor",))
         )
         body = self.client.get("/probe").json()
 
@@ -86,45 +86,45 @@ class AlbIdentityRouteWiringTests(unittest.TestCase):
 
     def test_viewer_group_stays_viewer(self):
         self._with_identity(
-            AlbIdentity(subject="user-2", groups=("lcdash-pilot-viewer",))
+            AlbIdentity(subject="user-2", groups=("lcdash-pilot-user",))
         )
         body = self.client.get("/probe").json()
-        self.assertEqual(body["roles"], ["viewer"])
+        self.assertEqual(body["roles"], ["user"])
         self.assertEqual(body["subject"], "user-2")
 
     def test_unverifiable_headers_fall_back_to_least_privilege(self):
         self._with_identity(None)
         body = self.client.get("/probe").json()
-        self.assertEqual(body["roles"], ["viewer"])
+        self.assertEqual(body["roles"], ["user"])
         self.assertEqual(body["identity_source"], "deployment-configuration")
         self.assertEqual(body["subject"], "deployment-cell")
 
     def test_unrecognized_group_does_not_elevate(self):
         """An unknown group denies the identity; it must not become supervisor."""
         self._with_identity(
-            AlbIdentity(subject="user-3", groups=("lcdash-pilot-superuser",))
+            AlbIdentity(subject="user-3", groups=("lcdash-pilot-rogue",))
         )
         body = self.client.get("/probe").json()
-        self.assertEqual(body["roles"], ["viewer"])
+        self.assertEqual(body["roles"], ["user"])
         self.assertEqual(body["identity_source"], "deployment-configuration")
 
     def test_disabled_flag_ignores_headers_entirely(self):
         resolver = self._with_identity(
-            AlbIdentity(subject="user-4", groups=("lcdash-pilot-reviewer",))
+            AlbIdentity(subject="user-4", groups=("lcdash-pilot-supervisor",))
         )
         with patch.object(settings, "alb_identity_enabled", False):
             body = self.client.get("/probe").json()
-        self.assertEqual(body["roles"], ["viewer"])
+        self.assertEqual(body["roles"], ["user"])
         self.assertEqual(body["identity_source"], "deployment-configuration")
         # Not merely ignored downstream -- never consulted at all.
         self.assertFalse(resolver.called)
 
     def test_administrator_group_resolves_to_administrator(self):
         self._with_identity(
-            AlbIdentity(subject="user-5", groups=("lcdash-pilot-administrator",))
+            AlbIdentity(subject="user-5", groups=("lcdash-pilot-admin",))
         )
         body = self.client.get("/probe").json()
-        self.assertEqual(body["roles"], ["administrator"])
+        self.assertEqual(body["roles"], ["admin"])
 
 
 if __name__ == "__main__":

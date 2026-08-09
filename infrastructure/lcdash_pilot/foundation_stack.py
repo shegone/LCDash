@@ -383,36 +383,40 @@ class Phase1FoundationStack(cdk.Stack):
             ),
             removal_policy=cdk.RemovalPolicy.DESTROY,
         )
+        # Group names must match COGNITO_GROUP_ROLE_MAP in
+        # app/core/cloud_pilot_roles.py exactly; a test asserts both directions,
+        # because resolve_pilot_role denies any group it does not recognize.
+        # The application's own ROLE_PRECEDENCE is what resolves a user's
+        # effective role -- Cognito precedence only orders the preferred-role
+        # claim for identity pools, and this pool has none and grants no
+        # RoleArn, so these numbers imply no AWS authority.
         cognito.CfnUserPoolGroup(
             self,
-            "PilotViewerGroup",
+            "PilotUserGroup",
             user_pool_id=user_pool.user_pool_id,
-            group_name="lcdash-pilot-viewer",
+            group_name="lcdash-pilot-user",
             description=(
-                "Read-only access to the Logan synthetic pilot; no operational outputs."
+                "Read-only restricted access to the Logan synthetic pilot; the "
+                "tier the sanitized build narrows. No operational outputs."
             ),
             precedence=20,
         )
         cognito.CfnUserPoolGroup(
             self,
-            "PilotReviewerGroup",
+            "PilotSupervisorGroup",
             user_pool_id=user_pool.user_pool_id,
-            group_name="lcdash-pilot-reviewer",
+            group_name="lcdash-pilot-supervisor",
             description=(
-                "Read-only pilot review and evaluation; no tenant or operational authority."
+                "Read-only but unrestricted pilot access including review and "
+                "evaluation; no tenant or operational authority."
             ),
             precedence=10,
         )
-        # The application's own ROLE_PRECEDENCE in app/core/cloud_pilot_roles.py
-        # is what resolves a user's effective role. Cognito precedence only
-        # orders the preferred-role claim for identity pools, and this pool has
-        # none and grants no RoleArn, so 0 here simply marks the highest of the
-        # three without implying any AWS authority.
         cognito.CfnUserPoolGroup(
             self,
-            "PilotAdministratorGroup",
+            "PilotAdminGroup",
             user_pool_id=user_pool.user_pool_id,
-            group_name="lcdash-pilot-administrator",
+            group_name="lcdash-pilot-admin",
             description=(
                 "Read-only pilot access administration; adds pilot access review "
                 "only, and no CAD, tenant, output, AWS, or operational authority."

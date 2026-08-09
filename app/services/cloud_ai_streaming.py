@@ -658,7 +658,7 @@ def stream_cloud_advisory(
     request_id: str,
     question: str,
     persona: str = "mae",
-    roles: tuple[str, ...] = ("viewer",),
+    roles: tuple[str, ...] = ("user",),
 ) -> Iterator[dict[str, Any]]:
     """Yield NDJSON-ready advisory events, terminating with ``done``.
 

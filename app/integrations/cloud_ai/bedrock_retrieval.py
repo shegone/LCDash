@@ -85,7 +85,7 @@ class ApprovedBedrockRetriever:
 
     def retrieve(self, *, tenant_id: str, question: str,
                  persona: str = "mae",
-                 roles: tuple[str, ...] = ("viewer",)) -> tuple[RetrievedPassage, ...]:
+                 roles: tuple[str, ...] = ("user",)) -> tuple[RetrievedPassage, ...]:
         clean = question.strip()
         if (tenant_id != self._tenant_id or persona not in {"mae", "jack"}
                 or not roles or not clean or len(clean) > 4000):

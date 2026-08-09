@@ -421,7 +421,7 @@ def answer_cloud_advisory(
     request_id: str,
     question: str,
     persona: str = "mae",
-    roles: tuple[str, ...] = ("viewer",),
+    roles: tuple[str, ...] = ("user",),
 ) -> dict[str, Any]:
     response = runtime.answer(
         AdvisoryRagRequest(
