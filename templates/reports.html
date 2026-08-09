@@ -147,6 +147,41 @@
     </article>
 </section>
 
+{% if not cloud_reporting_available %}
+{#- Cloud pilot only: MAE-saved report templates live in the cloud analytics
+    database and the /api/cloud-ai/reports endpoints only answer there. Before
+    this section existed the save button was write-only -- a template saved in
+    MAE was never visible anywhere again. -#}
+<section class="report-builder glass mt-4" aria-labelledby="saved-templates-title">
+    <div class="report-builder-header">
+        <div>
+            <div class="reports-eyebrow">SAVED FROM MAE</div>
+            <h2 id="saved-templates-title">Saved Report Templates</h2>
+            <p>
+                Templates saved from MAE Assistant answers. Ask MAE for a report
+                (for example &ldquo;calls by nature for the last 30 days&rdquo;)
+                and click <strong>Save as Template</strong> to add one here.
+            </p>
+        </div>
+    </div>
+
+    <div id="saved-templates-loading" class="report-progress" aria-live="polite">
+        <div class="report-progress-spinner" aria-hidden="true"></div>
+        <div><strong>Loading saved templates&hellip;</strong></div>
+    </div>
+
+    <div id="saved-templates-error" class="report-error" hidden></div>
+
+    <p id="saved-templates-empty" class="saved-templates-empty" hidden>
+        No saved templates yet. Ask MAE for a report and click
+        <strong>Save as Template</strong> under its answer.
+    </p>
+
+    <ul id="saved-templates-list" class="saved-templates-list" hidden></ul>
+</section>
+<script src="/static/js/lcdash-report-templates.js?v=20260809-saved-templates"></script>
+{% endif %}
+
 {% if cloud_reporting_available %}
 <script src="/static/js/lcdash-reports.js?v=20260803-county-commission"></script>
 {% endif %}

@@ -38,6 +38,52 @@ class CloudAnalyticsReportsPresentationTests(unittest.TestCase):
         self.assertNotIn("lcdash-reports.js", rendered)
         self.assertIn("HISTORICAL DATA REQUIRED", rendered)
 
+    def test_saved_templates_list_renders_in_cloud_and_only_in_cloud(self):
+        """The save button must not be write-only.
+
+        "Save as Template" (MAE/Mindshare) wrote templates that no page ever
+        listed -- found live on 2026-08-09 when Ted saved one and could not
+        find it again. This section is the read side. It renders only in the
+        cloud presentation: the /api/cloud-ai/reports endpoints require the
+        cloud tenant context and 403 on-prem, so showing the section there
+        would be a dead panel.
+        """
+        environment = Environment(loader=FileSystemLoader(REPOSITORY / "templates"))
+        request = SimpleNamespace(url=SimpleNamespace(path="/reports"))
+
+        cloud = environment.get_template("reports.html").render(
+            cloud_reporting_available=False, request=request, version="test"
+        )
+        self.assertIn('id="saved-templates-list"', cloud)
+        self.assertIn('id="saved-templates-error"', cloud)
+        self.assertIn("lcdash-report-templates.js", cloud)
+        # It must teach where templates come from, or an empty list is a
+        # dead end exactly like the page it fixes.
+        self.assertIn("Save as Template", cloud)
+        self.assertIn("MAE", cloud)
+
+        onprem = environment.get_template("reports.html").render(
+            cloud_reporting_available=True, request=request, version="test"
+        )
+        self.assertNotIn('id="saved-templates-list"', onprem)
+        self.assertNotIn("lcdash-report-templates.js", onprem)
+
+    def test_saved_templates_script_reads_the_endpoints_it_claims(self):
+        script = (REPOSITORY / "static" / "js" / "lcdash-report-templates.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('fetch("/api/cloud-ai/reports/templates"', script)
+        # Export must stay preview-first: the backend requires
+        # preview_confirmed and the UI must not fabricate that confirmation
+        # without having shown a preview.
+        self.assertIn('fetch("/api/cloud-ai/reports/preview"', script)
+        self.assertIn("preview_confirmed: true", script)
+        export_index = script.index('fetch("/api/cloud-ai/reports/export"')
+        preview_index = script.index('fetch("/api/cloud-ai/reports/preview"')
+        self.assertGreater(export_index, preview_index)
+        # Errors surface the HTTP status instead of a silent dead panel.
+        self.assertIn("HTTP ${response.status}", script)
+
     def test_county_commission_start_route_fails_closed_before_service_call(self):
         tree = ast.parse((REPOSITORY / "app" / "main.py").read_text(encoding="utf-8"))
         handler = next(

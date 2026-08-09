@@ -253,6 +253,90 @@
     font-size: .75rem;
 }
 
+/* Saved MAE report templates (cloud pilot) */
+.saved-templates-empty {
+    margin-top: 18px;
+    padding: 13px 15px;
+    border-radius: 12px;
+    color: #b9d8ed;
+    background: rgba(76, 201, 255, .08);
+    border: 1px solid rgba(76, 201, 255, .18);
+}
+
+.saved-templates-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin: 18px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.saved-template {
+    padding: 16px 18px;
+    border-radius: 14px;
+}
+
+.saved-template-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.saved-template-head h3 {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 800;
+}
+
+.saved-template-summary {
+    color: #7ea8d3;
+    font-size: .85rem;
+}
+
+.saved-template-meta {
+    margin-top: 6px;
+    color: #60798e;
+    font-size: .78rem;
+}
+
+.saved-template-actions {
+    margin-top: 12px;
+}
+
+.saved-template-actions button,
+.saved-template-preview button {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 14px;
+    border: 1px solid rgba(76, 201, 255, .35);
+    border-radius: 10px;
+    color: #dff8ff;
+    background: rgba(76, 201, 255, .12);
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.saved-template-actions button:disabled,
+.saved-template-preview button:disabled {
+    opacity: .55;
+    cursor: default;
+}
+
+.saved-template-preview {
+    margin-top: 12px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    color: #b9d8ed;
+    background: rgba(76, 201, 255, .07);
+    border: 1px solid rgba(76, 201, 255, .16);
+    font-size: .85rem;
+}
+
+.saved-template-preview p { margin: 0 0 10px; }
+
 @media (max-width: 900px) {
     .reports-hero,
     .report-builder-header { align-items: stretch; flex-direction: column; }
