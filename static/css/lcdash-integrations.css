@@ -117,6 +117,10 @@
     line-height: 1.25;
 }
 
+.integration-status-card strong.is-good {
+    color: var(--lcdash-green);
+}
+
 .integration-status-card strong.is-warning {
     color: var(--lcdash-yellow);
 }

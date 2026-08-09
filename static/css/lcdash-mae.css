@@ -65,6 +65,20 @@
     box-shadow: 0 0 12px rgba(99, 245, 178, .9);
 }
 
+.mae-orb {
+    flex: 0 0 64px;
+    width: 64px;
+    height: 64px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    border: 2px solid rgba(82, 215, 255, .55);
+    background: rgba(5, 20, 35, .9);
+    color: var(--mae-cyan);
+    font-size: 1.6rem;
+    box-shadow: 0 0 24px rgba(82, 215, 255, .2);
+}
+
 .mae-eyebrow {
     color: var(--mae-cyan);
     font-size: .76rem;
