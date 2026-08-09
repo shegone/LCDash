@@ -466,7 +466,7 @@ class CdkTemplateTests(unittest.TestCase):
         )
 
     def test_cognito_groups_are_named_read_only_roles_without_iam_roles(self):
-        self.template.resource_count_is("AWS::Cognito::UserPoolGroup", 2)
+        self.template.resource_count_is("AWS::Cognito::UserPoolGroup", 3)
         resources = self.template.to_json()["Resources"]
         groups = {
             resource["Properties"]["GroupName"]: resource["Properties"]
@@ -475,12 +475,40 @@ class CdkTemplateTests(unittest.TestCase):
         }
         self.assertEqual(
             set(groups),
-            {"lcdash-pilot-viewer", "lcdash-pilot-reviewer"},
+            {
+                "lcdash-pilot-viewer",
+                "lcdash-pilot-reviewer",
+                "lcdash-pilot-administrator",
+            },
         )
         for group in groups.values():
             self.assertNotIn("RoleArn", group)
             self.assertIn("Read-only", group["Description"])
             self.assertIn("operational", group["Description"])
+
+    def test_cognito_groups_match_the_application_role_map_exactly(self):
+        """Infrastructure and the app's role map must not drift apart.
+
+        They already had: the map named lcdash-pilot-administrator and its own
+        test asserted all three roles were covered, while infrastructure created
+        only two groups -- so the suite locked in a role the deployment could not
+        grant. resolve_pilot_role denies any group it does not recognize, so a
+        group present only in infrastructure locks its members out entirely,
+        and one present only in the map is simply unassignable. Either direction
+        is a silent failure, so both are asserted here.
+        """
+        from app.core.cloud_pilot_roles import COGNITO_GROUP_ROLE_MAP
+
+        template_groups = {
+            resource["Properties"]["GroupName"]
+            for resource in self.template.to_json()["Resources"].values()
+            if resource["Type"] == "AWS::Cognito::UserPoolGroup"
+        }
+        self.assertEqual(
+            template_groups,
+            set(COGNITO_GROUP_ROLE_MAP),
+            "Cognito groups in infrastructure must match COGNITO_GROUP_ROLE_MAP",
+        )
 
     def test_login_has_no_public_bypass_or_browser_aws_credentials(self):
         self.template.resource_count_is("AWS::Cognito::IdentityPool", 0)

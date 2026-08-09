@@ -13,13 +13,36 @@ cookies, recovery details, or client secrets.
 | Supervisor | `lcdash-pilot-reviewer` | Viewer access plus read-only review and advisory RAG/voice use. |
 | Administrator | `lcdash-pilot-administrator` | Application access review only; no Cognito, AWS, tenant, or operational administration. |
 
-The checked-in deployment definition contains the viewer and reviewer groups.
-The administrator group is reserved by the local contract but must be treated
-as unavailable unless a read-only live inspection confirms that the exact group
-exists. Do not create it during person onboarding. No role permits any CAD read,
-query, acknowledgement, write, paging, alert, dispatch, or other operational
-action. Missing, malformed, mixed-with-unknown, and unrecognized groups deny
-access.
+The checked-in deployment definition now contains all three groups, including
+`lcdash-pilot-administrator`; a test asserts that the deployed group names match
+`COGNITO_GROUP_ROLE_MAP` exactly. Still confirm by read-only inspection that the
+exact group exists in the live pool before assigning it, since the group is
+created by a stack update that may not yet have been applied. Do not create a
+group by hand during onboarding. No role permits any CAD read, query,
+acknowledgement, write, paging, alert, dispatch, or other operational action.
+Missing, malformed, mixed-with-unknown, and unrecognized groups deny access.
+
+## Preferred method: the approved-users file
+
+Onboarding by hand is error-prone and leaves no reviewable record of who has
+access. Prefer amending `config/approved_users.json` and running the reconciler,
+so the change is visible in a diff and repeatable:
+
+```
+python scripts/sync_cognito_users.py --user-pool-id <pool-id>
+python scripts/sync_cognito_users.py --user-pool-id <pool-id> --apply
+```
+
+The first form is a dry run and changes nothing; read its plan before applying.
+The script never chooses, sets, prints, or transmits a password -- Cognito
+generates and delivers the temporary credential directly to the person, exactly
+as in the manual procedure below. Removing someone from the file disables their
+account on the next run rather than deleting it, so the record survives for
+audit. A plan that would disable every enabled account is refused, because that
+is the signature of a truncated file rather than an intended change.
+
+The manual steps below remain valid and are the fallback when the reconciler
+cannot be run.
 
 ## Before adding a person
 

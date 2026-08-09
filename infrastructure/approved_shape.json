@@ -31,7 +31,8 @@
   "alb_cognito_client_confidential": true,
   "cognito_groups": [
     "lcdash-pilot-viewer",
-    "lcdash-pilot-reviewer"
+    "lcdash-pilot-reviewer",
+    "lcdash-pilot-administrator"
   ],
   "cognito_mfa": "required-totp",
   "cognito_access_token_minutes": 15,

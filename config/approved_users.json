@@ -1,0 +1,24 @@
+{
+  "_comment": [
+    "Who may sign in to the LCDash cloud pilot. This file is the record; run",
+    "scripts/sync_cognito_users.py to make Cognito match it.",
+    "",
+    "Roles (see app/core/cloud_pilot_roles.py):",
+    "  viewer        - read-only dashboard, analytics, and approved documents",
+    "  supervisor    - the above plus review, evaluation, and AI advisory tools",
+    "  administrator - the above plus pilot access review",
+    "",
+    "No role grants CAD write access, dispatch, paging, or any operational",
+    "output. That boundary is enforced in code, not here.",
+    "",
+    "Removing someone from this list disables their account on the next run;",
+    "it does not delete it, so the account remains available for audit."
+  ],
+  "users": [
+    {
+      "email": "tedsparks@911logan.com",
+      "name": "Ted Sparks",
+      "role": "administrator"
+    }
+  ]
+}

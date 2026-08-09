@@ -372,6 +372,22 @@ class Phase1FoundationStack(cdk.Stack):
             ),
             precedence=10,
         )
+        # The application's own ROLE_PRECEDENCE in app/core/cloud_pilot_roles.py
+        # is what resolves a user's effective role. Cognito precedence only
+        # orders the preferred-role claim for identity pools, and this pool has
+        # none and grants no RoleArn, so 0 here simply marks the highest of the
+        # three without implying any AWS authority.
+        cognito.CfnUserPoolGroup(
+            self,
+            "PilotAdministratorGroup",
+            user_pool_id=user_pool.user_pool_id,
+            group_name="lcdash-pilot-administrator",
+            description=(
+                "Read-only pilot access administration; adds pilot access review "
+                "only, and no CAD, tenant, output, AWS, or operational authority."
+            ),
+            precedence=0,
+        )
         alb_callback_url = cdk.Fn.join(
             "",
             ["https://", PILOT_DOMAIN_NAME, "/oauth2/idpresponse"],

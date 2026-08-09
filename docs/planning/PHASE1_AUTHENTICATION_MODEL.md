@@ -27,6 +27,15 @@ and no identity pool exists.
 | --- | ---: | --- |
 | `lcdash-pilot-viewer` | 20 | View the authenticated synthetic pilot, approved public/reference content, and read-only advisory results. |
 | `lcdash-pilot-reviewer` | 10 | Perform the same read-only review plus evaluation and acceptance review. It adds no tenant, CAD, output, AWS, or administrative authority. |
+| `lcdash-pilot-administrator` | 0 | Perform the same read-only review plus pilot access review. It adds no tenant, CAD, output, AWS, or operational authority. |
+
+Group names here must match `COGNITO_GROUP_ROLE_MAP` in
+`app/core/cloud_pilot_roles.py` exactly, and a test asserts it. `resolve_pilot_role`
+denies any group it does not recognize, so a group that exists only in
+infrastructure locks its members out, and one that exists only in the map cannot
+be assigned. Cognito's numeric precedence orders the preferred-role claim for
+identity pools; this pool has none and no group carries a `RoleArn`, so effective
+role resolution is performed by the application's own `ROLE_PRECEDENCE`.
 
 Every future pilot account must be named, administrator-created, assigned only
 to an approved group, reviewed against the current operator record, and removed

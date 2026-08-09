@@ -47,6 +47,7 @@ class OfflinePolicyTests(unittest.TestCase):
             "cognito_groups": [
                 "lcdash-pilot-viewer",
                 "lcdash-pilot-reviewer",
+                "lcdash-pilot-administrator",
             ],
             "cognito_mfa": "required-totp",
             "cognito_access_token_minutes": 15,
