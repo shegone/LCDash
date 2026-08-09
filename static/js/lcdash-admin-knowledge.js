@@ -498,6 +498,10 @@
             const response = await fetch("/api/admin/knowledge/documents", {
                 headers: { "Accept": "application/json" },
             });
+            // A poll that was bounced to the identity provider must stop, not
+            // retry: concurrent polls racing a real login are what redeem an
+            // authorization code twice (static/js/lcdash-session.js).
+            if (window.LCDashSession && window.LCDashSession.check(response)) return;
             docsLoading.hidden = true;
             if (!response.ok) {
                 const detail = await readDetail(response);
@@ -518,4 +522,7 @@
 
     refreshUploadControls();
     loadDocuments(true);
+    if (window.LCDashSession) {
+        window.LCDashSession.onEnd(stopPolling);
+    }
 })();

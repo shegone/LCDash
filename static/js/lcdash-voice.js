@@ -27,6 +27,7 @@
     async function loadStatus() {
         try {
             const response = await fetch("/api/voice/status", {cache: "no-store"});
+            if (window.LCDashSession && window.LCDashSession.check(response)) return;
             const payload = await response.json();
             cloudMode = payload.cloud_mode === true;
             ttsReady = !cloudMode || Boolean(payload.tts && payload.tts.ready);
@@ -72,6 +73,7 @@
                     response_format: "mp3"
                 })
             });
+            if (window.LCDashSession && window.LCDashSession.check(response)) return;
             if (!response.ok) {
                 const payload = await response.json();
                 throw new Error(payload.detail || "Speech generation failed.");
@@ -109,6 +111,7 @@
                 method: "POST",
                 body: formData
             });
+            if (window.LCDashSession && window.LCDashSession.check(response)) return;
             const payload = await response.json();
             if (!response.ok) {
                 throw new Error(payload.detail || "Transcription failed.");

@@ -777,6 +777,10 @@
                 "/api/operations/station-alerts?" + query.toString(),
                 { cache: "no-store", headers: { "Accept": "application/json" } }
             );
+            // A poll that was bounced to the identity provider must stop, not
+            // retry: concurrent polls racing a real login are what redeem an
+            // authorization code twice (static/js/lcdash-session.js).
+            if (window.LCDashSession && window.LCDashSession.check(response)) return;
             if (!response.ok) {
                 throw new Error("CAD request returned " + response.status);
             }
@@ -892,4 +896,12 @@
         text("station-name", "None selected");
     }
     startPolling();
+    if (window.LCDashSession) {
+        window.LCDashSession.onEnd(function () {
+            if (pollTimer) {
+                window.clearInterval(pollTimer);
+                pollTimer = null;
+            }
+        });
+    }
 })();

@@ -100,6 +100,10 @@
                 headers: {"Accept": "application/json"},
                 cache: "no-store"
             });
+            // A poll that was bounced to the identity provider must stop, not
+            // retry: concurrent polls racing a real login are what redeem an
+            // authorization code twice (static/js/lcdash-session.js).
+            if (window.LCDashSession && window.LCDashSession.check(response)) return;
             if (!response.ok) {
                 throw new Error("Health request failed.");
             }
@@ -127,6 +131,15 @@
         }
 
         const source = new EventSource(EVENTS_URL);
+        // EventSource reconnects on its own every few seconds. After a
+        // session ends that turns into a stream of unauthenticated requests
+        // racing the user's real login (static/js/lcdash-session.js). Stop
+        // the stream instead.
+        if (window.LCDashSession) {
+            window.LCDashSession.onEnd(function () {
+                source.close();
+            });
+        }
         source.addEventListener("open", function () {
             setStatusValue(
                 "integration-stream-status",
@@ -146,6 +159,13 @@
             window.setTimeout(refreshHealth, 350);
         });
         source.addEventListener("error", function () {
+            // A closed EventSource means the browser has given up; an ended
+            // session is the common cause, and retrying into the login flow
+            // is exactly what must not happen.
+            if (source.readyState === 2 && window.LCDashSession) {
+                window.LCDashSession.end();
+                return;
+            }
             setStatusValue(
                 "integration-stream-status",
                 "30S BACKUP",
@@ -160,5 +180,10 @@
 
     renderHealth(initialHealth());
     startEventStream();
-    window.setInterval(refreshHealth, REFRESH_MILLISECONDS);
+    const healthPollTimer = window.setInterval(refreshHealth, REFRESH_MILLISECONDS);
+    if (window.LCDashSession) {
+        window.LCDashSession.onEnd(function () {
+            window.clearInterval(healthPollTimer);
+        });
+    }
 })();
