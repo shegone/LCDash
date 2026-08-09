@@ -8,6 +8,7 @@ from functools import cached_property
 import boto3
 
 from app.config.settings import Settings
+from app.integrations.cad.cloud_read_runtime import build_cloud_cad_connector
 from app.integrations.cloud_ai import (
     AdvisoryRagRequest,
     AwsPollySpeechProvider,
@@ -204,6 +205,27 @@ def answer_verified_live_or_none(
     }
 
 
+class LazyCloudCadConnector:
+    """Build the read-only CentralSquare connector at most once, on first use.
+
+    Not built at import time or at construction time -- ``connector`` is a
+    ``cached_property`` so ``build_cloud_cad_connector(settings)`` (and the
+    Secrets Manager / transport objects it wires up) only run the first time
+    a tool actually needs a live CAD query (``search_call_history`` /
+    ``get_cad_configurations``). When cloud CAD is disabled for the tenant,
+    ``build_cloud_cad_connector`` returns None, which is cached just the
+    same, so disabled tenants pay this cost exactly once and never hit AWS
+    for it.
+    """
+
+    def __init__(self, settings: Settings) -> None:
+        self._settings = settings
+
+    @cached_property
+    def connector(self) -> Any:
+        return build_cloud_cad_connector(self._settings)
+
+
 def build_tool_calling_advisory(
     settings: Settings, *, budget: DailyRequestBudget | None = None
 ) -> ToolCallingLiveAdvisory:
@@ -229,6 +251,7 @@ def answer_tool_calling_or_none(
     cad_state: Any,
     cad_status: dict[str, Any],
     analytics_overview_fn: Any = None,
+    cad_connector_provider: LazyCloudCadConnector | None = None,
 ) -> dict[str, Any] | None:
     """Answer using the tool-calling loop, or return None.
 
@@ -236,11 +259,19 @@ def answer_tool_calling_or_none(
     the document-citation path) or the model never actually called a tool --
     deliberately treated the same way, since an un-tooled answer here would
     just be the model guessing.
+
+    ``cad_connector_provider`` is optional -- omitting it (or the whole
+    tenant having cloud CAD disabled, in which case
+    ``LazyCloudCadConnector.connector`` is None) simply means
+    search_call_history/get_cad_configurations report themselves
+    unavailable; every other tool in the registry is unaffected.
     """
+    cad_connector = cad_connector_provider.connector if cad_connector_provider is not None else None
     registry = LiveToolRegistry(
         cad_state=cad_state,
         cad_status=cad_status,
         analytics_overview_fn=analytics_overview_fn,
+        cad_connector=cad_connector,
     )
     response = advisory.answer(
         request_id=request_id,

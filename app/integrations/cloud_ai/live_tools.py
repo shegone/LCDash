@@ -8,23 +8,34 @@ no tool here can write, dispatch, acknowledge, or page -- those operations
 have no corresponding tool, so the model cannot invoke them no matter what
 it is asked. See ``FORBIDDEN_OPERATIONS`` in ``cloud_read_config.py``.
 
-Every tool reads only the already-polled, already-sanitized CAD snapshot
+Most tools read only the already-polled, already-sanitized CAD snapshot
 (``CloudCadDisplayState.calls`` / ``.units``, the same ``CALL_FIELDS`` /
 ``UNIT_FIELDS`` the dashboard and map render) or the analytics overview
-(``get_analytics_overview``). Nothing here makes a new CentralSquare API
-call. ``search_calls``/``search_units`` add structured, server-validated
-filtering over that same snapshot (see
-``docs/planning/MAE_FULL_READ_API_TOOLSET_2026-08-08.md`` sections 2.1/2.4);
-they do not reach the live CentralSquare search endpoints -- that would
-require calling the connector directly, which this registry has no access
-to (it is constructed from the polled snapshot and an analytics function
-only), and is left as later work.
+(``get_analytics_overview``); those make no new CentralSquare API call.
+``search_calls``/``search_units`` add structured, server-validated filtering
+over that same snapshot (see
+``docs/planning/MAE_FULL_READ_API_TOOLSET_2026-08-08.md`` sections 2.1/2.4).
+
+Two tools are the exception and DO make a live CentralSquare read:
+``search_call_history`` (POST ``/cfs_core/search`` via the injected
+``cad_connector``, time-bounded to at most 92 days and capped pages/rows)
+and ``get_cad_configurations`` (GET ``/configurations``). Both call only
+allowlisted, structurally read-only connector methods
+(``CloudCentralSquareReadConnector.search_calls`` /
+``.get_configurations``, ``cloud_read_config.py``'s ``allowed_operations``)
+and degrade to a clean error payload -- never an exception -- when no
+connector is injected (``cad_connector=None``, e.g. cloud CAD disabled for
+the tenant) or when the connector call itself fails.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Mapping, Sequence
+
+from app.integrations.cad.cloud_read_connector import CloudCadConnectorError
+from app.integrations.cad.cloud_read_runtime import _items, _normalize_calls
 
 from .live_data import CFS_PATTERN, LiveDataSource
 
@@ -34,6 +45,19 @@ MAX_BUSIEST_ROWS = 5
 MAX_INCIDENT_TYPE_ROWS = 10
 MAX_SEARCH_CALL_RESULTS = 50
 MAX_SEARCH_UNIT_RESULTS = 100
+
+# search_call_history: live CentralSquare CFS search, bounded to keep worst-
+# case latency/cost predictable (mirrors heatmap_service.MAX_HEATMAP_PAGES).
+MAX_HISTORY_WINDOW_DAYS = 92
+MAX_HISTORY_PAGES = 5
+HISTORY_PAGE_SIZE = 100
+MAX_HISTORY_RESULTS_DEFAULT = 200
+
+# get_cad_configurations: cap any list nested in the upstream configuration
+# payload so a large lookup table doesn't blow the tool-response token budget.
+MAX_CONFIG_LIST_ITEMS = 200
+
+_UNAVAILABLE_MESSAGE = "live CAD query is unavailable"
 
 _ANALYTICS_PERIOD_KEYS = {"24h", "7d", "30d", "90d", "365d"}
 _MIN_HOURS = 1
@@ -50,6 +74,16 @@ _SEARCH_CALLS_ALLOWED_KEYS = frozenset(
 _SEARCH_UNITS_STRING_FILTERS = ("agency", "unit_type", "status", "station")
 _SEARCH_UNITS_ALLOWED_KEYS = frozenset(_SEARCH_UNITS_STRING_FILTERS + ("limit",))
 _MAX_FILTER_STRING_LENGTH = 128
+
+# search_call_history filter keys. incident_code/agency/status are NOT native
+# /cfs_core/search body parameters (see module docstring on
+# _search_call_history) -- they are applied as post-filters over the rows the
+# connector returns, same as search_calls does over the snapshot.
+_SEARCH_HISTORY_STRING_FILTERS = ("incident_code", "agency", "status")
+_SEARCH_HISTORY_ALLOWED_KEYS = frozenset(
+    _SEARCH_HISTORY_STRING_FILTERS + ("created_from", "created_to", "limit")
+)
+_GET_CONFIGURATIONS_ALLOWED_KEYS = frozenset({"configuration"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,6 +224,48 @@ def _priority_as_int(priority: Any) -> int | None:
         return None
 
 
+def _parse_iso_datetime(tool_input: Mapping[str, Any], key: str) -> datetime:
+    value = tool_input.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise _ToolInputError(f"{key} is required and must be an ISO-8601 timestamp string")
+    text = value.strip()
+    if text.endswith(("Z", "z")):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError as exc:
+        raise _ToolInputError(f"{key} must be a valid ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _bound_configuration_value(value: Any) -> tuple[Any, bool]:
+    """Recursively cap any list found in a configuration payload.
+
+    Returns (bounded_value, truncated) so the caller can surface one clear
+    truncation flag without guessing at the upstream payload's shape.
+    """
+    if isinstance(value, list):
+        bounded = value[:MAX_CONFIG_LIST_ITEMS]
+        truncated = len(value) > len(bounded)
+        out = []
+        for item in bounded:
+            item_bounded, item_truncated = _bound_configuration_value(item)
+            out.append(item_bounded)
+            truncated = truncated or item_truncated
+        return out, truncated
+    if isinstance(value, Mapping):
+        out_map: dict[str, Any] = {}
+        truncated = False
+        for key, sub_value in value.items():
+            sub_bounded, sub_truncated = _bound_configuration_value(sub_value)
+            out_map[str(key)] = sub_bounded
+            truncated = truncated or sub_truncated
+        return out_map, truncated
+    return value, False
+
+
 class LiveToolRegistry:
     """Constructed once per request from the current snapshot; stateless calls."""
 
@@ -199,10 +275,19 @@ class LiveToolRegistry:
         cad_state: Any,
         cad_status: Mapping[str, Any],
         analytics_overview_fn: Callable[..., Mapping[str, Any]] | None,
+        cad_connector: Any = None,
     ) -> None:
         self._cad_state = cad_state
         self._cad_status = cad_status
         self._analytics_overview_fn = analytics_overview_fn
+        # Optional: the authenticated read-only CentralSquare connector
+        # (``CloudCentralSquareReadConnector``), used only by
+        # search_call_history/get_cad_configurations to reach the live CAD
+        # system. Every other tool here still reads only the polled snapshot.
+        # None means live CAD querying is unavailable (disabled tenant, or no
+        # connector injected) -- both new tools degrade to a clean error
+        # payload rather than raising.
+        self._cad_connector = cad_connector
 
     def execute(self, tool_name: str, tool_input: Mapping[str, Any]) -> LiveToolResult:
         handler = self._HANDLERS.get(tool_name)
@@ -418,6 +503,222 @@ class LiveToolRegistry:
             },
         )
 
+    # -- search_call_history (live connector) --------------------------------
+
+    def _search_call_history(self, tool_input: Mapping[str, Any]) -> LiveToolResult:
+        _reject_unknown_keys(tool_input, _SEARCH_HISTORY_ALLOWED_KEYS)
+
+        created_from = _parse_iso_datetime(tool_input, "created_from")
+        created_to = _parse_iso_datetime(tool_input, "created_to")
+        if created_from >= created_to:
+            raise _ToolInputError("created_from must be before created_to")
+        if created_to - created_from > timedelta(days=MAX_HISTORY_WINDOW_DAYS):
+            raise _ToolInputError(f"window must be at most {MAX_HISTORY_WINDOW_DAYS} days")
+
+        incident_code = _optional_str_filter(tool_input, "incident_code")
+        agency = _optional_str_filter(tool_input, "agency")
+        status = _optional_str_filter(tool_input, "status")
+        limit = _optional_limit(
+            tool_input, default=MAX_HISTORY_RESULTS_DEFAULT, maximum=MAX_HISTORY_RESULTS_DEFAULT
+        )
+
+        window = {"from": created_from.isoformat(), "to": created_to.isoformat()}
+
+        if self._cad_connector is None:
+            source = LiveDataSource(
+                name="CentralSquare CAD (live historical search)",
+                kind="live",
+                detail="No live CAD connector is configured for this tenant",
+                available=False,
+            )
+            return LiveToolResult(
+                "search_call_history",
+                source,
+                {
+                    "available": False,
+                    "error": _UNAVAILABLE_MESSAGE,
+                    "count": 0,
+                    "returned": 0,
+                    "truncated": False,
+                    "window": window,
+                    "calls": [],
+                },
+            )
+
+        body = {
+            "RecordCreatedFrom": window["from"],
+            "RecordCreatedTo": window["to"],
+            "OrderByField": "Created",
+            "OrderByDirection": "Descending",
+        }
+
+        calls_by_number: dict[str, Mapping[str, Any]] = {}
+        truncated = False
+        skip = 0
+        try:
+            for _page_number in range(MAX_HISTORY_PAGES):
+                result = self._cad_connector.search_calls(body, skip=skip, limit=HISTORY_PAGE_SIZE)
+                page_calls = _items(result, ("cfs_cores", "CFSCore", "calls", "items"))
+                for raw_call in page_calls:
+                    cfs_number = str(raw_call.get("CFSNumber") or raw_call.get("cfs_number") or "")
+                    if not cfs_number:
+                        continue
+                    if cfs_number not in calls_by_number:
+                        calls_by_number[cfs_number] = raw_call
+                    if len(calls_by_number) >= limit:
+                        truncated = True
+                        break
+                if truncated:
+                    break
+                page_len = len(page_calls)
+                if page_len < HISTORY_PAGE_SIZE:
+                    break
+                skip += page_len
+            else:
+                # Exhausted the page cap without a short page -- more rows may
+                # exist upstream than we retrieved.
+                truncated = True
+        except CloudCadConnectorError as error:
+            source = LiveDataSource(
+                name="CentralSquare CAD (live historical search)",
+                kind="live",
+                detail=f"search_calls failed: {error.code}",
+                available=False,
+            )
+            return LiveToolResult(
+                "search_call_history",
+                source,
+                {"available": False, "error": f"CAD history query failed: {error.code}", "window": window},
+            )
+        except Exception:
+            source = LiveDataSource(
+                name="CentralSquare CAD (live historical search)",
+                kind="live",
+                detail="Unexpected error running the historical search",
+                available=False,
+            )
+            return LiveToolResult(
+                "search_call_history",
+                source,
+                {"available": False, "error": "unexpected error querying CAD history", "window": window},
+            )
+
+        normalized = _normalize_calls(list(calls_by_number.values()))
+
+        def matches(call: Mapping[str, Any]) -> bool:
+            if incident_code and not (
+                _contains(call.get("incident_code"), incident_code)
+                or _contains(call.get("incident_description"), incident_code)
+            ):
+                return False
+            if agency and not _equals_ci(call.get("agency"), agency):
+                return False
+            if status and not _equals_ci(call.get("status"), status):
+                return False
+            return True
+
+        filtered = [call for call in normalized if matches(call)]
+        source = LiveDataSource(
+            name="CentralSquare CAD (live historical search)",
+            kind="live",
+            detail=f"search_calls window {window['from']} to {window['to']}",
+            available=True,
+        )
+        return LiveToolResult(
+            "search_call_history",
+            source,
+            {
+                "available": True,
+                "count": len(calls_by_number),
+                "returned": len(filtered),
+                "truncated": truncated,
+                "window": window,
+                "calls": [_summarize_call(c) for c in filtered],
+            },
+        )
+
+    # -- get_cad_configurations (live connector) -----------------------------
+
+    def _get_cad_configurations(self, tool_input: Mapping[str, Any]) -> LiveToolResult:
+        _reject_unknown_keys(tool_input, _GET_CONFIGURATIONS_ALLOWED_KEYS)
+
+        configuration = tool_input.get("configuration")
+        if (
+            not isinstance(configuration, str)
+            or not configuration
+            or len(configuration) > 64
+            or not configuration.isidentifier()
+        ):
+            raise _ToolInputError(
+                "configuration must be a non-empty identifier of at most 64 characters"
+            )
+
+        if self._cad_connector is None:
+            source = LiveDataSource(
+                name="CentralSquare CAD (live configuration lookup)",
+                kind="live",
+                detail="No live CAD connector is configured for this tenant",
+                available=False,
+            )
+            return LiveToolResult(
+                "get_cad_configurations",
+                source,
+                {"available": False, "error": _UNAVAILABLE_MESSAGE, "configuration": configuration},
+            )
+
+        try:
+            result = self._cad_connector.get_configurations(configuration)
+        except CloudCadConnectorError as error:
+            source = LiveDataSource(
+                name="CentralSquare CAD (live configuration lookup)",
+                kind="live",
+                detail=f"get_configurations failed: {error.code}",
+                available=False,
+            )
+            return LiveToolResult(
+                "get_cad_configurations",
+                source,
+                {
+                    "available": False,
+                    "error": f"CAD configuration query failed: {error.code}",
+                    "configuration": configuration,
+                },
+            )
+        except Exception:
+            source = LiveDataSource(
+                name="CentralSquare CAD (live configuration lookup)",
+                kind="live",
+                detail="Unexpected error fetching configuration",
+                available=False,
+            )
+            return LiveToolResult(
+                "get_cad_configurations",
+                source,
+                {
+                    "available": False,
+                    "error": "unexpected error querying CAD configuration",
+                    "configuration": configuration,
+                },
+            )
+
+        bounded_result, truncated = _bound_configuration_value(result)
+        source = LiveDataSource(
+            name="CentralSquare CAD (live configuration lookup)",
+            kind="live",
+            detail=f"get_configurations {configuration}",
+            available=True,
+        )
+        return LiveToolResult(
+            "get_cad_configurations",
+            source,
+            {
+                "available": True,
+                "configuration": configuration,
+                "truncated": truncated,
+                "result": bounded_result,
+            },
+        )
+
     # -- get_analytics_summary ----------------------------------------------
 
     def _get_analytics_summary(self, tool_input: Mapping[str, Any]) -> LiveToolResult:
@@ -487,6 +788,8 @@ LiveToolRegistry._HANDLERS = {
     "get_analytics_summary": LiveToolRegistry._get_analytics_summary,
     "search_calls": LiveToolRegistry._search_calls,
     "search_units": LiveToolRegistry._search_units,
+    "search_call_history": LiveToolRegistry._search_call_history,
+    "get_cad_configurations": LiveToolRegistry._get_cad_configurations,
 }
 
 
@@ -620,6 +923,85 @@ TOOL_SPECS: tuple[Mapping[str, Any], ...] = (
                         "hours": {"type": "integer", "minimum": 1, "maximum": 8784},
                         "period": {"type": "string", "enum": sorted(_ANALYTICS_PERIOD_KEYS)},
                     },
+                }
+            },
+        }
+    },
+    {
+        "toolSpec": {
+            "name": "search_call_history",
+            "description": (
+                "Search HISTORICAL Calls-For-Service by making a live query to the "
+                "CentralSquare CAD system -- NOT the current snapshot, and NOT free: "
+                "this makes a real network call to CAD every time it is used. Use "
+                "list_active_calls/search_calls (over the already-polled snapshot) "
+                "for anything about what is happening right now; use this tool only "
+                "when the question is genuinely about the past (a specific date, a "
+                "closed/older call, or a historical count/lookup that the current "
+                "snapshot cannot answer). Requires created_from AND created_to "
+                "(ISO-8601 timestamps, e.g. 2026-08-01T00:00:00Z); the window is "
+                "capped at 92 days and an unbounded query is always rejected. "
+                "incident_code (substring match against incident code/description), "
+                "agency (exact match), and status (exact match) are NOT native "
+                "CentralSquare search parameters -- they are applied as post-filters "
+                "over the rows CAD returns for the time window, so a narrow window "
+                "with a rare filter can still legitimately return zero rows. Results "
+                "are deduplicated by CFS number, paginated up to 5 pages of 100 rows "
+                "each, and capped at `limit` (default and max 200) total rows; "
+                "`truncated` is true only when one of those caps -- not a filter -- "
+                "stopped the search before scanning everything in the window."
+            ),
+            "inputSchema": {
+                "json": {
+                    "type": "object",
+                    "properties": {
+                        "created_from": {
+                            "type": "string",
+                            "description": "ISO-8601 window start, e.g. 2026-08-01T00:00:00Z",
+                        },
+                        "created_to": {
+                            "type": "string",
+                            "description": "ISO-8601 window end, e.g. 2026-08-02T00:00:00Z",
+                        },
+                        "incident_code": {"type": "string", "maxLength": 128},
+                        "agency": {"type": "string", "maxLength": 128},
+                        "status": {"type": "string", "maxLength": 128},
+                        "limit": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": MAX_HISTORY_RESULTS_DEFAULT,
+                        },
+                    },
+                    "required": ["created_from", "created_to"],
+                }
+            },
+        }
+    },
+    {
+        "toolSpec": {
+            "name": "get_cad_configurations",
+            "description": (
+                "Look up one named CentralSquare CAD system configuration/lookup "
+                "table (e.g. CADUnitStatus, IncidentType) by making a live query to "
+                "the CAD system -- NOT the current snapshot. Use this only when the "
+                "question is about CAD's own reference/configuration data (what "
+                "status codes exist, what incident types are defined, etc.), not "
+                "about a specific call or unit. `configuration` must be a valid "
+                "identifier (letters/digits/underscore, not starting with a digit) "
+                "of at most 64 characters. Any list nested in the result is capped "
+                "at 200 entries, with `truncated` set to true if anything was cut."
+            ),
+            "inputSchema": {
+                "json": {
+                    "type": "object",
+                    "properties": {
+                        "configuration": {
+                            "type": "string",
+                            "maxLength": 64,
+                            "description": "e.g. CADUnitStatus, IncidentType",
+                        },
+                    },
+                    "required": ["configuration"],
                 }
             },
         }

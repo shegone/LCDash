@@ -158,6 +158,7 @@ from app.services.cloud_ai_service import (
     build_verified_live_advisory,
     cloud_ai_status,
     cloud_mode_enabled,
+    LazyCloudCadConnector,
     synthesize_cloud_speech,
     transcribe_cloud_speech,
 )
@@ -198,6 +199,11 @@ from app.services.nga911_nova_service import (
 )
 
 cloud_cad_runtime = build_cloud_cad_runtime(settings)
+# Separate from cloud_cad_runtime's own internal connector: this one is used
+# only by the tool-calling advisory's live-history tools
+# (search_call_history/get_cad_configurations) and is built at most once, on
+# first actual use, not at import time (see LazyCloudCadConnector).
+cloud_cad_connector_provider = LazyCloudCadConnector(settings)
 cloud_ai_config = build_cloud_ai_config(settings)
 # One shared budget so the whole-answer and streaming advisory paths draw
 # from a single daily generation cap rather than two independent ones.
@@ -2219,6 +2225,7 @@ def cloud_ai_advisory_api(
             analytics_overview_fn=lambda **window: get_analytics_overview(
                 tenant_context=tenant_context, **window
             ),
+            cad_connector_provider=cloud_cad_connector_provider,
         )
     if result is None:
         result = answer_cloud_advisory(
@@ -2269,6 +2276,7 @@ def cloud_ai_advisory_stream_api(
             analytics_overview_fn=lambda **window: get_analytics_overview(
                 tenant_context=tenant_context, **window
             ),
+            cad_connector_provider=cloud_cad_connector_provider,
         )
     if live_result is not None:
         live_result["interaction_id"] = ""

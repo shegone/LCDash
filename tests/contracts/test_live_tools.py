@@ -8,6 +8,12 @@ Reporter/caller info and full command logs are deliberately exposed (Ted:
 
 import unittest
 
+from app.integrations.cad.cloud_read_config import (
+    CloudCadMode,
+    CloudCadReadConfig,
+    FORBIDDEN_OPERATIONS,
+)
+from app.integrations.cad.cloud_read_connector import CloudCadConnectorError
 from app.integrations.cloud_ai.live_tools import LiveToolRegistry, TOOL_SPECS
 
 
@@ -59,12 +65,50 @@ class _CadState:
         self.units = tuple(units)
 
 
-def _registry(calls=(), units=(), freshness="fresh", analytics_overview_fn=None):
+def _registry(calls=(), units=(), freshness="fresh", analytics_overview_fn=None, cad_connector=None):
     return LiveToolRegistry(
         cad_state=_CadState(calls, units),
         cad_status={"freshness": freshness, "age_seconds": 5},
         analytics_overview_fn=analytics_overview_fn,
+        cad_connector=cad_connector,
     )
+
+
+def _raw_cad_call(cfs_number: str, **overrides) -> dict:
+    raw = {
+        "CFSNumber": cfs_number,
+        "IncidentCode": {"Code": "MEDICAL", "Description": "Medical Call"},
+        "PrimaryResponseAgency": {"Abbreviation": "LEASA"},
+        "CallDateTime": "2026-08-01T12:00:00Z",
+        "Address": {"FullAddress": "314 HUDGINS STREET", "City": "LOGAN"},
+    }
+    raw.update(overrides)
+    return raw
+
+
+class _FakeCadConnector:
+    """Records calls; returns pre-baked pages/results or raises pre-baked errors."""
+
+    def __init__(self, *, search_pages=None, config_result=None, search_error=None, config_error=None):
+        self._search_pages = list(search_pages or [])
+        self._config_result = config_result
+        self._search_error = search_error
+        self._config_error = config_error
+        self.search_calls_requests: list[dict] = []
+        self.get_configurations_requests: list[str] = []
+
+    def search_calls(self, body, *, skip=0, limit=100):
+        self.search_calls_requests.append({"body": dict(body), "skip": skip, "limit": limit})
+        if self._search_error is not None:
+            raise self._search_error
+        page = self._search_pages.pop(0) if self._search_pages else []
+        return {"cfs_cores": page}
+
+    def get_configurations(self, configuration):
+        self.get_configurations_requests.append(configuration)
+        if self._config_error is not None:
+            raise self._config_error
+        return self._config_result
 
 
 class ToolSpecsTests(unittest.TestCase):
@@ -78,6 +122,8 @@ class ToolSpecsTests(unittest.TestCase):
                 "get_analytics_summary",
                 "search_calls",
                 "search_units",
+                "search_call_history",
+                "get_cad_configurations",
             },
         )
         for spec in TOOL_SPECS:
@@ -85,7 +131,6 @@ class ToolSpecsTests(unittest.TestCase):
             for forbidden in (
                 "dispatch",
                 "acknowledge",
-                "page",
                 "write",
                 "update_call",
                 "run_command",
@@ -93,8 +138,22 @@ class ToolSpecsTests(unittest.TestCase):
                 "trigger_tone",
                 "send_alert",
                 "send_message",
+                "send_page",
             ):
                 self.assertNotIn(forbidden, blob)
+
+    def test_no_forbidden_operation_name_appears_in_any_tool_spec(self):
+        for spec in TOOL_SPECS:
+            blob = str(spec).lower()
+            for forbidden in FORBIDDEN_OPERATIONS:
+                self.assertNotIn(forbidden.lower(), blob)
+
+    def test_get_configurations_is_allowlisted_and_no_forbidden_op_is(self):
+        config = CloudCadReadConfig(mode=CloudCadMode.SYNTHETIC_DISCONNECTED, tenant_id="lcso-wv")
+        allowed = config.allowed_operations
+        self.assertIn("get_configurations", allowed)
+        for forbidden in FORBIDDEN_OPERATIONS:
+            self.assertNotIn(forbidden, allowed)
 
 
 class ListActiveCallsTests(unittest.TestCase):
@@ -399,6 +458,252 @@ class SearchUnitsTests(unittest.TestCase):
         result = registry.execute("search_units", {})
         self.assertFalse(result.payload["available"])
         self.assertEqual(result.payload["units"], [])
+
+
+class SearchCallHistoryTests(unittest.TestCase):
+    def test_missing_created_from_is_an_error(self):
+        registry = _registry(cad_connector=_FakeCadConnector())
+        result = registry.execute("search_call_history", {"created_to": "2026-08-02T00:00:00Z"})
+        self.assertIn("error", result.payload)
+
+    def test_missing_created_to_is_an_error(self):
+        registry = _registry(cad_connector=_FakeCadConnector())
+        result = registry.execute("search_call_history", {"created_from": "2026-08-01T00:00:00Z"})
+        self.assertIn("error", result.payload)
+
+    def test_invalid_timestamp_is_an_error(self):
+        registry = _registry(cad_connector=_FakeCadConnector())
+        result = registry.execute(
+            "search_call_history",
+            {"created_from": "not-a-date", "created_to": "2026-08-02T00:00:00Z"},
+        )
+        self.assertIn("error", result.payload)
+
+    def test_inverted_window_is_rejected(self):
+        registry = _registry(cad_connector=_FakeCadConnector())
+        result = registry.execute(
+            "search_call_history",
+            {"created_from": "2026-08-02T00:00:00Z", "created_to": "2026-08-01T00:00:00Z"},
+        )
+        self.assertIn("error", result.payload)
+
+    def test_equal_from_and_to_is_rejected(self):
+        registry = _registry(cad_connector=_FakeCadConnector())
+        result = registry.execute(
+            "search_call_history",
+            {"created_from": "2026-08-01T00:00:00Z", "created_to": "2026-08-01T00:00:00Z"},
+        )
+        self.assertIn("error", result.payload)
+
+    def test_window_over_92_days_is_rejected(self):
+        registry = _registry(cad_connector=_FakeCadConnector())
+        result = registry.execute(
+            "search_call_history",
+            {"created_from": "2026-01-01T00:00:00Z", "created_to": "2026-08-01T00:00:00Z"},
+        )
+        self.assertIn("error", result.payload)
+
+    def test_window_of_exactly_92_days_is_accepted(self):
+        connector = _FakeCadConnector(search_pages=[[]])
+        registry = _registry(cad_connector=connector)
+        result = registry.execute(
+            "search_call_history",
+            {"created_from": "2026-05-01T00:00:00Z", "created_to": "2026-08-01T00:00:00Z"},
+        )
+        self.assertNotIn("error", result.payload)
+        self.assertTrue(result.payload["available"])
+
+    def test_accepts_trailing_z_and_offset_timestamps(self):
+        connector = _FakeCadConnector(search_pages=[[]])
+        registry = _registry(cad_connector=connector)
+        result = registry.execute(
+            "search_call_history",
+            {
+                "created_from": "2026-08-01T00:00:00+00:00",
+                "created_to": "2026-08-02T00:00:00Z",
+            },
+        )
+        self.assertTrue(result.payload["available"])
+
+    def test_connector_none_reports_unavailable_without_error(self):
+        registry = _registry(cad_connector=None)
+        result = registry.execute(
+            "search_call_history",
+            {"created_from": "2026-08-01T00:00:00Z", "created_to": "2026-08-02T00:00:00Z"},
+        )
+        self.assertFalse(result.payload["available"])
+        self.assertIn("unavailable", result.payload["error"])
+        self.assertEqual(result.payload["calls"], [])
+
+    def test_successful_paginated_search_stops_on_short_page(self):
+        page_one = [_raw_cad_call(f"CFS26-{i:05d}") for i in range(100)]
+        page_two = [_raw_cad_call(f"CFS26-{i:05d}") for i in range(100, 130)]
+        connector = _FakeCadConnector(search_pages=[page_one, page_two])
+        registry = _registry(cad_connector=connector)
+        result = registry.execute(
+            "search_call_history",
+            {"created_from": "2026-08-01T00:00:00Z", "created_to": "2026-08-02T00:00:00Z"},
+        )
+        self.assertTrue(result.payload["available"])
+        self.assertEqual(result.payload["count"], 130)
+        self.assertEqual(result.payload["returned"], 130)
+        self.assertFalse(result.payload["truncated"])
+        self.assertEqual(len(connector.search_calls_requests), 2)
+        # Search body uses the confirmed heatmap_service key names.
+        body = connector.search_calls_requests[0]["body"]
+        self.assertEqual(body["OrderByField"], "Created")
+        self.assertEqual(body["OrderByDirection"], "Descending")
+        self.assertIn("RecordCreatedFrom", body)
+        self.assertIn("RecordCreatedTo", body)
+
+    def test_dedupes_by_cfs_number_across_pages(self):
+        # page_one must be a full 100-row page or the loop treats it as the
+        # last (short) page and never fetches page_two.
+        fillers = [_raw_cad_call(f"CFS26-FILL{i:03d}") for i in range(98)]
+        page_one = fillers + [_raw_cad_call("CFS26-00001"), _raw_cad_call("CFS26-00002")]
+        page_two = [_raw_cad_call("CFS26-00002"), _raw_cad_call("CFS26-00003")]
+        connector = _FakeCadConnector(search_pages=[page_one, page_two])
+        registry = _registry(cad_connector=connector)
+        result = registry.execute(
+            "search_call_history",
+            {"created_from": "2026-08-01T00:00:00Z", "created_to": "2026-08-02T00:00:00Z"},
+        )
+        # 98 filler + 00001 + 00002 + 00003 (00002 deduped across pages).
+        self.assertEqual(result.payload["count"], 101)
+        self.assertEqual(len(connector.search_calls_requests), 2)
+
+    def test_row_cap_truncates_mid_page(self):
+        page = [_raw_cad_call(f"CFS26-{i:05d}") for i in range(100)]
+        connector = _FakeCadConnector(search_pages=[page])
+        registry = _registry(cad_connector=connector)
+        result = registry.execute(
+            "search_call_history",
+            {
+                "created_from": "2026-08-01T00:00:00Z",
+                "created_to": "2026-08-02T00:00:00Z",
+                "limit": 5,
+            },
+        )
+        self.assertEqual(result.payload["count"], 5)
+        self.assertTrue(result.payload["truncated"])
+        self.assertEqual(len(connector.search_calls_requests), 1)
+
+    def test_page_cap_truncates_after_five_full_pages(self):
+        # Each of the 5 pages is a full 100-row page (so the loop never sees
+        # a "short" page and never naturally stops), but every page repeats
+        # the same 40 CFS numbers, so the row cap (200) is never hit either
+        # -- the only thing that stops the search is MAX_HISTORY_PAGES.
+        one_page = ([_raw_cad_call(f"CFS26-{i:05d}") for i in range(40)] * 3)[:100]
+        connector = _FakeCadConnector(search_pages=[list(one_page) for _ in range(5)])
+        registry = _registry(cad_connector=connector)
+        result = registry.execute(
+            "search_call_history",
+            {"created_from": "2026-08-01T00:00:00Z", "created_to": "2026-08-02T00:00:00Z"},
+        )
+        self.assertEqual(result.payload["count"], 40)
+        self.assertTrue(result.payload["truncated"])
+        self.assertEqual(len(connector.search_calls_requests), 5)
+
+    def test_post_filters_apply_after_fetch_and_reduce_returned_not_count(self):
+        page = [
+            _raw_cad_call("CFS26-00001", **{"PrimaryResponseAgency": {"Abbreviation": "LEASA"}}),
+            _raw_cad_call("CFS26-00002", **{"PrimaryResponseAgency": {"Abbreviation": "LCSO"}}),
+        ]
+        connector = _FakeCadConnector(search_pages=[page])
+        registry = _registry(cad_connector=connector)
+        result = registry.execute(
+            "search_call_history",
+            {
+                "created_from": "2026-08-01T00:00:00Z",
+                "created_to": "2026-08-02T00:00:00Z",
+                "agency": "LEASA",
+            },
+        )
+        self.assertEqual(result.payload["count"], 2)
+        self.assertEqual(result.payload["returned"], 1)
+        self.assertFalse(result.payload["truncated"])
+
+    def test_connector_error_is_an_error_payload_not_an_exception(self):
+        connector = _FakeCadConnector(search_error=CloudCadConnectorError("upstream_rejected", "search_calls"))
+        registry = _registry(cad_connector=connector)
+        result = registry.execute(
+            "search_call_history",
+            {"created_from": "2026-08-01T00:00:00Z", "created_to": "2026-08-02T00:00:00Z"},
+        )
+        self.assertFalse(result.payload["available"])
+        self.assertIn("error", result.payload)
+
+    def test_unexpected_exception_is_an_error_payload_not_raised(self):
+        connector = _FakeCadConnector(search_error=RuntimeError("boom"))
+        registry = _registry(cad_connector=connector)
+        result = registry.execute(
+            "search_call_history",
+            {"created_from": "2026-08-01T00:00:00Z", "created_to": "2026-08-02T00:00:00Z"},
+        )
+        self.assertFalse(result.payload["available"])
+        self.assertIn("error", result.payload)
+
+    def test_unknown_filter_key_is_rejected(self):
+        registry = _registry(cad_connector=_FakeCadConnector())
+        result = registry.execute(
+            "search_call_history",
+            {
+                "created_from": "2026-08-01T00:00:00Z",
+                "created_to": "2026-08-02T00:00:00Z",
+                "dispatch_now": True,
+            },
+        )
+        self.assertIn("error", result.payload)
+
+
+class GetCadConfigurationsTests(unittest.TestCase):
+    def test_happy_path_returns_result(self):
+        connector = _FakeCadConnector(config_result={"Values": [{"Code": "AVAIL"}, {"Code": "OOS"}]})
+        registry = _registry(cad_connector=connector)
+        result = registry.execute("get_cad_configurations", {"configuration": "CADUnitStatus"})
+        self.assertTrue(result.payload["available"])
+        self.assertEqual(result.payload["configuration"], "CADUnitStatus")
+        self.assertFalse(result.payload["truncated"])
+        self.assertEqual(connector.get_configurations_requests, ["CADUnitStatus"])
+
+    def test_large_nested_list_is_capped_and_flagged(self):
+        many = {"Values": [{"Code": f"C{i}"} for i in range(500)]}
+        connector = _FakeCadConnector(config_result=many)
+        registry = _registry(cad_connector=connector)
+        result = registry.execute("get_cad_configurations", {"configuration": "IncidentType"})
+        self.assertTrue(result.payload["truncated"])
+        self.assertEqual(len(result.payload["result"]["Values"]), 200)
+
+    def test_invalid_configuration_name_is_an_error_payload(self):
+        registry = _registry(cad_connector=_FakeCadConnector())
+        for bad in ("", "1bad", "way-too-long-" * 10, "has space"):
+            result = registry.execute("get_cad_configurations", {"configuration": bad})
+            self.assertIn("error", result.payload, msg=bad)
+
+    def test_missing_configuration_is_an_error_payload(self):
+        registry = _registry(cad_connector=_FakeCadConnector())
+        result = registry.execute("get_cad_configurations", {})
+        self.assertIn("error", result.payload)
+
+    def test_connector_none_reports_unavailable_without_error(self):
+        registry = _registry(cad_connector=None)
+        result = registry.execute("get_cad_configurations", {"configuration": "CADUnitStatus"})
+        self.assertFalse(result.payload["available"])
+        self.assertIn("unavailable", result.payload["error"])
+
+    def test_connector_error_is_an_error_payload_not_an_exception(self):
+        connector = _FakeCadConnector(config_error=CloudCadConnectorError("upstream_rejected", "get_configurations"))
+        registry = _registry(cad_connector=connector)
+        result = registry.execute("get_cad_configurations", {"configuration": "CADUnitStatus"})
+        self.assertFalse(result.payload["available"])
+        self.assertIn("error", result.payload)
+
+    def test_unknown_filter_key_is_rejected(self):
+        registry = _registry(cad_connector=_FakeCadConnector())
+        result = registry.execute(
+            "get_cad_configurations", {"configuration": "CADUnitStatus", "extra": True}
+        )
+        self.assertIn("error", result.payload)
 
 
 class UnknownToolTests(unittest.TestCase):

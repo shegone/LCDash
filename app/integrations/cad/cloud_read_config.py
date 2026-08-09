@@ -176,6 +176,10 @@ class CloudCadReadConfig:
             "get_call",
             "search_units",
             "get_cfs_analytics",
+            # get_configurations is a GET of CentralSquare's own system
+            # configuration/lookup-table metadata (e.g. CADUnitStatus,
+            # IncidentType) -- strictly a read, no write counterpart exists.
+            "get_configurations",
         )
 
     @property
