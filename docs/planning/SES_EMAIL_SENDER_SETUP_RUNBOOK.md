@@ -153,6 +153,56 @@ Tell me, and I will confirm from my side that:
 
 Then the pool change can deploy and email sign-in becomes live.
 
+## Handling bounces and complaints
+
+AWS requires this as a condition of production access, and the approval email
+repeats it: *"Set up a process to handle bounces and complaints."* Here is what
+actually exists and what it means operationally.
+
+**Already automatic.** The account-level suppression list is **Enabled** with
+suppression reasons **Bounce and complaints**. SES adds any address that hard
+bounces or files a complaint, and silently stops sending to it. Nothing needs
+configuring for that.
+
+**The gap is notification, and it has a specific cost.** Nothing tells anyone
+when an address gets suppressed. Because every sign-in code goes through SES, a
+suppressed address means that person **cannot sign in at all** — and the symptom
+they report ("no code arrived") is indistinguishable from slow mail or a spam
+filter. Expect that to be the confusing one.
+
+**So: when a user says codes are not arriving, check the suppression list first,
+before anything else.**
+
+```
+aws sesv2 get-suppressed-destination --email-address <user@example.com> --region us-east-1
+```
+
+A hit means SES is deliberately refusing to send. Remove it once the underlying
+mailbox problem is fixed:
+
+```
+aws sesv2 delete-suppressed-destination --email-address <user@example.com> --region us-east-1
+```
+
+**Why the risk here is genuinely low.** Addresses reach Cognito only through
+`config/approved_users.json`, which is reviewed in a diff and format-validated by
+`scripts/sync_cognito_users.py`. There is no sign-up form and no imported list,
+so the only realistic source of a bad address is a typo in a reviewed file, and
+the affected person reports it directly. That is a short feedback loop.
+
+**Periodic check.** The SES console's **Reputation metrics** page shows bounce
+and complaint rates. Sustained rates above roughly 5% bounce or 0.1% complaint
+are what put an account back in the sandbox. At this volume — one message per
+sign-in for a handful of named county staff — neither should ever move.
+
+**Not configured, deliberately:** SNS notification of bounce and complaint
+events. Wiring that would introduce `sns:Publish` into the foundation stack, and
+`infrastructure/tests/test_offline_policy.py` explicitly asserts that string is
+absent — a reviewed guardrail against operational output paths (paging, station
+alerts, EMS delivery). Bounce telemetry is not an operational output in that
+sense, but the guardrail should be changed deliberately rather than worked
+around, so it has not been.
+
 ## Notes
 
 - The address the system sends *from* is `no-reply@logan911.com`
