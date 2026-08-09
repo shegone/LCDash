@@ -96,14 +96,31 @@ Verification is usually done in a few minutes, though AWS allows up to 72 hours.
 Refresh the SES identity page until **DKIM configuration** reads **Successful**
 and **Identity status** reads **Verified**.
 
+To check the records independently of SES — which distinguishes "I typed them
+wrong" from "SES has not polled yet" — query public DNS directly:
+
+```bash
+nslookup -type=CNAME <selector>._domainkey.logan911.com 1.1.1.1
+```
+
+Each should answer with `canonical name = <selector>.dkim.amazonses.com`. If all
+three answer correctly, the DNS side is done and only SES's own polling remains.
+
 ## Step 3 — Request production access
 
 A new SES account starts in the "sandbox," which allows only 200 messages a day
 *and* only to addresses you have individually verified. That cannot work for
 sign-in codes, so this limit has to be lifted.
 
-1. In SES, go to **Account dashboard**.
-2. Find the sandbox notice and choose **Request production access**.
+> **This step is gated on step 2 finishing.** AWS disables the **Request
+> production access** button until the domain reports **Verified** — the card
+> reads "Domain verification needed" and the button is genuinely disabled, not
+> just greyed. So the roughly 24-hour AWS review clock does not start until
+> verification completes. Plan the two waits as sequential, not overlapping.
+
+1. In SES, go to **Get set up** (or **Account dashboard**).
+2. Find the **Request production access** card and choose the button once it is
+   enabled.
 3. Fill in the request:
    - **Mail type**: Transactional
    - **Website URL**: `https://aws.logan911.com`
