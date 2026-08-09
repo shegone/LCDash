@@ -337,6 +337,37 @@
 
 .saved-template-preview p { margin: 0 0 10px; }
 
+.saved-template-rows {
+    margin: 0 0 12px;
+    overflow-x: auto;
+}
+
+.saved-template-rows table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .82rem;
+}
+
+.saved-template-rows th {
+    text-align: left;
+    padding: 6px 10px;
+    color: #7ea8d3;
+    text-transform: capitalize;
+    border-bottom: 1px solid rgba(76, 201, 255, .3);
+}
+
+.saved-template-rows td {
+    padding: 6px 10px;
+    border-bottom: 1px solid rgba(76, 201, 255, .12);
+    color: #dff8ff;
+}
+
+.saved-template-rows-more {
+    margin: 8px 0 0;
+    color: #60798e;
+    font-size: .76rem;
+}
+
 @media (max-width: 900px) {
     .reports-hero,
     .report-builder-header { align-items: stretch; flex-direction: column; }

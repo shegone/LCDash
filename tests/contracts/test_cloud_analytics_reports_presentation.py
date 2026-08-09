@@ -83,6 +83,11 @@ class CloudAnalyticsReportsPresentationTests(unittest.TestCase):
         self.assertGreater(export_index, preview_index)
         # Errors surface the HTTP status instead of a silent dead panel.
         self.assertIn("HTTP ${response.status}", script)
+        # The preview must render the actual rows, not just describe them --
+        # a summary line alone read as "the preview is broken" on first real
+        # use (Ted, 2026-08-09).
+        self.assertIn("renderPreviewRows(payload.rows)", script)
+        self.assertIn("createTBody", script)
 
     def test_county_commission_start_route_fails_closed_before_service_call(self):
         tree = ast.parse((REPOSITORY / "app" / "main.py").read_text(encoding="utf-8"))

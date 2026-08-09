@@ -56,6 +56,46 @@
         return `${cleaned || "mae-report"}.pdf`;
     }
 
+    const PREVIEW_ROW_LIMIT = 20;
+
+    // The preview must show the data, not just describe it -- "preview shows
+    // a summary line" read as "the preview is broken" the first time a real
+    // user clicked it. Rows are objects with unknown keys, so the table is
+    // built generically from the first row's columns.
+    function renderPreviewRows(rows) {
+        const container = document.createElement("div");
+        container.className = "saved-template-rows";
+        const table = document.createElement("table");
+        const columns = Object.keys(rows[0]);
+
+        const head = table.createTHead().insertRow();
+        columns.forEach(function (column) {
+            const cell = document.createElement("th");
+            cell.textContent = column.replace(/_/g, " ");
+            head.appendChild(cell);
+        });
+
+        const body = table.createTBody();
+        rows.slice(0, PREVIEW_ROW_LIMIT).forEach(function (row) {
+            const tableRow = body.insertRow();
+            columns.forEach(function (column) {
+                tableRow.insertCell().textContent =
+                    row[column] === null || row[column] === undefined ? "" : String(row[column]);
+            });
+        });
+        container.appendChild(table);
+
+        if (rows.length > PREVIEW_ROW_LIMIT) {
+            const more = document.createElement("p");
+            more.className = "saved-template-rows-more";
+            more.textContent =
+                `Showing the first ${PREVIEW_ROW_LIMIT} of ${rows.length} rows. ` +
+                "The PDF contains the full report.";
+            container.appendChild(more);
+        }
+        return container;
+    }
+
     function renderTemplate(record) {
         const item = document.createElement("li");
         item.className = "saved-template glass";
@@ -123,6 +163,8 @@
                     preview.appendChild(none);
                     return;
                 }
+
+                preview.appendChild(renderPreviewRows(payload.rows));
 
                 const exportButton = document.createElement("button");
                 exportButton.type = "button";
