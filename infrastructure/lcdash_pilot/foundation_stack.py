@@ -519,6 +519,17 @@ class Phase1FoundationStack(cdk.Stack):
             ),
             precedence=0,
         )
+        cognito.CfnUserPoolGroup(
+            self,
+            "PilotAvatarGroup",
+            user_pool_id=user_pool.user_pool_id,
+            group_name="lcdash-pilot-avatar",
+            description=(
+                "Read-only conversation access to MAE's avatar surface only; no "
+                "dashboard, CAD payload, tenant, or operational authority."
+            ),
+            precedence=30,
+        )
         alb_callback_url = cdk.Fn.join(
             "",
             ["https://", PILOT_DOMAIN_NAME, "/oauth2/idpresponse"],

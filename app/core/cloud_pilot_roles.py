@@ -11,12 +11,19 @@ class PilotAuthorizationDenied(PermissionError):
 
 
 class PilotRole(StrEnum):
-    """The three pilot roles, least to most privileged.
+    """The pilot roles.
 
     ``USER`` is the restricted tier that the sanitized build targets.
     ``SUPERVISOR`` is unrestricted access to operational data, including
     patient and reporter PII. ``ADMIN`` adds pilot access review on top and
     nothing else -- it confers no AWS, Cognito, or tenant authority.
+
+    ``AVATAR`` is not on that ladder: it is the conversation-only surface
+    from the avatar plan (docs/planning/MAE_AVATAR_PLAN_2026-08-09.md).
+    An avatar-group account can talk to MAE's face at ``/mae/avatar`` and
+    reach nothing else -- no dashboard, no CAD payloads beyond what MAE says
+    aloud. Enforcement is app/core/avatar_tier.py's deny-by-default path
+    allowlist, the same machinery that enforces the ``user`` tier.
 
     ``ADMIN`` is spelled "admin", not "administrator", because several existing
     authorization checks already test for "admin" (see
@@ -30,21 +37,28 @@ class PilotRole(StrEnum):
     USER = "user"
     SUPERVISOR = "supervisor"
     ADMIN = "admin"
+    AVATAR = "avatar"
 
 
 COGNITO_GROUP_ROLE_MAP = {
     "lcdash-pilot-user": PilotRole.USER,
     "lcdash-pilot-supervisor": PilotRole.SUPERVISOR,
     "lcdash-pilot-admin": PilotRole.ADMIN,
+    "lcdash-pilot-avatar": PilotRole.AVATAR,
 }
 
 # Lower binds tighter. Mirrors the Cognito group precedence in
 # infrastructure/lcdash_pilot/foundation_stack.py, though this map -- not
 # Cognito's -- is what actually resolves a user's effective role.
+#
+# AVATAR binds loosest on purpose: the group exists for accounts that hold
+# nothing else, so if someone is ALSO in a dashboard group, the dashboard
+# role wins and they reach the avatar page through its permission instead.
 ROLE_PRECEDENCE = {
     PilotRole.USER: 30,
     PilotRole.SUPERVISOR: 20,
     PilotRole.ADMIN: 10,
+    PilotRole.AVATAR: 40,
 }
 
 # The restricted tier, as scoped by Ted on 2026-08-09: the dashboard, station
@@ -70,15 +84,23 @@ SUPERVISOR_PERMISSIONS = USER_PERMISSIONS | {
     "documents.review.view",
     "rag.advisory.query",
     "voice.advisory.use",
+    "avatar.converse",
 }
 ADMIN_PERMISSIONS = SUPERVISOR_PERMISSIONS | {
     "pilot.access.review",
 }
 
+# The avatar surface and nothing else. Deliberately NOT a superset of
+# USER_PERMISSIONS: an avatar account gets no dashboard, no map, no alerts.
+# ``user`` deliberately lacks avatar.converse -- MAE answers from live CAD,
+# which is exactly what that tier exists to withhold.
+AVATAR_PERMISSIONS = frozenset({"avatar.converse"})
+
 ROLE_PERMISSIONS = {
     PilotRole.USER: USER_PERMISSIONS,
     PilotRole.SUPERVISOR: SUPERVISOR_PERMISSIONS,
     PilotRole.ADMIN: ADMIN_PERMISSIONS,
+    PilotRole.AVATAR: AVATAR_PERMISSIONS,
 }
 
 

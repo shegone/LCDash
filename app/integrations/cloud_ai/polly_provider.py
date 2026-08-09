@@ -2,13 +2,24 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from typing import Any, Protocol
 
-from .contracts import PollySpeechRequest
+from .contracts import (
+    MAX_VISEME_MARKS,
+    POLLY_VISEMES,
+    PollySpeechRequest,
+    PollySpeechWithVisemes,
+    PollyVisemeMark,
+)
 
 
 APPROVED_REGION = "us-east-1"
+
+# Speech marks are newline-delimited JSON, a few dozen bytes per phoneme;
+# a bounded read keeps a malfunctioning stream from growing without limit.
+MAX_SPEECH_MARK_BYTES = 1_000_000
 
 
 class PollyClient(Protocol):
@@ -76,3 +87,73 @@ class AwsPollySpeechProvider:
         if len(audio) > self._max_audio_bytes:
             raise RuntimeError("polly_audio_limit")
         return audio
+
+    def synthesize_with_visemes(
+        self, request: PollySpeechRequest
+    ) -> PollySpeechWithVisemes:
+        """One utterance plus its viseme timeline, in two bounded Polly calls.
+
+        Both calls stay on the neural engine deliberately: generative voices
+        do not emit viseme speech marks, so an engine change that "sounds
+        nicer" would silently freeze the avatar's mouth. The speech-mark call
+        reuses the exact text and voice of the audio call so the timeline can
+        never describe a different utterance than the one heard.
+        """
+
+        audio = self.synthesize(request)
+        response = self._client_for_request().synthesize_speech(
+            Engine="neural",
+            OutputFormat="json",
+            SpeechMarkTypes=["viseme"],
+            Text=request.spoken_text,
+            TextType="text",
+            VoiceId=request.voice.value,
+        )
+        stream = response.get("AudioStream")
+        if stream is None or not hasattr(stream, "read"):
+            raise RuntimeError("polly_speech_marks_missing")
+        try:
+            content_type = response.get("ContentType")
+            if content_type not in (None, "application/x-json-stream"):
+                raise RuntimeError("polly_speech_marks_content_type_invalid")
+            marks_raw = stream.read(MAX_SPEECH_MARK_BYTES + 1)
+        finally:
+            close = getattr(stream, "close", None)
+            if callable(close):
+                close()
+        if not isinstance(marks_raw, bytes):
+            raise RuntimeError("polly_speech_marks_invalid")
+        if len(marks_raw) > MAX_SPEECH_MARK_BYTES:
+            raise RuntimeError("polly_speech_marks_limit")
+        return PollySpeechWithVisemes(audio, _parse_viseme_marks(marks_raw))
+
+
+def _parse_viseme_marks(marks_raw: bytes) -> tuple[PollyVisemeMark, ...]:
+    """Parse Polly's newline-delimited speech-mark JSON into bounded marks.
+
+    A malformed line or an undocumented viseme value is dropped rather than
+    failing the whole utterance: the audio is already synthesized, and a
+    mouth that misses one phoneme beats an avatar that refuses to speak.
+    """
+
+    marks: list[PollyVisemeMark] = []
+    for line in marks_raw.decode("utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(entry, dict) or entry.get("type") != "viseme":
+            continue
+        time_ms = entry.get("time")
+        viseme = entry.get("value")
+        if not isinstance(time_ms, int) or not 0 <= time_ms <= 600_000:
+            continue
+        if viseme not in POLLY_VISEMES:
+            continue
+        marks.append(PollyVisemeMark(time_ms, viseme))
+        if len(marks) >= MAX_VISEME_MARKS:
+            break
+    return tuple(marks)

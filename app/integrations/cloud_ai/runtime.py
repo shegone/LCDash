@@ -12,6 +12,7 @@ from .contracts import (
     CloudPollyProvider,
     CloudTranscribeProvider,
     PollySpeechRequest,
+    PollySpeechWithVisemes,
     TranscribePushToTalkRequest,
 )
 from .provider_config import CloudAiMode, CloudAiProviderConfig
@@ -121,3 +122,36 @@ class CloudAiRuntime:
         if not audio or len(audio) > self._config.max_synthesized_audio_bytes:
             raise CloudAiRuntimeUnavailable("audio_output_limit")
         return audio
+
+    def synthesize_with_visemes(
+        self, request: PollySpeechRequest
+    ) -> PollySpeechWithVisemes:
+        """Audio plus mouth-shape timeline for the avatar; fails closed.
+
+        The capability is probed rather than assumed because the injected
+        provider only has to satisfy ``CloudPollyProvider``; a provider
+        without speech marks yields an unavailable error, never a silent
+        audio-only downgrade the client would misread as "no mouth motion
+        needed".
+        """
+
+        if request.tenant_id != self._config.tenant_id:
+            raise CloudAiRuntimeUnavailable("tenant_not_authorized")
+        if (
+            not self._config.voice_enabled
+            or self._polly is None
+        ):
+            raise CloudAiRuntimeUnavailable("polly_unavailable")
+        synthesize = getattr(self._polly, "synthesize_with_visemes", None)
+        if not callable(synthesize):
+            raise CloudAiRuntimeUnavailable("polly_visemes_unavailable")
+        try:
+            speech = synthesize(request)
+        except Exception as exc:
+            raise CloudAiRuntimeUnavailable("polly_provider_failed") from exc
+        if (
+            not isinstance(speech, PollySpeechWithVisemes)
+            or len(speech.audio_mp3) > self._config.max_synthesized_audio_bytes
+        ):
+            raise CloudAiRuntimeUnavailable("audio_output_limit")
+        return speech

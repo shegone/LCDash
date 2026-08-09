@@ -93,6 +93,55 @@ class CloudPilotRoleContractTests(unittest.TestCase):
                         ["lcdash-pilot-admin"], permission
                     )
 
+    def test_avatar_group_maps_to_the_avatar_role(self):
+        self.assertEqual(
+            resolve_pilot_role(["lcdash-pilot-avatar"]),
+            PilotRole.AVATAR,
+        )
+
+    def test_any_dashboard_role_wins_over_avatar(self):
+        """The avatar group binds loosest by design.
+
+        The group exists for accounts that hold nothing else; someone also in
+        a dashboard group keeps their dashboard role and reaches the avatar
+        page through its permission instead of being narrowed to it.
+        """
+        for group, expected in (
+            ("lcdash-pilot-user", PilotRole.USER),
+            ("lcdash-pilot-supervisor", PilotRole.SUPERVISOR),
+            ("lcdash-pilot-admin", PilotRole.ADMIN),
+        ):
+            with self.subTest(group=group):
+                self.assertEqual(
+                    resolve_pilot_role(["lcdash-pilot-avatar", group]),
+                    expected,
+                )
+
+    def test_avatar_permission_is_conversation_only(self):
+        self.assertEqual(
+            authorize_pilot_permission(["lcdash-pilot-avatar"], "avatar.converse"),
+            PilotRole.AVATAR,
+        )
+        # An avatar account gets nothing the dashboard tiers have...
+        for permission in (
+            "dashboard.synthetic.view",
+            "map.view",
+            "station.alerts.view",
+            "analytics.review.view",
+            "pilot.access.review",
+        ):
+            with self.subTest(permission=permission):
+                with self.assertRaises(PilotAuthorizationDenied):
+                    authorize_pilot_permission(["lcdash-pilot-avatar"], permission)
+        # ...the restricted user tier does not gain the conversation (MAE
+        # narrates live CAD, which is what that tier exists to withhold)...
+        with self.assertRaises(PilotAuthorizationDenied):
+            authorize_pilot_permission(["lcdash-pilot-user"], "avatar.converse")
+        # ...and dashboard roles above it do get the conversation.
+        for group in ("lcdash-pilot-supervisor", "lcdash-pilot-admin"):
+            with self.subTest(group=group):
+                authorize_pilot_permission([group], "avatar.converse")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,157 @@
+:root {
+    --bg: #0b1220;
+    --panel: rgba(15, 26, 46, 0.88);
+    --line: rgba(148, 187, 233, 0.18);
+    --text: #e8eefb;
+    --muted: #93a4c3;
+    --accent: #2fbfae;
+    --accent-soft: rgba(47, 191, 174, 0.16);
+    --danger: #e2606c;
+}
+* { box-sizing: border-box; }
+html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+#avatar-stage {
+    position: fixed;
+    inset: 0;
+}
+#avatar-stage canvas { display: block; }
+#portrait-fallback {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at center, #16233d 0%, var(--bg) 75%);
+}
+#portrait-fallback img {
+    width: min(46vh, 78vw);
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+}
+.hud {
+    position: fixed;
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+    z-index: 10;
+}
+#hud-top {
+    top: 0; left: 0; right: 0;
+    padding: 0.7rem 1rem;
+    justify-content: space-between;
+    background: linear-gradient(180deg, rgba(11, 18, 32, 0.92), rgba(11, 18, 32, 0));
+}
+.hud-brand { display: flex; gap: 0.65rem; align-items: center; min-width: 0; }
+.hud-brand img { height: 34px; }
+.hud-brand strong { font-size: 1.02rem; letter-spacing: 0.04em; }
+.hud-brand small { display: block; color: var(--muted); font-size: 0.72rem; }
+.hud-pills { display: flex; gap: 0.4rem; flex-wrap: wrap; justify-content: flex-end; }
+.pill {
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--muted);
+    border-radius: 999px;
+    font-size: 0.72rem;
+    padding: 0.28rem 0.7rem;
+    white-space: nowrap;
+}
+.pill.ok { color: var(--accent); border-color: rgba(47, 191, 174, 0.45); }
+.pill.err { color: var(--danger); border-color: rgba(226, 96, 108, 0.5); }
+.pill button {
+    all: unset;
+    cursor: pointer;
+    color: inherit;
+}
+.pill.frame-active { color: var(--text); background: var(--accent-soft); }
+#safety-note {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(var(--dock-height, 220px) + 0.6rem);
+    z-index: 10;
+    font-size: 0.7rem;
+    color: var(--muted);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 0.3rem 0.9rem;
+    max-width: 92vw;
+    text-align: center;
+}
+#dock {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 0.9rem;
+    width: min(760px, calc(100vw - 1.4rem));
+    z-index: 11;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    backdrop-filter: blur(10px);
+    padding: 0.7rem;
+}
+#transcript {
+    max-height: 60vh;
+    min-height: 8vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    padding: 0.2rem 0.3rem 0.5rem;
+}
+.msg { display: flex; }
+.msg > div {
+    border-radius: 12px;
+    padding: 0.45rem 0.7rem;
+    font-size: 0.86rem;
+    line-height: 1.35;
+    max-width: 86%;
+    white-space: pre-wrap;
+}
+.msg.user { justify-content: flex-end; }
+.msg.user > div { background: rgba(78, 129, 208, 0.28); }
+.msg.mae > div { background: rgba(47, 191, 174, 0.14); }
+.msg.status > div {
+    background: none;
+    color: var(--muted);
+    font-size: 0.74rem;
+    font-style: italic;
+}
+#composer { display: flex; gap: 0.5rem; align-items: center; }
+#question {
+    flex: 1;
+    background: rgba(9, 15, 27, 0.85);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 0.62rem 0.8rem;
+    font-size: 0.92rem;
+    outline: none;
+}
+#question:focus { border-color: var(--accent); }
+.dock-btn {
+    border: 1px solid var(--line);
+    background: rgba(9, 15, 27, 0.85);
+    color: var(--text);
+    border-radius: 12px;
+    padding: 0.6rem 0.85rem;
+    font-size: 0.9rem;
+    cursor: pointer;
+    user-select: none;
+}
+.dock-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+#ptt.recording { background: var(--danger); border-color: var(--danger); color: #fff; }
+#send { background: var(--accent-soft); border-color: rgba(47, 191, 174, 0.45); }
+#stop-speech { display: none; }
+body.kiosk #hud-top .hud-pills .pill:not(#pill-voice) { display: none; }
+@media (max-width: 640px) {
+    .hud-brand small { display: none; }
+}

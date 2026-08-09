@@ -34,6 +34,17 @@ class PollyVoice(StrEnum):
     JOANNA = "Joanna"
 
 
+# Polly's documented viseme inventory for en-US speech marks. The avatar's
+# mouth animation maps these to ARKit blendshapes client-side; an identifier
+# outside this set is a contract violation, not a new mouth shape.
+POLLY_VISEMES = frozenset(
+    {"p", "t", "S", "T", "f", "k", "i", "r", "s", "u", "@", "a", "e", "E", "o", "O", "sil"}
+)
+# Roughly 2400 phonemes fit in the 3000-character text bound; this leaves
+# headroom without letting a malfunctioning stream grow without limit.
+MAX_VISEME_MARKS = 4000
+
+
 class PushToTalkAudioFormat(StrEnum):
     PCM = "pcm"
     OGG_OPUS = "ogg-opus"
@@ -187,6 +198,34 @@ class PollySpeechRequest:
         return prepare_polly_text(self.display_text)
 
 
+@dataclass(frozen=True, slots=True)
+class PollyVisemeMark:
+    """One Polly viseme speech mark: when (audio milliseconds) and which shape."""
+
+    time_ms: int
+    viseme: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.time_ms, int) or not 0 <= self.time_ms <= 600_000:
+            raise ValueError("Viseme timestamps must be bounded non-negative milliseconds.")
+        if self.viseme not in POLLY_VISEMES:
+            raise ValueError("Viseme identifier is not in Polly's documented set.")
+
+
+@dataclass(frozen=True, slots=True)
+class PollySpeechWithVisemes:
+    """One synthesized utterance and the mouth-shape timeline that drives it."""
+
+    audio_mp3: bytes
+    visemes: tuple[PollyVisemeMark, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.audio_mp3, bytes) or not self.audio_mp3:
+            raise ValueError("Avatar speech requires non-empty MP3 audio.")
+        if len(self.visemes) > MAX_VISEME_MARKS:
+            raise ValueError("Viseme timeline exceeds the bounded mark count.")
+
+
 @runtime_checkable
 class CloudAdvisoryProvider(Protocol):
     def answer(self, request: AdvisoryRagRequest) -> AdvisoryRagResponse: ...
@@ -200,3 +239,17 @@ class CloudTranscribeProvider(Protocol):
 @runtime_checkable
 class CloudPollyProvider(Protocol):
     def synthesize(self, request: PollySpeechRequest) -> bytes: ...
+
+
+@runtime_checkable
+class CloudPollyAvatarProvider(CloudPollyProvider, Protocol):
+    """A Polly provider that can also return the viseme timeline.
+
+    Separate from ``CloudPollyProvider`` so existing sentence-speech fakes and
+    wiring keep working unchanged; the runtime probes for this capability and
+    fails closed when the injected provider lacks it.
+    """
+
+    def synthesize_with_visemes(
+        self, request: PollySpeechRequest
+    ) -> PollySpeechWithVisemes: ...

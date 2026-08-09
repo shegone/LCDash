@@ -2,6 +2,14 @@
 
 Date: 2026-08-01
 
+> **Historical record.** This inventory predates the avatar build plan
+> ([`docs/planning/MAE_AVATAR_PLAN_2026-08-09.md`](planning/MAE_AVATAR_PLAN_2026-08-09.md)),
+> which chose Character Creator over MetaHuman and browser rendering over
+> Pixel Streaming. The MetaHuman/Live Link evaluation paths below are no
+> longer the direction; the hardware facts and installed-software versions
+> remain useful. Note the version inventoried here is Character Creator
+> 4.72 — the plan's Phase 0 assumes CC5.
+
 This was a read-only inventory. iClone, Character Creator, and Unreal Editor
 were not closed or modified.
 

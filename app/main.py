@@ -22,7 +22,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config.settings import settings
 from app.core.alb_identity import AlbIdentity, resolve_alb_identity
-from app.core import sanitized_tier
+from app.core import avatar_tier, sanitized_tier
 from app.core.cloud_pilot_roles import (
     PilotAuthorizationDenied,
     PilotRole,
@@ -183,6 +183,7 @@ from app.services.cloud_ai_streaming import (
     build_cloud_advisory_streamer,
     iter_advisory_ndjson,
     stream_cloud_advisory,
+    synthesize_cloud_avatar_speech,
     synthesize_cloud_sentence,
 )
 from app.services.centralsquare import (
@@ -550,7 +551,12 @@ def _units_without_positions(units: list) -> list:
 
 
 @app.get("/")
-def home():
+def home(request: Request):
+    # Avatar-only accounts have no dashboard to land on; everything except
+    # the avatar surface answers 403 for them (see restrict_avatar_tier).
+    resolved = _resolve_pilot_identity(request)
+    if resolved is not None and avatar_tier.restricts(resolved[1]):
+        return RedirectResponse(url="/mae/avatar", status_code=307)
     return RedirectResponse(url="/dashboard", status_code=307)
 
 
@@ -961,6 +967,37 @@ async def restrict_sanitized_tier(request: Request, call_next):
                     "detail": (
                         "This view is not available on your account. "
                         "Ask an administrator if you need access."
+                    )
+                },
+            )
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def restrict_avatar_tier(request: Request, call_next):
+    """Deny-by-default path gate for the avatar-only role.
+
+    Same shape as ``restrict_sanitized_tier`` above, same rationale, and the
+    same short-circuit: paths on the avatar allowlist skip identity
+    resolution entirely, and only a verified avatar-role identity is denied
+    the rest. The two gates are independent -- a role restricted by one is
+    not resolved by the other -- so neither can widen what the other closed.
+    """
+
+    if avatar_tier.is_path_allowed_for_avatar(request.url.path):
+        return await call_next(request)
+
+    resolved = _resolve_pilot_identity(request)
+    if resolved is not None:
+        _identity, role = resolved
+        if avatar_tier.restricts(role):
+            logger.info("Avatar tier denied %s for %s", request.url.path, role)
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "detail": (
+                        "This account is for talking with MAE only. "
+                        "Ask an administrator if you need more access."
                     )
                 },
             )
@@ -2280,6 +2317,27 @@ def mae_page(request: Request):
     )
 
 
+@app.get("/mae/avatar")
+def mae_avatar_page(request: Request):
+    """MAE's face: the avatar conversation surface from the 2026-08-09 plan.
+
+    Standalone rather than extending the dashboard layout on purpose: the
+    avatar tier cannot reach the dashboard's nav targets or APIs, so a page
+    shell that references them would render broken chrome for exactly the
+    audience this page exists for.
+    """
+
+    return templates.TemplateResponse(
+        request=request,
+        name="mae_avatar.html",
+        context={
+            "version": "0.3.0",
+            "cloud_mode": cloud_mode_enabled(settings),
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.get("/integrations/health")
 def integrations_health_page(request: Request):
     presentation = _cloud_presentation_status()
@@ -2911,6 +2969,39 @@ def cloud_ai_sentence_speech_api(payload: CloudSentenceSpeechRequest):
         media_type="audio/mpeg",
         headers={"Cache-Control": "no-store"},
     )
+
+
+class AvatarSpeechRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=3000)
+    voice: str = Field(default="", max_length=40)
+
+
+@app.post("/api/mae/avatar/speech")
+def mae_avatar_speech_api(payload: AvatarSpeechRequest):
+    """MAE's avatar voice: one utterance as audio plus its viseme timeline.
+
+    The one speech route on the avatar tier's allowlist. MAE-persona only --
+    the avatar surface is her face -- and JSON rather than raw MP3 because
+    the mouth animation needs the timeline alongside the audio.
+    """
+
+    if not cloud_mode_enabled(settings):
+        raise HTTPException(status_code=404, detail="Cloud AI is not configured here.")
+    try:
+        speech = synthesize_cloud_avatar_speech(
+            cloud_ai_runtime,
+            cloud_ai_config,
+            request_id=f"cloud-avatar-{secrets.token_hex(12)}",
+            text=payload.text,
+            voice=payload.voice,
+        )
+    except CloudAiRuntimeUnavailable as exc:
+        status = cloud_ai_status(cloud_ai_config, cloud_ai_runtime)
+        raise HTTPException(
+            status_code=503,
+            detail=status["tts"]["disabled_reason"] or str(exc),
+        ) from exc
+    return JSONResponse(content=speech, headers={"Cache-Control": "no-store"})
 
 
 @app.post("/api/voice/speech")

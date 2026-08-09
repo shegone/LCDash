@@ -15,6 +15,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator
 from functools import cached_property
 from typing import Any, Protocol
+import base64
 import json
 import re
 
@@ -765,3 +766,40 @@ def synthesize_cloud_sentence(
     return runtime.synthesize(
         PollySpeechRequest(request_id, config.tenant_id, spoken, selected_voice)
     )
+
+
+def synthesize_cloud_avatar_speech(
+    runtime: CloudAiRuntime,
+    config: CloudAiProviderConfig,
+    *,
+    request_id: str,
+    text: str,
+    voice: str = "",
+) -> dict[str, Any]:
+    """One avatar utterance: sanitized text in, audio plus viseme timeline out.
+
+    MAE-only by construction -- the avatar surface is her face. The same
+    sanitation as sentence speech applies, and the timeline comes from the
+    same synthesized text, so the mouth can never say something the audio
+    does not.
+    """
+
+    spoken = sanitize_spoken_text(text)
+    if not spoken:
+        raise CloudAiRuntimeUnavailable("empty_speech_text")
+    try:
+        selected_voice = PollyVoice(voice) if voice else voice_for_persona(config, "mae")
+    except ValueError as exc:
+        raise CloudAiRuntimeUnavailable("polly_voice_not_allowed") from exc
+    speech = runtime.synthesize_with_visemes(
+        PollySpeechRequest(request_id, config.tenant_id, spoken, selected_voice)
+    )
+    return {
+        "audio_base64": base64.b64encode(speech.audio_mp3).decode("ascii"),
+        "audio_format": "mp3",
+        "voice": selected_voice.value,
+        "visemes": [
+            {"time_ms": mark.time_ms, "viseme": mark.viseme}
+            for mark in speech.visemes
+        ],
+    }

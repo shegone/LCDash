@@ -110,6 +110,11 @@
                 {{ nav_item("/reports", "bi-file-earmark-bar-graph", "Pre-Built Reports", current_path.startswith("/reports")) }}
                 {{ nav_item("/nga911-intelligence", "bi-diagram-3-fill", "NGA911 Intelligence", current_path == "/nga911-intelligence") }}
                 {{ nav_item("/mae", "bi-robot", "MAE Assistant", current_path == "/mae") }}
+                {#- Avatar surface: inside the not-restricted block on purpose.
+                    The user tier must not reach MAE, who narrates live CAD;
+                    avatar-group accounts land on /mae/avatar directly and
+                    never see this sidebar at all. -#}
+                {{ nav_item("/mae/avatar", "bi-person-video3", "MAE Avatar", current_path == "/mae/avatar") }}
                 {{ nav_item("/mindshare", "bi-broadcast", "Mindshare / JACK", current_path.startswith("/mindshare")) }}
                 {{ nav_item("/knowledge", "bi-journal-text", "Knowledge Library", current_path == "/knowledge") }}
             </div>

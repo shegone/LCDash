@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+{#- Standalone on purpose: avatar-tier accounts can reach only this surface,
+    so extending the dashboard layout would render nav chrome whose every
+    target answers 403 for exactly this page's primary audience. -#}
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MAE | Logan County 911</title>
+    <link rel="icon" href="/static/img/logan911-logo.png">
+    <link rel="stylesheet" href="/static/css/lcdash-mae-avatar.css?v=20260809-avatar-v1">
+</head>
+<body data-cloud-mode="{{ 'true' if cloud_mode else 'false' }}">
+    <div id="avatar-stage" aria-hidden="true"></div>
+    <div id="portrait-fallback">
+        <img src="/static/img/mae/mae-neutral.jpg" alt="MAE virtual assistant portrait">
+    </div>
+
+    <header id="hud-top" class="hud">
+        <div class="hud-brand">
+            <img src="/static/img/logan911-logo.png" alt="">
+            <div>
+                <strong>MAE</strong>
+                <small>Mission Assistance Engine &middot; Logan County 911</small>
+            </div>
+        </div>
+        <div class="hud-pills">
+            <span class="pill" id="pill-identity">Checking sign-in&hellip;</span>
+            <span class="pill" id="pill-voice">Checking voice&hellip;</span>
+            <span class="pill" id="pill-frame-console"><button type="button" data-frame="console">Console</button></span>
+            <span class="pill" id="pill-frame-booth"><button type="button" data-frame="booth">Full body</button></span>
+        </div>
+    </header>
+
+    <div id="safety-note" role="note">
+        Advisory only. MAE cannot dispatch, page, alter CAD, or operate ESInet services.
+    </div>
+
+    <section id="dock" aria-label="Talk with MAE">
+        <div id="transcript" aria-live="polite"></div>
+        <div id="composer">
+            <button class="dock-btn" id="ptt" type="button"
+                    title="Hold to talk">&#127908; Hold to talk</button>
+            <input id="question" type="text" autocomplete="off"
+                   maxlength="4000" placeholder="Ask MAE&hellip;">
+            <button class="dock-btn" id="send" type="button">Send</button>
+            <button class="dock-btn" id="stop-speech" type="button">Stop</button>
+        </div>
+    </section>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "/static/vendor/three-0.171.0/three.module.min.js",
+            "three/addons/loaders/GLTFLoader.js": "/static/vendor/three-0.171.0/GLTFLoader.js"
+        }
+    }
+    </script>
+    <script type="module" src="/static/js/lcdash-mae-avatar.js?v=20260809-avatar-v1"></script>
+</body>
+</html>
