@@ -21,6 +21,19 @@ class Phase1DocumentLibraryStack(cdk.Stack):
         f"{TENANT_ROOT}/mindshare/software-catalog",
         f"{TENANT_ROOT}/manifests/approved",
     )
+    # Admin cloud-uploads (2026-08-09): written by the running app's
+    # /admin/knowledge page, NOT by any pipeline here, and deliberately NOT in
+    # READ_PREFIXES -- that tuple is the frozen 2026-08-05 approved layout
+    # (a contract test pins it against the historical upload plan) and also
+    # scopes this stack's dormant read role. Write access to these two lives
+    # on the ECS task role (foundation_stack._grant_knowledge_uploads); the
+    # indexing data source comes from
+    # scripts/provision_cloud_uploads_data_source.py. jack-uploads nests
+    # /mindshare/ because the persona filter confines JACK to such paths.
+    CLOUD_UPLOAD_PREFIXES = (
+        f"{TENANT_ROOT}/mae-uploads/current",
+        f"{TENANT_ROOT}/jack-uploads/mindshare/current",
+    )
     STAGING_PREFIX = f"{TENANT_ROOT}/staging"
 
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:

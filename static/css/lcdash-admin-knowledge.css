@@ -1,0 +1,296 @@
+/* Admin: AI knowledge library (/admin/knowledge).
+   Loaded alongside lcdash-admin.css and reuses its shared classes
+   (.admin-panel, .admin-eyebrow, .admin-safety, .admin-progress,
+   .admin-error, .admin-empty, .admin-invite-feedback, .admin-row-action,
+   .admin-row-note). This file only adds what is knowledge-specific. */
+
+.knowledge-hero {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 24px;
+    padding: 28px;
+    overflow: hidden;
+}
+
+.knowledge-hero h1 {
+    margin: 4px 0 6px;
+    color: #fff;
+    font-size: clamp(2rem, 4vw, 3rem);
+    font-weight: 950;
+}
+
+.knowledge-hero p {
+    margin: 0;
+    color: #91afc9;
+}
+
+.knowledge-provenance {
+    display: block;
+    margin-top: 3px;
+    color: #7ea8d3;
+    font-size: .8rem;
+}
+
+/* Upload form */
+
+.knowledge-upload-form {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+    margin-top: 18px;
+}
+
+.knowledge-dropzone {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    padding: 22px 20px;
+    border: 2px dashed rgba(76, 201, 255, .38);
+    border-radius: 14px;
+    color: #dff8ff;
+    background: rgba(76, 201, 255, .06);
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
+}
+
+.knowledge-dropzone i { font-size: 1.9rem; color: #4cc9ff; }
+.knowledge-dropzone strong { display: block; }
+.knowledge-dropzone span { color: #91afc9; font-size: .82rem; }
+
+.knowledge-dropzone:hover,
+.knowledge-dropzone.is-dragover {
+    border-color: #4cc9ff;
+    background: rgba(76, 201, 255, .14);
+}
+
+.knowledge-dropzone:focus-visible,
+.knowledge-destination-card input:focus-visible,
+.knowledge-sync-button:focus-visible,
+#knowledge-upload-submit:focus-visible {
+    outline: 3px solid rgba(85, 212, 255, .62);
+    outline-offset: 2px;
+}
+
+.knowledge-file-preview {
+    margin: 0;
+    padding: 8px 13px;
+    border: 1px solid rgba(76, 201, 255, .25);
+    border-radius: 10px;
+    color: #dff8ff;
+    background: rgba(76, 201, 255, .1);
+    font-size: .86rem;
+    word-break: break-all;
+}
+
+/* Destination cards */
+
+.knowledge-destinations {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.knowledge-destinations legend {
+    margin-bottom: 8px;
+    padding: 0;
+    color: #9ec0da;
+    font-size: .75rem;
+    font-weight: 850;
+    text-transform: uppercase;
+}
+
+.knowledge-destination-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    min-width: 250px;
+    flex: 1 1 250px;
+    max-width: 380px;
+    padding: 13px 15px;
+    border: 1px solid rgba(76, 201, 255, .28);
+    border-radius: 12px;
+    background: rgba(5, 16, 30, .55);
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
+}
+
+.knowledge-destination-card:hover { border-color: rgba(76, 201, 255, .55); }
+
+.knowledge-destination-card:has(input:checked) {
+    border-color: #4cc9ff;
+    background: rgba(76, 201, 255, .12);
+}
+
+.knowledge-destination-card input {
+    margin-top: 3px;
+    accent-color: #4cc9ff;
+}
+
+.knowledge-destination-body strong { display: block; color: #fff; font-size: .92rem; }
+.knowledge-destination-body span { color: #91afc9; font-size: .8rem; }
+
+#knowledge-upload-submit {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 42px;
+    border: 0;
+    border-radius: 10px;
+    padding: 8px 18px;
+    color: #04131f;
+    background: linear-gradient(135deg, #4cc9ff, #69ffb9);
+    font-weight: 900;
+    cursor: pointer;
+}
+
+#knowledge-upload-submit:disabled { opacity: .55; cursor: default; }
+
+/* Sync panel */
+
+.knowledge-sync-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 42px;
+    border: 1px solid rgba(76, 201, 255, .4);
+    border-radius: 10px;
+    padding: 8px 16px;
+    color: #dff8ff;
+    background: rgba(76, 201, 255, .14);
+    font-weight: 800;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.knowledge-sync-button:disabled { opacity: .55; cursor: default; }
+
+.knowledge-sync-status {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-top: 18px;
+    padding: 13px 15px;
+    border-radius: 12px;
+    color: #dff8ff;
+    background: rgba(76, 201, 255, .08);
+    border: 1px solid rgba(76, 201, 255, .2);
+}
+
+.knowledge-sync-status strong { display: block; }
+
+.knowledge-sync-subtitle {
+    display: block;
+    margin-top: 2px;
+    color: #91afc9;
+    font-size: .82rem;
+}
+
+.knowledge-sync-status.is-running {
+    color: #dff8ff;
+    background: rgba(76, 201, 255, .1);
+    border-color: rgba(76, 201, 255, .3);
+}
+
+.knowledge-sync-status.is-complete {
+    color: var(--lcdash-green, #69ffb9);
+    background: rgba(105, 255, 185, .08);
+    border-color: rgba(105, 255, 185, .3);
+}
+
+.knowledge-sync-status.is-complete .knowledge-sync-subtitle,
+.knowledge-sync-status.is-complete .knowledge-sync-stats { color: #a7c4da; }
+
+.knowledge-sync-status.is-failed {
+    color: #ffbdc9;
+    background: rgba(255, 91, 126, .1);
+    border-color: rgba(255, 91, 126, .3);
+}
+
+.knowledge-sync-stats {
+    margin: 8px 0 0;
+    padding-left: 18px;
+    color: #b9d8ed;
+    font-size: .84rem;
+}
+
+.knowledge-sync-stats li { margin-bottom: 2px; }
+
+/* Documents table (mirrors .admin-users-table) */
+
+.knowledge-table-wrap { margin-top: 18px; }
+
+.knowledge-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .88rem;
+}
+
+.knowledge-table th {
+    text-align: left;
+    padding: 8px 12px;
+    color: #7ea8d3;
+    font-size: .74rem;
+    font-weight: 900;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-bottom: 1px solid rgba(76, 201, 255, .3);
+}
+
+.knowledge-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(76, 201, 255, .12);
+    color: #dff8ff;
+    vertical-align: middle;
+}
+
+.knowledge-cell-filename { font-weight: 700; word-break: break-all; }
+.knowledge-cell-size,
+.knowledge-cell-uploaded { color: #91afc9; white-space: nowrap; }
+.knowledge-cell-uploader { color: #b9d8ed; word-break: break-all; }
+
+.knowledge-table tr.is-busy td {
+    opacity: .5;
+    transition: opacity .15s ease;
+}
+
+/* Destination chips: MAE cyan, JACK purple */
+
+.knowledge-destination-chip {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: .7rem;
+    font-weight: 900;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.knowledge-destination-chip.is-mae {
+    color: #4cc9ff;
+    background: rgba(76, 201, 255, .13);
+    border: 1px solid rgba(76, 201, 255, .35);
+}
+
+.knowledge-destination-chip.is-jack {
+    color: #c79bff;
+    background: rgba(168, 121, 255, .14);
+    border: 1px solid rgba(168, 121, 255, .4);
+}
+
+/* Responsive: table scrolls horizontally in its container below 900px */
+
+@media (max-width: 900px) {
+    .knowledge-hero,
+    .admin-panel-header { align-items: stretch; flex-direction: column; }
+    .knowledge-sync-button { align-self: flex-start; }
+    .knowledge-destination-card { max-width: none; }
+    .knowledge-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .knowledge-table { min-width: 760px; }
+}

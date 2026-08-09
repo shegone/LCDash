@@ -155,6 +155,32 @@ class Settings:
             "onprem-approved-164-2026-08-05/"
         ),
     )
+    # The Bedrock data source that indexes ADMIN-UPLOADED documents (the two
+    # cloud-uploads prefixes), as opposed to the two out-of-band data sources
+    # holding the approved on-prem sets. Blank means the uploads feature is
+    # not provisioned: upload pages still render but sync reports itself
+    # unconfigured rather than guessing at a data source.
+    cloud_ai_uploads_data_source_id: str = _env(
+        "LCDASH_CLOUD_AI_UPLOADS_DATA_SOURCE_ID"
+    ).strip()
+    # Where admin knowledge uploads land. County-specific values live HERE
+    # (settings is the one sanctioned home for them -- see the county-profile
+    # contract test); the upload service takes these as plain arguments.
+    # jack's prefix must contain "/mindshare/" (persona filter) and its first
+    # segment after document-library/ must differ from "mindshare" (library
+    # key collision) -- see knowledge_upload_service's module docstring.
+    knowledge_upload_bucket: str = _env(
+        "LCDASH_KNOWLEDGE_UPLOAD_BUCKET",
+        "lcdash-p1-logan-use1-862772137583-document-library",
+    ).strip()
+    knowledge_upload_mae_prefix: str = _env(
+        "LCDASH_KNOWLEDGE_UPLOAD_MAE_PREFIX",
+        "tenants/logan-synthetic/document-library/mae-uploads/current/",
+    ).strip()
+    knowledge_upload_jack_prefix: str = _env(
+        "LCDASH_KNOWLEDGE_UPLOAD_JACK_PREFIX",
+        "tenants/logan-synthetic/document-library/jack-uploads/mindshare/current/",
+    ).strip()
     cloud_ai_polly_voice: str = _env(
         "LCDASH_CLOUD_AI_POLLY_VOICE", "Joanna"
     ).strip()

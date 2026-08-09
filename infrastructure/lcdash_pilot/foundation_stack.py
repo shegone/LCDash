@@ -227,6 +227,9 @@ class Phase1FoundationStack(cdk.Stack):
                 "LCDASH_CLOUD_AI_ALLOWED_S3_PREFIXES": parameters[
                     "cloud_ai_allowed_s3_prefixes"
                 ].value_as_string,
+                "LCDASH_CLOUD_AI_UPLOADS_DATA_SOURCE_ID": parameters[
+                    "cloud_ai_uploads_data_source_id"
+                ].value_as_string,
                 "LCDASH_CLOUD_AI_GENERATION_MODEL_ID": "us.amazon.nova-pro-v1:0",
                 "LCDASH_CLOUD_AI_MAX_OUTPUT_TOKENS": "400",
                 "LCDASH_CLOUD_AI_RETRIEVAL_RESULT_LIMIT": "5",
@@ -596,6 +599,10 @@ class Phase1FoundationStack(cdk.Stack):
         self._grant_content_access(task_role, content_bucket)
         self._grant_document_library_read(task_role)
         self._grant_pilot_access_administration(task_role, user_pool)
+        self._grant_knowledge_uploads(
+            task_role,
+            parameters["cloud_ai_knowledge_base_id"],
+        )
         self._grant_managed_providers(
             task_role,
             parameters["cloud_ai_knowledge_base_id"],
@@ -845,6 +852,21 @@ class Phase1FoundationStack(cdk.Stack):
                 min_length=1,
                 description="Comma-separated approved S3 prefixes for cited retrieval.",
             ),
+            "cloud_ai_uploads_data_source_id": cdk.CfnParameter(
+                self,
+                "CloudAiUploadsDataSourceId",
+                type="String",
+                # Blank means admin uploads are not provisioned; the data
+                # source is created out-of-band by
+                # scripts/provision_cloud_uploads_data_source.py, matching how
+                # the knowledge base itself was provisioned.
+                allowed_pattern="^([A-Z0-9]{10})?$",
+                default="",
+                description=(
+                    "Bedrock data source ID indexing the admin cloud-uploads "
+                    "prefixes; blank until provisioned."
+                ),
+            ),
             "create_trail": cdk.CfnParameter(
                 self,
                 "CreatePilotCloudTrail",
@@ -1065,6 +1087,70 @@ class Phase1FoundationStack(cdk.Stack):
                     "cognito-idp:AdminEnableUser",
                 ],
                 resources=[user_pool.user_pool_arn],
+            )
+        )
+
+    def _grant_knowledge_uploads(
+        self, role: iam.Role, knowledge_base_id: cdk.CfnParameter
+    ) -> None:
+        """Admin document uploads: write access to the two cloud-uploads
+        prefixes and the right to run ingestion syncs -- nothing else.
+
+        This is deliberately disjoint from ``_grant_document_library_read``:
+        the approved on-prem sets stay read-only forever (that grant's
+        docstring still holds), while uploads live under their own prefixes
+        whose names encode their provenance. ``mae-uploads`` is retrievable
+        by MAE only; ``jack-uploads/mindshare`` contains ``/mindshare/``
+        because the persona filter confines JACK to such paths, and its first
+        path segment is distinct so the document-library key parser cannot
+        collide it with the approved mindshare set. DeleteObject is granted
+        because admins remove upload mistakes; the approved prefixes remain
+        untouchable -- this statement's resources do not include them.
+        """
+        uploads_bucket = s3.Bucket.from_bucket_name(
+            self,
+            "KnowledgeUploadsBucket",
+            bucket_name=cdk.Fn.sub(
+                f"{NAME_PREFIX}-${{AWS::AccountId}}-document-library"
+            ),
+        )
+        upload_prefixes = [
+            "tenants/logan-synthetic/document-library/mae-uploads/current/*",
+            "tenants/logan-synthetic/document-library/jack-uploads/mindshare/current/*",
+        ]
+        role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["s3:ListBucket"],
+                resources=[uploads_bucket.bucket_arn],
+                conditions={"StringLike": {"s3:prefix": upload_prefixes}},
+            )
+        )
+        role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+                resources=[
+                    uploads_bucket.arn_for_objects(prefix)
+                    for prefix in upload_prefixes
+                ],
+            )
+        )
+        role.add_to_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "bedrock:StartIngestionJob",
+                    "bedrock:GetIngestionJob",
+                    "bedrock:ListIngestionJobs",
+                ],
+                resources=[
+                    cdk.Fn.sub(
+                        "arn:aws:bedrock:us-east-1:${AWS::AccountId}:"
+                        "knowledge-base/${KnowledgeBaseId}",
+                        {"KnowledgeBaseId": knowledge_base_id.value_as_string},
+                    )
+                ],
+                conditions={
+                    "StringEquals": {"aws:RequestedRegion": APPROVED_REGION}
+                },
             )
         )
 

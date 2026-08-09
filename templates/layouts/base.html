@@ -101,6 +101,7 @@
                 {% set nav_identity = pilot_identity_badge(request) if pilot_identity_badge is defined else {"role": ""} %}
                 {% if nav_identity.role == "admin" %}
                 {{ nav_item("/admin/users", "bi-people-fill", "User Admin", current_path == "/admin/users") }}
+                {{ nav_item("/admin/knowledge", "bi-cloud-arrow-up-fill", "Knowledge Uploads", current_path == "/admin/knowledge") }}
                 {% endif %}
             </div>
         </section>

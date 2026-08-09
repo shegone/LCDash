@@ -21,6 +21,14 @@ class Phase1KnowledgeSearchStack(cdk.Stack):
     )
     EMBEDDING_MODEL_ID = "amazon.titan-embed-text-v2:0"
     EMBEDDING_DIMENSIONS = 1024
+    # NOTE (2026-08-09): the LIVE knowledge base this stack mirrors also has a
+    # third data source, lcdash_cloud_uploads, indexing the two admin-upload
+    # prefixes (mae-uploads/current, jack-uploads/mindshare/current). It was
+    # provisioned out-of-band by scripts/provision_cloud_uploads_data_source.py
+    # -- the same way the KB itself was -- with chunking/parsing copied
+    # verbatim from the centralsquare source. This plan-only stack is left
+    # unexpanded on purpose: it has never been deployed, and inventing a
+    # mirror resource here would imply a provenance it does not have.
 
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)

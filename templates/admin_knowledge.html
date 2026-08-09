@@ -1,0 +1,157 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Knowledge Uploads | LCDash{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="/static/css/lcdash-admin.css?v=20260809-admin-knowledge">
+<link rel="stylesheet" href="/static/css/lcdash-admin-knowledge.css?v=20260809-admin-knowledge">
+
+<div class="command-page">
+<section class="knowledge-hero glass">
+    <div>
+        <div class="admin-eyebrow">KNOWLEDGE LIBRARY</div>
+        <h1>Knowledge Uploads</h1>
+        <p>
+            Documents uploaded here become searchable by the AI assistants
+            after the next sync.
+        </p>
+    </div>
+    <div class="admin-safety">
+        <i class="bi bi-shield-lock-fill" aria-hidden="true"></i>
+        <div><strong>Additive only</strong><span>Approved 164-document library is never touched here</span></div>
+    </div>
+</section>
+
+<section class="admin-panel glass mt-4" aria-labelledby="knowledge-upload-title">
+    <div class="admin-panel-header">
+        <div>
+            <div class="admin-eyebrow">NEW DOCUMENT</div>
+            <h2 id="knowledge-upload-title">Upload a PDF</h2>
+            <p>Single PDF, 25 MB max. Choose which assistant it belongs to before uploading.</p>
+        </div>
+    </div>
+
+    <form id="knowledge-upload-form" class="knowledge-upload-form">
+        <div
+            id="knowledge-dropzone"
+            class="knowledge-dropzone"
+            role="button"
+            tabindex="0"
+            aria-label="Choose a PDF file, or drag and drop one here"
+        >
+            <i class="bi bi-file-earmark-arrow-up" aria-hidden="true"></i>
+            <div>
+                <strong>Drag a PDF here</strong>
+                <span>or press Enter to browse (PDF only, 25 MB max)</span>
+            </div>
+        </div>
+        <input
+            id="knowledge-file-input"
+            type="file"
+            accept="application/pdf"
+            class="visually-hidden"
+            tabindex="-1"
+            aria-hidden="true"
+        >
+
+        <p id="knowledge-file-preview" class="knowledge-file-preview" aria-live="polite" hidden></p>
+
+        <fieldset class="knowledge-destinations">
+            <legend>Destination assistant</legend>
+            <label class="knowledge-destination-card">
+                <input type="radio" name="knowledge-destination" value="mae" checked>
+                <span class="knowledge-destination-body">
+                    <strong>MAE (operations assistant)</strong>
+                    <span>Visible to MAE only.</span>
+                </span>
+            </label>
+            <label class="knowledge-destination-card">
+                <input type="radio" name="knowledge-destination" value="jack">
+                <span class="knowledge-destination-body">
+                    <strong>JACK (Mindshare radio)</strong>
+                    <span>JACK and MAE both see these &mdash; MAE reads everything.</span>
+                </span>
+            </label>
+        </fieldset>
+
+        <button id="knowledge-upload-submit" type="submit" disabled>
+            <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i> Upload
+        </button>
+    </form>
+
+    <div id="knowledge-upload-progress" class="admin-progress" aria-live="polite" hidden>
+        <div class="admin-progress-spinner" aria-hidden="true"></div>
+        <div><strong id="knowledge-upload-progress-text">Uploading&hellip;</strong></div>
+    </div>
+
+    <p id="knowledge-upload-feedback" class="admin-invite-feedback" aria-live="polite" hidden></p>
+</section>
+
+<section class="admin-panel glass mt-4" aria-labelledby="knowledge-sync-title">
+    <div class="admin-panel-header">
+        <div>
+            <div class="admin-eyebrow">KNOWLEDGE BASE</div>
+            <h2 id="knowledge-sync-title">Sync</h2>
+            <p>Uploads and removals only take effect for the assistants after a sync.</p>
+        </div>
+        <button id="knowledge-sync-button" type="button" class="knowledge-sync-button" disabled>
+            <i class="bi bi-arrow-repeat" aria-hidden="true"></i> Sync knowledge base now
+        </button>
+    </div>
+
+    <div id="knowledge-sync-status" class="knowledge-sync-status" aria-live="polite">
+        <div class="admin-progress-spinner" aria-hidden="true"></div>
+        <div><strong>Checking sync status&hellip;</strong></div>
+    </div>
+
+    <p id="knowledge-sync-feedback" class="admin-invite-feedback" aria-live="polite" hidden></p>
+</section>
+
+<section class="admin-panel glass mt-4" aria-labelledby="knowledge-docs-title">
+    <div class="admin-panel-header">
+        <div>
+            <div class="admin-eyebrow">UPLOADED SO FAR</div>
+            <h2 id="knowledge-docs-title">Documents</h2>
+            <p>
+                Everything uploaded through this page, per assistant.
+                <span class="knowledge-provenance">Each document is tagged with the admin who uploaded it.</span>
+            </p>
+        </div>
+    </div>
+
+    <div id="knowledge-docs-loading" class="admin-progress" aria-live="polite">
+        <div class="admin-progress-spinner" aria-hidden="true"></div>
+        <div><strong>Loading documents&hellip;</strong></div>
+    </div>
+
+    <div id="knowledge-docs-error" class="admin-error" hidden></div>
+
+    <p id="knowledge-docs-empty" class="admin-empty" hidden>
+        No uploads yet. Documents uploaded here are separate from the approved on-prem library.
+    </p>
+
+    <p id="knowledge-docs-feedback" class="admin-invite-feedback" aria-live="polite" hidden></p>
+
+    <div id="knowledge-docs-table-wrap" class="knowledge-table-wrap" hidden>
+        <table class="knowledge-table">
+            <caption class="visually-hidden">
+                Knowledge library uploads with destination, size, upload time, uploader, and actions
+            </caption>
+            <thead>
+                <tr>
+                    <th scope="col">Document</th>
+                    <th scope="col">Destination</th>
+                    <th scope="col">Size</th>
+                    <th scope="col">Uploaded</th>
+                    <th scope="col">Uploaded by</th>
+                    <th scope="col">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="knowledge-docs-tbody"></tbody>
+        </table>
+    </div>
+</section>
+
+<script src="/static/js/lcdash-admin-knowledge.js?v=20260809-admin-knowledge"></script>
+</div>
+{% endblock %}

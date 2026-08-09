@@ -27,6 +27,10 @@ from app.core.cloud_pilot_roles import (
     resolve_pilot_role,
 )
 from app.services.pilot_access_service import PilotAccessError, PilotAccessService
+from app.services.knowledge_upload_service import (
+    KnowledgeUploadError,
+    KnowledgeUploadService,
+)
 from app.core.county_branding import branding_for_tenant_context
 from app.core.tenancy import TenantContext
 from app.core.county_profiles import resolve_county_profile
@@ -1004,6 +1008,94 @@ def admin_users_resend_invite_api(payload: AdminUserActionRequest, request: Requ
     except PilotAccessError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"ok": True}
+
+
+def _knowledge_upload_service() -> "KnowledgeUploadService":
+    return KnowledgeUploadService(
+        settings.knowledge_upload_bucket,
+        {
+            "mae": settings.knowledge_upload_mae_prefix,
+            "jack": settings.knowledge_upload_jack_prefix,
+        },
+        knowledge_base_id=settings.cloud_ai_knowledge_base_id,
+        data_source_id=settings.cloud_ai_uploads_data_source_id,
+    )
+
+
+class AdminKnowledgeRemoveRequest(BaseModel):
+    destination: str = Field(max_length=20)
+    document_id: str = Field(min_length=1, max_length=1000)
+
+
+@app.get("/admin/knowledge")
+def admin_knowledge_page(request: Request):
+    _require_pilot_admin(request)
+    return templates.TemplateResponse(
+        request=request,
+        name="admin_knowledge.html",
+        context={"version": "0.1.0"},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/admin/knowledge/documents")
+def admin_knowledge_list_api(request: Request):
+    _require_pilot_admin(request)
+    service = _knowledge_upload_service()
+    try:
+        documents = service.list_documents()
+    except KnowledgeUploadError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    try:
+        ingestion = service.ingestion_status()
+    except KnowledgeUploadError:
+        # Sync being unconfigured must not hide the document list.
+        ingestion = {"job_id": "", "status": "NEVER_RUN"}
+    return {"documents": documents, "ingestion": ingestion}
+
+
+@app.post("/api/admin/knowledge/documents")
+async def admin_knowledge_upload_api(
+    request: Request,
+    file: UploadFile,
+    destination: Annotated[str, Form(max_length=20)],
+):
+    identity = _require_pilot_admin(request)
+    content = await file.read()
+    try:
+        return _knowledge_upload_service().upload_document(
+            destination,
+            file.filename or "",
+            content,
+            uploaded_by=identity.email or identity.subject,
+        )
+    except KnowledgeUploadError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/admin/knowledge/documents/remove")
+def admin_knowledge_remove_api(payload: AdminKnowledgeRemoveRequest, request: Request):
+    identity = _require_pilot_admin(request)
+    try:
+        _knowledge_upload_service().remove_document(
+            payload.destination,
+            payload.document_id,
+            removed_by=identity.email or identity.subject,
+        )
+    except KnowledgeUploadError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True}
+
+
+@app.post("/api/admin/knowledge/sync")
+def admin_knowledge_sync_api(request: Request):
+    _require_pilot_admin(request)
+    try:
+        return _knowledge_upload_service().start_ingestion()
+    except KnowledgeUploadError as exc:
+        detail = str(exc)
+        status = 409 if "already running" in detail else 400
+        raise HTTPException(status_code=status, detail=detail) from exc
 
 
 def _alb_user_tenant_context(request: Request | None) -> TenantContext | None:
@@ -2264,7 +2356,10 @@ def nga911_nova_chat_api(chat_request: NOVAChatRequest, response: Response):
 
 @app.get("/knowledge/documents/{library_key}/{document_id}")
 def knowledge_document_pdf(
-    library_key: Literal["centralsquare", "mindshare"],
+    # mae-uploads / jack-uploads are the admin-uploaded sets; their keys only
+    # resolve once CloudAiAllowedS3Prefixes includes the upload prefixes, so
+    # allowing them here is inert until that parameter ships.
+    library_key: Literal["centralsquare", "mindshare", "mae-uploads", "jack-uploads"],
     document_id: str,
     download: bool = False,
 ):
