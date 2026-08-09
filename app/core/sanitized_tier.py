@@ -78,7 +78,12 @@ def is_path_allowed_for_user(path: str) -> bool:
     clean = (path or "").split("?", 1)[0].rstrip("/") or "/"
     if clean in _USER_ALLOWED_EXACT or f"{clean}/" in _USER_ALLOWED_EXACT:
         return True
-    return any(path.startswith(prefix) for prefix in _USER_ALLOWED_PREFIXES)
+    # Prefix check must run against the same normalized `clean` path as the
+    # exact-match check above, not the raw input. Matching against the raw
+    # `path` let a query string or trailing slash slip a path through here
+    # that the exact-match branch would have judged differently -- the two
+    # checks disagreeing about what "the path" even is. Caught in review.
+    return any(clean.startswith(prefix) for prefix in _USER_ALLOWED_PREFIXES)
 
 
 def restricts(role: str | PilotRole | None) -> bool:
@@ -246,6 +251,38 @@ def sanitize_station_alerts(payload: Any) -> dict[str, Any]:
 _MAP_CALL_PROPERTIES = ("kind", "incident_code", "incident_description", "location_label")
 _MAP_UNIT_PROPERTIES = ("kind", "unit_number", "status")
 
+# Top-level keys this tier may see, matched against what map_service.py
+# actually emits (build_map_snapshot / build_empty_map_snapshot), not the
+# names this list used to guess at. The previous list named "connected" and
+# "counts", which do not exist on this payload -- the service emits
+# "cad_connected" and "summary" -- so every restricted request silently lost
+# both and the /map route only kept working because it merged the reduced
+# dict back over the full one (see the route in app/main.py, fixed alongside
+# this). type/generated_at/cad_connected/roster_connected/roster_warning/
+# error are all structural or status fields, not call data, so they pass
+# through unmodified. "summary" is call/unit *counts* -- like dashboard_stats,
+# aggregate numbers with no per-agency or per-call breakdown -- so it is safe
+# in the same way, but it is still picked field-by-field below rather than
+# passed through, in case CAD ever nests something sharper into it.
+_MAP_TOP_LEVEL_FIELDS = (
+    "type",
+    "generated_at",
+    "cad_connected",
+    "roster_connected",
+    "roster_warning",
+    "error",
+)
+_MAP_SUMMARY_FIELDS = (
+    "total_calls",
+    "mapped_calls",
+    "unmapped_calls",
+    "total_units",
+    "mapped_units",
+    "unmapped_units",
+    "stale_units",
+    "excluded_units",
+)
+
 
 def sanitize_map_snapshot(payload: Any) -> dict[str, Any]:
     """GeoJSON with call pins stripped of any route to call detail."""
@@ -256,9 +293,11 @@ def sanitize_map_snapshot(payload: Any) -> dict[str, Any]:
     # dict(payload) passthrough would ship any new top-level key unreviewed.
     safe = {
         key: payload.get(key)
-        for key in ("type", "generated_at", "connected", "error", "counts")
+        for key in _MAP_TOP_LEVEL_FIELDS
         if key in payload
     }
+    if isinstance(payload.get("summary"), Mapping):
+        safe["summary"] = _pick(payload["summary"], _MAP_SUMMARY_FIELDS)
     features = []
     for feature in _rows(payload.get("features")):
         if not isinstance(feature, Mapping):

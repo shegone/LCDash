@@ -19,16 +19,21 @@ Roles are signed in the way production does it, by patching
 ``app.main.resolve_alb_identity`` to return the Cognito group claim the ALB
 would have verified. Every data source is mocked, so nothing here touches CAD.
 
-KNOWN PRODUCT BUG, encoded below rather than fixed: the sanitizer's address
-field is spelled ``location_label``, but dashboard calls and station alerts both
-carry the address under ``location``. The address the tier is supposed to see is
-therefore blanked. See
-``test_known_bug_dashboard_address_is_blanked_by_field_name_mismatch``.
+The address field is spelled differently depending on the source:
+``location`` for dashboard calls and station alerts (operations_service.py,
+station_alert_service.py) and ``location_label`` only for the map
+(map_service.py). ``sanitized_tier`` picks the field matching each shape; see
+``test_the_address_actually_survives_on_every_allowed_view`` for the
+regression this guards -- an earlier version used ``location_label``
+everywhere and silently blanked the address on the two views that don't emit
+that key.
 """
 
 from __future__ import annotations
 
+import itertools
 import json
+import re
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -67,8 +72,14 @@ def _full_call() -> dict:
         "agency": "LCEMS",
         "status": "Dispatched",
         "call_datetime": "2026-08-09T10:04:00Z",
+        # operations_service.py emits "location", never "location_label" --
+        # station_alert_service.py the same. Only map_service.py emits
+        # "location_label" (see _full_map_snapshot). A fixture carrying both
+        # keys would pass sanitize_call/sanitize_station_alerts even if the
+        # field list picked the wrong one, since the right value would still
+        # be present under the wrong key. Matching production's actual shape
+        # is what makes the address-survives regression test meaningful.
         "location": "141 Stratton Street",
-        "location_label": "141 Stratton Street",
         "city": "Logan",
         "latitude": 37.8487,
         "longitude": -81.9932,
@@ -134,8 +145,8 @@ def _full_station_alert_snapshot() -> dict:
                 "incident_code": "MEDA",
                 "incident_description": "Medical Alarm",
                 "priority": "1",
+                # station_alert_service.py emits "location" only.
                 "location": "141 Stratton Street",
-                "location_label": "141 Stratton Street",
                 "call_datetime": "2026-08-09T10:04:00Z",
                 "status": "Dispatched",
                 "unit_numbers": ["M1"],
@@ -241,6 +252,21 @@ DENIAL_DETAIL = (
     "Ask an administrator if you need access."
 )
 
+_PATH_PARAM_RE = re.compile(r"\{[^{}]+\}")
+
+
+def _concrete_path(path: str) -> str:
+    """Replace every ``{param}`` segment with a harmless placeholder value.
+
+    Used to turn a route table entry like ``/calls/{cfs_number}`` into a real,
+    requestable path for the deny-by-default sweep. The placeholder text
+    itself is irrelevant -- the middleware being tested denies on the raw URL
+    path string before FastAPI ever resolves or type-checks the parameter.
+    """
+
+    counter = itertools.count(1)
+    return _PATH_PARAM_RE.sub(lambda _match: f"TEST-VALUE-{next(counter)}", path)
+
 
 def _identity(email: str, group: str) -> AlbIdentity:
     return AlbIdentity(subject=f"sub-{email}", groups=(group,), email=email)
@@ -326,29 +352,72 @@ class PathGateTests(_SanitizedTierTestCase):
         refused. If somebody registers ``/api/operations/call-detail`` and
         forgets this tier exists, this test fails on the next run.
 
-        Parameterised paths are skipped because their real form cannot be
-        synthesised here; the count assertion below stops the test from
-        silently degrading to a no-op if route registration changes shape.
+        Parameterised paths are NOT skipped: each ``{param}`` segment is
+        replaced with a dummy value so the real concrete path can be requested.
+        Earlier this loop did ``continue`` on any path containing "{", which
+        silently exempted every parameterised route (``/calls/{cfs_number}``
+        among them) from the sweep entirely -- the one class of route most
+        likely to expose call detail. The middleware denies on the raw URL
+        path before FastAPI resolves or type-validates path parameters, so a
+        placeholder string is enough regardless of the parameter's declared
+        type; a 404 is accepted alongside 403 for the rare route where routing
+        itself rejects the placeholder first.
         """
         self._sign_in_as(USER)
 
         checked = 0
         for path in sorted({getattr(route, "path", "") for route in app.routes}):
-            if not path or "{" in path:
+            if not path:
                 continue
-            if sanitized_tier.is_path_allowed_for_user(path):
+            concrete = _concrete_path(path)
+            if sanitized_tier.is_path_allowed_for_user(concrete):
                 continue
-            with self.subTest(path=path):
-                response = self.client.get(path, follow_redirects=False)
-                self.assertEqual(
+            with self.subTest(path=path, concrete=concrete):
+                response = self.client.get(concrete, follow_redirects=False)
+                self.assertIn(
                     response.status_code,
-                    403,
-                    f"{path} is not on the allowlist but was not denied",
+                    (403, 404),
+                    f"{path} is not on the allowlist but was not denied "
+                    f"(got {response.status_code} for {concrete})",
                 )
             checked += 1
 
         self.assertGreater(
             checked, 40, "route enumeration collapsed -- the sweep proves nothing"
+        )
+
+    def test_no_allowed_prefix_shadows_an_unreviewed_route(self):
+        """The prefix allowlist (``_USER_ALLOWED_PREFIXES``) is a ``startswith``
+        check, so it opens up anything registered under it -- not just the
+        tile and reference-layer routes it was written for. This walks the
+        real route table and fails the day a new route is registered under
+        ``/static/`` or ``/api/operations/map/tiles/``/``.../reference/`` that
+        was never reviewed for this tier, which is exactly how the exact-match
+        allowlist above was designed to never fail silently. The prefix list
+        gets the same guarantee here.
+        """
+        known_prefixed_routes = {
+            "/api/operations/map/tiles/{style}/{z}/{x}/{y}",
+            "/api/operations/map/reference/{layer}",
+        }
+        seen_under_a_prefix = set()
+        for route in app.routes:
+            path = getattr(route, "path", None)
+            if path is None:
+                # Mounts (e.g. the /static StaticFiles mount) carry the mount
+                # point on `.path` too, but the files under it are not
+                # individual routes in app.routes -- there is nothing further
+                # to enumerate here for /static/.
+                continue
+            for prefix in sanitized_tier._USER_ALLOWED_PREFIXES:
+                if path.startswith(prefix):
+                    seen_under_a_prefix.add(path)
+
+        unreviewed = seen_under_a_prefix - known_prefixed_routes
+        self.assertFalse(
+            unreviewed,
+            f"route(s) newly reachable via the prefix allowlist, not reviewed "
+            f"for this tier: {sorted(unreviewed)}",
         )
 
     def test_documentation_and_schema_routes_are_denied(self):
@@ -466,6 +535,37 @@ class FieldReductionTests(unittest.TestCase):
         )
         self.assertNoPII(safe)
 
+    def test_map_snapshot_keeps_the_structural_fields_the_page_needs(self):
+        """Regression: the top-level allowlist used to name "connected" and
+        "counts", which map_service.py has never emitted -- it emits
+        "cad_connected" and "summary". Both were silently dropped, and the
+        /map route only kept working because it merged the reduced dict back
+        over the unsanitized one (a second bug, fixed alongside this one).
+        Asserting only the absence of PII, as the other tests here do, cannot
+        catch a required key going missing -- this asserts presence too."""
+        safe = sanitized_tier.sanitize_map_snapshot(_full_map_snapshot())
+
+        self.assertIn("cad_connected", safe)
+        self.assertIs(safe["cad_connected"], True)
+        self.assertIn("generated_at", safe)
+        self.assertEqual(safe["generated_at"], "2026-08-09T10:06:00Z")
+        self.assertIn("summary", safe)
+        # _pick fills every field in _MAP_SUMMARY_FIELDS, defaulting absent
+        # ones to "" -- the fixture only sets three of the eight counts.
+        self.assertEqual(safe["summary"]["total_calls"], 1)
+        self.assertEqual(safe["summary"]["mapped_calls"], 1)
+        self.assertEqual(safe["summary"]["total_units"], 1)
+        self.assertEqual(
+            set(safe["summary"]),
+            {
+                "total_calls", "mapped_calls", "unmapped_calls",
+                "total_units", "mapped_units", "unmapped_units",
+                "stale_units", "excluded_units",
+            },
+        )
+        self.assertIn("roster_connected", safe)
+        self.assertIn("roster_warning", safe)
+
     def test_map_call_pins_lose_every_route_to_call_detail(self):
         """Hiding the link in the template is not enough -- the identifier has
         to go, or the pin is still a lookup key for call detail."""
@@ -544,15 +644,17 @@ class FieldReductionTests(unittest.TestCase):
         for all three shapes, but only the map service emits that key --
         dashboard calls and station alerts use ``location``. Every address
         rendered blank, which is over-redaction that breaks the tier's whole
-        reason to exist. Each shape now uses the field list matching it."""
+        reason to exist. Each shape now uses the field list matching it.
+        The fixtures carry only the key production actually emits for each
+        shape (see _full_call / _full_station_alert_snapshot), so this fails
+        honestly if the field list regresses -- there is no ``location_label``
+        left in these fixtures for the wrong key to accidentally match."""
         call = _full_call()
-        call.pop("location_label", None)
         self.assertEqual(
             sanitized_tier.sanitize_call(call)["location"], "141 Stratton Street"
         )
 
         alerts = _full_station_alert_snapshot()
-        alerts["alerts"][0].pop("location_label", None)
         safe = sanitized_tier.sanitize_station_alerts(alerts)
         self.assertEqual(safe["alerts"][0]["location"], "141 Stratton Street")
 
@@ -632,6 +734,12 @@ class SanitizedEndpointTests(_SanitizedTierTestCase):
         self.assertEqual(reduced.status_code, 200)
         body = reduced.json()
         self.assertTrue(body["sanitized_view"])
+        # Presence, not just absence of PII: this is what BUG 2 broke -- the
+        # allowlist named keys the service never emits, so "cad_connected"
+        # and "summary" vanished even though they carry nothing sensitive.
+        self.assertIn("cad_connected", body)
+        self.assertIn("summary", body)
+        self.assertIn("generated_at", body)
         properties = body["features"][0]["properties"]
         self.assertNotIn("cfs_number", properties)
         self.assertNotIn("detail_url", properties)
@@ -749,6 +857,40 @@ class RenderedPageTests(_SanitizedTierTestCase):
         self.assertNotIn("cfs_number", pins[0]["properties"])
         self.assertNotIn("detail_url", pins[0]["properties"])
         self.assertTrue(pins[0]["geometry"]["coordinates"])
+
+    def test_map_page_embeds_only_the_sanitized_shape(self):
+        """Regression: the /map route did
+        ``{**map_data, **sanitize_map_snapshot(map_data)}`` -- the full,
+        unsanitized payload spread back in UNDER the reduced one, so every
+        top-level key the sanitizer meant to drop (roster_connected,
+        roster_warning, plus anything CAD ever adds) still reached the
+        template, and every per-feature property the sanitizer stripped rode
+        along too wherever a later key collision didn't happen to overwrite
+        it. Asserting no-PII-in-values (as the other page tests here do) does
+        not catch a structural key surviving that merge; this checks the
+        embedded object's shape directly against what sanitize_map_snapshot
+        actually returns for the same input.
+        """
+        import json as _json
+
+        self._sign_in_as(USER)
+        html = self.client.get("/map").text
+        embedded = _json.loads(html.split('id="map-data">')[1].split("</script>")[0])
+
+        self.assertTrue(embedded.get("sanitized_view"))
+        for feature in embedded["features"]:
+            kind = feature["properties"].get("kind")
+            allowed = (
+                sanitized_tier._MAP_UNIT_PROPERTIES
+                if kind == "unit"
+                else sanitized_tier._MAP_CALL_PROPERTIES
+            )
+            self.assertLessEqual(
+                set(feature["properties"]),
+                set(allowed),
+                f"unsanitized property leaked into a {kind} feature on the "
+                f"rendered map page: {set(feature['properties']) - set(allowed)}",
+            )
 
     def test_map_page_and_map_api_agree_for_every_role(self):
         """They took different data sources in cloud mode, which is how the

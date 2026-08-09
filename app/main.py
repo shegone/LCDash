@@ -1714,9 +1714,18 @@ def gis_map(
     # map.html inlines each feature's properties, which in the full payload
     # include cfs_number and detail_url -- the route to call detail this tier
     # must not have. Reduce before the template ever sees them.
+    #
+    # This must REPLACE map_data, not merge into it. {**map_data,
+    # **sanitize_map_snapshot(map_data)} puts the reduced dict OVER the full
+    # one, but the full one is still underneath -- every top-level key the
+    # sanitizer meant to drop (and any per-feature property it stripped, since
+    # "features" here is the sanitizer's reduced list merged over nothing) was
+    # only hidden as long as sanitize_map_snapshot's own key names happened to
+    # match. /api/operations/map (map_api, above) replaces the payload for
+    # exactly this reason; the page route has to match it.
     restricted = _is_restricted_caller(request)
     if restricted:
-        map_data = {**map_data, **sanitized_tier.sanitize_map_snapshot(map_data)}
+        map_data = sanitized_tier.sanitize_map_snapshot(map_data)
 
     features = map_data["features"]
     call_features = [
