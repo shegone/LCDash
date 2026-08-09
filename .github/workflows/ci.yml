@@ -15,7 +15,10 @@ jobs:
           python-version: "3.13"
 
       - name: Install dependencies
-        run: python -m pip install -r requirements-dev.txt
+        run: python -m pip install -r requirements-dev.txt -r infrastructure/requirements.txt
 
       - name: Run tests
-        run: python -m pytest tests/ -q
+        # Bare pytest from the repo root: pytest.ini's testpaths pulls in BOTH
+        # tests/ and infrastructure/tests/. Naming only tests/ here silently
+        # skipped the 141 CDK template/guardrail tests.
+        run: python -m pytest -q

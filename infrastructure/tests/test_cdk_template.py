@@ -148,7 +148,12 @@ class CdkTemplateTests(unittest.TestCase):
             {"Ref": "PilotImageDigest"},
         )
 
-    def test_service_allows_one_replacement_task_during_rollout(self):
+    def test_service_deploys_make_before_break(self):
+        # min 100 / max 200 with desired_count=1: the scheduler must start the
+        # replacement task and see it healthy before stopping the old one.
+        # min was 0 until 2026-08-09 (deploys could dip to zero healthy
+        # targets); Ted approved the change alongside the no-healthy-target
+        # alarm, which would otherwise fire on every deploy.
         template = self.template.to_json()
         service = next(
             resource
@@ -156,7 +161,7 @@ class CdkTemplateTests(unittest.TestCase):
             if resource["Type"] == "AWS::ECS::Service"
         )
         deployment = service["Properties"]["DeploymentConfiguration"]
-        self.assertEqual(deployment["MinimumHealthyPercent"], 0)
+        self.assertEqual(deployment["MinimumHealthyPercent"], 100)
         self.assertEqual(deployment["MaximumPercent"], 200)
         self.assertTrue(deployment["DeploymentCircuitBreaker"]["Enable"])
         self.assertTrue(deployment["DeploymentCircuitBreaker"]["Rollback"])

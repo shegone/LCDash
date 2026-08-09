@@ -381,7 +381,10 @@ class Phase1FoundationStack(cdk.Stack):
             security_groups=[app_security_group],
             vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
             circuit_breaker=ecs.DeploymentCircuitBreaker(rollback=True),
-            min_healthy_percent=0,
+            # Make-before-break: with desired_count=1, min 0% let every deploy
+            # take the site down until the new task went healthy. 100/200 makes
+            # the scheduler start the replacement first (approved 2026-08-09).
+            min_healthy_percent=100,
             max_healthy_percent=200,
         )
 
