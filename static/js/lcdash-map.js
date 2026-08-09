@@ -376,34 +376,7 @@
     const fitButton = document.getElementById("fit-visible-markers");
     if (fitButton) fitButton.addEventListener("click", function () { applyFilters(true); });
 
-    // The restricted `user` tier is served an empty feature collection by the
-    // page, because the /map route's copy of the GeoJSON has not been through
-    // the field allowlist and still carries cfs_number and detail_url. The
-    // sanitized collection comes from /api/operations/map instead, so the
-    // reduction stays defined in one place (app/core/sanitized_tier.py) rather
-    // than being restated in the template.
-    async function loadSanitizedFeatures() {
-        try {
-            const response = await fetch("/api/operations/map", {
-                cache: "no-store",
-                credentials: "same-origin",
-                headers: {"Accept": "application/json"}
-            });
-            if (!response.ok) throw new Error("map snapshot unavailable");
-            const payload = await response.json();
-            ingestFeatures(payload.features);
-            applyFilters(true);
-        } catch (error) {
-            showMapNotice(
-                "Incident locations could not be loaded right now. The basemap and reference layers are still shown."
-            );
-        }
-    }
-
     ingestFeatures(mapData.features);
     applyFilters(true);
     loadReferenceLayers();
-    if (mapData.sanitized_pending === true) {
-        loadSanitizedFeatures();
-    }
 })();

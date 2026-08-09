@@ -810,6 +810,18 @@
         }
 
         realtimeSource = new EventSource("/api/operations/events");
+        // EventSource reconnects on its own every few seconds. After a session
+        // ends that turns into a stream of unauthenticated requests racing the
+        // user's real login, which is what made a good MFA code land on a 401
+        // (see static/js/lcdash-session.js). Stop the stream instead.
+        if (window.LCDashSession) {
+            window.LCDashSession.onEnd(function () {
+                if (realtimeSource) {
+                    realtimeSource.close();
+                    realtimeSource = null;
+                }
+            });
+        }
         realtimeSource.addEventListener("open", function () {
             setRealtimeStatus(
                 "UPDATE CHANNEL",
@@ -823,6 +835,13 @@
             handleRealtimeEvent
         );
         realtimeSource.addEventListener("error", function () {
+            // A closed EventSource means the browser has given up; an ended
+            // session is the common cause, and retrying into the login flow
+            // is exactly what must not happen.
+            if (realtimeSource && realtimeSource.readyState === 2 && window.LCDashSession) {
+                window.LCDashSession.end();
+                return;
+            }
             setRealtimeStatus(
                 "30S BACKUP",
                 "ops-warning",

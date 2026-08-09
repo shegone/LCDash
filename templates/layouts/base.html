@@ -54,6 +54,9 @@
     {% block page_styles %}{% endblock %}
 
     <script src="/static/js/lcdash-time.js"></script>
+    {#- Loaded before any page script so pollers and streams can register a
+        stop before they start talking to the server. -#}
+    <script src="/static/js/lcdash-session.js?v=20260809-session-end"></script>
 </head>
 
 <body>

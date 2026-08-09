@@ -440,26 +440,16 @@
     aria-describedby="operations-map-description map-filter-status"
 ></div>
 
-{#- The /map route hands this template the unreduced GeoJSON -- only
-    /api/operations/map passes through the field allowlist, which is where
-    cfs_number and detail_url are dropped. Embedding the route's copy would put
-    every call's CFS number in the page source for the restricted tier, so it
-    gets an empty feature collection and lcdash-map.js fetches the sanitized one
-    instead. Reproducing the allowlist here in Jinja would make the reduction
-    two things to keep in step. -#}
-{% if restricted %}
-<script type="application/json" id="map-data">{{ {
-    "cad_connected": map_data.cad_connected|default(false, true),
-    "roster_warning": map_data.roster_warning|default("", true),
-    "generated_at": map_data.generated_at|default("", true),
-    "features": [],
-    "sanitized_pending": true
-}|tojson }}</script>
-{% else %}
+{#- map_data is already reduced for the restricted tier: the /map ROUTE runs
+    it through app/core/sanitized_tier.sanitize_map_snapshot before the
+    template sees it, so cfs_number and detail_url are gone from the page
+    source. It is embedded directly for every role -- an earlier version left
+    this empty for restricted users and had the JS re-fetch from
+    /api/operations/map, which rendered no pins at all because that endpoint
+    took a different data source in cloud mode. One source, one reduction. -#}
 <script type="application/json" id="map-data">{{ map_data|tojson }}</script>
-{% endif %}
 <script src="/static/vendor/leaflet/leaflet.js"></script>
-<script src="/static/js/lcdash-map.js?v=20260809-sanitized-tier"></script>
+<script src="/static/js/lcdash-map.js?v=20260809-map-source-fix"></script>
 <script>
     LCDashTime.updateCadDisplayTimes();
     LCDashTime.startRefreshCountdown({

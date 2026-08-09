@@ -616,6 +616,10 @@
                 cache: "no-store",
                 headers: {"Accept": "application/json"}
             });
+            // A poll that was bounced to the identity provider must stop, not
+            // retry: concurrent polls racing a real login are what redeem an
+            // authorization code twice (static/js/lcdash-session.js).
+            if (window.LCDashSession && window.LCDashSession.check(response)) return;
             if (!response.ok) throw new Error("Read-only assignment source unavailable");
             const data = await response.json();
             renderSnapshot(data);
@@ -687,5 +691,8 @@
     } else {
         firstSnapshot = false;
     }
-    window.setInterval(loadSnapshot, POLL_SECONDS * 1000);
+    const pollTimer = window.setInterval(loadSnapshot, POLL_SECONDS * 1000);
+    if (window.LCDashSession) {
+        window.LCDashSession.onEnd(function () { window.clearInterval(pollTimer); });
+    }
 }());

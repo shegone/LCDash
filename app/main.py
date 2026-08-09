@@ -1375,7 +1375,21 @@ def map_api(
     response.headers["Cache-Control"] = "no-store"
 
     try:
-        payload = get_live_map_snapshot(tenant_context=tenant_context)
+        # Same branch as the /map page. This endpoint used to always take the
+        # live on-prem path, so in cloud mode it answered with no incidents
+        # while the page beside it plotted them from the polled snapshot --
+        # two views of "the map" disagreeing.
+        if _cloud_cad_bridge_enabled():
+            snapshot = _current_operations_snapshot()
+            payload = build_map_snapshot(
+                {
+                    "calls": snapshot["calls"],
+                    "all_units": [],
+                    "roster_connected": False,
+                }
+            )
+        else:
+            payload = get_live_map_snapshot(tenant_context=tenant_context)
     except CentralSquareAPIError as exc:
         payload = build_empty_map_snapshot(str(exc))
     return _sanitize_for_tier(request, payload, sanitized_tier.sanitize_map_snapshot)

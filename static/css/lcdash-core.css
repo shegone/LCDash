@@ -288,232 +288,46 @@ a {
     color: #ffbdc9;
 }
 
-/* Sign-out confirmation page (standalone, no app shell) */
-.signed-out-body {
-    display: grid;
-    place-items: center;
-    min-height: 100vh;
-    margin: 0;
-    padding: 24px;
-}
-
-.signed-out-card {
-    max-width: 460px;
-    padding: 40px 36px;
-    text-align: center;
-}
-
-.signed-out-logo {
-    width: 84px;
-    margin-bottom: 18px;
-}
-
-.signed-out-card h1 {
-    margin: 0 0 14px;
-    font-size: 1.6rem;
-    font-weight: 800;
-}
-
-.signed-out-card p {
-    margin: 0 0 14px;
-    color: #b9d8ed;
-    font-size: .92rem;
-}
-
-.signed-out-shared {
+/* Session-ended banner. Fixed to the viewport because it can appear while the
+   user is scrolled anywhere, and it is the only thing on the page still true:
+   everything behind it stopped updating the moment the session died. */
+.lcdash-session-ended {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    z-index: 2000;
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 9px;
-    padding: 11px 14px;
-    border-radius: 12px;
-    background: rgba(76, 201, 255, .08);
-    border: 1px solid rgba(76, 201, 255, .2);
-    color: #dff8ff !important;
+    gap: 18px;
+    max-width: min(560px, calc(100vw - 32px));
+    padding: 15px 20px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 176, 32, .55);
+    background: linear-gradient(145deg, rgba(60, 40, 8, .97), rgba(38, 24, 4, .97));
+    box-shadow: 0 18px 44px rgba(0, 0, 0, .55);
 }
 
-.signed-out-action {
-    display: inline-block;
-    margin-top: 8px;
-    padding: 11px 26px;
-    border-radius: 12px;
-    color: #04131f;
-    background: linear-gradient(135deg, #4cc9ff, #69ffb9);
-    font-weight: 800;
-    text-decoration: none;
-}
-
-.topbar-identity-unverified .bi,
-.topbar-identity-unverified .topbar-identity-role {
-    color: #ffc046;
-}
-
-.glass {
-    background:
-        linear-gradient(145deg, rgba(20, 42, 70, .90), rgba(10, 25, 44, .92));
-    border: 1px solid var(--lcdash-border);
-    border-radius: var(--lcdash-radius);
-    box-shadow: var(--lcdash-shadow);
-}
-
-.clock {
-    position: relative;
-    z-index: 1;
-    color: var(--lcdash-cyan);
-    font-size: 1.05rem;
-    font-weight: 800;
-}
-
-.page-eyebrow {
-    color: var(--lcdash-cyan);
-    font-size: .72rem;
-    font-weight: 900;
-    letter-spacing: .15em;
-    text-transform: uppercase;
-}
-
-.view-mode-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 9px 13px;
-    border: 1px solid rgba(85, 212, 255, .24);
-    border-radius: 999px;
-    background: rgba(85, 212, 255, .08);
-    color: #c9edfb;
-    font-size: .78rem;
-    font-weight: 800;
-    letter-spacing: .05em;
-}
-
-.view-mode-badge::before {
-    content: "";
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--lcdash-green);
-    box-shadow: 0 0 10px rgba(105, 255, 185, .55);
-}
-
-.incident-card-link {
+.lcdash-session-ended strong {
     display: block;
-    height: 100%;
-    color: inherit;
-    text-decoration: none;
-    border-radius: 22px;
-}
-
-.incident-card-link:hover {
-    color: inherit;
-    text-decoration: none;
-}
-
-.incident-card {
-    height: 100%;
-    padding: 22px;
-    border: 1px solid rgba(95, 178, 255, .35);
-    border-radius: 22px;
-    background:
-        linear-gradient(180deg, rgba(19, 38, 64, .96), rgba(8, 18, 33, .96));
-    box-shadow:
-        0 0 22px rgba(0, 148, 255, .12),
-        inset 0 0 18px rgba(255, 255, 255, .025);
-    transition: transform .15s ease, box-shadow .15s ease;
-}
-
-.incident-card:hover {
-    transform: translateY(-3px);
-    box-shadow:
-        0 0 32px rgba(0, 180, 255, .28),
-        inset 0 0 18px rgba(255, 255, 255, .04);
-}
-
-.incident-code {
-    color: var(--lcdash-yellow);
-    font-size: .95rem;
-    font-weight: 800;
-    letter-spacing: 1.5px;
-}
-
-.incident-title {
-    margin-top: 3px;
-    color: #ffffff;
-    font-size: 1.25rem;
+    color: #ffc046;
     font-weight: 800;
 }
 
-.priority-badge {
-    padding: 8px 12px;
-    border-radius: 999px;
-    background: var(--lcdash-yellow);
-    color: #03101e;
+.lcdash-session-ended span {
+    display: block;
+    margin-top: 2px;
+    color: #f0dcb4;
     font-size: .85rem;
+}
+
+.lcdash-session-ended button {
+    flex-shrink: 0;
+    padding: 9px 18px;
+    border: 0;
+    border-radius: 10px;
+    color: #1d1403;
+    background: #ffc046;
     font-weight: 800;
-    white-space: nowrap;
-}
-
-.incident-location,
-.incident-units {
-    color: #dbeeff;
-    font-size: .95rem;
-}
-
-.incident-location i,
-.incident-units i {
-    margin-right: 6px;
-    color: var(--lcdash-cyan);
-}
-
-.label {
-    color: #82a9ca;
-    font-size: .72rem;
-    font-weight: 700;
-    letter-spacing: 1.2px;
-}
-
-.value {
-    color: #ffffff;
-    font-weight: 700;
-}
-
-.status-text {
-    color: var(--lcdash-green);
-}
-
-.incident-footer {
-    padding-top: 12px;
-    border-top: 1px solid rgba(255, 255, 255, .08);
-    color: var(--lcdash-muted);
-    font-weight: 700;
-    letter-spacing: 1px;
-}
-
-.priority-5,
-.priority-10 {
-    border-color: rgba(255, 76, 76, .65);
-    box-shadow: 0 0 26px rgba(255, 76, 76, .18);
-}
-
-.priority-15 {
-    border-color: rgba(255, 214, 107, .65);
-    box-shadow: 0 0 26px rgba(255, 214, 107, .14);
-}
-
-.priority-20 {
-    border-color: rgba(76, 201, 255, .65);
-}
-
-.priority-30 {
-    border-color: rgba(105, 255, 185, .4);
-}
-
-@media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-        scroll-behavior: auto !important;
-        transition-duration: .01ms !important;
-        animation-duration: .01ms !important;
-        animation-iteration-count: 1 !important;
-    }
+    cursor: pointer;
 }

@@ -721,3 +721,48 @@ class RenderedPageTests(_SanitizedTierTestCase):
         body = self.client.get("/dashboard").text
         self.assertIn("CFS26-1234", body)
         self.assertIn("/calls/CFS26-1234", body)
+
+    def test_map_pins_actually_render_and_match_the_summary_count(self):
+        """Regression for the symptom Ted hit: the map said "3 calls mapped"
+        and drew none.
+
+        The template used to embed an EMPTY feature collection for this tier
+        and have the JS re-fetch from /api/operations/map -- but that endpoint
+        always took the live on-prem path, so in cloud mode it answered with no
+        incidents while the summary beside it counted the polled snapshot. The
+        route now reduces map_data itself and the template embeds it directly,
+        so the pins and the count come from one source.
+        """
+        import json as _json
+
+        self._sign_in_as(USER)
+        html = self.client.get("/map").text
+        embedded = _json.loads(html.split('id="map-data">')[1].split("</script>")[0])
+        pins = [
+            feature
+            for feature in embedded.get("features", [])
+            if feature["properties"].get("kind") == "call"
+        ]
+        self.assertTrue(pins, "the restricted map embedded no call pins at all")
+        self.assertEqual(len(pins), embedded["summary"]["mapped_calls"])
+        # And the pins are reduced, not merely present.
+        self.assertNotIn("cfs_number", pins[0]["properties"])
+        self.assertNotIn("detail_url", pins[0]["properties"])
+        self.assertTrue(pins[0]["geometry"]["coordinates"])
+
+    def test_map_page_and_map_api_agree_for_every_role(self):
+        """They took different data sources in cloud mode, which is how the
+        empty map hid behind a non-zero count."""
+        for identity in (USER, SUPERVISOR):
+            with self.subTest(role=identity.groups[0]):
+                self._sign_in_as(identity)
+                html = self.client.get("/map").text
+                import json as _json
+
+                embedded = _json.loads(
+                    html.split('id="map-data">')[1].split("</script>")[0]
+                )
+                api = self.client.get("/api/operations/map").json()
+                self.assertEqual(
+                    len(embedded.get("features", [])), len(api.get("features", []))
+                )

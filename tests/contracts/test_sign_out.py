@@ -154,3 +154,52 @@ class SignOutTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SessionEndDetectionTests(unittest.TestCase):
+    """Background traffic must not drive its own login.
+
+    Diagnosed from CloudWatch on 2026-08-09: ELBAuthFailure non-zero with
+    ELBAuthError zero, which AWS defines as an IdP denial or an authorization
+    code redeemed more than once. Cognito was accepting the code, so codes
+    were being used twice -- the dashboard's auto-reconnecting EventSource and
+    the station-alert poll were each starting their own login flow alongside
+    the user's real navigation, clobbering each other's nonce. The user got a
+    bare 401 after a perfectly good MFA code and had to retype the URL.
+    """
+
+    def _read(self, relative: str) -> str:
+        from pathlib import Path
+
+        return (Path(__file__).parents[2] / relative).read_text(encoding="utf-8")
+
+    def test_helper_stops_work_and_shows_a_banner(self):
+        helper = self._read("static/js/lcdash-session.js")
+        self.assertIn("opaqueredirect", helper)
+        self.assertIn("/oauth2/", helper)
+        self.assertIn("Your session has ended", helper)
+        self.assertIn("Sign in again", helper)
+        # It must never navigate on its own; the reload is the user's choice.
+        self.assertNotIn("window.location.assign", helper)
+        self.assertNotIn("window.location.href =", helper)
+
+    def test_helper_loads_before_any_page_script(self):
+        base = self._read("templates/layouts/base.html")
+        self.assertIn("lcdash-session.js", base)
+        self.assertLess(
+            base.index("lcdash-session.js"),
+            base.index("{% block content %}"),
+            "pollers must be able to register a stop before they start",
+        )
+
+    def test_the_reconnecting_event_source_is_closed_on_session_end(self):
+        dashboard = self._read("static/js/lcdash-dashboard.js")
+        self.assertIn("LCDashSession.onEnd", dashboard)
+        self.assertIn("realtimeSource.close()", dashboard)
+        # readyState 2 is CLOSED: the browser gave up reconnecting.
+        self.assertIn("readyState === 2", dashboard)
+
+    def test_polling_checks_the_response_and_stops(self):
+        alerts = self._read("static/js/lcdash-station-alerts-cloud.js")
+        self.assertIn("LCDashSession.check(response)", alerts)
+        self.assertIn("clearInterval(pollTimer)", alerts)
