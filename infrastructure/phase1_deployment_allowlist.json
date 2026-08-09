@@ -12,8 +12,8 @@
     {
       "order": 1,
       "stack": "lcdash-p1-logan-use1-certificate",
-      "purpose": "request ACM certificate for aws.logan911.com",
-      "human_hold": "add exact ACM validation CNAME in authoritative Cloudflare DNS (never in Hostinger, which is registrar only) and confirm certificate status ISSUED"
+      "purpose": "request ACM certificates for aws.logan911.com and auth.logan911.com",
+      "human_hold": "add BOTH exact ACM validation CNAMEs, one per certificate, in authoritative Cloudflare DNS as DNS-only (never in Hostinger, which is registrar only) and confirm BOTH certificates report ISSUED; publishing only one leaves the other at PENDING_VALIDATION with no error -- see docs/planning/CLOUDFLARE_ACM_DNS_HOLD.md"
     },
     {
       "order": 2,
