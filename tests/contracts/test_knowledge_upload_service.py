@@ -428,3 +428,97 @@ class IngestionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class _PerSourceBedrockClient:
+    """Bedrock double whose behavior differs per data source id."""
+
+    def __init__(self, *, conflicts=(), summaries_by_source=None) -> None:
+        self.conflicts = set(conflicts)
+        self.summaries_by_source = summaries_by_source or {}
+        self.calls: list[tuple] = []
+
+    def start_ingestion_job(self, **kwargs):
+        self.calls.append(("start_ingestion_job", kwargs))
+        source = kwargs["dataSourceId"]
+        if source in self.conflicts:
+            raise _StubClientError("ConflictException")
+        return {"ingestionJob": {"ingestionJobId": f"job-{source}", "status": "STARTING"}}
+
+    def list_ingestion_jobs(self, **kwargs):
+        self.calls.append(("list_ingestion_jobs", kwargs))
+        return {
+            "ingestionJobSummaries": list(
+                self.summaries_by_source.get(kwargs["dataSourceId"], [])
+            )
+        }
+
+
+class MultiDataSourceTests(unittest.TestCase):
+    """The KB caps inclusionPrefixes at one per data source, so the two
+    upload destinations are two data sources behind one admin-facing sync.
+    These pin the fan-out and the aggregation rules."""
+
+    def test_sync_fans_out_to_every_data_source(self):
+        bedrock = _PerSourceBedrockClient()
+        service = _service(bedrock=bedrock, data_source_id="DSMAE00001,DSJACK0001")
+        result = service.start_ingestion()
+        started = [c[1]["dataSourceId"] for c in bedrock.calls if c[0] == "start_ingestion_job"]
+        self.assertEqual(started, ["DSMAE00001", "DSJACK0001"])
+        self.assertEqual(result["job_id"], "job-DSMAE00001,job-DSJACK0001")
+        self.assertEqual(result["status"], "STARTING")
+
+    def test_one_source_mid_sync_does_not_block_the_other(self):
+        bedrock = _PerSourceBedrockClient(conflicts={"DSMAE00001"})
+        service = _service(bedrock=bedrock, data_source_id="DSMAE00001,DSJACK0001")
+        result = service.start_ingestion()
+        self.assertEqual(result["job_id"], "job-DSJACK0001")
+
+    def test_all_sources_mid_sync_is_the_conflict_error(self):
+        bedrock = _PerSourceBedrockClient(conflicts={"DSMAE00001", "DSJACK0001"})
+        service = _service(bedrock=bedrock, data_source_id="DSMAE00001,DSJACK0001")
+        with self.assertRaisesRegex(KnowledgeUploadError, "already running"):
+            service.start_ingestion()
+
+    def test_status_running_on_either_source_wins(self):
+        """A half-synced pair must never read as done."""
+        bedrock = _PerSourceBedrockClient(summaries_by_source={
+            "DSMAE00001": [{"ingestionJobId": "a", "status": "COMPLETE"}],
+            "DSJACK0001": [{"ingestionJobId": "b", "status": "IN_PROGRESS"}],
+        })
+        service = _service(bedrock=bedrock, data_source_id="DSMAE00001,DSJACK0001")
+        self.assertEqual(service.ingestion_status()["status"], "IN_PROGRESS")
+
+    def test_status_failure_on_either_source_beats_complete(self):
+        bedrock = _PerSourceBedrockClient(summaries_by_source={
+            "DSMAE00001": [{"ingestionJobId": "a", "status": "COMPLETE"}],
+            "DSJACK0001": [{"ingestionJobId": "b", "status": "FAILED"}],
+        })
+        service = _service(bedrock=bedrock, data_source_id="DSMAE00001,DSJACK0001")
+        self.assertEqual(service.ingestion_status()["status"], "FAILED")
+
+    def test_status_statistics_are_summed_across_sources(self):
+        bedrock = _PerSourceBedrockClient(summaries_by_source={
+            "DSMAE00001": [{"ingestionJobId": "a", "status": "COMPLETE",
+                            "statistics": {"numberOfDocumentsScanned": 2}}],
+            "DSJACK0001": [{"ingestionJobId": "b", "status": "COMPLETE",
+                            "statistics": {"numberOfDocumentsScanned": 3}}],
+        })
+        service = _service(bedrock=bedrock, data_source_id="DSMAE00001,DSJACK0001")
+        status = service.ingestion_status()
+        self.assertEqual(status["status"], "COMPLETE")
+        self.assertEqual(status["statistics"]["numberOfDocumentsScanned"], 5)
+
+    def test_never_run_only_when_no_source_has_synced(self):
+        bedrock = _PerSourceBedrockClient(summaries_by_source={
+            "DSMAE00001": [], "DSJACK0001": [],
+        })
+        service = _service(bedrock=bedrock, data_source_id="DSMAE00001,DSJACK0001")
+        self.assertEqual(service.ingestion_status()["status"], "NEVER_RUN")
+
+        bedrock = _PerSourceBedrockClient(summaries_by_source={
+            "DSMAE00001": [{"ingestionJobId": "a", "status": "COMPLETE"}],
+            "DSJACK0001": [],
+        })
+        service = _service(bedrock=bedrock, data_source_id="DSMAE00001,DSJACK0001")
+        self.assertEqual(service.ingestion_status()["status"], "COMPLETE")

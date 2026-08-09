@@ -856,15 +856,17 @@ class Phase1FoundationStack(cdk.Stack):
                 self,
                 "CloudAiUploadsDataSourceId",
                 type="String",
-                # Blank means admin uploads are not provisioned; the data
-                # source is created out-of-band by
+                # Blank means admin uploads are not provisioned. The data
+                # sources are created out-of-band by
                 # scripts/provision_cloud_uploads_data_source.py, matching how
-                # the knowledge base itself was provisioned.
-                allowed_pattern="^([A-Z0-9]{10})?$",
+                # the knowledge base itself was provisioned. Comma-separated
+                # because this KB caps inclusionPrefixes at one per data
+                # source, so the two upload destinations are two sources.
+                allowed_pattern="^([A-Z0-9]{10}(,[A-Z0-9]{10})*)?$",
                 default="",
                 description=(
-                    "Bedrock data source ID indexing the admin cloud-uploads "
-                    "prefixes; blank until provisioned."
+                    "Comma-separated Bedrock data source IDs indexing the "
+                    "admin cloud-uploads prefixes; blank until provisioned."
                 ),
             ),
             "create_trail": cdk.CfnParameter(

@@ -330,49 +330,96 @@ class KnowledgeUploadService:
 
     # -------------------------------------------------------------- ingestion
 
+    # The KB's S3 Vectors storage caps inclusionPrefixes at ONE per data
+    # source (a two-prefix create was rejected with a ValidationException at
+    # provisioning time), so the two destinations are two data sources and
+    # ``data_source_id`` is a comma-separated pair. One "sync" from the
+    # admin's point of view fans out to one job per data source, and status
+    # aggregates across them: any running wins, else any failure, else done.
+
     def start_ingestion(self) -> dict:
-        """Start a Knowledge Base ingestion sync over the data source."""
+        """Start a Knowledge Base ingestion sync over every data source."""
         self._require_ingestion_config()
-        try:
-            response = self.bedrock.start_ingestion_job(
-                knowledgeBaseId=self._knowledge_base_id,
-                dataSourceId=self._data_source_id,
+        started: list[str] = []
+        already_running = 0
+        for data_source_id in self._data_source_ids():
+            try:
+                response = self.bedrock.start_ingestion_job(
+                    knowledgeBaseId=self._knowledge_base_id,
+                    dataSourceId=data_source_id,
+                )
+            except Exception as error:
+                if _aws_error_code(error) == "ConflictException":
+                    # Bedrock allows one running job per data source. A pair
+                    # where one is mid-sync should still sync the other, so
+                    # count and continue rather than abort.
+                    already_running += 1
+                    continue
+                raise
+            job = response.get("ingestionJob", {})
+            job_id = str(job.get("ingestionJobId") or "")
+            started.append(job_id)
+            logger.info(
+                "knowledge-upload start_ingestion data_source=%s job_id=%s",
+                data_source_id, job_id,
             )
-        except Exception as error:
-            if _aws_error_code(error) == "ConflictException":
-                # Bedrock allows one running job per data source; surface
-                # that as a plain sentence instead of a stack trace.
-                raise KnowledgeUploadError(
-                    "An ingestion sync is already running; wait for it to finish."
-                ) from error
-            raise
-        job = response.get("ingestionJob", {})
-        job_id = str(job.get("ingestionJobId") or "")
-        status = str(job.get("status") or "")
-        logger.info("knowledge-upload start_ingestion job_id=%s status=%s", job_id, status)
-        return {"job_id": job_id, "status": status}
+        if not started and already_running:
+            raise KnowledgeUploadError(
+                "An ingestion sync is already running; wait for it to finish."
+            )
+        return {"job_id": ",".join(started), "status": "STARTING"}
+
+    _STATUS_PRECEDENCE = ("IN_PROGRESS", "STARTING", "FAILED", "STOPPED", "COMPLETE")
 
     def ingestion_status(self) -> dict:
-        """Status of the most recent ingestion job, or NEVER_RUN when none."""
+        """Aggregate status of the newest job on each data source.
+
+        NEVER_RUN only when NO data source has ever synced; a running job on
+        either source reports the whole sync as running, and a failure on
+        either surfaces as FAILED -- a half-synced pair must not read as done.
+        """
         self._require_ingestion_config()
-        response = self.bedrock.list_ingestion_jobs(
-            knowledgeBaseId=self._knowledge_base_id,
-            dataSourceId=self._data_source_id,
-            maxResults=1,
-            sortBy={"attribute": "STARTED_AT", "order": "DESCENDING"},
-        )
-        summaries = response.get("ingestionJobSummaries") or []
-        if not summaries:
+        newest_jobs: list[dict] = []
+        for data_source_id in self._data_source_ids():
+            response = self.bedrock.list_ingestion_jobs(
+                knowledgeBaseId=self._knowledge_base_id,
+                dataSourceId=data_source_id,
+                maxResults=1,
+                sortBy={"attribute": "STARTED_AT", "order": "DESCENDING"},
+            )
+            summaries = response.get("ingestionJobSummaries") or []
+            if summaries:
+                newest_jobs.append(summaries[0])
+        if not newest_jobs:
             return {"job_id": "", "status": "NEVER_RUN"}
-        newest = summaries[0]
-        started = newest.get("startedAt")
-        statistics = newest.get("statistics")
+
+        statuses = [str(job.get("status") or "") for job in newest_jobs]
+        overall = next(
+            (candidate for candidate in self._STATUS_PRECEDENCE if candidate in statuses),
+            statuses[0],
+        )
+        merged_statistics: dict = {}
+        for job in newest_jobs:
+            statistics = job.get("statistics")
+            if isinstance(statistics, Mapping):
+                for key, value in statistics.items():
+                    if isinstance(value, (int, float)) and not isinstance(value, bool):
+                        merged_statistics[key] = merged_statistics.get(key, 0) + value
+        started_values = [
+            job.get("startedAt") for job in newest_jobs if job.get("startedAt")
+        ]
+        earliest = min(started_values, default="")
         return {
-            "job_id": str(newest.get("ingestionJobId") or ""),
-            "status": str(newest.get("status") or ""),
-            "started_at": started.isoformat() if hasattr(started, "isoformat") else (started or ""),
-            "statistics": dict(statistics) if isinstance(statistics, Mapping) else {},
+            "job_id": ",".join(str(job.get("ingestionJobId") or "") for job in newest_jobs),
+            "status": overall,
+            "started_at": earliest.isoformat() if hasattr(earliest, "isoformat") else (earliest or ""),
+            "statistics": merged_statistics,
         }
+
+    def _data_source_ids(self) -> tuple[str, ...]:
+        return tuple(
+            part.strip() for part in self._data_source_id.split(",") if part.strip()
+        )
 
     # ----------------------------------------------------------------- guards
 

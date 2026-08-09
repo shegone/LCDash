@@ -8,11 +8,15 @@ what exists.
 
 What it does, idempotently:
 
-1. Creates data source ``lcdash_cloud_uploads`` on the knowledge base with the
-   two admin-upload inclusion prefixes, copying the chunking and parsing
-   configuration VERBATIM from the live centralsquare data source (chunking is
-   irreversible per docs/planning/PRIVATE_BEDROCK_KB_RAG_READINESS_2026-08-05;
-   uploads must not fragment differently from the approved sets).
+1. Creates TWO data sources, ``lcdash_mae_uploads`` and
+   ``lcdash_jack_uploads`` -- one per admin-upload prefix, because this KB
+   (S3 Vectors storage) caps inclusionPrefixes at ONE per data source; the
+   first attempt with a single two-prefix source was rejected with a
+   ValidationException, which is also why the approved sources are one
+   prefix each. Chunking and parsing are copied VERBATIM from the live
+   centralsquare source (chunking is irreversible per
+   docs/planning/PRIVATE_BEDROCK_KB_RAG_READINESS_2026-08-05; uploads must
+   not fragment differently from the approved sets).
 2. Extends the knowledge-base service role's inline policy so Bedrock can read
    the upload prefixes: adds them to the s3:ListBucket prefix condition and
    the s3:GetObject resources. Nothing is removed and no other statement is
@@ -43,14 +47,16 @@ KNOWLEDGE_BASE_ID = "BPKT5MB6UW"
 REGION = "us-east-1"
 BUCKET = "lcdash-p1-logan-use1-862772137583-document-library"
 BUCKET_ARN = f"arn:aws:s3:::{BUCKET}"
-DATA_SOURCE_NAME = "lcdash_cloud_uploads"
 TEMPLATE_DATA_SOURCE_NAME = "lcdash_centralsquare_approved_20260805"
 KB_ROLE_NAME = "AmazonBedrockExecutionRoleForKnowledgeBase_lcdash_p1_logan_use1"
 
-UPLOAD_PREFIXES = (
-    "tenants/logan-synthetic/document-library/mae-uploads/current/",
-    "tenants/logan-synthetic/document-library/jack-uploads/mindshare/current/",
+UPLOAD_DATA_SOURCES = (
+    ("lcdash_mae_uploads",
+     "tenants/logan-synthetic/document-library/mae-uploads/current/"),
+    ("lcdash_jack_uploads",
+     "tenants/logan-synthetic/document-library/jack-uploads/mindshare/current/"),
 )
+UPLOAD_PREFIXES = tuple(prefix for _name, prefix in UPLOAD_DATA_SOURCES)
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -126,7 +132,9 @@ def main(argv: list[str] | None = None) -> int:
     bedrock = session.client("bedrock-agent")
     iam_client = session.client("iam")
 
-    existing = _find_data_source(bedrock, DATA_SOURCE_NAME)
+    existing = {
+        name: _find_data_source(bedrock, name) for name, _prefix in UPLOAD_DATA_SOURCES
+    }
     template = _find_data_source(bedrock, TEMPLATE_DATA_SOURCE_NAME)
     if template is None:
         print(f"error: template data source {TEMPLATE_DATA_SOURCE_NAME} not found.")
@@ -135,8 +143,10 @@ def main(argv: list[str] | None = None) -> int:
     policy_name, updated_policy, policy_changed = _plan_role_policy(iam_client)
 
     print(f"Knowledge base: {KNOWLEDGE_BASE_ID}")
-    print(f"Data source {DATA_SOURCE_NAME}: "
-          f"{'EXISTS id=' + existing['dataSourceId'] if existing else 'to be CREATED'}")
+    for name, _prefix in UPLOAD_DATA_SOURCES:
+        found = existing[name]
+        print(f"Data source {name}: "
+              f"{'EXISTS id=' + found['dataSourceId'] if found else 'to be CREATED'}")
     print(f"KB role policy {policy_name}: "
           f"{'to be EXTENDED with upload prefixes' if policy_changed else 'already grants upload prefixes'}")
     for prefix in UPLOAD_PREFIXES:
@@ -154,11 +164,16 @@ def main(argv: list[str] | None = None) -> int:
         )
         print("applied: KB role policy extended.")
 
-    if existing is None:
+    ids: list[str] = []
+    for name, prefix in UPLOAD_DATA_SOURCES:
+        found = existing[name]
+        if found is not None:
+            ids.append(found["dataSourceId"])
+            continue
         created = bedrock.create_data_source(
             knowledgeBaseId=KNOWLEDGE_BASE_ID,
-            name=DATA_SOURCE_NAME,
-            description="Admin-uploaded documents (mae-uploads + jack-uploads).",
+            name=name,
+            description=f"Admin-uploaded documents ({name.removeprefix('lcdash_')}).",
             # RETAIN matches the approved data sources: deleting the data
             # source must never delete vectors out from under the index.
             dataDeletionPolicy="RETAIN",
@@ -167,20 +182,21 @@ def main(argv: list[str] | None = None) -> int:
                 "s3Configuration": {
                     "bucketArn": BUCKET_ARN,
                     "bucketOwnerAccountId": "862772137583",
-                    "inclusionPrefixes": list(UPLOAD_PREFIXES),
+                    # This KB (S3 Vectors) caps inclusionPrefixes at one per
+                    # data source, hence one data source per destination.
+                    "inclusionPrefixes": [prefix],
                 },
             },
             # Copied verbatim from the live approved source, not restated.
             vectorIngestionConfiguration=template["vectorIngestionConfiguration"],
         )["dataSource"]
-        print(f"applied: created data source {created['dataSourceId']}")
-        data_source_id = created["dataSourceId"]
-    else:
-        data_source_id = existing["dataSourceId"]
+        print(f"applied: created data source {name} = {created['dataSourceId']}")
+        ids.append(created["dataSourceId"])
 
+    joined = ",".join(ids)
     print(
         "\nNext steps:\n"
-        f"  1. Stack parameter CloudAiUploadsDataSourceId = {data_source_id}\n"
+        f"  1. Stack parameter CloudAiUploadsDataSourceId = {joined}\n"
         "  2. Append to CloudAiAllowedS3Prefixes:\n"
         + "".join(f"     s3://{BUCKET}/{prefix},\n" for prefix in UPLOAD_PREFIXES)
         + "  3. Deploy; then upload a test PDF and run a sync from /admin/knowledge."
