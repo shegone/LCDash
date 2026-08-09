@@ -29,9 +29,17 @@ these resources, re-apply by hand from this record.
   `get-user-pool-mfa-config` and preserved all mutable settings explicitly.
   Do the same for any future pool change.
 
-## Proposed but NOT executed (awaiting approval)
+## Second batch — approved and executed later the same day
 
-- `minimumHealthyPercent` 0 → 100 and deregistration delay 300s → 30s
-  (make-before-break deploys; bundle with next release)
-- ALB access logs to S3; ALB deletion protection
-- GuardDuty (~$5/mo)
+| # | Change | Resource | Verified state after |
+|---|--------|----------|----------------------|
+| 7 | `minimumHealthyPercent` 0 → 100 | ECS service (via CDK + reviewed change set, release `d547a1f`) | Live; first make-before-break deploy completed with zero downtime and no alarm |
+| 8 | ALB access logs | Bucket `lcdash-p1-logan-use1-862772137583-alb-logs` (PAB all-on, ELB delivery policy, 90-day expiry), prefix `alb/` | `access_logs.s3.enabled=true` accepted (ALB validates bucket perms at enable) |
+| 9 | Deregistration delay 300s → 30s | Target group `lcdash-WebTa-R0JLQ7JULDGH` | Attribute read-back 30 |
+| 10 | GuardDuty | Detector `04cff43c9f20b8c9cf5c2bc0d520e99e` | Enabled, SIX_HOURS publishing |
+| 11 | ALB deletion protection | `lcdash-p1-logan-use1-alb` | `deletion_protection.enabled=true` |
+
+8, 9, and 11 are mirrored in `foundation_stack.py` so the template and live
+state agree; the log bucket itself stays OUT of the stack so a teardown
+cannot delete the forensic record. GuardDuty and the bucket are API-only —
+re-apply from this table if ever rebuilding the account.

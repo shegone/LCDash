@@ -396,7 +396,21 @@ class Phase1FoundationStack(cdk.Stack):
             internet_facing=True,
             security_group=alb_security_group,
             vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
+            deletion_protection=True,
         )
+        # Access logs + deletion protection were applied live 2026-08-09
+        # (approved). The log bucket is managed OUT of this stack on purpose:
+        # a teardown must not take the forensic record of the auth front door
+        # with it. Attributes are mirrored here so the template and the live
+        # ALB agree; the bucket policy grants the us-east-1 ELB log-delivery
+        # account PutObject on alb/AWSLogs/<account>/* (see
+        # docs/planning/AWS_HARDENING_2026-08-09.md).
+        load_balancer.set_attribute("access_logs.s3.enabled", "true")
+        load_balancer.set_attribute(
+            "access_logs.s3.bucket",
+            "lcdash-p1-logan-use1-862772137583-alb-logs",
+        )
+        load_balancer.set_attribute("access_logs.s3.prefix", "alb")
         certificate = acm.Certificate.from_certificate_arn(
             self,
             "Certificate",
@@ -581,6 +595,11 @@ class Phase1FoundationStack(cdk.Stack):
             protocol=elbv2.ApplicationProtocol.HTTP,
             targets=[service],
             health_check=elbv2.HealthCheck(path="/health"),
+            # 30s, not the 300s default: one target means every deploy waits
+            # out the full drain, and this app holds no long-lived requests
+            # worth five minutes of connection draining. Applied live
+            # 2026-08-09 (approved); mirrored here so the template agrees.
+            deregistration_delay=cdk.Duration.seconds(30),
         )
         # NOTE: AWS suggests a dedicated UNauthenticated logout landing page
         # ("client logout landing pages... cannot be behind an Application
