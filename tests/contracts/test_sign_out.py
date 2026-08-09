@@ -82,6 +82,15 @@ class SignOutTests(unittest.TestCase):
         self.assertTrue(host_only)
         self.assertTrue(domain_scoped)
 
+    def test_logout_also_clears_the_in_flight_login_nonce(self):
+        """AWSALBAuthNonce is written while a login is in flight and its name
+        is fixed by AWS regardless of session_cookie_name. Nothing is in
+        flight at sign-out, so leaving one behind is stale state a later
+        login has no reason to inherit."""
+        response = self.client.get("/logout", follow_redirects=False)
+        expired = "".join(response.headers.get_list("set-cookie"))
+        self.assertIn("AWSALBAuthNonce=", expired)
+
     def test_cookie_name_follows_settings(self):
         """Name comes from the stack, so app and listener cannot drift."""
         with patch.object(settings, "alb_identity_session_cookie", "SomeOtherName"):

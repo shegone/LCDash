@@ -900,7 +900,15 @@ def _alb_session_cookie_names() -> tuple[str, ...]:
     """
 
     base = settings.alb_identity_session_cookie or "AWSELBAuthSessionCookie"
-    return (base, *(f"{base}-{index}" for index in range(4)))
+    return (
+        base,
+        *(f"{base}-{index}" for index in range(4)),
+        # The nonce the ALB writes while a login is in flight. Its name is
+        # fixed by AWS and unaffected by session_cookie_name. Nothing is
+        # in flight at sign-out, so a leftover one is stale state that a
+        # later login has no reason to inherit.
+        "AWSALBAuthNonce",
+    )
 
 
 @app.get("/logout")
