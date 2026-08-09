@@ -23,12 +23,15 @@ Two deliberate choices:
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Literal, Mapping
 
 from app.core.cloud_pilot_roles import COGNITO_GROUP_ROLE_MAP, PilotRole
+
+logger = logging.getLogger(__name__)
 
 # The pool sets UsernameAttributes=["email"], so a user's email *is* their
 # username. Keep that assumption in one place.
@@ -171,11 +174,24 @@ def plan_user_sync(
     current: Iterable[CognitoUserState],
     *,
     allow_disabling_everyone: bool = False,
+    suppressed: Mapping[str, str] | None = None,
 ) -> SyncPlan:
-    """Diff the declared list against pool state and return an ordered plan."""
+    """Diff the declared list against pool state and return an ordered plan.
+
+    ``suppressed`` maps an email address to the reason SES suppressed it. A
+    suppressed approved user is reported as a warning rather than a refusal:
+    their account should still exist and be in the right group, but they cannot
+    receive a sign-in code, so in practice they cannot sign in at all. Surfacing
+    it here is the point -- otherwise the only symptom is the user saying no code
+    arrived, which is indistinguishable from slow mail or a spam filter.
+    """
 
     approved_by_email = {user.email: user for user in approved}
     current_by_email = {state.email.strip().lower(): state for state in current}
+    suppressed_by_email = {
+        str(email).strip().lower(): str(reason)
+        for email, reason in (suppressed or {}).items()
+    }
 
     actions: list[SyncAction] = []
     warnings: list[str] = []
@@ -184,6 +200,13 @@ def plan_user_sync(
     if not approved_by_email:
         refusals.append("No approved users were declared; refusing to plan.")
         return SyncPlan(refusals=tuple(refusals))
+
+    for email in sorted(set(approved_by_email) & set(suppressed_by_email)):
+        warnings.append(
+            f"{email} is on the SES suppression list "
+            f"({suppressed_by_email[email]}); sign-in codes cannot reach them, so "
+            "this account cannot sign in until the address is removed from it."
+        )
 
     for email, user in sorted(approved_by_email.items()):
         state = current_by_email.get(email)
@@ -309,6 +332,40 @@ def read_pool_state(client: Any, user_pool_id: str) -> tuple[CognitoUserState, .
                 )
             )
     return tuple(states)
+
+
+def read_suppressed_addresses(
+    sesv2_client: Any, emails: Iterable[str]
+) -> dict[str, str]:
+    """Return {email: reason} for approved addresses SES is refusing to send to.
+
+    Queried per address rather than by listing the whole suppression list: the
+    list is account-wide and unbounded, while the addresses we care about are the
+    handful in the approved-users file.
+
+    Never raises. This is diagnostic information, so a missing permission or an
+    API change must not stop the reconciler from doing its actual job.
+    """
+
+    suppressed: dict[str, str] = {}
+    for email in emails:
+        address = str(email).strip().lower()
+        if not address:
+            continue
+        try:
+            response = sesv2_client.get_suppressed_destination(EmailAddress=address)
+        except Exception as exc:  # noqa: BLE001
+            # NotFoundException is the normal, healthy answer: not suppressed.
+            if "NotFound" not in type(exc).__name__ and "NotFound" not in str(exc):
+                logger.warning(
+                    "Could not check the SES suppression list for an approved "
+                    "address; continuing without that check (%s)",
+                    type(exc).__name__,
+                )
+            continue
+        destination = response.get("SuppressedDestination") or {}
+        suppressed[address] = str(destination.get("Reason") or "unknown reason")
+    return suppressed
 
 
 def _read_user_groups(client: Any, user_pool_id: str, username: str) -> list[str]:

@@ -24,6 +24,7 @@ from app.tools.cognito_user_sync import (
     load_approved_users,
     parse_approved_users,
     plan_user_sync,
+    read_suppressed_addresses,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -259,6 +260,100 @@ class PlanTests(unittest.TestCase):
             ],
         )
         self.assertTrue(plan.is_empty)
+
+
+class SuppressionCheckTests(unittest.TestCase):
+    """A suppressed address means that user cannot sign in at all.
+
+    Every sign-in code goes through SES, so suppression is a silent lockout: the
+    account looks healthy in Cognito and the only symptom is the person saying no
+    code arrived. These tests pin that it surfaces, and that it surfaces as a
+    warning rather than blocking provisioning.
+    """
+
+    def _user(self, email="a@911logan.com"):
+        return ApprovedUser(email=email, name="A", role=PilotRole.USER)
+
+    def test_suppressed_approved_user_is_reported_with_the_reason(self):
+        plan = plan_user_sync(
+            [self._user()], [], suppressed={"a@911logan.com": "BOUNCE"}
+        )
+        self.assertTrue(any("suppression list" in w for w in plan.warnings))
+        self.assertTrue(any("BOUNCE" in w for w in plan.warnings))
+        self.assertTrue(any("cannot sign in" in w for w in plan.warnings))
+
+    def test_suppression_warns_but_does_not_block_provisioning(self):
+        """The account should still be created and grouped correctly."""
+        plan = plan_user_sync(
+            [self._user()], [], suppressed={"a@911logan.com": "COMPLAINT"}
+        )
+        self.assertTrue(plan.safe_to_apply)
+        self.assertEqual(
+            _kinds(plan),
+            [
+                ("create_user", "a@911logan.com", "lcdash-pilot-user"),
+                ("add_to_group", "a@911logan.com", "lcdash-pilot-user"),
+            ],
+        )
+
+    def test_suppressed_address_not_in_the_approved_list_is_ignored(self):
+        """Someone else's suppressed address is not this tool's business."""
+        plan = plan_user_sync(
+            [self._user()], [], suppressed={"stranger@example.com": "BOUNCE"}
+        )
+        self.assertEqual(plan.warnings, ())
+
+    def test_suppression_matching_is_case_insensitive(self):
+        plan = plan_user_sync(
+            [self._user("mixed@911logan.com")],
+            [],
+            suppressed={"Mixed@911Logan.com": "BOUNCE"},
+        )
+        self.assertTrue(any("mixed@911logan.com" in w for w in plan.warnings))
+
+    def test_no_suppression_data_produces_no_warnings(self):
+        self.assertEqual(plan_user_sync([self._user()], []).warnings, ())
+
+
+class SuppressionReaderTests(unittest.TestCase):
+    def test_not_found_means_healthy_and_is_not_reported(self):
+        class _NotFoundException(Exception):
+            pass
+
+        class _Client:
+            def get_suppressed_destination(self, **kwargs):
+                raise _NotFoundException("address not found")
+
+        self.assertEqual(
+            read_suppressed_addresses(_Client(), ["a@911logan.com"]), {}
+        )
+
+    def test_suppressed_address_returns_its_reason(self):
+        class _Client:
+            def get_suppressed_destination(self, **kwargs):
+                return {
+                    "SuppressedDestination": {
+                        "EmailAddress": kwargs["EmailAddress"],
+                        "Reason": "BOUNCE",
+                    }
+                }
+
+        self.assertEqual(
+            read_suppressed_addresses(_Client(), ["A@911Logan.com"]),
+            {"a@911logan.com": "BOUNCE"},
+        )
+
+    def test_an_unexpected_api_error_never_breaks_the_reconciler(self):
+        """Diagnostics must not stop the tool from doing its actual job."""
+
+        class _Client:
+            def get_suppressed_destination(self, **kwargs):
+                raise RuntimeError("AccessDeniedException")
+
+        with self.assertLogs("app.tools.cognito_user_sync", level="WARNING"):
+            self.assertEqual(
+                read_suppressed_addresses(_Client(), ["a@911logan.com"]), {}
+            )
 
 
 class LockoutGuardTests(unittest.TestCase):

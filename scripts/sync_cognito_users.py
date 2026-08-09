@@ -31,6 +31,7 @@ from app.tools.cognito_user_sync import (  # noqa: E402
     load_approved_users,
     plan_user_sync,
     read_pool_state,
+    read_suppressed_addresses,
 )
 
 DEFAULT_APPROVED_USERS = REPO_ROOT / "config" / "approved_users.json"
@@ -67,6 +68,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=(
             "Permit a plan that disables every enabled user. Refused by default, "
             "since that is normally a truncated approved-users file."
+        ),
+    )
+    parser.add_argument(
+        "--skip-suppression-check",
+        action="store_true",
+        help=(
+            "Skip checking whether approved addresses are on the SES suppression "
+            "list. Only useful if the caller lacks ses:GetSuppressedDestination."
         ),
     )
     return parser.parse_args(argv)
@@ -109,10 +118,28 @@ def main(argv: list[str] | None = None) -> int:
         groups = ",".join(sorted(state.groups)) or "-none-"
         print(f"  {state.email:<40} {flag} {state.status:<22} {groups}")
 
+    # A suppressed address cannot receive a sign-in code, so that account cannot
+    # sign in at all. Checked here because this is the one place that already
+    # knows exactly which addresses are supposed to work.
+    suppressed = {}
+    if not args.skip_suppression_check:
+        try:
+            suppressed = read_suppressed_addresses(
+                boto3.client("sesv2", region_name=args.region),
+                (user.email for user in approved),
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"warning: could not check the SES suppression list ({exc});"
+                " continuing without it",
+                file=sys.stderr,
+            )
+
     plan = plan_user_sync(
         approved,
         current,
         allow_disabling_everyone=args.allow_disabling_everyone,
+        suppressed=suppressed,
     )
 
     for warning in plan.warnings:
