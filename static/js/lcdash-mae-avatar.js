@@ -154,11 +154,14 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
     ];
     const SMILE_REGION = { x0: 0.28, x1: 0.70, y0: 0.43, y1: 0.68 };
 
-    // Framing presets: how tightly the portrait is cropped. The booth frame
-    // shows the whole portrait; console fills the pane with her face.
+    // Framing presets: which vertical band of the portrait fills the pane's
+    // height. Console is head-and-shoulders; booth is the whole portrait.
+    // The sides letterbox against the page background on wide screens --
+    // multiplying a zoom onto cover-fit instead meant a widescreen monitor
+    // showed only her eyes.
     const PORTRAIT_FRAMES = {
-        console: { zoom: 1.55, focusY: 0.42 },
-        booth: { zoom: 1.0, focusY: 0.5 }
+        console: { top: 0.13, bottom: 0.86 },
+        booth: { top: 0.0, bottom: 1.0 }
     };
     let activeFrame = "console";
 
@@ -219,15 +222,17 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
             const ih = base.height;
             const frame = PORTRAIT_FRAMES[activeFrame] || PORTRAIT_FRAMES.console;
 
-            // Cover-fit, zoomed, centered on her face.
-            const scale = Math.max(cw / iw, ch / ih) * frame.zoom;
+            // Fit the frame's vertical band to the pane height, centered on
+            // her face; sides letterbox on wide screens rather than zooming.
+            const band = Math.max(0.1, frame.bottom - frame.top);
+            const scale = ch / (band * ih);
             const drawW = iw * scale;
             const drawH = ih * scale;
             let ox = cw / 2 - FACE.cx * drawW;
-            let oy = ch / 2 - frame.focusY * drawH;
-            // Never show past the image edges.
-            ox = Math.min(0, Math.max(cw - drawW, ox));
-            oy = Math.min(0, Math.max(ch - drawH, oy));
+            const oy = -frame.top * drawH;
+            // Keep her horizontally on screen when the image is wider than
+            // the pane (narrow/kiosk screens crop the sides symmetrically).
+            if (drawW > cw) ox = Math.min(0, Math.max(cw - drawW, ox));
 
             ctx.setTransform(1, 0, 0, 1, 0, 0);
             ctx.fillStyle = "#0b1220";
