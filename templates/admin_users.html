@@ -48,6 +48,9 @@
                 <option value="user">User</option>
                 <option value="supervisor" selected>Supervisor</option>
                 <option value="admin">Admin</option>
+                {#- Avatar-only: can talk with MAE at /mae/avatar and reach
+                    nothing else. The booth/demo tier from the avatar plan. -#}
+                <option value="avatar">Avatar</option>
             </select>
         </div>
         <button id="admin-invite-submit" type="submit">
@@ -97,6 +100,6 @@
     </div>
 </section>
 
-<script src="/static/js/lcdash-admin-users.js?v=20260809-admin-users"></script>
+<script src="/static/js/lcdash-admin-users.js?v=20260809-avatar-role"></script>
 </div>
 {% endblock %}

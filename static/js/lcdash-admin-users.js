@@ -8,8 +8,10 @@
 (function () {
     "use strict";
 
-    const ROLES = ["user", "supervisor", "admin"];
-    const ROLE_ORDER = { admin: 0, supervisor: 1, user: 2 };
+    // "avatar" is the conversation-only tier from the avatar plan: the
+    // account can talk with MAE at /mae/avatar and reach nothing else.
+    const ROLES = ["user", "supervisor", "admin", "avatar"];
+    const ROLE_ORDER = { admin: 0, supervisor: 1, user: 2, avatar: 3 };
     const CONFIRM_WINDOW_MS = 5000;
 
     const loading = document.getElementById("admin-users-loading");
@@ -72,12 +74,12 @@
         return String(value);
     }
 
-    // Sort: enabled admins, then supervisors, then users, disabled accounts
-    // last; alphabetical by email within each band.
+    // Sort: enabled admins, then supervisors, then users, then avatar-only
+    // accounts, disabled accounts last; alphabetical by email within each band.
     function sortUsers(users) {
         return users.slice().sort(function (a, b) {
-            const bandA = a.enabled ? (ROLE_ORDER[a.role] !== undefined ? ROLE_ORDER[a.role] : 2) : 3;
-            const bandB = b.enabled ? (ROLE_ORDER[b.role] !== undefined ? ROLE_ORDER[b.role] : 2) : 3;
+            const bandA = a.enabled ? (ROLE_ORDER[a.role] !== undefined ? ROLE_ORDER[a.role] : 2) : 4;
+            const bandB = b.enabled ? (ROLE_ORDER[b.role] !== undefined ? ROLE_ORDER[b.role] : 2) : 4;
             if (bandA !== bandB) return bandA - bandB;
             return String(a.email).localeCompare(String(b.email));
         });

@@ -106,6 +106,37 @@ class AdminUsersRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.service.invite_user.assert_called_once_with("new@911logan.com", "supervisor")
 
+    def test_avatar_role_is_assignable_and_offered_in_the_invite_form(self):
+        """The avatar-only tier must be reachable from User Admin.
+
+        The service already validates roles against COGNITO_GROUP_ROLE_MAP,
+        so the backend accepted "avatar" from the day the role map grew --
+        but the invite dropdown and row selects hardcode their choices, and
+        a role the UI never offers is a tier no admin can actually grant.
+        Shipped missing on the first avatar release; Ted caught it, not the
+        suite. Both halves are pinned here.
+        """
+        self._with_service()
+        self._sign_in_as(_identity("tedsparks@911logan.com", "lcdash-pilot-admin"))
+
+        self.service.invite_user.return_value = {"email": "booth@911logan.com"}
+        response = self.client.post(
+            "/api/admin/users", json={"email": "booth@911logan.com", "role": "avatar"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.service.invite_user.assert_called_once_with("booth@911logan.com", "avatar")
+
+        self.service.set_role.return_value = {"email": "booth@911logan.com"}
+        self.client.post(
+            "/api/admin/users/role", json={"email": "booth@911logan.com", "role": "avatar"}
+        )
+        self.service.set_role.assert_called_once_with(
+            "booth@911logan.com", "avatar", acting_subject="tedsparks@911logan.com"
+        )
+
+        page = self.client.get("/admin/users")
+        self.assertIn('value="avatar"', page.text)
+
     def test_role_change_and_disable_carry_the_acting_admin(self):
         """Self-protection rules live in the service; they only work if the
         routes pass WHO is acting, from the verified identity."""

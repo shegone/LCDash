@@ -1,11 +1,12 @@
 // MAE avatar runtime -- Phase 1 of docs/planning/MAE_AVATAR_PLAN_2026-08-09.md.
 //
-// A client-rendered figure driven by ARKit-style blendshape weights. The
-// weight *names* are the contract: today a procedural placeholder interprets
-// a small subset and Polly visemes drive the mouth; when the Character
-// Creator 5 export lands at /static/models/mae.glb the same weights drive
-// its real morph targets, and when Audio2Face streams weights later, only
-// the source changes. Rendering is always local -- no server GPU.
+// Two renderers, one driver. Until the Character Creator export exists, MAE
+// is her actual portrait photographs (static/img/mae/), animated in a 2D
+// canvas: the jaw region translates with the same viseme-driven weights that
+// will one day drive real morph targets, eyelids blink, and the soft-smile
+// portrait cross-fades in for warmth. When /static/models/mae.glb appears,
+// the three.js renderer takes over and drives its ARKit morph targets from
+// the very same weight names. Rendering is always local -- no server GPU.
 
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
@@ -73,12 +74,16 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
         cursor: 0
     };
 
-    function activeVisemeTargets() {
+    function isSpeaking() {
         const audio = speechState.audio;
-        if (!audio || audio.paused || audio.ended) return VISEME_TARGETS.sil;
+        return Boolean(audio && !audio.paused && !audio.ended);
+    }
+
+    function activeVisemeTargets() {
+        if (!isSpeaking()) return VISEME_TARGETS.sil;
         // 60 ms lookahead approximates co-articulation: the mouth starts
         // forming a shape slightly before the sound lands.
-        const now = audio.currentTime * 1000 + 60;
+        const now = speechState.audio.currentTime * 1000 + 60;
         const marks = speechState.visemes;
         while (
             speechState.cursor + 1 < marks.length &&
@@ -100,7 +105,8 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
         blinkStartedAt: 0,
         gaze: { x: 0, y: 0 },
         gazeTarget: { x: 0, y: 0 },
-        nextGazeAt: 0
+        nextGazeAt: 0,
+        smile: 0.3
     };
 
     function idleStep(now) {
@@ -123,260 +129,215 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
         idle.gaze.x += (idle.gazeTarget.x - idle.gaze.x) * 0.12;
         idle.gaze.y += (idle.gazeTarget.y - idle.gaze.y) * 0.12;
 
-        // A touch of engagement while speaking.
-        const speaking = speechState.audio && !speechState.audio.paused && !speechState.audio.ended;
-        setWeight("browInnerUp", speaking ? 0.18 : 0.06);
+        // Warmth: a slow soft-smile while listening, mostly neutral while
+        // talking so the mouth animation stays legible.
+        const smileTarget = isSpeaking()
+            ? 0.08
+            : 0.28 + Math.sin(now / 4700) * 0.16;
+        idle.smile += (smileTarget - idle.smile) * 0.03;
+
+        setWeight("browInnerUp", isSpeaking() ? 0.18 : 0.06);
     }
 
     // ------------------------------------------------------------------
-    // Renderer, scene, and the placeholder figure.
+    // Portrait renderer: MAE's photographs, animated on a 2D canvas.
     // ------------------------------------------------------------------
 
-    let renderer = null;
-    let scene = null;
-    let camera = null;
-    let rig = null;
+    // Landmarks measured on the 832x1248 reference set (all portraits share
+    // one framing), normalized so any same-framing re-export keeps working.
+    const FACE = { cx: 0.469, cy: 0.399 };
+    const MOUTH = { x0: 0.397, x1: 0.575, lip: 0.561 };
+    const JAW = { x0: 0.33, x1: 0.66, top: 0.558, bottom: 0.665, maxDrop: 0.019 };
+    const EYES = [
+        { x: 0.300, y: 0.377, w: 0.097, h: 0.046 },
+        { x: 0.547, y: 0.377, w: 0.097, h: 0.046 }
+    ];
+    const SMILE_REGION = { x0: 0.28, x1: 0.70, y0: 0.43, y1: 0.68 };
 
-    const FRAMES = {
-        console: { position: [0, 1.615, 0.52], look: [0, 1.6, 0], fov: 26 },
-        booth: { position: [0, 1.25, 2.7], look: [0, 1.05, 0], fov: 34 }
+    // Framing presets: how tightly the portrait is cropped. The booth frame
+    // shows the whole portrait; console fills the pane with her face.
+    const PORTRAIT_FRAMES = {
+        console: { zoom: 1.55, focusY: 0.42 },
+        booth: { zoom: 1.0, focusY: 0.5 }
     };
     let activeFrame = "console";
 
-    function applyFrame(name) {
-        if (!camera) return;
-        const frame = FRAMES[name] || FRAMES.console;
-        activeFrame = FRAMES[name] ? name : "console";
-        camera.fov = frame.fov;
-        camera.position.set(...frame.position);
-        camera.lookAt(...frame.look);
-        camera.updateProjectionMatrix();
+    function markActiveFramePill() {
         document.getElementById("pill-frame-console").classList.toggle(
             "frame-active", activeFrame === "console");
         document.getElementById("pill-frame-booth").classList.toggle(
             "frame-active", activeFrame === "booth");
     }
 
-    function buildPlaceholderRig() {
-        const skin = new THREE.MeshStandardMaterial({ color: 0xe6b193, roughness: 0.65 });
-        const hairMat = new THREE.MeshStandardMaterial({ color: 0x33241c, roughness: 0.5 });
-        const blouse = new THREE.MeshStandardMaterial({ color: 0x14655c, roughness: 0.7 });
-        const slacks = new THREE.MeshStandardMaterial({ color: 0x1c2434, roughness: 0.8 });
-        const lipMat = new THREE.MeshStandardMaterial({ color: 0xa65a52, roughness: 0.55 });
-        const mouthInnerMat = new THREE.MeshBasicMaterial({ color: 0x40191c });
-        const white = new THREE.MeshStandardMaterial({ color: 0xf4f2ee, roughness: 0.25 });
-        const irisMat = new THREE.MeshBasicMaterial({ color: 0x4f6b52 });
-        const pupilMat = new THREE.MeshBasicMaterial({ color: 0x101010 });
+    function createPortraitRenderer() {
+        const canvas = document.createElement("canvas");
+        canvas.style.cssText = "display:block;width:100%;height:100%;";
+        stage.appendChild(canvas);
+        const ctx = canvas.getContext("2d");
 
-        const figure = new THREE.Group();
+        let base = null;
+        let smile = null;
 
-        // Body: deliberately stylized -- this placeholder exists to prove the
-        // pipeline and frame the camera, not to impersonate the CC5 build.
-        const hips = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.13, 0.105, 0.86, 24), slacks);
-        hips.position.y = 0.52;
-        figure.add(hips);
-        const torso = new THREE.Mesh(
-            new THREE.CapsuleGeometry(0.145, 0.34, 8, 24), blouse);
-        torso.position.y = 1.18;
-        figure.add(torso);
-        for (const side of [-1, 1]) {
-            const arm = new THREE.Mesh(
-                new THREE.CapsuleGeometry(0.038, 0.52, 6, 16), blouse);
-            arm.position.set(side * 0.2, 1.12, 0);
-            arm.rotation.z = side * 0.06;
-            figure.add(arm);
-        }
-        const neck = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.042, 0.05, 0.09, 20), skin);
-        neck.position.y = 1.5;
-        figure.add(neck);
-
-        const head = new THREE.Group();
-        head.position.y = 1.62;
-        figure.add(head);
-
-        const skull = new THREE.Mesh(new THREE.SphereGeometry(0.105, 40, 32), skin);
-        skull.scale.set(0.92, 1.06, 0.94);
-        head.add(skull);
-
-        const hairBack = new THREE.Mesh(
-            new THREE.SphereGeometry(0.112, 40, 32, 0, Math.PI * 2, 0, Math.PI * 0.62),
-            hairMat);
-        hairBack.scale.set(0.98, 1.08, 0.98);
-        hairBack.position.set(0, 0.012, -0.014);
-        head.add(hairBack);
-        const bun = new THREE.Mesh(new THREE.SphereGeometry(0.045, 24, 18), hairMat);
-        bun.position.set(0, 0.05, -0.1);
-        head.add(bun);
-
-        const nose = new THREE.Mesh(new THREE.ConeGeometry(0.011, 0.03, 12), skin);
-        nose.rotation.x = Math.PI / 2;
-        nose.position.set(0, -0.012, 0.098);
-        head.add(nose);
-
-        const eyes = { left: null, right: null, lids: [] };
-        for (const side of [-1, 1]) {
-            const eyeGroup = new THREE.Group();
-            eyeGroup.position.set(side * 0.037, 0.018, 0.078);
-            const ball = new THREE.Mesh(new THREE.SphereGeometry(0.0145, 24, 18), white);
-            eyeGroup.add(ball);
-            const iris = new THREE.Mesh(new THREE.CircleGeometry(0.008, 20), irisMat);
-            iris.position.z = 0.0142;
-            eyeGroup.add(iris);
-            const pupil = new THREE.Mesh(new THREE.CircleGeometry(0.0038, 16), pupilMat);
-            pupil.position.z = 0.0146;
-            eyeGroup.add(pupil);
-            const lid = new THREE.Mesh(
-                new THREE.SphereGeometry(0.0165, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.55),
-                skin);
-            lid.rotation.x = -0.35;
-            eyeGroup.add(lid);
-            const brow = new THREE.Mesh(
-                new THREE.BoxGeometry(0.034, 0.0052, 0.006), hairMat);
-            brow.position.set(0, 0.028, 0.004);
-            brow.rotation.z = side * -0.12;
-            eyeGroup.add(brow);
-            head.add(eyeGroup);
-            eyes[side === -1 ? "left" : "right"] = eyeGroup;
-            eyes.lids.push({ lid: lid, brow: brow, side: side });
+        function loadImage(src) {
+            return new Promise(function (resolve, reject) {
+                const img = new Image();
+                img.onload = function () { resolve(img); };
+                img.onerror = reject;
+                img.src = src;
+            });
         }
 
-        // Jaw pivots near the ear line; the chin and lower lip ride on it so
-        // jawOpen reads as a real jaw, not a scaling mouth decal.
-        const jaw = new THREE.Group();
-        jaw.position.set(0, -0.02, 0.01);
-        head.add(jaw);
-        const chin = new THREE.Mesh(new THREE.SphereGeometry(0.062, 28, 20), skin);
-        chin.scale.set(1.05, 0.72, 0.9);
-        chin.position.set(0, -0.045, 0.028);
-        jaw.add(chin);
-
-        const mouth = new THREE.Group();
-        mouth.position.set(0, -0.034, 0.089);
-        head.add(mouth);
-        const mouthInner = new THREE.Mesh(
-            new THREE.CircleGeometry(0.0135, 24), mouthInnerMat);
-        mouthInner.position.z = -0.002;
-        mouth.add(mouthInner);
-        const upperLip = new THREE.Mesh(
-            new THREE.CapsuleGeometry(0.0042, 0.03, 4, 12), lipMat);
-        upperLip.rotation.z = Math.PI / 2;
-        upperLip.position.y = 0.008;
-        mouth.add(upperLip);
-        // Lower lip is parented to the jaw so it follows jawOpen.
-        const lowerLip = new THREE.Mesh(
-            new THREE.CapsuleGeometry(0.005, 0.028, 4, 12), lipMat);
-        lowerLip.rotation.z = Math.PI / 2;
-        lowerLip.position.set(0, -0.008, 0.079);
-        jaw.add(lowerLip);
-
-        const group = figure;
-
-        function apply(now) {
-            const open = weight("jawOpen");
-            const close = weight("mouthClose");
-            const pucker = weight("mouthPucker");
-            const funnel = weight("mouthFunnel");
-            const smile = (weight("mouthSmileLeft") + weight("mouthSmileRight")) / 2;
-            const press = (weight("mouthPressLeft") + weight("mouthPressRight")) / 2;
-
-            jaw.rotation.x = open * 0.38;
-
-            const width = Math.max(0.35, 1 + smile * 0.35 - pucker * 0.5 - funnel * 0.3);
-            const openness = Math.max(0.12, open * 1.9 * (1 - close) + funnel * 0.35);
-            mouth.scale.set(width, 1, 1);
-            mouthInner.scale.set(1, Math.min(2.4, openness), 1);
-            mouth.position.z = 0.089 + pucker * 0.009 + funnel * 0.006;
-            mouth.position.y = -0.034 + smile * 0.004;
-            // The capsule is rotated 90 degrees, so its thickness is local X.
-            upperLip.scale.x = 1 - press * 0.35;
-            lowerLip.position.y = -0.008 - weight("mouthRollLower") * 0.004;
-
-            const blinkL = weight("eyeBlinkLeft");
-            const blinkR = weight("eyeBlinkRight");
-            for (const entry of eyes.lids) {
-                const blink = entry.side === -1 ? blinkL : blinkR;
-                entry.lid.rotation.x = -0.35 + blink * 1.25;
-                entry.brow.position.y = 0.028 + weight("browInnerUp") * 0.006;
-            }
-            for (const side of ["left", "right"]) {
-                eyes[side].rotation.y = idle.gaze.x * 0.35;
-                eyes[side].rotation.x = -idle.gaze.y * 0.3;
-            }
-
-            // Breathing sway; a little more presence in booth framing.
-            const sway = activeFrame === "booth" ? 1 : 0.55;
-            const t = now / 1000;
-            head.rotation.y = Math.sin(t * 0.31) * 0.045 * sway + idle.gaze.x * 0.12;
-            head.rotation.x = Math.sin(t * 0.23) * 0.02 * sway - idle.gaze.y * 0.06;
-            head.rotation.z = Math.sin(t * 0.17) * 0.014 * sway;
-            torso.position.y = 1.18 + Math.sin(t * 0.9) * 0.0035;
-            group.rotation.y = Math.sin(t * 0.11) * 0.02 * sway;
-        }
-
-        return { group: group, apply: apply };
-    }
-
-    function buildGltfRig(gltfScene) {
-        // Bind every mesh that carries morph targets; drive them by ARKit
-        // name each frame. Unknown names are left alone, missing names are
-        // reported once so a bad CC5 export is loud, not subtly frozen.
-        const morphMeshes = [];
-        gltfScene.traverse(function (node) {
-            if (node.isMesh && node.morphTargetDictionary) {
-                morphMeshes.push(node);
-            }
-        });
-        const found = new Set();
-        for (const mesh of morphMeshes) {
-            for (const name of Object.keys(mesh.morphTargetDictionary)) {
-                found.add(name);
-            }
-        }
-        console.info(
-            "MAE avatar: model exposes " + found.size + " morph targets:",
-            Array.from(found).sort().join(", "));
-        for (const key of MOUTH_KEYS.concat(["eyeBlinkLeft", "eyeBlinkRight"])) {
-            if (!found.has(key)) {
-                console.warn("MAE avatar: model is missing ARKit shape '" + key +
-                    "' -- was the export made with the ARKit profile on?");
-            }
-        }
-
-        function apply(now) {
-            const t = now / 1000;
-            gltfScene.rotation.y = Math.sin(t * 0.11) * 0.02;
-            for (const mesh of morphMeshes) {
-                const dict = mesh.morphTargetDictionary;
-                for (const name of Object.keys(dict)) {
-                    if (name in weights) {
-                        mesh.morphTargetInfluences[dict[name]] = weights[name];
-                    }
-                }
-            }
-        }
-        return { group: gltfScene, apply: apply };
-    }
-
-    function initScene() {
-        try {
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-        } catch (error) {
-            console.warn("MAE avatar: WebGL unavailable, using portrait fallback.", error);
+        const ready = Promise.all([
+            loadImage("/static/img/mae/mae-neutral.jpg"),
+            loadImage("/static/img/mae/mae-soft-smile.jpg")
+        ]).then(function (images) {
+            base = images[0];
+            smile = images[1];
+            // First paint immediately: rAF is throttled or paused in hidden
+            // or backgrounded panes, and she should be there the moment the
+            // page becomes visible rather than one frame later.
+            draw(performance.now());
+        }).catch(function () {
+            // Static portrait fallback: still MAE, just not animated.
+            canvas.remove();
             fallback.style.display = "flex";
-            return false;
+        });
+
+        function resize() {
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            canvas.width = Math.round(stage.clientWidth * dpr);
+            canvas.height = Math.round(stage.clientHeight * dpr);
         }
+        resize();
+        window.addEventListener("resize", resize);
+
+        function draw(now) {
+            if (!base) return;
+            const cw = canvas.width;
+            const ch = canvas.height;
+            const iw = base.width;
+            const ih = base.height;
+            const frame = PORTRAIT_FRAMES[activeFrame] || PORTRAIT_FRAMES.console;
+
+            // Cover-fit, zoomed, centered on her face.
+            const scale = Math.max(cw / iw, ch / ih) * frame.zoom;
+            const drawW = iw * scale;
+            const drawH = ih * scale;
+            let ox = cw / 2 - FACE.cx * drawW;
+            let oy = ch / 2 - frame.focusY * drawH;
+            // Never show past the image edges.
+            ox = Math.min(0, Math.max(cw - drawW, ox));
+            oy = Math.min(0, Math.max(ch - drawH, oy));
+
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.fillStyle = "#0b1220";
+            ctx.fillRect(0, 0, cw, ch);
+
+            // Breathing sway: a slow rotation about her face plus a gentle
+            // vertical bob. Subtle by design -- presence, not seasickness.
+            const t = now / 1000;
+            const swayAngle = Math.sin(t * 0.35) * 0.008 + idle.gaze.x * 0.004;
+            const bob = Math.sin(t * 0.9) * drawH * 0.0016;
+            const faceX = ox + FACE.cx * drawW;
+            const faceY = oy + FACE.cy * drawH;
+            ctx.translate(faceX, faceY + bob);
+            ctx.rotate(swayAngle);
+            ctx.translate(-faceX, -faceY);
+
+            ctx.drawImage(base, ox, oy, drawW, drawH);
+
+            // Soft-smile cross-fade, clipped to the lower face so hair
+            // differences between the two shots cannot ghost.
+            const smileAlpha = Math.max(0, Math.min(1, idle.smile +
+                (weight("mouthSmileLeft") + weight("mouthSmileRight")) / 2));
+            if (smile && smileAlpha > 0.02) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(
+                    ox + SMILE_REGION.x0 * drawW,
+                    oy + SMILE_REGION.y0 * drawH,
+                    (SMILE_REGION.x1 - SMILE_REGION.x0) * drawW,
+                    (SMILE_REGION.y1 - SMILE_REGION.y0) * drawH
+                );
+                ctx.clip();
+                ctx.globalAlpha = Math.min(0.9, smileAlpha);
+                ctx.drawImage(smile, ox, oy, drawW, drawH);
+                ctx.restore();
+                ctx.globalAlpha = 1;
+            }
+
+            // The mouth: reveal a dark interior and translate the jaw region
+            // down. Small displacements read as speech; large ones read as a
+            // broken photograph, hence the conservative maxDrop.
+            const open = weight("jawOpen") * (1 - weight("mouthClose") * 0.85);
+            if (open > 0.02) {
+                const drop = open * JAW.maxDrop * drawH;
+                const mouthX = ox + MOUTH.x0 * drawW;
+                const mouthW = (MOUTH.x1 - MOUTH.x0) * drawW;
+                const lipY = oy + MOUTH.lip * drawH;
+                ctx.fillStyle = "#2e1114";
+                ctx.beginPath();
+                ctx.ellipse(
+                    mouthX + mouthW / 2, lipY + drop * 0.45,
+                    mouthW * 0.46, Math.max(2, drop * 0.75),
+                    0, 0, Math.PI * 2
+                );
+                ctx.fill();
+                const jawSrcY = JAW.top * ih;
+                const jawSrcH = (JAW.bottom - JAW.top) * ih;
+                ctx.drawImage(
+                    base,
+                    JAW.x0 * iw, jawSrcY, (JAW.x1 - JAW.x0) * iw, jawSrcH,
+                    ox + JAW.x0 * drawW, oy + JAW.top * drawH + drop,
+                    (JAW.x1 - JAW.x0) * drawW, jawSrcH * scale
+                );
+            }
+
+            // Blink: stretch the skin strip above each eye down over it.
+            for (const eye of EYES) {
+                const blink = weight(eye === EYES[0] ? "eyeBlinkLeft" : "eyeBlinkRight");
+                if (blink < 0.05) continue;
+                const lidSrcY = (eye.y - 0.026) * ih;
+                const lidSrcH = 0.024 * ih;
+                ctx.drawImage(
+                    base,
+                    eye.x * iw, lidSrcY, eye.w * iw, lidSrcH,
+                    ox + eye.x * drawW, oy + eye.y * drawH,
+                    eye.w * drawW, eye.h * drawH * blink
+                );
+            }
+
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+        }
+
+        function dispose() {
+            window.removeEventListener("resize", resize);
+            canvas.remove();
+        }
+
+        return { ready: ready, draw: draw, dispose: dispose };
+    }
+
+    // ------------------------------------------------------------------
+    // three.js renderer: takes over when the CC5 character exists.
+    // ------------------------------------------------------------------
+
+    const GLTF_FRAMES = {
+        console: { position: [0, 1.615, 0.52], look: [0, 1.6, 0], fov: 26 },
+        booth: { position: [0, 1.25, 2.7], look: [0, 1.05, 0], fov: 34 }
+    };
+
+    function createGltfRenderer(gltfScene) {
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setSize(stage.clientWidth, stage.clientHeight);
         stage.appendChild(renderer.domElement);
 
-        scene = new THREE.Scene();
+        const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x0b1220);
         scene.fog = new THREE.Fog(0x0b1220, 4, 9);
-
-        camera = new THREE.PerspectiveCamera(
-            26, window.innerWidth / window.innerHeight, 0.05, 20);
+        const camera = new THREE.PerspectiveCamera(
+            26, stage.clientWidth / stage.clientHeight, 0.05, 20);
 
         const key = new THREE.DirectionalLight(0xfff1e0, 2.4);
         key.position.set(0.7, 2.4, 1.6);
@@ -388,55 +349,109 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
         rim.position.set(0, 2.2, -1.8);
         scene.add(rim);
         scene.add(new THREE.AmbientLight(0x24304a, 1.4));
+        scene.add(gltfScene);
 
-        const floor = new THREE.Mesh(
-            new THREE.CircleGeometry(1.6, 48),
-            new THREE.MeshStandardMaterial({ color: 0x101a2e, roughness: 0.9 }));
-        floor.rotation.x = -Math.PI / 2;
-        scene.add(floor);
-
-        rig = buildPlaceholderRig();
-        scene.add(rig.group);
-
-        // The CC5 character drops in here when Phase 0 delivers it; until
-        // then the 404 is expected and the placeholder stays.
-        new GLTFLoader().load(
-            "/static/models/mae.glb",
-            function (gltf) {
-                scene.remove(rig.group);
-                rig = buildGltfRig(gltf.scene);
-                scene.add(rig.group);
-                addStatusLine("Character model loaded.");
-            },
-            undefined,
-            function () {
-                console.info("MAE avatar: no /static/models/mae.glb yet; placeholder active.");
+        // Bind every mesh with morph targets; drive them by ARKit name.
+        // Missing names are reported once so a bad CC5 export is loud.
+        const morphMeshes = [];
+        gltfScene.traverse(function (node) {
+            if (node.isMesh && node.morphTargetDictionary) morphMeshes.push(node);
+        });
+        const found = new Set();
+        for (const mesh of morphMeshes) {
+            Object.keys(mesh.morphTargetDictionary).forEach(function (name) {
+                found.add(name);
             });
-
-        // Portrait aspect (the 512x1536 booth panel) defaults to full body.
-        applyFrame(window.innerWidth / window.innerHeight < 0.55 ? "booth" : "console");
-
-        window.addEventListener("resize", function () {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-
-        renderer.setAnimationLoop(function (now) {
-            idleStep(now);
-            const targets = activeVisemeTargets();
-            // Attack faster than release so consonant closures register.
-            for (const key of MOUTH_KEYS) {
-                const target = targets[key] || 0;
-                const current = weight(key);
-                const alpha = target > current ? 0.45 : 0.28;
-                setWeight(key, current + (target - current) * alpha);
+        }
+        console.info(
+            "MAE avatar: model exposes " + found.size + " morph targets:",
+            Array.from(found).sort().join(", "));
+        for (const name of MOUTH_KEYS.concat(["eyeBlinkLeft", "eyeBlinkRight"])) {
+            if (!found.has(name)) {
+                console.warn("MAE avatar: model is missing ARKit shape '" + name +
+                    "' -- was the export made with the ARKit profile on?");
             }
-            rig.apply(now);
+        }
+
+        function applyFrame() {
+            const frame = GLTF_FRAMES[activeFrame] || GLTF_FRAMES.console;
+            camera.fov = frame.fov;
+            camera.position.set(...frame.position);
+            camera.lookAt(...frame.look);
+            camera.updateProjectionMatrix();
+        }
+        applyFrame();
+
+        function resize() {
+            camera.aspect = stage.clientWidth / stage.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(stage.clientWidth, stage.clientHeight);
+        }
+        window.addEventListener("resize", resize);
+
+        function draw(now) {
+            applyFrame();
+            const t = now / 1000;
+            gltfScene.rotation.y = Math.sin(t * 0.11) * 0.02;
+            for (const mesh of morphMeshes) {
+                const dict = mesh.morphTargetDictionary;
+                for (const name of Object.keys(dict)) {
+                    if (name in weights) {
+                        mesh.morphTargetInfluences[dict[name]] = weights[name];
+                    }
+                }
+            }
             renderer.render(scene, camera);
-        });
-        return true;
+        }
+
+        return { draw: draw };
     }
+
+    // ------------------------------------------------------------------
+    // Boot the renderers and the shared animation loop.
+    // ------------------------------------------------------------------
+
+    let active = createPortraitRenderer();
+    markActiveFramePill();
+
+    // The CC5 character takes over the moment it exists; the 404 until
+    // Phase 0 delivers is expected and the portraits stay.
+    new GLTFLoader().load(
+        "/static/models/mae.glb",
+        function (gltf) {
+            try {
+                const gltfRenderer = createGltfRenderer(gltf.scene);
+                active.dispose();
+                active = gltfRenderer;
+                addStatusLine("Character model loaded.");
+            } catch (error) {
+                console.warn("MAE avatar: model renderer failed, keeping portraits.", error);
+            }
+        },
+        undefined,
+        function () {
+            console.info("MAE avatar: no /static/models/mae.glb yet; portrait mode active.");
+        });
+
+    function animationLoop(now) {
+        idleStep(now);
+        const targets = activeVisemeTargets();
+        // Attack faster than release so consonant closures register.
+        for (const key of MOUTH_KEYS) {
+            const target = targets[key] || 0;
+            const current = weight(key);
+            const alpha = target > current ? 0.45 : 0.28;
+            setWeight(key, current + (target - current) * alpha);
+        }
+        active.draw(now);
+        window.requestAnimationFrame(animationLoop);
+    }
+    window.requestAnimationFrame(animationLoop);
+
+    // Portrait aspect (the 512x1536 booth panel) defaults to the full
+    // portrait framing.
+    activeFrame = window.innerWidth / window.innerHeight < 0.55 ? "booth" : "console";
+    markActiveFramePill();
 
     // ------------------------------------------------------------------
     // Speech: text -> /api/mae/avatar/speech -> audio + viseme timeline.
@@ -792,7 +807,8 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
     document.querySelectorAll("[data-frame]").forEach(function (button) {
         button.addEventListener("click", function () {
-            applyFrame(button.dataset.frame);
+            activeFrame = button.dataset.frame === "booth" ? "booth" : "console";
+            markActiveFramePill();
         });
     });
 
@@ -839,7 +855,6 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
     // Boot
     // ------------------------------------------------------------------
 
-    initScene();
     loadIdentity();
     loadVoiceStatus();
     window.setInterval(loadVoiceStatus, 60000);
