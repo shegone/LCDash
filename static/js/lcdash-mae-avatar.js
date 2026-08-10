@@ -487,6 +487,11 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
         return chunks;
     }
 
+    // Set when the browser refuses playback for want of a user gesture, so
+    // the opening greeting can be spoken on the first click instead of
+    // being lost silently.
+    let autoplayBlocked = false;
+
     const speech = (function () {
         let sessionId = 0;
         let queue = Promise.resolve();
@@ -554,7 +559,17 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
                 }
                 audio.addEventListener("ended", finish, { once: true });
                 audio.addEventListener("error", finish, { once: true });
-                audio.play().catch(finish);
+                audio.play().then(function () {
+                    autoplayBlocked = false;
+                }).catch(function (error) {
+                    // NotAllowedError means the browser refused autoplay
+                    // before any user gesture -- recoverable on the next
+                    // click, unlike a decode or network failure.
+                    if (error && error.name === "NotAllowedError") {
+                        autoplayBlocked = true;
+                    }
+                    finish();
+                });
             });
         }
 
@@ -731,12 +746,77 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
     // Push-to-talk: hold the button, release to transcribe and ask.
     // ------------------------------------------------------------------
 
+    // Cloud STT is Amazon Transcribe streaming, which accepts only pcm and
+    // ogg-opus -- the MediaRecorder default (audio/webm;codecs=opus) is
+    // refused with transcribe_format_not_allowed, which is exactly what this
+    // page shipped with. Cloud mode therefore captures raw 16 kHz PCM via
+    // LCDashVoiceCapture (the same module the MAE page uses); MediaRecorder
+    // remains for on-prem, whose faster-whisper path wants a container.
+    let pcmCapture = null;
+    let pcmAudioContext = null;
+    let pcmSourceNode = null;
+    let pcmStream = null;
     let recorder = null;
     let recorderChunks = [];
     let recorderStream = null;
 
+    function usePcmCapture() {
+        return cloudMode && Boolean(window.LCDashVoiceCapture);
+    }
+
+    // Release the microphone and audio graph. Leaving the stream open holds
+    // the browser's recording indicator on and keeps the mic hot between
+    // questions, which is not something a 911 console should ever do.
+    function releasePcmGraph() {
+        pcmCapture = null;
+        pcmSourceNode = null;
+        if (pcmAudioContext) {
+            const context = pcmAudioContext;
+            pcmAudioContext = null;
+            context.close().catch(function () { /* already closed */ });
+        }
+        if (pcmStream) {
+            pcmStream.getTracks().forEach(function (track) { track.stop(); });
+            pcmStream = null;
+        }
+    }
+
+    function setRecordingUi(active) {
+        pttButton.classList.toggle("recording", active);
+        if (active) {
+            pttButton.textContent = "Listening… release to send";
+        } else {
+            pttButton.innerHTML = "&#127908; Hold to talk";
+        }
+    }
+
     async function startRecording() {
-        if (recorder || busy) return;
+        if (pcmCapture || recorder || busy) return;
+        speech.stop();
+
+        if (usePcmCapture()) {
+            try {
+                // The capture module records from an existing graph rather
+                // than opening the microphone itself, so the stream, context,
+                // and source node are ours to create and to tear down.
+                pcmStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+                pcmAudioContext = new AudioContextCtor();
+                if (pcmAudioContext.state === "suspended") {
+                    await pcmAudioContext.resume();
+                }
+                pcmSourceNode = pcmAudioContext.createMediaStreamSource(pcmStream);
+                pcmCapture = window.LCDashVoiceCapture.start(pcmAudioContext, pcmSourceNode);
+            } catch (error) {
+                releasePcmGraph();
+                addStatusLine(
+                    "Microphone unavailable: " + (error.message || "permission denied"));
+                return;
+            }
+            setRecordingUi(true);
+            return;
+        }
+
         try {
             recorderStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         } catch (error) {
@@ -752,28 +832,40 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
         recorder.addEventListener("dataavailable", function (event) {
             if (event.data && event.data.size) recorderChunks.push(event.data);
         });
-        recorder.addEventListener("stop", onRecordingStopped);
+        recorder.addEventListener("stop", function () {
+            const blob = new Blob(recorderChunks, { type: "audio/webm" });
+            recorder = null;
+            recorderChunks = [];
+            if (recorderStream) {
+                recorderStream.getTracks().forEach(function (track) { track.stop(); });
+                recorderStream = null;
+            }
+            submitRecording(blob, null);
+        });
         recorder.start();
-        pttButton.classList.add("recording");
-        pttButton.textContent = "Listening… release to send";
-        speech.stop();
+        setRecordingUi(true);
     }
 
-    async function onRecordingStopped() {
-        pttButton.classList.remove("recording");
-        pttButton.innerHTML = "&#127908; Hold to talk";
-        const blob = new Blob(recorderChunks, { type: "audio/webm" });
-        recorder = null;
-        recorderChunks = [];
-        if (recorderStream) {
-            recorderStream.getTracks().forEach(function (track) { track.stop(); });
-            recorderStream = null;
-        }
-        if (blob.size < 2000) return;
+    async function submitRecording(blob, clip) {
+        setRecordingUi(false);
+        if (!blob || blob.size < 2000) return;
         addStatusLine("Understanding your question…");
         try {
             const formData = new FormData();
-            formData.append("file", blob, "mae-question.webm");
+            if (clip && clip.audioFormat === "pcm") {
+                // The endpoint defaults to webm-opus/48000; raw PCM must
+                // declare its own format and rate or the push-to-talk
+                // contract rejects it.
+                formData.append("file", blob, "mae-question.pcm");
+                formData.append("audio_format", clip.audioFormat);
+                formData.append("sample_rate_hz", String(clip.sampleRateHz));
+                formData.append(
+                    "duration_seconds",
+                    String(Math.min(30, Math.max(0.1, clip.durationSeconds)))
+                );
+            } else {
+                formData.append("file", blob, "mae-question.webm");
+            }
             const response = await fetch("/api/voice/transcribe", {
                 method: "POST",
                 cache: "no-store",
@@ -795,6 +887,18 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
     }
 
     function stopRecording() {
+        if (pcmCapture) {
+            const capture = pcmCapture;
+            pcmCapture = null;
+            capture.stop().then(function (clip) {
+                releasePcmGraph();
+                submitRecording(clip ? clip.blob : null, clip);
+            }).catch(function () {
+                releasePcmGraph();
+                submitRecording(null, null);
+            });
+            return;
+        }
         if (recorder && recorder.state === "recording") recorder.stop();
     }
 
@@ -860,8 +964,65 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
     // Boot
     // ------------------------------------------------------------------
 
+    // MAE greets whoever opened her, by name when identity is verified, and
+    // says it aloud. Composed here rather than asked of the model: a
+    // greeting must be instant and identical every time, and the advisory
+    // path costs a Bedrock round trip to produce a fixed sentence. Speech
+    // failure is silent -- the written greeting still lands, and a muted
+    // MAE beats an error toast as a first impression.
+    let greetingText = "";
+    let greetingSpoken = false;
+
+    async function greet() {
+        let name = "";
+        try {
+            const response = await fetch("/api/identity/whoami", { cache: "no-store" });
+            const payload = await response.json();
+            if (payload.verified) {
+                // The badge carries an email; the local part is close enough
+                // to a name for a greeting and never exposes the domain.
+                name = String(payload.name || "").split("@")[0].replace(/[._-]+/g, " ").trim();
+            }
+        } catch (error) {
+            name = "";
+        }
+        const hour = new Date().getHours();
+        const partOfDay = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+        const greeting = name
+            ? partOfDay + ", " + name + ". I'm MAE."
+            : partOfDay + ". I'm MAE, the Mission Assistance Engine.";
+        const offer = " Ask me about active calls, wait times, or unit coverage.";
+
+        greetingText = greeting + offer;
+        addMessage("mae", greetingText);
+        speakGreeting();
+    }
+
+    function speakGreeting() {
+        if (!greetingText || greetingSpoken) return;
+        const sessionId = speech.begin();
+        speech.enqueue(sessionId, greetingText);
+        // Only count it as delivered if playback was not refused for want
+        // of a user gesture; otherwise leave it pending for the first click.
+        speech.idle().then(function () {
+            if (!autoplayBlocked) greetingSpoken = true;
+        });
+    }
+
     loadIdentity();
     loadVoiceStatus();
     window.setInterval(loadVoiceStatus, 60000);
-    addStatusLine("MAE is ready. Ask about active calls, wait times, or coverage.");
+    greet();
+    // Browsers block autoplay until the page has been interacted with, and
+    // a blocked play() rejects silently. If the greeting audio never
+    // actually started, the first click or keypress speaks it -- keyed on
+    // whether it PLAYED, not on whether it was attempted.
+    ["pointerdown", "keydown"].forEach(function (eventName) {
+        window.addEventListener(eventName, function () {
+            if (autoplayBlocked && !greetingSpoken) {
+                autoplayBlocked = false;
+                speakGreeting();
+            }
+        }, { once: true });
+    });
 })();

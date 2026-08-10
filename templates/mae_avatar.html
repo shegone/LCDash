@@ -48,6 +48,11 @@
         </div>
     </section>
 
+    {#- Raw 16 kHz PCM capture. Amazon Transcribe streaming accepts only
+        pcm/ogg-opus; the MediaRecorder default (audio/webm;codecs=opus) is
+        refused with transcribe_format_not_allowed. Plain script tag, not a
+        module: it attaches window.LCDashVoiceCapture. -#}
+    <script src="/static/js/lcdash-voice-capture.js"></script>
     <script type="importmap">
     {
         "imports": {
@@ -56,6 +61,6 @@
         }
     }
     </script>
-    <script type="module" src="/static/js/lcdash-mae-avatar.js?v=20260809-avatar-v3-framing"></script>
+    <script type="module" src="/static/js/lcdash-mae-avatar.js?v=20260809-avatar-v5-greeting"></script>
 </body>
 </html>
