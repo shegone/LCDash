@@ -177,7 +177,10 @@ from app.services.cloud_ai_service import (
     synthesize_cloud_speech,
     transcribe_cloud_speech,
 )
-from app.integrations.cloud_ai import CloudAiRuntimeUnavailable
+from app.integrations.cloud_ai import (
+    CloudAiNoSpeechDetected,
+    CloudAiRuntimeUnavailable,
+)
 from app.integrations.cloud_ai.bedrock_retrieval import DailyRequestBudget
 from app.services.cloud_ai_streaming import (
     build_cloud_advisory_streamer,
@@ -2939,6 +2942,15 @@ def cloud_ai_advisory_stream_api(
     )
 
 
+# What a person sees when speech fails and the status probe has no better
+# explanation. The alternative was str(exc) -- internal categories like
+# "polly_provider_failed" rendered verbatim in the UI. Those now go to the
+# log, where they are useful, instead of to the microphone holder.
+SPEECH_UNAVAILABLE_DETAIL = (
+    "MAE's voice is unavailable right now. Her written answer is still above."
+)
+
+
 class CloudSentenceSpeechRequest(BaseModel):
     text: str = Field(min_length=1, max_length=3000)
     persona: str = Field(default="mae", pattern="^(mae|jack)$")
@@ -2959,10 +2971,11 @@ def cloud_ai_sentence_speech_api(payload: CloudSentenceSpeechRequest):
             persona=payload.persona,
         )
     except CloudAiRuntimeUnavailable as exc:
+        logger.warning("Cloud sentence speech denied: %s", exc)
         status = cloud_ai_status(cloud_ai_config, cloud_ai_runtime)
         raise HTTPException(
             status_code=503,
-            detail=status["tts"]["disabled_reason"] or str(exc),
+            detail=status["tts"]["disabled_reason"] or SPEECH_UNAVAILABLE_DETAIL,
         ) from exc
     return Response(
         content=audio,
@@ -2996,10 +3009,11 @@ def mae_avatar_speech_api(payload: AvatarSpeechRequest):
             voice=payload.voice,
         )
     except CloudAiRuntimeUnavailable as exc:
+        logger.warning("Cloud avatar speech denied: %s", exc)
         status = cloud_ai_status(cloud_ai_config, cloud_ai_runtime)
         raise HTTPException(
             status_code=503,
-            detail=status["tts"]["disabled_reason"] or str(exc),
+            detail=status["tts"]["disabled_reason"] or SPEECH_UNAVAILABLE_DETAIL,
         ) from exc
     return JSONResponse(content=speech, headers={"Cache-Control": "no-store"})
 
@@ -3024,10 +3038,11 @@ def voice_speech_api(
                 voice=payload.voice or cloud_ai_config.polly_voice.value,
             )
         except CloudAiRuntimeUnavailable as exc:
+            logger.warning("Cloud voice speech denied: %s", exc)
             status = cloud_ai_status(cloud_ai_config, cloud_ai_runtime)
             raise HTTPException(
                 status_code=503,
-                detail=status["tts"]["disabled_reason"] or str(exc),
+                detail=status["tts"]["disabled_reason"] or SPEECH_UNAVAILABLE_DETAIL,
             ) from exc
         return Response(
             content=audio,
@@ -3085,11 +3100,30 @@ async def voice_transcribe_api(
                 sample_rate_hz=sample_rate_hz,
                 duration_seconds=duration_seconds,
             )
+        except CloudAiNoSpeechDetected:
+            # Silence is a conversational outcome, not an outage. Callers
+            # already handle an empty transcript as "I didn't catch that";
+            # answering 503 here told a tester who pressed the button a beat
+            # too short that the system was down (live, 2026-08-11).
+            return {
+                "text": "",
+                "model": "Amazon Transcribe streaming en-US",
+                "stored": False,
+            }
         except CloudAiRuntimeUnavailable as exc:
+            # The category is an internal identifier ("transcript_output_limit"),
+            # safe to log -- it names no audio, transcript, or person -- and
+            # meaningless to whoever is holding the microphone. Log it so the
+            # next occurrence is diagnosable; say something human on screen.
+            logger.warning("Cloud transcribe denied: %s", exc)
             status = cloud_ai_status(cloud_ai_config, cloud_ai_runtime)
             raise HTTPException(
                 status_code=503,
-                detail=status["stt"]["disabled_reason"] or str(exc),
+                detail=(
+                    status["stt"]["disabled_reason"]
+                    or "Voice input is unavailable right now. Please try again, "
+                    "or type your question instead."
+                ),
             ) from exc
         return {
             "text": transcript,

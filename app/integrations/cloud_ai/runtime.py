@@ -25,6 +25,22 @@ class CloudAiRuntimeUnavailable(RuntimeError):
     """Sanitized fail-closed category; never includes provider payloads."""
 
 
+class CloudAiNoSpeechDetected(CloudAiRuntimeUnavailable):
+    """The clip carried no recognizable speech.
+
+    Not a failure of anything: someone tapped the talk button, started
+    speaking late, or the room was too quiet. It subclasses the unavailable
+    category so every existing ``except CloudAiRuntimeUnavailable`` keeps
+    failing closed, but callers that can offer "I didn't catch that" should
+    catch this FIRST and treat it as an ordinary conversational outcome.
+
+    It exists because the two were indistinguishable: an empty transcript
+    raised ``transcript_output_limit``, the route turned that into 503
+    Service Unavailable, and a tester holding the button a beat too short
+    was told the system was down (live, 2026-08-11).
+    """
+
+
 @dataclass(frozen=True, slots=True)
 class CloudAiRuntimeStatus:
     advisory_enabled: bool
@@ -103,8 +119,14 @@ class CloudAiRuntime:
             transcript = _CONTROL_CHARACTERS.sub("", self._transcribe.transcribe(request, audio)).strip()
         except Exception as exc:
             raise CloudAiRuntimeUnavailable("transcribe_provider_failed") from exc
-        if not transcript or len(transcript) > self._config.max_transcript_characters:
+        # Split deliberately: an over-long transcript is a bound being
+        # enforced, an empty one is just silence. Collapsing them meant
+        # "you said nothing" and "the service is broken" were the same
+        # answer to the caller.
+        if len(transcript) > self._config.max_transcript_characters:
             raise CloudAiRuntimeUnavailable("transcript_output_limit")
+        if not transcript:
+            raise CloudAiNoSpeechDetected("no_speech_detected")
         return transcript
 
     def synthesize(self, request: PollySpeechRequest) -> bytes:

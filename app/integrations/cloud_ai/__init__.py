@@ -13,7 +13,12 @@ from .contracts import (
 )
 from .provider_config import CloudAiProviderConfig, voice_for_persona
 from .polly_provider import AwsPollySpeechProvider, build_polly_client
-from .runtime import CloudAiRuntime, CloudAiRuntimeStatus, CloudAiRuntimeUnavailable
+from .runtime import (
+    CloudAiNoSpeechDetected,
+    CloudAiRuntime,
+    CloudAiRuntimeStatus,
+    CloudAiRuntimeUnavailable,
+)
 from .live_data import LiveDataSource, VerifiedFact, build_live_data_facts
 from .verified_live_advisory import VerifiedLiveAdvisory, VerifiedLiveResponse
 
@@ -28,6 +33,7 @@ __all__ = [
     "CloudAiRuntime",
     "CloudAiRuntimeStatus",
     "CloudAiRuntimeUnavailable",
+    "CloudAiNoSpeechDetected",
     "CloudPollyProvider",
     "CloudTranscribeProvider",
     "PollySpeechRequest",
