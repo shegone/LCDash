@@ -143,26 +143,56 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
     // Portrait renderer: MAE's photographs, animated on a 2D canvas.
     // ------------------------------------------------------------------
 
-    // Landmarks measured on the 832x1248 reference set (all portraits share
-    // one framing), normalized so any same-framing re-export keeps working.
-    const FACE = { cx: 0.469, cy: 0.399 };
-    const MOUTH = { x0: 0.397, x1: 0.575, lip: 0.561 };
-    const JAW = { x0: 0.33, x1: 0.66, top: 0.558, bottom: 0.665, maxDrop: 0.019 };
-    const EYES = [
-        { x: 0.300, y: 0.377, w: 0.097, h: 0.046 },
-        { x: 0.547, y: 0.377, w: 0.097, h: 0.046 }
-    ];
-    const SMILE_REGION = { x0: 0.28, x1: 0.70, y0: 0.43, y1: 0.68 };
-
-    // Framing presets: which vertical band of the portrait fills the pane's
-    // height. Console is head-and-shoulders; booth is the whole portrait.
-    // The sides letterbox against the page background on wide screens --
-    // multiplying a zoom onto cover-fit instead meant a widescreen monitor
-    // showed only her eyes.
-    const PORTRAIT_FRAMES = {
-        console: { top: 0.13, bottom: 0.86 },
-        booth: { top: 0.0, bottom: 1.0 }
+    // Two source figures, because the two frames want genuinely different
+    // pictures: the console wants her face, the trade-show panel wants a
+    // life-size standing person. Landmarks are normalized to each source
+    // image. Every value was measured against actual pixels -- if a
+    // reference image is re-shot or re-cropped, re-measure rather than
+    // nudging numbers until it looks right.
+    //
+    // `band` is the vertical slice of the source that fills the pane's
+    // height; the sides letterbox against the page background on wide
+    // screens. (Multiplying a zoom onto cover-fit instead meant a widescreen
+    // monitor showed only her eyes.)
+    const FIGURES = {
+        // Head-and-shoulders portraits, 832x1248.
+        portrait: {
+            src: "/static/img/mae/mae-neutral.jpg",
+            smileSrc: "/static/img/mae/mae-soft-smile.jpg",
+            face: { cx: 0.469, cy: 0.399 },
+            mouth: { x0: 0.397, x1: 0.575, lip: 0.561 },
+            jaw: { x0: 0.33, x1: 0.66, top: 0.558, bottom: 0.665, maxDrop: 0.019 },
+            eyes: [
+                { x: 0.300, y: 0.377, w: 0.097, h: 0.046 },
+                { x: 0.547, y: 0.377, w: 0.097, h: 0.046 }
+            ],
+            smileRegion: { x0: 0.28, x1: 0.70, y0: 0.43, y1: 0.68 },
+            band: { top: 0.13, bottom: 0.86 }
+        },
+        // Full-body A-pose, derived from the 2026-08-11 reference export with
+        // its white background keyed out, so she stands against the page
+        // rather than on a white slab. Her head is a small fraction of this
+        // frame, so the mouth displacement is correspondingly tiny -- at
+        // booth distance the readable signal is that she moves at all.
+        // Landmarks are normalized to the DERIVED asset (760x1139, cropped to
+        // her silhouette), not to the 1152x1728 source they were measured on
+        // -- cropping moves every normalized coordinate. Rebuilding the asset
+        // with a different crop means recomputing these.
+        fullBody: {
+            src: "/static/img/mae/mae-fullbody.png",
+            smileSrc: "",
+            face: { cx: 0.4954, cy: 0.0898 },
+            mouth: { x0: 0.4808, x1: 0.5114, lip: 0.1130 },
+            jaw: { x0: 0.4582, x1: 0.5345, top: 0.1066, bottom: 0.1361, maxDrop: 0.0043 },
+            eyes: [
+                { x: 0.4392, y: 0.0628, w: 0.0295, h: 0.0135 },
+                { x: 0.4926, y: 0.0620, w: 0.0295, h: 0.0135 }
+            ],
+            smileRegion: null,
+            band: { top: 0.0, bottom: 1.0 }
+        }
     };
+    const FRAME_FIGURES = { console: "portrait", booth: "fullBody" };
     let activeFrame = "console";
 
     function markActiveFramePill() {
@@ -178,8 +208,8 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
         stage.appendChild(canvas);
         const ctx = canvas.getContext("2d");
 
-        let base = null;
-        let smile = null;
+        // One entry per figure: its loaded images, or null while loading.
+        const loaded = Object.create(null);
 
         function loadImage(src) {
             return new Promise(function (resolve, reject) {
@@ -190,12 +220,14 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
             });
         }
 
+        // The portrait must load or there is nothing to draw; the full-body
+        // figure is allowed to fail on its own, in which case the booth
+        // frame falls back to the portrait rather than the page going blank.
         const ready = Promise.all([
-            loadImage("/static/img/mae/mae-neutral.jpg"),
-            loadImage("/static/img/mae/mae-soft-smile.jpg")
+            loadImage(FIGURES.portrait.src),
+            loadImage(FIGURES.portrait.smileSrc)
         ]).then(function (images) {
-            base = images[0];
-            smile = images[1];
+            loaded.portrait = { base: images[0], smile: images[1] };
             // First paint immediately: rAF is throttled or paused in hidden
             // or backgrounded panes, and she should be there the moment the
             // page becomes visible rather than one frame later.
@@ -204,6 +236,12 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
             // Static portrait fallback: still MAE, just not animated.
             canvas.remove();
             fallback.style.display = "flex";
+        });
+
+        loadImage(FIGURES.fullBody.src).then(function (img) {
+            loaded.fullBody = { base: img, smile: null };
+        }).catch(function () {
+            console.info("MAE avatar: full-body figure unavailable; booth frame uses the portrait.");
         });
 
         function resize() {
@@ -215,12 +253,21 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
         window.addEventListener("resize", resize);
 
         function draw(now) {
-            if (!base) return;
+            // Pick the figure this frame wants, falling back to the portrait
+            // when the full-body image is missing or still loading.
+            let figureName = FRAME_FIGURES[activeFrame] || "portrait";
+            if (!loaded[figureName]) figureName = "portrait";
+            const images = loaded[figureName];
+            if (!images) return;
+            const FIG = FIGURES[figureName];
+            const base = images.base;
+            const smile = images.smile;
+
             const cw = canvas.width;
             const ch = canvas.height;
             const iw = base.width;
             const ih = base.height;
-            const frame = PORTRAIT_FRAMES[activeFrame] || PORTRAIT_FRAMES.console;
+            const frame = FIG.band;
 
             // Fit the frame's vertical band to the pane height, centered on
             // her face; sides letterbox on wide screens rather than zooming.
@@ -228,7 +275,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
             const scale = ch / (band * ih);
             const drawW = iw * scale;
             const drawH = ih * scale;
-            let ox = cw / 2 - FACE.cx * drawW;
+            let ox = cw / 2 - FIG.face.cx * drawW;
             const oy = -frame.top * drawH;
             // Keep her horizontally on screen when the image is wider than
             // the pane (narrow/kiosk screens crop the sides symmetrically).
@@ -243,8 +290,8 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
             const t = now / 1000;
             const swayAngle = Math.sin(t * 0.35) * 0.008 + idle.gaze.x * 0.004;
             const bob = Math.sin(t * 0.9) * drawH * 0.0016;
-            const faceX = ox + FACE.cx * drawW;
-            const faceY = oy + FACE.cy * drawH;
+            const faceX = ox + FIG.face.cx * drawW;
+            const faceY = oy + FIG.face.cy * drawH;
             ctx.translate(faceX, faceY + bob);
             ctx.rotate(swayAngle);
             ctx.translate(-faceX, -faceY);
@@ -255,14 +302,14 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
             // differences between the two shots cannot ghost.
             const smileAlpha = Math.max(0, Math.min(1, idle.smile +
                 (weight("mouthSmileLeft") + weight("mouthSmileRight")) / 2));
-            if (smile && smileAlpha > 0.02) {
+            if (smile && FIG.smileRegion && smileAlpha > 0.02) {
                 ctx.save();
                 ctx.beginPath();
                 ctx.rect(
-                    ox + SMILE_REGION.x0 * drawW,
-                    oy + SMILE_REGION.y0 * drawH,
-                    (SMILE_REGION.x1 - SMILE_REGION.x0) * drawW,
-                    (SMILE_REGION.y1 - SMILE_REGION.y0) * drawH
+                    ox + FIG.smileRegion.x0 * drawW,
+                    oy + FIG.smileRegion.y0 * drawH,
+                    (FIG.smileRegion.x1 - FIG.smileRegion.x0) * drawW,
+                    (FIG.smileRegion.y1 - FIG.smileRegion.y0) * drawH
                 );
                 ctx.clip();
                 ctx.globalAlpha = Math.min(0.9, smileAlpha);
@@ -276,10 +323,10 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
             // broken photograph, hence the conservative maxDrop.
             const open = weight("jawOpen") * (1 - weight("mouthClose") * 0.85);
             if (open > 0.02) {
-                const drop = open * JAW.maxDrop * drawH;
-                const mouthX = ox + MOUTH.x0 * drawW;
-                const mouthW = (MOUTH.x1 - MOUTH.x0) * drawW;
-                const lipY = oy + MOUTH.lip * drawH;
+                const drop = open * FIG.jaw.maxDrop * drawH;
+                const mouthX = ox + FIG.mouth.x0 * drawW;
+                const mouthW = (FIG.mouth.x1 - FIG.mouth.x0) * drawW;
+                const lipY = oy + FIG.mouth.lip * drawH;
                 ctx.fillStyle = "#2e1114";
                 ctx.beginPath();
                 ctx.ellipse(
@@ -288,19 +335,19 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
                     0, 0, Math.PI * 2
                 );
                 ctx.fill();
-                const jawSrcY = JAW.top * ih;
-                const jawSrcH = (JAW.bottom - JAW.top) * ih;
+                const jawSrcY = FIG.jaw.top * ih;
+                const jawSrcH = (FIG.jaw.bottom - FIG.jaw.top) * ih;
                 ctx.drawImage(
                     base,
-                    JAW.x0 * iw, jawSrcY, (JAW.x1 - JAW.x0) * iw, jawSrcH,
-                    ox + JAW.x0 * drawW, oy + JAW.top * drawH + drop,
-                    (JAW.x1 - JAW.x0) * drawW, jawSrcH * scale
+                    FIG.jaw.x0 * iw, jawSrcY, (FIG.jaw.x1 - FIG.jaw.x0) * iw, jawSrcH,
+                    ox + FIG.jaw.x0 * drawW, oy + FIG.jaw.top * drawH + drop,
+                    (FIG.jaw.x1 - FIG.jaw.x0) * drawW, jawSrcH * scale
                 );
             }
 
             // Blink: stretch the skin strip above each eye down over it.
-            for (const eye of EYES) {
-                const blink = weight(eye === EYES[0] ? "eyeBlinkLeft" : "eyeBlinkRight");
+            for (const eye of FIG.eyes) {
+                const blink = weight(eye === FIG.eyes[0] ? "eyeBlinkLeft" : "eyeBlinkRight");
                 if (blink < 0.05) continue;
                 const lidSrcY = (eye.y - 0.026) * ih;
                 const lidSrcH = 0.024 * ih;
@@ -438,18 +485,34 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
             console.info("MAE avatar: no /static/models/mae.glb yet; portrait mode active.");
         });
 
+    // A thrown frame must never end the animation: requestAnimationFrame
+    // only continues if it is called again, so an exception anywhere in
+    // draw() used to freeze MAE permanently on her last painted frame --
+    // silently, since the canvas keeps showing it. The rescheduling now
+    // happens in `finally`, and the first failure is reported once rather
+    // than on every frame at 60 Hz.
+    let frameErrorReported = false;
+
     function animationLoop(now) {
-        idleStep(now);
-        const targets = activeVisemeTargets();
-        // Attack faster than release so consonant closures register.
-        for (const key of MOUTH_KEYS) {
-            const target = targets[key] || 0;
-            const current = weight(key);
-            const alpha = target > current ? 0.45 : 0.28;
-            setWeight(key, current + (target - current) * alpha);
+        try {
+            idleStep(now);
+            const targets = activeVisemeTargets();
+            // Attack faster than release so consonant closures register.
+            for (const key of MOUTH_KEYS) {
+                const target = targets[key] || 0;
+                const current = weight(key);
+                const alpha = target > current ? 0.45 : 0.28;
+                setWeight(key, current + (target - current) * alpha);
+            }
+            active.draw(now);
+        } catch (error) {
+            if (!frameErrorReported) {
+                frameErrorReported = true;
+                console.error("MAE avatar: frame failed; animation continues.", error);
+            }
+        } finally {
+            window.requestAnimationFrame(animationLoop);
         }
-        active.draw(now);
-        window.requestAnimationFrame(animationLoop);
     }
     window.requestAnimationFrame(animationLoop);
 
