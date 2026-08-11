@@ -30,8 +30,41 @@ MAX_TRANSCRIPT_CHARACTERS = 4000
 
 
 class PollyVoice(StrEnum):
-    MATTHEW = "Matthew"
-    JOANNA = "Joanna"
+    RUTH = "Ruth"
+    STEPHEN = "Stephen"
+
+
+# The Polly engine used for plain (non-avatar) chat speech. Both current
+# voices are generative-only for chat; the avatar's viseme path is
+# engine-forced to neural regardless of this mapping -- see
+# polly_provider.synthesize_with_visemes.
+POLLY_CHAT_ENGINES: dict[PollyVoice, str] = {
+    PollyVoice.RUTH: "generative",
+    PollyVoice.STEPHEN: "generative",
+}
+
+# Voices that support Polly's neural engine, the only engine that emits
+# viseme speech marks. Both current voices support neural; this set exists
+# so a future voice that lacks neural support entirely fails the avatar
+# path loudly (RuntimeError) instead of silently freezing the mouth.
+NEURAL_CAPABLE_POLLY_VOICES: frozenset[PollyVoice] = frozenset(
+    {PollyVoice.RUTH, PollyVoice.STEPHEN}
+)
+
+
+def polly_engine_for_voice(voice: PollyVoice) -> str:
+    """Resolve the Polly engine used for plain (non-avatar) chat speech."""
+    return POLLY_CHAT_ENGINES[voice]
+
+
+def supports_neural_engine(voice: PollyVoice) -> bool:
+    """Whether a voice can be synthesized on Polly's neural engine.
+
+    The avatar's viseme path requires this: generative voices do not emit
+    viseme speech marks, so the avatar always renders on neural regardless
+    of the engine a voice normally uses for chat.
+    """
+    return voice in NEURAL_CAPABLE_POLLY_VOICES
 
 
 # Polly's documented viseme inventory for en-US speech marks. The avatar's

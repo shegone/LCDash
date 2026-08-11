@@ -12,6 +12,8 @@ from .contracts import (
     PollySpeechRequest,
     PollySpeechWithVisemes,
     PollyVisemeMark,
+    polly_engine_for_voice,
+    supports_neural_engine,
 )
 
 
@@ -63,8 +65,11 @@ class AwsPollySpeechProvider:
         return self._client
 
     def synthesize(self, request: PollySpeechRequest) -> bytes:
+        return self._synthesize_audio(request, polly_engine_for_voice(request.voice))
+
+    def _synthesize_audio(self, request: PollySpeechRequest, engine: str) -> bytes:
         response = self._client_for_request().synthesize_speech(
-            Engine="neural",
+            Engine=engine,
             OutputFormat="mp3",
             Text=request.spoken_text,
             TextType="text",
@@ -93,14 +98,22 @@ class AwsPollySpeechProvider:
     ) -> PollySpeechWithVisemes:
         """One utterance plus its viseme timeline, in two bounded Polly calls.
 
-        Both calls stay on the neural engine deliberately: generative voices
-        do not emit viseme speech marks, so an engine change that "sounds
-        nicer" would silently freeze the avatar's mouth. The speech-mark call
-        reuses the exact text and voice of the audio call so the timeline can
-        never describe a different utterance than the one heard.
+        Both calls are forced onto the neural engine regardless of the
+        voice's normal chat engine: neural is the only Polly engine that
+        emits viseme speech marks, so a generative voice used for chat
+        (Ruth, Stephen) would otherwise silently freeze the avatar's mouth
+        if this call reused the chat engine. The guard below exists for a
+        future voice that lacks neural support entirely -- today's voices
+        (Ruth, Stephen) both support it, so the same voice identity speaks
+        everywhere: chat renders it on generative, the avatar renders it on
+        neural. The speech-mark call reuses the exact text and voice of the
+        audio call so the timeline can never describe a different utterance
+        than the one heard.
         """
 
-        audio = self.synthesize(request)
+        if not supports_neural_engine(request.voice):
+            raise RuntimeError("polly_viseme_voice_not_neural")
+        audio = self._synthesize_audio(request, "neural")
         response = self._client_for_request().synthesize_speech(
             Engine="neural",
             OutputFormat="json",

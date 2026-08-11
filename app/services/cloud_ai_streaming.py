@@ -778,19 +778,24 @@ def synthesize_cloud_avatar_speech(
 ) -> dict[str, Any]:
     """One avatar utterance: sanitized text in, audio plus viseme timeline out.
 
-    MAE-only by construction -- the avatar surface is her face. The same
-    sanitation as sentence speech applies, and the timeline comes from the
-    same synthesized text, so the mouth can never say something the audio
-    does not.
+    MAE-only by construction -- the avatar surface is her face, and Ruth is
+    her one voice everywhere: chat and avatar alike. The route is pinned to
+    Ruth explicitly (not the configurable persona default) so JACK's voice
+    (Stephen) can never reach the avatar even if a caller supplies it. The
+    same sanitation as sentence speech applies, and the timeline comes from
+    the same synthesized text, so the mouth can never say something the
+    audio does not.
     """
 
     spoken = sanitize_spoken_text(text)
     if not spoken:
         raise CloudAiRuntimeUnavailable("empty_speech_text")
     try:
-        selected_voice = PollyVoice(voice) if voice else voice_for_persona(config, "mae")
+        selected_voice = PollyVoice(voice) if voice else PollyVoice.RUTH
     except ValueError as exc:
         raise CloudAiRuntimeUnavailable("polly_voice_not_allowed") from exc
+    if selected_voice is not PollyVoice.RUTH:
+        raise CloudAiRuntimeUnavailable("polly_voice_not_allowed")
     speech = runtime.synthesize_with_visemes(
         PollySpeechRequest(request_id, config.tenant_id, spoken, selected_voice)
     )

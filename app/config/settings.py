@@ -200,7 +200,7 @@ class Settings:
         "tenants/logan-synthetic/document-library/jack-uploads/mindshare/current/",
     ).strip()
     cloud_ai_polly_voice: str = _env(
-        "LCDASH_CLOUD_AI_POLLY_VOICE", "Joanna"
+        "LCDASH_CLOUD_AI_POLLY_VOICE", "Ruth"
     ).strip()
     cloud_ai_voice_enabled: bool = _env_bool(
         "LCDASH_CLOUD_AI_VOICE_ENABLED", True

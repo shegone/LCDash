@@ -247,7 +247,7 @@ class Phase1FoundationStack(cdk.Stack):
                 "LCDASH_CLOUD_AI_GENERATION_MODEL_ID": "us.amazon.nova-pro-v1:0",
                 "LCDASH_CLOUD_AI_MAX_OUTPUT_TOKENS": "400",
                 "LCDASH_CLOUD_AI_RETRIEVAL_RESULT_LIMIT": "5",
-                "LCDASH_CLOUD_AI_POLLY_VOICE": "Joanna",
+                "LCDASH_CLOUD_AI_POLLY_VOICE": "Ruth",
                 "LCDASH_CLOUD_AI_VOICE_ENABLED": "true",
                 # MAE read-only tool-calling. Model set explicitly to Nova Pro
                 # rather than relying on the generation-model fallback, so a

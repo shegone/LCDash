@@ -232,7 +232,7 @@ class AvatarSpeechRouteTests(_AvatarTierTestCase):
         payload = {
             "audio_base64": "c3ludGhldGljLW1wMw==",
             "audio_format": "mp3",
-            "voice": "Joanna",
+            "voice": "Ruth",
             "visemes": [{"time_ms": 0, "viseme": "p"}],
         }
         with patch("app.main.synthesize_cloud_avatar_speech", return_value=payload):

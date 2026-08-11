@@ -61,7 +61,7 @@ def _request(text="Call 911."):
         "synthetic-request-2001",
         "logan-synthetic",
         text,
-        PollyVoice.JOANNA,
+        PollyVoice.RUTH,
     )
 
 
@@ -244,7 +244,7 @@ class AvatarSpeechServiceTests(unittest.TestCase):
             base64.b64decode(payload["audio_base64"]), b"synthetic-mp3"
         )
         self.assertEqual(payload["audio_format"], "mp3")
-        self.assertEqual(payload["voice"], PollyVoice.JOANNA.value)
+        self.assertEqual(payload["voice"], PollyVoice.RUTH.value)
         self.assertEqual(
             payload["visemes"],
             [
@@ -268,7 +268,7 @@ class AvatarSpeechServiceTests(unittest.TestCase):
                 _config(),
                 request_id="synthetic-request-3003",
                 text="Hello.",
-                voice="Ruth",
+                voice="Stephen",
             )
 
 

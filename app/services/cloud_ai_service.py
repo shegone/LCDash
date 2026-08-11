@@ -49,14 +49,14 @@ CLOUD_TRANSCRIBE_AUDIO_FORMATS = tuple(
 
 CLOUD_POLLY_VOICES = (
     {
-        "id": PollyVoice.JOANNA.value,
-        "label": "Joanna",
-        "description": "AWS Polly neural American female",
+        "id": PollyVoice.RUTH.value,
+        "label": "Ruth",
+        "description": "AWS Polly generative American female -- MAE's voice",
     },
     {
-        "id": PollyVoice.MATTHEW.value,
-        "label": "Matthew",
-        "description": "AWS Polly neural American male",
+        "id": PollyVoice.STEPHEN.value,
+        "label": "Stephen",
+        "description": "AWS Polly generative American male -- JACK's voice",
     },
 )
 

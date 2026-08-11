@@ -58,7 +58,7 @@ class CloudAiProviderConfig:
     retrieval_result_limit: int = 5
     retrieval_score_threshold: float = 0.5
     allowed_s3_prefixes: tuple[str, ...] = ()
-    polly_voice: PollyVoice = PollyVoice.JOANNA
+    polly_voice: PollyVoice = PollyVoice.RUTH
     transcribe_language_code: str = "en-US"
     voice_enabled: bool = False
     max_input_audio_bytes: int = 2_000_000
@@ -138,7 +138,7 @@ class CloudAiProviderConfig:
             allowed_s3_prefixes=tuple(
                 str(item) for item in raw_prefixes
             ),
-            polly_voice=PollyVoice(str(values.get("polly_voice", PollyVoice.JOANNA))),
+            polly_voice=PollyVoice(str(values.get("polly_voice", PollyVoice.RUTH))),
             transcribe_language_code=str(
                 values.get("transcribe_language_code", "en-US")
             ),
@@ -157,11 +157,11 @@ class CloudAiProviderConfig:
 def voice_for_persona(config: CloudAiProviderConfig, persona: str) -> PollyVoice:
     """Resolve the Polly voice a persona speaks with.
 
-    JACK always uses its own distinct voice (Matthew) so the two assistants
+    JACK always uses its own distinct voice (Stephen) so the two assistants
     can never be confused, regardless of what a caller requests. Every other
     persona -- MAE, or anything unrecognized -- keeps the prior, unchanged
     behavior: the single deployment-wide operator-configured default.
     """
     if persona == "jack":
-        return PollyVoice.MATTHEW
+        return PollyVoice.STEPHEN
     return config.polly_voice

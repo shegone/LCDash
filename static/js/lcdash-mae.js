@@ -379,7 +379,7 @@
             body: JSON.stringify({
                 text: spokenText,
                 voice: cloudMode
-                    ? (cloudVoiceName || "Joanna")
+                    ? (cloudVoiceName || "Ruth")
                     : "mae-synthetic-female",
                 speed: 1.0,
                 response_format: "mp3"
@@ -1759,7 +1759,7 @@
     voiceStop.addEventListener("click", endVoiceMode);
     window.addEventListener("beforeunload", endVoiceMode);
 
-    // Cloud Polly voices are enum-bound (Joanna / Matthew); the on-prem voice
+    // Cloud Polly voices are enum-bound (Ruth / Stephen); the on-prem voice
     // names are not accepted there, so the active voice comes from the server.
     async function loadCloudVoiceProfile() {
         try {

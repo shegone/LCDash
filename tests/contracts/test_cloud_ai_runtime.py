@@ -100,7 +100,7 @@ class CloudAiRuntimeTests(unittest.TestCase):
         self.assertTrue(runtime.status.tts_ready)
         self.assertTrue(runtime.status.stt_ready)
         speech = PollySpeechRequest(
-            "request-1010", "logan-synthetic", "Call 911.", PollyVoice.JOANNA
+            "request-1010", "logan-synthetic", "Call 911.", PollyVoice.RUTH
         )
         self.assertEqual(runtime.synthesize(speech), b"mp3")
         self.network.assert_not_called()
@@ -141,7 +141,7 @@ class CloudAiRuntimeTests(unittest.TestCase):
         self.assertEqual(
             runtime.transcribe(transcribe_request, b"pcm"), "ask about nine one one"
         )
-        for voice in (PollyVoice.MATTHEW, PollyVoice.JOANNA):
+        for voice in (PollyVoice.RUTH, PollyVoice.STEPHEN):
             speech = PollySpeechRequest(
                 "request-1005", "logan-synthetic", "Call 911.", voice
             )

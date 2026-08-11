@@ -44,7 +44,7 @@ def _settings(**overrides):
         "cloud_ai_allowed_s3_prefixes": (
             "s3://private/tenants/logan-synthetic/approved/",
         ),
-        "cloud_ai_polly_voice": "Joanna",
+        "cloud_ai_polly_voice": "Ruth",
         "cloud_ai_voice_enabled": False,
     }
     values.update(overrides)
@@ -72,7 +72,7 @@ class CloudAiApplicationWiringTests(unittest.TestCase):
         self.assertFalse(status["action_tools_enabled"])
         self.assertIn("not ingested", status["disabled_reason"])
         self.assertEqual(
-            {voice["id"] for voice in CLOUD_POLLY_VOICES}, {"Matthew", "Joanna"}
+            {voice["id"] for voice in CLOUD_POLLY_VOICES}, {"Ruth", "Stephen"}
         )
         self.network.assert_not_called()
 
@@ -88,15 +88,15 @@ class CloudAiApplicationWiringTests(unittest.TestCase):
         # The default persona (what every pre-fix caller effectively used)
         # and an explicit "mae" persona must keep reporting the exact same,
         # unchanged voice.
-        self.assertEqual(cloud_ai_status(config, runtime)["tts"]["voice"], "Joanna")
+        self.assertEqual(cloud_ai_status(config, runtime)["tts"]["voice"], "Ruth")
         self.assertEqual(
             cloud_ai_status(config, runtime, persona="mae")["tts"]["voice"],
-            "Joanna",
+            "Ruth",
         )
         # JACK must get its own, different voice from that same status call.
         self.assertEqual(
             cloud_ai_status(config, runtime, persona="jack")["tts"]["voice"],
-            "Matthew",
+            "Stephen",
         )
         self.network.assert_not_called()
 
@@ -126,10 +126,10 @@ class CloudAiApplicationWiringTests(unittest.TestCase):
             config,
             request_id="request-cloud-2001",
             text="Call 911.",
-            voice="Matthew",
+            voice="Stephen",
             persona="mae",
         )
-        self.assertEqual(polly.requests[-1].voice, PollyVoice.MATTHEW)
+        self.assertEqual(polly.requests[-1].voice, PollyVoice.STEPHEN)
         # ...and an empty voice still falls back to the configured default.
         synthesize_cloud_sentence(
             runtime,
@@ -139,9 +139,9 @@ class CloudAiApplicationWiringTests(unittest.TestCase):
             voice="",
             persona="mae",
         )
-        self.assertEqual(polly.requests[-1].voice, PollyVoice.JOANNA)
+        self.assertEqual(polly.requests[-1].voice, PollyVoice.RUTH)
 
-        # JACK always gets Matthew when no voice is supplied (the cold-start
+        # JACK always gets Stephen when no voice is supplied (the cold-start
         # path, before the browser has fetched a status response)...
         synthesize_cloud_sentence(
             runtime,
@@ -151,7 +151,7 @@ class CloudAiApplicationWiringTests(unittest.TestCase):
             voice="",
             persona="jack",
         )
-        self.assertEqual(polly.requests[-1].voice, PollyVoice.MATTHEW)
+        self.assertEqual(polly.requests[-1].voice, PollyVoice.STEPHEN)
         # ...and also when a caller explicitly sends MAE's voice alongside
         # persona=jack -- the exact failure mode that shipped, since the
         # status endpoint used to hand every caller the same voice string.
@@ -160,10 +160,10 @@ class CloudAiApplicationWiringTests(unittest.TestCase):
             config,
             request_id="request-cloud-2004",
             text="Call 911.",
-            voice="Joanna",
+            voice="Ruth",
             persona="jack",
         )
-        self.assertEqual(polly.requests[-1].voice, PollyVoice.MATTHEW)
+        self.assertEqual(polly.requests[-1].voice, PollyVoice.STEPHEN)
         self.network.assert_not_called()
 
     def test_cloud_transcription_is_wired_but_rejects_unstreamable_audio(self):
@@ -216,7 +216,7 @@ class CloudAiApplicationWiringTests(unittest.TestCase):
                 build_cloud_ai_config(settings),
                 request_id="request-cloud-1002",
                 text="Call 911.",
-                voice="Matthew",
+                voice="Ruth",
             )
         self.network.assert_not_called()
 
@@ -251,7 +251,7 @@ class CloudAiApplicationWiringTests(unittest.TestCase):
     def test_cloud_template_enables_voices_and_names_document_gate(self):
         template = (ROOT / "templates/voice_lab.html").read_text(encoding="utf-8")
         script = (ROOT / "static/js/lcdash-voice.js").read_text(encoding="utf-8")
-        self.assertIn("Matthew and Joanna are enabled", template)
+        self.assertIn("Ruth and Stephen are enabled", template)
         self.assertIn("cloud_voice and not tts_enabled", template)
         self.assertIn("cloud_voice and not stt_enabled", template)
         self.assertIn("ttsReady = !cloudMode", script)

@@ -381,7 +381,7 @@
             body: JSON.stringify({
                 text: spokenText,
                 voice: cloudMode
-                    ? (cloudVoiceName || "Matthew")
+                    ? (cloudVoiceName || "Stephen")
                     : "jack-synthetic-southern-male",
                 speed: cloudMode ? 1.0 : 0.92,
                 response_format: "mp3"

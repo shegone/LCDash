@@ -42,7 +42,7 @@ class CloudAiProviderBoundaryTests(unittest.TestCase):
             "generation_model_id": "amazon.nova-micro-v1:0",
             "max_output_tokens": 512,
             "retrieval_result_limit": 5,
-            "polly_voice": "Joanna",
+            "polly_voice": "Ruth",
             "transcribe_language_code": "en-US",
             "action_tools": [],
         }
@@ -56,7 +56,7 @@ class CloudAiProviderBoundaryTests(unittest.TestCase):
         self.assertFalse(schema["additionalProperties"])
         self.assertEqual(schema["properties"]["action_tools"]["maxItems"], 0)
         self.assertEqual(
-            schema["properties"]["polly_voice"]["enum"], ["Matthew", "Joanna"]
+            schema["properties"]["polly_voice"]["enum"], ["Ruth", "Stephen"]
         )
         config = CloudAiProviderConfig.from_mapping(self.live_config())
         self.assertEqual(config.max_output_tokens, 512)
@@ -156,7 +156,7 @@ class CloudAiProviderBoundaryTests(unittest.TestCase):
             )
 
     def test_polly_voices_and_nine_one_one_pronunciation_are_exact(self):
-        for voice in (PollyVoice.MATTHEW, PollyVoice.JOANNA):
+        for voice in (PollyVoice.RUTH, PollyVoice.STEPHEN):
             request = PollySpeechRequest(
                 "request-0009",
                 "logan-synthetic",

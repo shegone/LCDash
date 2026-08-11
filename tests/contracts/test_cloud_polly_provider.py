@@ -37,7 +37,22 @@ class _Client:
         return self.response
 
 
-def _request(voice=PollyVoice.JOANNA, text="Call 911."):
+class _SequencedClient:
+    """Returns each queued response in order -- audio call, then marks call."""
+
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.calls = []
+
+    def synthesize_speech(self, **kwargs):
+        self.calls.append(kwargs)
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+
+def _request(voice=PollyVoice.RUTH, text="Call 911."):
     return PollySpeechRequest(
         "synthetic-request-1001",
         "logan-synthetic",
@@ -71,24 +86,58 @@ class CloudPollyProviderTests(unittest.TestCase):
             client.calls,
             [
                 {
-                    "Engine": "neural",
+                    "Engine": "generative",
                     "OutputFormat": "mp3",
                     "Text": "Call nine one one.",
                     "TextType": "text",
-                    "VoiceId": "Joanna",
+                    "VoiceId": "Ruth",
                 }
             ],
         )
         self.assertTrue(stream.was_closed)
         self.network.assert_not_called()
 
-    def test_both_reviewed_voices_are_forwarded_exactly(self):
-        for voice in (PollyVoice.JOANNA, PollyVoice.MATTHEW):
+    def test_both_reviewed_voices_are_forwarded_on_the_generative_engine(self):
+        for voice in (PollyVoice.RUTH, PollyVoice.STEPHEN):
             stream = _Stream(b"mp3")
             client = _Client({"AudioStream": stream})
             provider = AwsPollySpeechProvider(client_factory=lambda: client)
             provider.synthesize(_request(voice=voice))
             self.assertEqual(client.calls[0]["VoiceId"], voice.value)
+            self.assertEqual(client.calls[0]["Engine"], "generative")
+
+    def test_synthesize_with_visemes_forces_neural_even_for_a_generative_voice(self):
+        """Chat renders Ruth/Stephen on generative; the avatar forces neural."""
+        for voice in (PollyVoice.RUTH, PollyVoice.STEPHEN):
+            client = _SequencedClient(
+                [
+                    {"AudioStream": _Stream(b"mp3"), "ContentType": "audio/mpeg"},
+                    {
+                        "AudioStream": _Stream(
+                            b'{"time": 0, "type": "viseme", "value": "p"}'
+                        ),
+                        "ContentType": "application/x-json-stream",
+                    },
+                ]
+            )
+            provider = AwsPollySpeechProvider(client_factory=lambda: client)
+            provider.synthesize_with_visemes(_request(voice=voice))
+            self.assertEqual(client.calls[0]["Engine"], "neural")
+            self.assertEqual(client.calls[1]["Engine"], "neural")
+
+    def test_synthesize_with_visemes_guards_non_neural_voices(self):
+        """The guard exists for a future voice without neural support; today's
+        two voices both have it, so this exercises the guard by patching the
+        capability check rather than by finding a real non-neural voice."""
+        client = _SequencedClient([])
+        provider = AwsPollySpeechProvider(client_factory=lambda: client)
+        with patch(
+            "app.integrations.cloud_ai.polly_provider.supports_neural_engine",
+            return_value=False,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "polly_viseme_voice_not_neural"):
+                provider.synthesize_with_visemes(_request())
+        self.assertEqual(client.calls, [])
 
     def test_missing_empty_and_oversize_audio_fail_closed_and_close_stream(self):
         wrong_type_stream = _Stream(b"mp3")
