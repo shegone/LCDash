@@ -10,6 +10,7 @@
 
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 
 (function () {
     "use strict";
@@ -466,9 +467,17 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
     let active = createPortraitRenderer();
     markActiveFramePill();
 
-    // The CC5 character takes over the moment it exists; the 404 until
-    // Phase 0 delivers is expected and the portraits stay.
-    new GLTFLoader().load(
+    // The character takes over the moment mae.glb exists; a 404 keeps the
+    // portraits. The converter Draco-compresses the meshes (that is most of
+    // the difference between an 80 MB and a 29 MB file), and GLTFLoader
+    // REFUSES Draco content unless a decoder is attached -- the first ship
+    // of the real model fell back to portraits exactly this way, with a log
+    // line that wrongly claimed the file didn't exist.
+    const dracoLoader = new DRACOLoader();
+    dracoLoader.setDecoderPath("/static/vendor/three-0.171.0/draco/");
+    const gltfLoader = new GLTFLoader();
+    gltfLoader.setDRACOLoader(dracoLoader);
+    gltfLoader.load(
         "/static/models/mae.glb",
         function (gltf) {
             try {
@@ -481,8 +490,12 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
             }
         },
         undefined,
-        function () {
-            console.info("MAE avatar: no /static/models/mae.glb yet; portrait mode active.");
+        function (error) {
+            // A missing file and a file the loader cannot parse are very
+            // different problems; say which one actually happened.
+            console.warn(
+                "MAE avatar: mae.glb did not load; portrait mode active.",
+                error && (error.message || error));
         });
 
     // A thrown frame must never end the animation: requestAnimationFrame
