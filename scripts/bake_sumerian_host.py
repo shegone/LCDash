@@ -77,6 +77,43 @@ print("BLINK_ACTIONS:", sorted(a.name for a in blink_actions))
 if char_armature.animation_data is None:
     char_armature.animation_data_create()
 
+# --------------------------------------------------------------------
+# Bones whose REST POSE must not be touched.
+#
+# `pose.armature_apply` makes the current pose the new rest, and Blender
+# warns outright: "Actions on this armature will be destroyed by this new
+# rest pose as the transforms stored are relative to the old rest pose."
+# That warning is load-bearing here. stand_idle's frame 0 does not only
+# pose the body -- it also carries real offsets on 63 head-skinning bones
+# (def_c_lowLip |loc|=0.0336, def_l_cornerLip 0.0174, def_c_upLip 0.0130,
+# neckA 14.6 deg, neckB 5.3 deg). Folding those into the rest and THEN
+# replaying a viseme action, whose channel values were authored against
+# the ORIGINAL rest, composes idle-offset x viseme instead of just
+# viseme. Measured against the un-rest-baked rig, that corrupted every
+# single viseme by 65-309% of its own true displacement -- the error was
+# larger than the signal, and it read as a crooked, one-sided mouth.
+#
+# So: neutralise every bone that a replayed action drives before applying
+# any pose as rest. Those bones keep their authored rest, the actions stay
+# valid, and the body still gets its standing stance from the bones the
+# face never touches (arms, legs, fingers).
+import re as _re
+
+def _keyed_bones(action):
+    found = set()
+    for fcurve in action.fcurves:
+        match = _re.match(r'pose\.bones\["([^"]+)"\]', fcurve.data_path)
+        if match:
+            found.add(match.group(1))
+    return found
+
+REST_LOCKED_BONES = set()
+for _action in list(viseme_actions) + list(blink_actions):
+    if _action.name == "stand_talk":
+        continue
+    REST_LOCKED_BONES |= _keyed_bones(_action)
+print("REST_LOCKED_BONES:", len(REST_LOCKED_BONES))
+
 def assign_action(obj, action):
     """Blender 4.4+'s layered-action system requires BOTH `.action` and
     `.action_slot` set, or the object is left completely undriven -- no
@@ -97,6 +134,16 @@ def bake_pose_into_rest(action):
     reads the CURRENT (armature-deformed) mesh as the neutral reference."""
     assign_action(char_armature, action)
     bpy.context.scene.frame_set(0)
+    bpy.context.view_layer.update()
+    locked = 0
+    for pose_bone in char_armature.pose.bones:
+        if pose_bone.name in REST_LOCKED_BONES:
+            pose_bone.location = (0.0, 0.0, 0.0)
+            pose_bone.rotation_quaternion = (1.0, 0.0, 0.0, 0.0)
+            pose_bone.rotation_euler = (0.0, 0.0, 0.0)
+            pose_bone.scale = (1.0, 1.0, 1.0)
+            locked += 1
+    print(f"  rest-locked {locked} action-driven bones before applying rest")
     bpy.context.view_layer.update()
     bpy.context.view_layer.objects.active = char_armature
     char_armature.select_set(True)
