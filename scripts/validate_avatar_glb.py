@@ -63,6 +63,20 @@ REQUIRED_NOW = (
     "browInnerUp",
 )
 
+# The SECOND rig contract the runtime accepts: one morph per Polly viseme
+# code plus a combined blink, as produced by baking a Sumerian Host's
+# bone-driven viseme poses into shape keys (scripts/bake_sumerian_host.py
+# in the session history; the pose clips in the Hosts' lipsync.glb are
+# literally named with Polly's codes). A model honouring this contract is
+# validated against it INSTEAD of ARKit.
+POLLY_VISEME_CODES = (
+    "p", "t", "S", "T", "f", "k", "i", "r", "s", "u",
+    "@", "a", "e", "E", "o", "O", "sil",
+)
+REQUIRED_NATIVE_VISEME = tuple(
+    f"viseme_{code}" for code in POLLY_VISEME_CODES
+) + ("blink",)
+
 MAX_RECOMMENDED_BYTES = 30 * 1024 * 1024
 GLB_MAGIC = 0x46546C67
 CHUNK_JSON = 0x4E4F534A
@@ -172,6 +186,15 @@ def validate(path: Path) -> list[str]:
                 "no morph targets at all -- the export had blendshapes turned "
                 "off. In Character Creator, export with the ARKit/ExpressionPlus "
                 "facial profile enabled."
+            )
+    elif "viseme_sil" in names or "viseme_p" in names:
+        missing_native = [n for n in REQUIRED_NATIVE_VISEME if n not in names]
+        if missing_native:
+            problems.append(
+                "native-viseme model is missing morphs the runtime drives: "
+                + ", ".join(missing_native)
+                + ". Each Polly viseme code needs its morph, or that sound "
+                "will not move her mouth."
             )
     else:
         missing_now = [n for n in REQUIRED_NOW if n not in names]

@@ -68,6 +68,19 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
         "mouthPressRight", "mouthRollLower", "tongueOut"
     ];
 
+    // Models baked from Sumerian Hosts carry one morph PER Polly viseme
+    // (viseme_p, viseme_a, ...) -- an exact pose per code, no ARKit
+    // approximation. Each Polly code drives its own morph directly; the two
+    // vocabularies coexist in VISEME_TARGETS and the draw loop applies
+    // whichever names the loaded model actually has.
+    for (const code of Object.keys(VISEME_TARGETS)) {
+        if (code !== "sil") VISEME_TARGETS[code]["viseme_" + code] = 1;
+    }
+    const NATIVE_VISEME_KEYS = Object.keys(VISEME_TARGETS)
+        .filter(function (code) { return code !== "sil"; })
+        .map(function (code) { return "viseme_" + code; });
+    const DRIVEN_MOUTH_KEYS = MOUTH_KEYS.concat(NATIVE_VISEME_KEYS);
+
     // Current speech playback state read by the animation loop.
     const speechState = {
         audio: null,
@@ -120,6 +133,10 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
         const blink = blinkT < 1 ? Math.sin(Math.PI * blinkT) : 0;
         setWeight("eyeBlinkLeft", blink);
         setWeight("eyeBlinkRight", blink);
+        // Sumerian Host bakes carry one combined "blink" morph instead of
+        // ARKit's per-eye pair; the draw loop skips names a model lacks, so
+        // driving both vocabularies costs nothing.
+        setWeight("blink", blink);
 
         // Gaze: small saccades toward a wandering target near the viewer.
         if (now >= idle.nextGazeAt) {
@@ -375,10 +392,37 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
     // three.js renderer: takes over when the CC5 character exists.
     // ------------------------------------------------------------------
 
-    const GLTF_FRAMES = {
-        console: { position: [0, 1.615, 0.52], look: [0, 1.6, 0], fov: 26 },
-        booth: { position: [0, 1.25, 2.7], look: [0, 1.05, 0], fov: 34 }
+    // Frames are DERIVED from the loaded model's bounding box, not
+    // hardcoded: fixed positions written for the 1.71 m placeholder cropped
+    // the top of the real 1.84 m character's head, and every re-export
+    // would re-break them. Each frame names the vertical slice of the
+    // character it wants (fractions of body height measured from the top);
+    // the camera distance that fits that slice is computed from the fov.
+    const GLTF_FRAME_SPECS = {
+        // Head to mid-chest: the conversational torso view.
+        console: { topMargin: 0.04, bottomFrac: 0.42, fov: 26 },
+        // Full figure, hair to feet.
+        booth: { topMargin: 0.03, bottomFrac: 1.03, fov: 34 }
     };
+
+    function frameForSpec(spec, bounds) {
+        const height = bounds.max.y - bounds.min.y;
+        const centerX = (bounds.min.x + bounds.max.x) / 2;
+        const centerZ = (bounds.min.z + bounds.max.z) / 2;
+        const top = bounds.max.y + spec.topMargin * height;
+        const bottom = bounds.max.y - spec.bottomFrac * height;
+        const middle = (top + bottom) / 2;
+        // Distance at which the vertical span exactly fills the fov, pushed
+        // back from the model's front face rather than its centerline so a
+        // deep asset cannot poke through the near plane.
+        const span = top - bottom;
+        const distance = (span / 2) / Math.tan((spec.fov * Math.PI) / 360);
+        return {
+            fov: spec.fov,
+            position: [centerX, middle, bounds.max.z + distance],
+            look: [centerX, middle, centerZ]
+        };
+    }
 
     function createGltfRenderer(gltfScene) {
         const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -419,15 +463,54 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
         console.info(
             "MAE avatar: model exposes " + found.size + " morph targets:",
             Array.from(found).sort().join(", "));
-        for (const name of MOUTH_KEYS.concat(["eyeBlinkLeft", "eyeBlinkRight"])) {
-            if (!found.has(name)) {
-                console.warn("MAE avatar: model is missing ARKit shape '" + name +
-                    "' -- was the export made with the ARKit profile on?");
+        // Two rig contracts are accepted: ARKit names (Character Creator
+        // pipeline) or native Polly viseme morphs (Sumerian Host bake).
+        // Warn against whichever contract the model is closest to honouring.
+        const isNativeViseme = found.has("viseme_sil") || found.has("viseme_p");
+        if (isNativeViseme) {
+            for (const name of NATIVE_VISEME_KEYS.concat(["blink"])) {
+                if (!found.has(name)) {
+                    console.warn("MAE avatar: viseme model is missing morph '" +
+                        name + "' -- that Polly viseme will not move her mouth.");
+                }
+            }
+        } else {
+            for (const name of MOUTH_KEYS.concat(["eyeBlinkLeft", "eyeBlinkRight"])) {
+                if (!found.has(name)) {
+                    console.warn("MAE avatar: model is missing ARKit shape '" + name +
+                        "' -- was the export made with the ARKit profile on?");
+                }
             }
         }
 
+        const bounds = new THREE.Box3().setFromObject(gltfScene);
+        const frames = {
+            console: frameForSpec(GLTF_FRAME_SPECS.console, bounds),
+            booth: frameForSpec(GLTF_FRAME_SPECS.booth, bounds)
+        };
+        // Read-only debug surface: lets a console (or an agent driving one)
+        // verify what the derived frames actually contain without guessing
+        // at closure state. projectY answers "where on screen is this world
+        // height" in [0,1] from the top of the pane.
+        window.LCDashAvatarDebug = {
+            bounds: { min: bounds.min.toArray(), max: bounds.max.toArray() },
+            frames: frames,
+            projectY: function (worldY, frameName) {
+                const frame = frames[frameName] || frames.console;
+                const probe = new THREE.PerspectiveCamera(
+                    frame.fov, camera.aspect, 0.05, 20);
+                probe.position.set(...frame.position);
+                probe.lookAt(...frame.look);
+                probe.updateProjectionMatrix();
+                const point = new THREE.Vector3(
+                    frame.look[0], worldY, frame.look[2]);
+                point.project(probe);
+                return (1 - point.y) / 2;
+            }
+        };
+
         function applyFrame() {
-            const frame = GLTF_FRAMES[activeFrame] || GLTF_FRAMES.console;
+            const frame = frames[activeFrame] || frames.console;
             camera.fov = frame.fov;
             camera.position.set(...frame.position);
             camera.lookAt(...frame.look);
@@ -511,7 +594,10 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
             idleStep(now);
             const targets = activeVisemeTargets();
             // Attack faster than release so consonant closures register.
-            for (const key of MOUTH_KEYS) {
+            // Every driven key decays to zero unless the active viseme
+            // names it -- including the native viseme_* morphs, or a
+            // Sumerian-baked mouth would hold its last shape forever.
+            for (const key of DRIVEN_MOUTH_KEYS) {
                 const target = targets[key] || 0;
                 const current = weight(key);
                 const alpha = target > current ? 0.45 : 0.28;
