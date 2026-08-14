@@ -4,7 +4,11 @@ import unittest
 
 
 INFRASTRUCTURE_ROOT = Path(__file__).resolve().parents[1]
+# Repo root first so the application's `app` namespace package resolves even
+# when the suite runs from infrastructure/ (the CDK entry script is named
+# cdk_app.py, not app.py, so it cannot shadow that package).
 sys.path.insert(0, str(INFRASTRUCTURE_ROOT))
+sys.path.insert(0, str(INFRASTRUCTURE_ROOT.parent))
 
 try:
     import aws_cdk as cdk
@@ -632,10 +636,50 @@ class CdkTemplateTests(unittest.TestCase):
             https["DefaultActions"][0]["AuthenticateCognitoConfig"]["SessionTimeout"],
             "86400",
         )
+
+    def test_only_the_approved_asset_paths_skip_authentication(self):
+        """Exactly one listener rule exists, and it bypasses Cognito only for
+        the static, secret-free paths in ALB_UNAUTHENTICATED_PATHS.
+
+        Those background requests (service worker, manifest, favicon) fire
+        while the user is still on the login page; when they authenticated,
+        each one restarted the ALB auth flow and clobbered the AWSALBAuthNonce
+        cookie, so the first Cognito callback of every session got a 401. The
+        bypass is the fix -- and this test is the guardrail that replaced the
+        old "zero listener rules" assertion: broadening the list, adding a
+        second rule, or attaching an authenticate action here must fail synth
+        tests before it reaches a change set.
+        """
+        from lcdash_pilot.config import ALB_UNAUTHENTICATED_PATHS
+
         self.template.resource_count_is(
             "AWS::ElasticLoadBalancingV2::ListenerRule",
-            0,
+            1,
         )
+        rule = next(
+            resource["Properties"]
+            for resource in self.template.to_json()["Resources"].values()
+            if resource["Type"] == "AWS::ElasticLoadBalancingV2::ListenerRule"
+        )
+        self.assertEqual(
+            [action["Type"] for action in rule["Actions"]],
+            ["forward"],
+            "The asset bypass must forward only -- never authenticate, "
+            "redirect, or fixed-response",
+        )
+        self.assertEqual(len(rule["Conditions"]), 1)
+        self.assertEqual(rule["Conditions"][0]["Field"], "path-pattern")
+        self.assertEqual(
+            sorted(rule["Conditions"][0]["PathPatternConfig"]["Values"]),
+            sorted(ALB_UNAUTHENTICATED_PATHS),
+            "The bypassed paths must match ALB_UNAUTHENTICATED_PATHS exactly",
+        )
+        for path in ALB_UNAUTHENTICATED_PATHS:
+            self.assertNotIn(
+                "*",
+                path,
+                "Bypassed paths must be exact files, never wildcards",
+            )
 
     def test_tenant_binding_is_fixed_in_task_not_a_parameter(self):
         template = self.template.to_json()

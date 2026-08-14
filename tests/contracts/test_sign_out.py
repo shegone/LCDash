@@ -99,24 +99,36 @@ class SignOutTests(unittest.TestCase):
         self.assertIn("SomeOtherName-0=", expired)
 
     def test_no_unauthenticated_landing_page_is_introduced(self):
-        """AWS suggests a dedicated UNauthenticated logout landing page, which
-        would need an ElasticLoadBalancingV2::ListenerRule --
-        phase1_deployment_allowlist.json prohibits that type deliberately, so
-        this ALB keeps exactly one path and every path authenticates.
-        Sign-out therefore lands on the app root, where the ALB finds no
-        session and shows the login page. If a landing page is ever wanted,
-        the prohibition is the decision to revisit first, with Ted."""
-        import json
+        """AWS suggests a dedicated UNauthenticated logout landing page. That
+        remains rejected: sign-out lands on the app root, where the ALB finds
+        no session and shows the login page, which is unambiguous and adds no
+        unauthenticated surface.
+
+        Since 2026-08-14 (AWS now the authoritative platform) the listener
+        does carry ONE unauthenticated rule -- the static asset paths in
+        ALB_UNAUTHENTICATED_PATHS, which existed to stop background requests
+        from clobbering the login nonce -- so the old "zero listener rules"
+        posture is history. This test now holds the narrower line: no logout
+        landing PAGE may join that list, and no such route may exist in the
+        app. Broadening beyond static assets is a decision to revisit with
+        Ted first."""
         from pathlib import Path
 
-        allowlist = json.loads(
-            (Path(__file__).parents[2] / "infrastructure" / "phase1_deployment_allowlist.json")
-            .read_text(encoding="utf-8")
+        import sys
+        sys.path.insert(
+            0, str(Path(__file__).parents[2] / "infrastructure")
         )
-        self.assertIn(
-            "AWS::ElasticLoadBalancingV2::ListenerRule",
-            allowlist["prohibited_resource_types"],
-        )
+        try:
+            from lcdash_pilot.config import ALB_UNAUTHENTICATED_PATHS
+        finally:
+            sys.path.pop(0)
+
+        for path in ALB_UNAUTHENTICATED_PATHS:
+            self.assertTrue(
+                path.startswith("/static/") or path == "/favicon.ico",
+                f"{path}: only static assets may skip authentication -- "
+                "pages and API routes never",
+            )
         # No bypass route may exist in the app either: a landing page the ALB
         # still authenticates is unreachable after sign-out, so shipping one
         # would only be dead code implying a bypass that isn't there.

@@ -26,6 +26,25 @@ PILOT_DOMAIN_NAME = f"aws.{PILOT_ZONE_NAME}"
 # have to agree; when they did not, sign-out silently did nothing.
 ALB_SESSION_COOKIE_NAME = "LCDashPilotAuth"
 
+# The only paths the HTTPS listener serves WITHOUT Cognito authentication.
+# Browsers request all three in the background while the user is still on the
+# login page -- the manifest is even fetched WITHOUT cookies unless the link
+# tag opts in -- and every such request used to restart the ALB's auth flow,
+# minting a fresh AWSALBAuthNonce cookie that clobbered the one the real login
+# was using. Cognito's callback then arrived bound to a nonce the browser no
+# longer held, and the ALB answered 401 on the first login of every session
+# (diagnosed from ALB access logs, 2026-08-14).
+#
+# Everything here must be static, secret-free, and safe to serve to the open
+# internet, because that is exactly what this list does. Do not add paths
+# casually: /static/* at large, every API route, and every page stay behind
+# authentication.
+ALB_UNAUTHENTICATED_PATHS = (
+    "/static/service-worker.js",
+    "/static/manifest.webmanifest",
+    "/favicon.ico",
+)
+
 # Hostname serving Cognito managed login. Kept on our own domain rather than the
 # Cognito prefix domain for two reasons: a county-owned hostname is what users
 # should be asked to trust with a password, and WebAuthn passkeys bind to a

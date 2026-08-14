@@ -24,6 +24,7 @@ from constructs import Construct
 
 from .config import (
     ALB_SESSION_COOKIE_NAME,
+    ALB_UNAUTHENTICATED_PATHS,
     APPROVED_REGION,
     NAME_PREFIX,
     PILOT_DOMAIN_NAME,
@@ -538,8 +539,9 @@ class Phase1FoundationStack(cdk.Stack):
         # authenticated application root on purpose: with the ALB session
         # cookie expired, the load balancer finds no session and sends the
         # browser to the login page, which is the sign-out confirmation. A
-        # dedicated unauthenticated landing page would need a prohibited
-        # ListenerRule (see the listener below).
+        # dedicated unauthenticated landing page remains rejected -- the only
+        # unauthenticated paths are ALB_UNAUTHENTICATED_PATHS (see the
+        # listener below for why those exist).
         alb_logout_url = cdk.Fn.join(
             "",
             ["https://", PILOT_DOMAIN_NAME, "/"],
@@ -612,16 +614,51 @@ class Phase1FoundationStack(cdk.Stack):
             # 2026-08-09 (approved); mirrored here so the template agrees.
             deregistration_delay=cdk.Duration.seconds(30),
         )
-        # NOTE: AWS suggests a dedicated UNauthenticated logout landing page
-        # ("client logout landing pages... cannot be behind an Application
-        # Load Balancer rule that requires authentication"). That would need
-        # an AWS::ElasticLoadBalancingV2::ListenerRule, which
-        # phase1_deployment_allowlist.json PROHIBITS -- deliberately, so this
-        # ALB keeps exactly one path and every path authenticates. The
-        # guardrail wins: sign-out instead lands on the application root,
-        # where the ALB finds no session and hands the browser to the login
-        # page. The user sees the sign-in screen rather than a custom
-        # confirmation page, which is unambiguous and adds no bypass.
+        # HISTORY: through 2026-08-14 this stack held the line that "this ALB
+        # keeps exactly one path and every path authenticates", and the
+        # deployment allowlist prohibited ListenerRule outright. That posture
+        # was set when AWS was a disconnected pilot beside the authoritative
+        # on-prem system. Two things have changed since. First, AWS is now the
+        # authoritative platform, so first-login reliability is an operational
+        # requirement, not a pilot nicety. Second, the all-paths rule turned
+        # out to BREAK authentication rather than strengthen it: background
+        # browser requests (service worker, manifest, favicon) fired during
+        # the login window each restarted the ALB auth flow and overwrote the
+        # AWSALBAuthNonce cookie the real login depended on, so Cognito's
+        # callback arrived bound to a nonce the browser no longer held and the
+        # ALB answered 401 on the first login of every session.
+        #
+        # The rule below is the deliberate, bounded exception: the paths in
+        # ALB_UNAUTHENTICATED_PATHS (three static, secret-free files) forward
+        # without authentication so they can never mint a nonce. Everything
+        # else -- every page, every API, all other /static/* -- still
+        # authenticates. The allowlist now permits ListenerRule for exactly
+        # this purpose; test_cdk_template.py pins the rule count to one and
+        # the path list to the constant, so any quiet broadening fails synth
+        # tests before it reaches a change set.
+        #
+        # AWS's suggested unauthenticated LOGOUT landing page remains
+        # rejected: sign-out still lands on the application root, where the
+        # ALB finds no session and shows the login page. That flow is
+        # unambiguous and needs no additional unauthenticated surface.
+        # Priority 5, not 10: the fix first shipped as a HAND-created rule at
+        # priority 10 on 2026-08-14 (emergency fix, then codified here). A
+        # CloudFormation create at an occupied priority fails the whole stack
+        # update, so this rule deploys at 5 and coexists with the manual rule
+        # -- identical condition and action, so behaviour cannot differ --
+        # until the manual rule at 10 is deleted after the first deploy.
+        elbv2.ApplicationListenerRule(
+            self,
+            "UnauthenticatedAssetPaths",
+            listener=https_listener,
+            priority=5,
+            conditions=[
+                elbv2.ListenerCondition.path_patterns(
+                    list(ALB_UNAUTHENTICATED_PATHS)
+                )
+            ],
+            action=elbv2.ListenerAction.forward([target_group]),
+        )
         https_listener.add_action(
             "AuthenticateThenForward",
             action=elbv2_actions.AuthenticateCognitoAction(

@@ -124,6 +124,7 @@
       "AWS::ECS::Service": 1,
       "AWS::ECS::TaskDefinition": 2,
       "AWS::ElasticLoadBalancingV2::Listener": 2,
+      "AWS::ElasticLoadBalancingV2::ListenerRule": 1,
       "AWS::ElasticLoadBalancingV2::LoadBalancer": 1,
       "AWS::ElasticLoadBalancingV2::TargetGroup": 1,
       "AWS::Events::Rule": 1,
@@ -166,12 +167,16 @@
   "prohibited_resource_types": [
     "AWS::Cognito::IdentityPool",
     "AWS::EC2::NatGateway",
-    "AWS::ElasticLoadBalancingV2::ListenerRule",
     "AWS::Route53::HostedZone",
     "AWS::Route53::RecordSet",
     "AWS::SNS::Topic",
     "AWS::SQS::Queue"
   ],
+  "listener_rule_exception": {
+    "granted": "2026-08-14",
+    "reason": "ListenerRule left prohibited_resource_types when AWS became the authoritative platform. The all-paths-authenticate rule broke first login: background requests (service worker, manifest, favicon) each restarted the ALB auth flow and clobbered the AWSALBAuthNonce the real login depended on, so every session's first Cognito callback got a 401. Exactly one rule is permitted, forwarding only the static secret-free paths in lcdash_pilot/config.py ALB_UNAUTHENTICATED_PATHS without authentication; test_cdk_template.py pins the count and the paths.",
+    "approved_by": "Ted Sparks"
+  },
   "prohibited_scope": [
     "resources outside 862772137583/us-east-1",
     "any stack other than the two listed application stacks",
