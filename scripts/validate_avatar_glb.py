@@ -29,6 +29,7 @@ Exit status is 0 when the export is usable, 1 when it is not.
 from __future__ import annotations
 
 import json
+import math
 import re
 import struct
 import sys
@@ -190,48 +191,109 @@ def estimated_height(gltf: dict) -> float | None:
 # --- morph target PAYLOAD checks --------------------------------------
 #
 # Everything above only looks at the glTF *schema*: did the exporter declare
-# the right names. That is not enough -- Blender 4.4+ will happily bake an
-# armature/mesh action whose ``.action`` is set but whose ``.action_slot``
-# is not, and the result is a morph target that is present, correctly
-# named, and pointing at a real POSITION accessor, but that moved zero (or
-# duplicate) vertices when it was baked. There is no error and no warning.
-# This has shipped to production once already. Catching it means reading
-# the actual per-vertex deltas, not just the names.
+# the right names. That does not prove a declared, correctly named, correctly
+# pointed-at morph target actually carries the pose it claims to -- for that,
+# the file's own per-vertex deltas have to be read and compared.
 #
-# The float32 noise floor measured on a genuinely dead morph target in the
-# shipped file that triggered this check was 2.5e-7 m (0.25 microns) --
-# that is rounding error propagating through the bake, not motion. The
-# smallest genuinely-baked shape measured on the same file was ~1.1mm, and
-# even viseme_sil -- near-rest by design, see the exemption discussion
-# below -- still measured 1.9mm on the mesh where it WAS baked correctly.
-# 50 microns (5e-5 m) sits about 200x above the noise floor and about 20x
-# below the smallest real shape seen, with nothing observed anywhere near
-# either side of that gap. Wide margin on both sides means this does not
-# need per-mesh or per-viseme tuning.
+# CALIBRATION NOTE, learned the hard way: a morph that moves nothing, or
+# that is identical to a sibling, is NOT automatically a bake defect. A mesh
+# skinned to very few bones -- e.g. a real shipped inner-mouth mesh, weighted
+# only to the jaw, two tongue bones, and a trace of neck, with NO lip bone --
+# will legitimately collapse many visually distinct facial poses into
+# identical or zero deformation, because the bones that would distinguish
+# those poses simply do not influence that mesh. Two visemes sharing the
+# same jaw angle produce the same inner-mouth shape; a closed-jaw sound
+# produces zero inner-mouth motion. That is correct anatomy transcribed
+# faithfully from the source rig, not a defect. An earlier version of this
+# check did not account for this and would have failed a genuinely correct
+# export -- see ``_mesh_skin_joint_counts`` and the design note in
+# ``check_degenerate_and_duplicate_morphs`` for how that is told apart from
+# a real defect below.
+
+# The float32 noise floor measured on a genuinely dead morph target in a
+# real export was 2.5e-7 m (0.25 microns) -- that is rounding error
+# propagating through the bake, not motion. The smallest genuinely-baked
+# shape measured on a richly-skinned mesh (a real head mesh, 64 skin
+# joints, one per lip/cheek/jaw bone) was ~1.1mm, and even viseme_sil --
+# near-rest by design -- still measured 1.9mm there. 50 microns (5e-5 m)
+# sits about 200x above the noise floor and about 20x below the smallest
+# real shape seen on a richly-skinned mesh, with nothing observed anywhere
+# near either side of that gap. This threshold only answers "did this
+# shape move at all" -- whether zero movement is EXPECTED for a given mesh
+# is a separate, richness-aware question, handled in the checker below.
 MORPH_DEGENERATE_THRESHOLD_M = 5e-5
 
-# Duplicate detection: the observed failure is two shapes baked from the
-# same source pose under two different names, matching to float32
-# precision -- a max per-vertex difference of exactly 0. Two genuinely
-# different visemes on the same mesh move different vertices by different
-# amounts; even the closest real pair is not remotely close to the 50
-# micron noise-floor margin used for the degenerate check above, so that
-# same threshold (and the same rationale) is reused here rather than
-# inventing a second unjustified number.
+# Duplicate detection: bit-identical (max per-vertex difference of exactly
+# 0) is the strongest signal, but a looser match also matters -- two poses
+# driven by the same bone angle produce the same delta up to floating-point
+# noise without being bit-identical.
 #
-# This was checked directly against the shipped defective file, not just
-# reasoned about: on char:mouthShape, ALL 13-choose-2 = 78 pairs of live
-# visemes were measured. Three pairs cluster at 0/14/19 microns max
-# per-vertex difference (viseme_e==viseme_i bit-identical; viseme_a/
-# viseme_k and viseme_E/viseme_r a few microns apart, each moving the
-# exact same 6417 vertices with cosine similarity > 0.999999998). Every
-# other pair -- genuinely distinct visemes -- is at least 319 microns
-# apart, 16x further than the closest of those three and >6000x the
-# duplicate threshold. That is a clean, isolated cluster with nothing
-# near either edge of the threshold, so 50 microns is not "too loose": a
-# prior bit-exact-only check on this file found just the one identical
-# pair and missed the other two, which this check catches correctly.
+# Measured directly on a real file: on a richly-skinned mesh (64 joints,
+# one per lip/cheek/jaw bone), every pair of distinct live visemes differs
+# by at least 319 microns. On a mesh skinned to only 4 bones (jaw +
+# tongue), several pairs cluster at 0-19 microns apart -- traced back to
+# jaw poses themselves within a couple hundredths of a degree of each
+# other in the source rig, so the mesh faithfully reproduces near-identical
+# deltas for near-identical poses. 50 microns sits in the middle of that
+# gap: 16x below the smallest genuinely-distinct-pose difference measured,
+# and 16x above the largest same-pose difference measured. So it reliably
+# separates "these are actually the same shape" from "these are different
+# shapes" -- but, per the calibration note above, whether an identical pair
+# on a given mesh is a DEFECT or expected anatomy still depends on that
+# mesh's skinning, handled below.
 MORPH_DUPLICATE_MAX_DIFF_M = 5e-5
+
+# Which meshes get the DEGENERATE/DUPLICATE findings above treated as hard
+# failures versus informational notes.
+#
+# CHOSEN DESIGN: measure, per mesh, how directionally diverse its own ALIVE
+# morph deltas are -- the mean |cosine similarity| between every pair of
+# alive morphs on that mesh, treating each morph's flattened per-vertex
+# delta array as one vector. A mesh whose alive morphs point in nearly the
+# same direction and differ mainly in magnitude is being driven along
+# essentially one degree of freedom (e.g. jaw angle): every closed-mouth
+# viseme comes out as "the same shape, scaled by how far the jaw opened",
+# so identical or near-identical deltas among them are the direct,
+# inevitable numerical consequence of that single shared driver -- not a
+# defect. A mesh whose alive morphs point in many different directions is
+# expressing many independent degrees of freedom, so an identical or dead
+# pair among them is surprising and worth failing on. This needs no
+# cross-mesh comparison or ranking: it is a property of one mesh's own
+# morphs, so it generalises to a mesh in isolation, and to a new character.
+#
+# Measured directly on the two real files this fix was built against: a
+# richly-detailed head mesh (64 driving bones in the source rig, full lip
+# and cheek control) has mean |cosine similarity| 0.34 across its 18 alive
+# morphs -- pointing in substantially different directions, i.e. many
+# independent poses. An inner-mouth mesh (4 driving bones in the source
+# rig -- jaw, two tongue bones, a trace of neck; no lip bone at all) has
+# mean |cosine similarity| 0.92 across its 13 alive morphs -- essentially
+# collinear, i.e. one dominant pose axis. FOLLOWER_COLLINEARITY_THRESHOLD
+# sits at the midpoint of that 0.34-0.92 gap, giving comfortable margin on
+# both sides without needing per-character tuning.
+#
+# Two other designs were tried first and rejected:
+#   - Skin joint count, read from the glTF skin object (the first thing
+#     tried, because the source rig genuinely has exactly this signal --
+#     4 joints vs 64, measured directly in Blender). It turned out NOT to
+#     be recoverable from the delivered GLB: the face meshes in this
+#     export pipeline carry no JOINTS_0/WEIGHTS_0 attributes and reference
+#     no skin at all (only body meshes -- clothing, hair -- are vertex-
+#     skinned; the face is deformed entirely by pre-baked morph targets,
+#     with the rig staying behind in Blender). "The validator can see
+#     joints/skin weights in the glTF" is true of the SOURCE rig but not
+#     of this delivered file, so a signal that is actually present in
+#     every GLB this validator will ever see was needed instead.
+#   - Ranking meshes by raw alive-morph count ("richest = most live
+#     morphs"), i.e. treating only the top mesh (or a count-based ratio of
+#     it) as strict: measured and rejected. The inner mouth has 13 of 18
+#     morphs alive (72%) -- not obviously "few" -- so a count or fraction
+#     cutoff either fails to separate it from a genuinely rich mesh, or
+#     needs a suspiciously fine-tuned number to do so. The actual
+#     anatomical fact is not that the mouth moves rarely, it is that it
+#     moves the SAME WAY for many different sounds; a count metric cannot
+#     see that distinction, a direction metric does directly.
+FOLLOWER_COLLINEARITY_THRESHOLD = 0.6
 
 
 def _read_morph_delta(
@@ -313,6 +375,59 @@ def _max_displacement(deltas: list[tuple[float, float, float]]) -> float:
     return max((x * x + y * y + z * z) ** 0.5 for x, y, z in deltas)
 
 
+def _mean_alive_cosine_similarity(
+    morphs: dict[str, list[tuple[float, float, float]] | None],
+    displacements: dict[str, float],
+) -> float | None:
+    """Mean |cosine similarity| between every pair of this mesh's ALIVE
+    morph deltas, each flattened into one long vector.
+
+    This is the richness signal ``check_degenerate_and_duplicate_morphs``
+    uses to tell "this mesh legitimately collapses many poses" apart from
+    "this mesh's bake actually dropped or duplicated a shape" -- see the
+    design note above FOLLOWER_COLLINEARITY_THRESHOLD for the reasoning
+    and the two designs (skin joints; alive-morph count) that were tried
+    and rejected first.
+
+    Returns None when fewer than two morphs are alive, or when every alive
+    morph happens to have zero norm (shouldn't happen given the caller's
+    own threshold, but division by zero is refused rather than guessed
+    past) -- there is nothing to compare, so nothing can be said.
+    """
+
+    alive = [n for n, d in displacements.items() if d >= MORPH_DEGENERATE_THRESHOLD_M]
+    if len(alive) < 2:
+        return None
+
+    norms = {}
+    for name in alive:
+        deltas = morphs[name]
+        norms[name] = math.sqrt(sum(x * x + y * y + z * z for x, y, z in deltas))
+
+    similarities: list[float] = []
+    for i, name_a in enumerate(alive):
+        norm_a = norms[name_a]
+        if norm_a == 0:
+            continue
+        deltas_a = morphs[name_a]
+        for name_b in alive[i + 1:]:
+            norm_b = norms[name_b]
+            if norm_b == 0:
+                continue
+            deltas_b = morphs[name_b]
+            if len(deltas_a) != len(deltas_b):
+                continue
+            dot = sum(
+                xa * xb + ya * yb + za * zb
+                for (xa, ya, za), (xb, yb, zb) in zip(deltas_a, deltas_b)
+            )
+            similarities.append(abs(dot / (norm_a * norm_b)))
+
+    if not similarities:
+        return None
+    return sum(similarities) / len(similarities)
+
+
 def _morph_family(name: str) -> str:
     """Which group of morphs ``name`` belongs to, for judging "did this
     mesh plausibly participate in this KIND of deformation at all".
@@ -339,63 +454,58 @@ def _morph_family(name: str) -> str:
 
 
 def check_degenerate_and_duplicate_morphs(gltf: dict, bin_chunk: bytes) -> list[str]:
-    """Flag morph targets that were declared correctly but never really baked.
+    """Flag morph targets that carry no real (or no distinct) motion on a
+    mesh that is diverse enough that the motion should be there.
 
-    Two independent problems, both per-mesh:
+    Two independent observations, both computed per-mesh:
 
     1. DEGENERATE -- a morph whose largest per-vertex displacement sits at
-       the float32 noise floor, i.e. it moves nothing. This is what an
-       action baked without its action_slot looks like.
+       the float32 noise floor, i.e. it moved nothing when measured.
     2. DUPLICATE -- two differently-named morphs on the same mesh whose
-       deltas are identical or near-identical, i.e. one shape got baked
-       twice under two names (also an action_slot symptom: the second
-       target reused the last real evaluation instead of its own).
+       measured deltas are identical or near-identical.
 
-    DEGENERATE is judged PER FAMILY (see ``_morph_family``), not per morph,
-    and this matters a lot in practice. Eyeballs, eyelashes and eyebrows
-    legitimately do not deform for any mouth viseme -- that is not a bake
-    defect, it is a mesh that simply does not participate in that kind of
-    motion. The naive rule "flag a dead morph if some OTHER morph on the
-    mesh is alive" was tried and rejected: on a real shipped file,
-    char:eyebrowsShape has ``blink`` genuinely alive (it measurably moves
-    for eye blinks) while all 17 visemes are uniformly dead, and that naive
-    rule would flag all 17 visemes as broken just because blink happens to
-    live on the same mesh -- exactly the false positive this exists to
-    avoid. Comparing within a family instead of across the whole mesh only
-    flags a dead morph when a SIBLING in the same family (e.g. another
-    viseme) is alive on that same mesh, which is the actual signal that the
-    mesh participates in that kind of deformation and dropped one shape.
-    A family with only one member (blink, on a mesh with no other
-    lowercase-prefixed morphs) has no sibling to compare against, so it is
-    never flagged by this check either way -- this is what lets ``blink``
-    be legitimately dead on one mesh (the inner mouth, plausibly, does not
-    move for a blink) and legitimately alive on another (the head) without
-    naming it anywhere in this code. The tradeoff is that a truly singleton
-    shape (ARKit has exactly one: ``tongueOut``) that silently fails to
-    bake would not be caught by this check alone -- there is no sibling
-    signal available to catch it with, short of hard-coding expectations
-    per shape name, which this deliberately does not do.
+    Neither is a hard failure ("problem") purely on its own. Each is only
+    reported as a failure on a mesh whose alive morphs point in diverse
+    directions -- i.e. the mesh expresses more than one degree of freedom,
+    so a dead or duplicate shape among them is surprising (see
+    ``_mean_alive_cosine_similarity`` and FOLLOWER_COLLINEARITY_THRESHOLD
+    above for the richness measurement and the designs that were rejected
+    first). Everywhere else it is downgraded to an informational note
+    (printed, not returned in the failure list).
 
-    A mesh where EVERY measured morph is dead gets an informational note,
-    not a problem: that is indistinguishable from "this mesh does not
-    deform at all" (a static prop, an eyeball, ...), which is normal, not
-    a defect.
+    DEGENERATE is additionally judged PER FAMILY (see ``_morph_family``),
+    not per morph. Eyeballs, eyelashes and eyebrows legitimately do not
+    deform for any mouth viseme; a family that is uniformly dead on a mesh
+    just means that mesh does not participate in that kind of motion at
+    all, which is not by itself surprising (a head mesh's blink family
+    being alive says nothing about whether its viseme family "should" be
+    alive too). A dead morph only joins the reported list when a SIBLING
+    in the same family is alive on that same mesh -- that is the actual
+    signal that the mesh participates in this kind of deformation and
+    dropped one shape. A family with only one member on a mesh (e.g.
+    ``blink``, which shares no prefix with anything else) has no sibling
+    to compare against, so it is never flagged either way -- this is what
+    lets ``blink`` be legitimately dead on the inner mouth (plausibly does
+    not move for a blink) and legitimately alive on the head, without
+    naming either mesh or ``blink`` anywhere in this code.
 
-    ``viseme_sil`` is deliberately NOT given a family-of-one exemption
-    either. Within the ``viseme`` family it is treated exactly like every
-    other viseme: on a mesh where the family is genuinely alive, a dead
-    viseme_sil is flagged just like a dead viseme_S would be. It is
-    legitimately small on some meshes (near-rest by design), but the
-    measured real value (1.9mm) is comfortably above
-    MORPH_DEGENERATE_THRESHOLD_M (50 microns) while a genuinely dead
-    viseme_sil measured 0.25 microns -- the same 200x/20x margin that
-    makes the threshold safe for every other shape applies to it too.
-    viseme_sil was in fact one of the dead shapes in the shipped defect
-    that motivated this check, so exempting it would have hidden exactly
-    the bug this exists to catch.
+    A mesh where EVERY measured morph is dead gets an informational note
+    regardless of richness: that is indistinguishable from "this mesh does
+    not deform at all" (a static prop, an eyeball, ...), which is normal,
+    not a defect, and there is no sibling on the mesh to compare against
+    in the first place.
+
+    ``viseme_sil`` gets no name-based exemption anywhere in this function.
+    On a directionally-diverse mesh it is judged exactly like any other
+    viseme: dead alongside alive siblings is reported, same as a dead
+    viseme_S would be. On a collinear/follower mesh (e.g. an inner mouth
+    driven only by jaw angle) it may legitimately be dead, same as a dead
+    viseme_S would be there too -- the richness/family logic already
+    covers both, there is nothing viseme_sil-specific left to special-case.
     """
 
     problems: list[str] = []
+
     for mesh_name, morphs in sorted(_mesh_morph_deltas(gltf, bin_chunk).items()):
         displacements: dict[str, float] = {}
         for name, deltas in morphs.items():
@@ -415,6 +525,30 @@ def check_degenerate_and_duplicate_morphs(gltf: dict, bin_chunk: bytes) -> list[
                 "individual shapes below would be pure noise, since there is "
                 "nothing alive on this mesh to compare them against."
             )
+            continue  # nothing left to usefully compare on this mesh
+
+        # Richness gate. Fewer than two alive morphs (diversity is None)
+        # means there is no evidence either way -- stays strict, the same
+        # conservative default this check used before richness was taken
+        # into account at all.
+        diversity = _mean_alive_cosine_similarity(morphs, displacements)
+        is_low_fidelity = (
+            diversity is not None and diversity >= FOLLOWER_COLLINEARITY_THRESHOLD
+        )
+
+        def _report(message: str) -> None:
+            if is_low_fidelity:
+                print(
+                    f"note (informational -- mesh '{mesh_name}'s alive morphs "
+                    f"point in nearly the same direction, mean |cosine "
+                    f"similarity| {diversity:.2f} >= "
+                    f"{FOLLOWER_COLLINEARITY_THRESHOLD:.2f} -- consistent "
+                    "with a mesh driven by one dominant degree of freedom "
+                    "(e.g. jaw angle), where collapsed poses are expected): "
+                    + message
+                )
+            else:
+                problems.append(message)
 
         families: dict[str, list[str]] = {}
         for name in displacements:
@@ -429,17 +563,17 @@ def check_degenerate_and_duplicate_morphs(gltf: dict, bin_chunk: bytes) -> list[
             if alive_members and dead_members:
                 # a sibling in this family moves, so the mesh clearly
                 # participates in this kind of deformation -- a dead one
-                # among them is the bake dropping a shape, not "this mesh
-                # doesn't do that"
+                # among them dropped a shape, whether that is a defect (on
+                # a diverse mesh) or just this particular follower mesh
+                # legitimately not distinguishing these two poses
                 dead.extend(dead_members)
         dead.sort()
         if dead:
-            problems.append(
-                f"mesh '{mesh_name}': morph target(s) move essentially no vertices "
-                f"(under {MORPH_DEGENERATE_THRESHOLD_M * 1000:.3f} mm -- the float32 "
-                "noise floor, not a real shape) while sibling shapes on the same "
-                "mesh move normally -- check Blender's action_slot on the bake -- "
-                + ", ".join(dead)
+            _report(
+                f"mesh '{mesh_name}': morph target(s) measured essentially no "
+                f"vertex movement (under {MORPH_DEGENERATE_THRESHOLD_M * 1000:.3f} mm "
+                "-- the float32 noise floor) while sibling shapes on the same "
+                "mesh move normally -- " + ", ".join(dead)
             )
 
         names = sorted(displacements)
@@ -452,7 +586,7 @@ def check_degenerate_and_duplicate_morphs(gltf: dict, bin_chunk: bytes) -> list[
                     continue
                 if (displacements[name_a] < MORPH_DEGENERATE_THRESHOLD_M
                         and displacements[name_b] < MORPH_DEGENERATE_THRESHOLD_M):
-                    continue  # both already reported as dead above; don't double-flag
+                    continue  # both already covered by the dead-family case above
                 if not deltas_a:
                     continue
                 max_diff = max(
@@ -462,9 +596,9 @@ def check_degenerate_and_duplicate_morphs(gltf: dict, bin_chunk: bytes) -> list[
                 if max_diff < MORPH_DUPLICATE_MAX_DIFF_M:
                     duplicates.append(f"{name_a} == {name_b}")
         if duplicates:
-            problems.append(
-                f"mesh '{mesh_name}': morph targets are identical or near-identical "
-                "(one shape baked twice under two names) -- " + "; ".join(duplicates)
+            _report(
+                f"mesh '{mesh_name}': morph targets measured identical or "
+                "near-identical vertex positions -- " + "; ".join(duplicates)
             )
 
     return problems

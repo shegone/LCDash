@@ -12,6 +12,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import math
 import struct
 import unittest
 from pathlib import Path
@@ -138,7 +139,38 @@ def _healthy_native_viseme_morphs(vertex_count=5):
     for idx, name in enumerate(names):
         # A few mm, distinct per shape (matches magnitudes actually measured
         # on real exports), so no two healthy shapes are anywhere near the
-        # duplicate threshold of each other.
+        # duplicate threshold of each other. Directions are scattered (not
+        # all parallel) so this fixture's mean pairwise cosine similarity
+        # lands well under FOLLOWER_COLLINEARITY_THRESHOLD (measured here:
+        # ~0.46), matching a richly-detailed mesh like a real head mesh
+        # (~0.34) rather than a single-degree-of-freedom follower mesh like
+        # a real inner mouth (~0.92) -- a validate() call on this fixture
+        # must be judged strictly, not downgraded to informational notes.
+        base = 0.002 + idx * 0.0005
+        angle = idx * 47  # irregular step avoids accidental periodicity
+        dx = math.cos(math.radians(angle))
+        dy = math.sin(math.radians(angle))
+        dz = math.cos(math.radians(angle * 2))
+        morphs[name] = [(base * dx, base * dy, base * dz) for _ in range(vertex_count)]
+    return morphs
+
+
+def _collinear_viseme_morphs(vertex_count=5):
+    """A synthetic jaw-follower-style mesh: every alive morph points in
+    exactly the same direction and differs only in magnitude, the way a
+    real inner-mouth mesh driven by a single degree of freedom (jaw angle)
+    does. Two visemes sharing a magnitude collapse to the identical shape;
+    visemes given the smallest magnitude collapse to (near) zero. Unlike
+    ``_healthy_native_viseme_morphs``, this fixture's mean pairwise cosine
+    similarity is 1.0 -- well over FOLLOWER_COLLINEARITY_THRESHOLD -- on
+    purpose, to exercise the "expected collapse" side of the richness gate.
+    """
+    names = [f"viseme_{c}" for c in (
+        "p", "t", "S", "T", "f", "k", "i", "r", "s", "u",
+        "@", "a", "e", "E", "o", "O", "sil",
+    )] + ["blink"]
+    morphs = {}
+    for idx, name in enumerate(names):
         base = 0.002 + idx * 0.0005
         morphs[name] = [(base, base * 0.5, 0.0) for _ in range(vertex_count)]
     return morphs
@@ -342,6 +374,42 @@ class MorphPayloadTests(_Written):
             problems = check_degenerate_and_duplicate_morphs(gltf2, bin_chunk)
         self.assertEqual(problems, [])
         self.assertIn("no live morphs at all", buf.getvalue())
+
+    def test_low_fidelity_follower_mesh_is_not_flagged_but_a_rich_mesh_is(self):
+        """The core distinction the richness fix rests on: a mesh whose
+        alive morphs point in nearly the same direction (one dominant
+        degree of freedom, like a real jaw/tongue-only inner mouth) must
+        not be failed for collapsing several visemes to the same or a
+        near-zero shape, while a directionally-diverse (richly-detailed)
+        mesh doing the exact same thing must still be caught."""
+        rich = _healthy_native_viseme_morphs()
+        vertex_count = len(rich["viseme_T"])
+        rich["viseme_T"] = [(1e-7, 0.0, 0.0)] * vertex_count  # genuine dead shape
+
+        follower = _collinear_viseme_morphs()
+        for name in ("viseme_S", "viseme_T", "viseme_f", "viseme_sil"):
+            follower[name] = [(3e-7, 0.0, 0.0)] * len(follower[name])
+        follower["viseme_i"] = follower["viseme_e"]  # same driving pose, faithfully transcribed
+
+        gltf, bin_data = _gltf_with_meshes([("head", rich), ("mouth", follower)])
+        problems = validate(self.write(_glb_with_bin(gltf, bin_data)))
+        joined = " ".join(problems)
+        self.assertIn("head", joined)
+        self.assertIn("viseme_T", joined)
+        self.assertNotIn("mouth", joined)
+
+    def test_low_fidelity_mesh_findings_become_informational_notes(self):
+        follower = _collinear_viseme_morphs()
+        follower["viseme_S"] = [(3e-7, 0.0, 0.0)] * len(follower["viseme_S"])
+        gltf, bin_data = _gltf_with_meshes([("mouth", follower)])
+        path = self.write(_glb_with_bin(gltf, bin_data))
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            gltf2, bin_chunk = read_glb_chunks(path)
+            problems = check_degenerate_and_duplicate_morphs(gltf2, bin_chunk)
+        self.assertEqual(problems, [])
+        self.assertIn("viseme_S", buf.getvalue())
+        self.assertIn("cosine similarity", buf.getvalue())
 
     def test_sparse_accessor_is_treated_as_unreadable_not_zero(self):
         """A sparse morph accessor is valid glTF; reading it as dense would
