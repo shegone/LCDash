@@ -24,6 +24,7 @@ while true; do
         && rclone copy "$SOURCE_PATH" "$REMOTE_PATH" \
         --filter "+ /jack-*.json" \
         --filter "+ /recovery-*.txt" \
+        --filter "+ /n8n/**" \
         --filter "- **" \
         --checksum \
         --metadata \
