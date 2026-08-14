@@ -495,6 +495,31 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
         window.LCDashAvatarDebug = {
             bounds: { min: bounds.min.toArray(), max: bounds.max.toArray() },
             frames: frames,
+            weights: weights,
+            // Ground truth: what the mesh ACTUALLY has applied this frame,
+            // not what the state object claims -- catches a dictionary
+            // name mismatch that would silently no-op the whole pipeline.
+            liveInfluence: function (morphName) {
+                for (const mesh of morphMeshes) {
+                    const idx = mesh.morphTargetDictionary[morphName];
+                    if (idx !== undefined) {
+                        return { mesh: mesh.name, influence: mesh.morphTargetInfluences[idx] };
+                    }
+                }
+                return null;
+            },
+            // Runs exactly the weights->mesh copy step draw() does, without
+            // needing a visible/rendering tab to pump requestAnimationFrame.
+            applyWeightsNow: function () {
+                for (const mesh of morphMeshes) {
+                    const dict = mesh.morphTargetDictionary;
+                    for (const name of Object.keys(dict)) {
+                        if (name in weights) {
+                            mesh.morphTargetInfluences[dict[name]] = weights[name];
+                        }
+                    }
+                }
+            },
             projectY: function (worldY, frameName) {
                 const frame = frames[frameName] || frames.console;
                 const probe = new THREE.PerspectiveCamera(
