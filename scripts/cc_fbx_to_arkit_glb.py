@@ -169,10 +169,93 @@ def main() -> int:
             image.scale(max(1, int(width * scale)), max(1, int(height * scale)))
             resized += 1
 
+    # Repair transparency wiring. Blender's FBX importer wires a diffuse
+    # texture's own alpha channel into Principled Alpha whenever the image
+    # HAS one -- but Character Creator authors real transparency only in
+    # dedicated *_Opacity maps. The head, eyeball and tongue diffuses carry
+    # junk alpha channels (masks, not opacity), and honouring them dissolved
+    # the face into black plates, emptied the eye sockets, and blacked out
+    # the mouth -- rendered identically by Blender and three.js, so it was
+    # the file, not the runtime. The rule, from dumping every material's
+    # wiring on the real export:
+    #   * alpha fed by an *_Opacity image  -> authored, keep as-is
+    #     (hair, scalp, eyelash, shirt, slacks, heels, bra).
+    #   * constant alpha < 1               -> authored, keep as-is
+    #     (tearline 0.05, eye occlusion 0.0 -- meant to be invisible).
+    #   * alpha fed by a Diffuse's channel -> importer artifact, sever it
+    #     and force opaque (head, body eyes, tongue)...
+    #   * ...EXCEPT the cornea, which really is a glass layer: it gets a
+    #     constant low alpha instead of trusting its diffuse channel.
+    severed = []
+    for material in bpy.data.materials:
+        if not material.use_nodes:
+            continue
+        tree = material.node_tree
+        principled = next(
+            (n for n in tree.nodes if n.type == "BSDF_PRINCIPLED"), None
+        )
+        if principled is None:
+            continue
+        alpha_input = principled.inputs.get("Alpha")
+        if alpha_input is None or not alpha_input.is_linked:
+            continue
+        link = alpha_input.links[0]
+        source = link.from_node
+        image_name = (
+            source.image.name if source.type == "TEX_IMAGE" and source.image else ""
+        )
+        if "Opacity" in image_name:
+            continue  # authored transparency, leave it alone
+        tree.links.remove(link)
+        if "Cornea" in material.name:
+            alpha_input.default_value = 0.1
+        else:
+            alpha_input.default_value = 1.0
+            material.blend_method = "OPAQUE"
+        severed.append(material.name)
+
+    # Underwear never shows through clothing on a dressed character -- but
+    # blended layers stacked inside blended layers z-fight, and the bra
+    # rendered as dark blobs THROUGH the shirt. Delete hidden underlayers
+    # outright; smaller file, zero sorting hazard.
+    HIDDEN_UNDERLAYERS = ("Bra", "Underwear_Bottoms")
+    removed_objects = []
+    for obj in list(bpy.data.objects):
+        if obj.type == "MESH" and obj.name in HIDDEN_UNDERLAYERS:
+            removed_objects.append(obj.name)
+            bpy.data.objects.remove(obj, do_unlink=True)
+
+    # Cloth cutouts (open collar, shoe openings) are binary shapes, and
+    # rendering them as gradient BLEND makes big meshes sort against
+    # themselves -- dark plates on the shoulders and collar. Alpha-test
+    # (CLIP -> glTF MASK) is artifact-free by construction. True gradients
+    # (hair, eyelash, tearline, cornea) stay blended.
+    CUTOUT_MATERIALS = ("shirt", "Slacks", "High_Heels", "Scalp")
+    clipped = []
+    for material in bpy.data.materials:
+        if any(tag.lower() in material.name.lower() for tag in CUTOUT_MATERIALS):
+            material.blend_method = "CLIP"
+            if hasattr(material, "alpha_threshold"):
+                material.alpha_threshold = 0.5
+            clipped.append(material.name)
+
+    # Cull backfaces everywhere (glTF doubleSided=false; three.js honours
+    # it). The shirt and hair carry interior shells whose normals face
+    # inward; rendered double-sided they appear as flat unlit plates on the
+    # shoulders, collar and hair -- present in every version until a culled
+    # test render removed them all. Front-facing avatar: nothing legitimate
+    # is lost.
+    for material in bpy.data.materials:
+        material.use_backface_culling = True
+
+
     print(f"RENAMED_TO_ARKIT: {renamed}")
     print(f"KEPT_CC_VISEMES:  {kept_visemes}")
     print(f"DROPPED_UNUSED:   {dropped}")
     print(f"TEXTURES_RESIZED: {resized}")
+    print("ALPHA_SEVERED:    " + (", ".join(severed) if severed else "none"))
+    print("UNDERLAYERS_CUT:  " + (", ".join(removed_objects) if removed_objects else "none"))
+    print("CUTOUT_CLIPPED:   " + (", ".join(clipped) if clipped else "none"))
 
     missing = [name for name in REQUIRED_NOW if name not in seen_arkit]
     if missing:
@@ -193,7 +276,12 @@ def main() -> int:
         # which is the one thing the character exists for.
         export_draco_mesh_compression_enable=True,
         export_draco_mesh_compression_level=6,
-        export_image_format="JPEG",
+        # WEBP, never JPEG: JPEG cannot carry an alpha channel, and forcing
+        # it strips the transparency the hair, lashes and cloth cutouts
+        # need. AUTO keeps alpha but stores it as PNG, which weighed 46 MB;
+        # WebP carries alpha at JPEG-like sizes, and three.js r171 reads
+        # EXT_texture_webp natively.
+        export_image_format="WEBP",
     )
     print(f"WROTE: {dst}")
     return 0
