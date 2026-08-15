@@ -1,14 +1,16 @@
 # MAE character model drop-in
 
-> **This slot is deliberately empty as of 2026-08-14.** Grace (an Amazon
-> Sumerian Host) shipped in task def :73, rendered correctly, and was pulled
-> the same day: the lip sync read badly enough that Ted's call was that no
-> character beats that character. The page is back on the animated portraits,
-> which is the documented fallback below, not a degraded mode. The shipped
-> file is recoverable from git at `42f236a`, and `grace_v11.glb` is still on
-> `.15`. Do not re-add a character here until the lip sync is measured — a new
-> model does not fix a pipeline fault, and which of the two it is has not been
-> established yet.
+> **Shipped file: Grace, rebaked (`grace_v12.glb`), 2026-08-14.** She shipped
+> once before, on the same day, and was pulled within hours: every viseme was
+> visibly crooked. The cause was not the visemes but the rest pose baked in
+> ahead of them -- see the commit for `scripts/bake_sumerian_host.py`. Do not
+> re-bake this character with an older copy of that script.
+>
+> Two things measured about her that look like bugs and are not: on
+> `char:mouthShape` (the inner mouth) the visemes `S`, `T`, `f` and `sil` move
+> nothing, and `E`/`r`, `a`/`k`, `e`/`i` are identical. That mesh is skinned
+> almost entirely to the jaw, those four sounds are made with a closed jaw,
+> and those pairs share a jaw angle. It is correct. Leave it alone.
 
 
 Put the character here as **`mae.glb`**. That is the whole handoff: the
