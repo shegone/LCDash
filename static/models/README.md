@@ -1,6 +1,13 @@
 # MAE character model drop-in
 
-> **Shipped file: Grace, rebaked (`grace_v12.glb`), 2026-08-14.** She shipped
+> **Shipped file: Grace, rebaked and SKINNED (`grace_v13_noanim.glb`), 2026-08-14.**
+> The face meshes are skinned to the 134-joint armature, which is what lets the
+> runtime pose the neck and eye bones procedurally for head motion and gaze. An
+> earlier bake froze them to static geometry and no bone could reach the face.
+> Animation clips are stripped on export: the runtime never plays them, they cost
+> 2.6 MB, and a consumer that DID play clip 0 would now deform the face.
+>
+> **Previously (`grace_v12.glb`), 2026-08-14.** She shipped
 > once before, on the same day, and was pulled within hours: every viseme was
 > visibly crooked. The cause was not the visemes but the rest pose baked in
 > ahead of them -- see the commit for `scripts/bake_sumerian_host.py`. Do not

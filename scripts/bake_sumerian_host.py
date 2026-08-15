@@ -210,41 +210,35 @@ for mesh in face_meshes:
     bpy.ops.object.parent_clear(type="CLEAR_KEEP_TRANSFORM")
     pose_face_meshes[mesh.name] = dup
 
-# Freeze the ORIGINAL face meshes at their current (correct, neutral)
-# pose into plain static geometry: apply the Armature modifier
-# DESTRUCTIVELY, once, per mesh -- not the repeated as-shapekey call that
-# produced the bug. This becomes the Basis every shape key joins onto.
+# The ORIGINAL face meshes are deliberately left ALONE here: still
+# parented to the armature, still carrying their ARMATURE modifier and
+# all 134 vertex groups. They are the Basis that every shape key joins
+# onto, and they must stay SKINNED so the runtime can pose the head,
+# neck and eye bones procedurally.
 #
-# Clear the parent link first (keeping world transform). These characters
-# are authored in centimetres, carried as a 0.01 object-scale on the
-# armature; `modifier_apply` on a mesh still parented to that scaled
-# armature does not correctly fold the parent's scale into the baked
-# result -- confirmed by bisection: this exact step, alone, with nothing
-# else in the pipeline, exported a 174-unit-tall character (should be
-# ~1.78). A parented mesh has no further use for the parent link once its
-# deformation is frozen, so clearing it removes the ambiguity outright
-# rather than compensating for it.
-for mesh in face_meshes:
-    modifier = next((m for m in mesh.modifiers if m.type == "ARMATURE"), None)
-    if modifier is None:
-        continue
-    bpy.context.view_layer.objects.active = mesh
-    bpy.ops.object.select_all(action="DESELECT")
-    mesh.select_set(True)
-    bpy.ops.object.parent_clear(type="CLEAR_KEEP_TRANSFORM")
-    bpy.ops.object.modifier_apply(modifier=modifier.name)
-    # These characters are authored in centimetres and rely on a 0.01
-    # node-level scale to read correctly as metres. That is invisible to
-    # any renderer while the mesh stays SKINNED (per the glTF spec, a
-    # skinned mesh's vertex positions come from joint matrices, not its own
-    # node transform, so the node's scale is moot) -- but this mesh just
-    # lost its skin binding via the destructive apply above, making the
-    # node's own scale suddenly load-bearing. Baking that scale directly
-    # into the vertex data keeps the exported geometry correct without
-    # depending on any downstream tool (including this project's own
-    # validator, which deliberately ignores node transforms) correctly
-    # applying node transforms for a static mesh.
-    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+# The previous version froze them with a destructive
+# `modifier_apply(ARMATURE)` + `transform_apply(scale)` pair. Measured,
+# that pair was:
+#   * the exact and only place the skin binding was lost -- modifiers go
+#     from ['ARMATURE'] to [] at that call, while `parent_clear` and
+#     `transform_apply` were both measured to preserve modifiers and all
+#     134 vertex groups, so neither of them was ever the culprit;
+#   * geometrically a NO-OP. `bake_pose_into_rest` above already made the
+#     current pose the rest pose, so the armature modifier evaluates to
+#     identity: max |evaluated - raw| over all 6 face meshes was 2.4e-7 m
+#     (0.24 micron), and world-space vertex positions were unchanged to
+#     1e-9 m across the apply.
+# A no-op that costs the entire skin binding is pure loss, so it is gone.
+#
+# The 0.01 centimetre->metre object scale is likewise left in place. It
+# is invisible for a SKINNED mesh (per the glTF spec a skinned mesh's
+# positions come from joint matrices, not its node transform) -- that
+# scale only became load-bearing in the old flow *because* the mesh had
+# just been unskinned by the line above. Keeping the mesh skinned removes
+# the very problem the `transform_apply` existed to solve, and keeping
+# the base in the same centimetre local space as the pose duplicates is
+# what makes the morph deltas come out numerically identical to the
+# unskinned build.
 
 def pose_and_join_as_shape(action, key_name):
     assign_action(pose_armature, action)
@@ -263,17 +257,16 @@ def pose_and_join_as_shape(action, key_name):
         if modifier is not None:
             bpy.context.view_layer.objects.active = temp
             bpy.ops.object.modifier_apply(modifier=modifier.name)
-        # Bake this posed duplicate's 0.01 object scale into its vertices,
-        # exactly as done to the target meshes above. join_shapes copies raw
-        # vertex COORDINATES and ignores object transforms, so a
-        # centimetre-scaled source joined onto a metre-scaled Basis writes
-        # deltas 100x too large -- which rendered as the character's head
-        # exploding into a black void the moment a viseme was applied.
-        # Both sides of the join must agree on units.
-        bpy.context.view_layer.objects.active = temp
-        bpy.ops.object.select_all(action="DESELECT")
-        temp.select_set(True)
-        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        # `join_shapes` copies raw vertex COORDINATES and ignores object
+        # transforms, so BOTH SIDES OF THE JOIN MUST AGREE ON UNITS. The
+        # old flow satisfied that by baking the 0.01 scale into the
+        # vertices of the base AND of this duplicate, putting both in
+        # metres. The base is now left skinned and unscaled, i.e. in its
+        # authored centimetre local space, so this duplicate is left in
+        # centimetres too -- matched by the same rule, one scale factor
+        # earlier. `parent_clear(KEEP_TRANSFORM)` on the pose source and
+        # `modifier_apply` here both write their results back into that
+        # same local space, so the duplicate never leaves it.
         # join_shapes: select the shape SOURCE(S), make the TARGET active
         # last so it receives the new key. Vertex counts must match, which
         # they do -- temp is a duplicate of the same topology throughout.
