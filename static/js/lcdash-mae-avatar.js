@@ -555,6 +555,267 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
     }
 
     // ------------------------------------------------------------------
+    // Idle BONE motion: head drift, gaze-with-lag, micro-saccades, breath.
+    // This poses ARMATURE BONES per frame -- it is not a skeletal clip and
+    // never becomes one (no AnimationMixer, nothing loaded). It composes
+    // small rotations onto each bone's captured rest pose every frame, so
+    // it can never drift or accumulate the way overwriting rotation deltas
+    // would.
+    //
+    // The character shipped tonight (2026-08-14) has ONE armature and ONE
+    // skin, and that skin IS bound to 134 joints including every neck/eye
+    // bone here -- but only by the body and clothing meshes (arms, cap,
+    // ankles, ...). The face meshes (char:head/mouth/eyes_inner/
+    // eyes_outer/eyebrows/eyelashes) are separate, unparented, UNSKINNED
+    // root nodes that the same skin never touches. So "is this bone
+    // skinned to something" is true today and is the wrong question -- it
+    // would rotate the collar and shoulders while the head and eyes stayed
+    // frozen, which reads worse than no motion at all. The right question
+    // is "is this bone skinned to the FACE", and the face is identified
+    // the same name-free way the morph-target discovery code above
+    // identifies it: it is whichever mesh carries the viseme/ARKit morph
+    // targets (morphMeshes, passed in below). A bone only gets posed once
+    // a morph-carrying mesh's skeleton actually contains it. Bone names
+    // are never hardcoded (the next character, a MetaPerson export, uses
+    // entirely different ones); this predicate is checked per motion
+    // channel, not as one global switch -- see readiness below.
+    // ------------------------------------------------------------------
+
+    const SACCADE_INTERVAL_MIN_MS = 200;   // real fixations run ~0.2-2s
+    const SACCADE_INTERVAL_MAX_MS = 2000;
+    const SACCADE_AMPLITUDE_RAD = THREE.MathUtils.degToRad(2.5); // "a couple degrees"
+    const GAZE_WANDER_INTERVAL_MIN_MS = 2500; // how often the base gaze point moves
+    const GAZE_WANDER_INTERVAL_MAX_MS = 7000;
+    const GAZE_WANDER_AMPLITUDE_RAD = THREE.MathUtils.degToRad(6);
+    const EYE_EASE = 0.55;              // fast: saccades land in a couple frames (~30-50ms @60fps)
+    const MAX_EYE_ROTATION_RAD = THREE.MathUtils.degToRad(12); // hard clamp, belt-and-braces
+    const HEAD_FOLLOW_GAIN = 0.35;       // head moves a FRACTION of what the eyes did
+    const HEAD_FOLLOW_EASE = 0.02;       // ...and arrives much later -- eyes lead, head lags
+    const HEAD_DRIFT_AMPLITUDE_RAD = THREE.MathUtils.degToRad(3);
+    const HEAD_DRIFT_PERIOD_A_S = 11.3;  // two incommensurate periods so drift never visibly loops
+    const HEAD_DRIFT_PERIOD_B_S = 7.9;
+    const MAX_NECK_ROTATION_RAD = THREE.MathUtils.degToRad(9);
+    const BREATH_AMPLITUDE_RAD = THREE.MathUtils.degToRad(1.1); // spine sway, slower & smaller than head
+    const BREATH_PERIOD_S = 4.3;
+    const MAX_SPINE_ROTATION_RAD = THREE.MathUtils.degToRad(3);
+    const SPEAKING_HEAD_DRIFT_GAIN = 1.4;    // a talking head that holds still looks dead
+    const SPEAKING_GAZE_WANDER_GAIN = 0.55;  // ...but fewer big gaze wanders while talking
+
+    // Flexible bone resolution: substring/regex match on name, case
+    // insensitive, matching THREE.Bone objects only (never a Mesh that
+    // happens to share the word, e.g. the char:head MESH).
+    function findBones(bones, pattern) {
+        return bones.filter(function (b) { return pattern.test(b.name); });
+    }
+    function boneSide(name) {
+        const n = name.toLowerCase();
+        if (n.indexOf("_l_") !== -1 || n.indexOf("left") !== -1) return "left";
+        if (n.indexOf("_r_") !== -1 || n.indexOf("right") !== -1) return "right";
+        return null;
+    }
+    // Is bone in the skeleton of a mesh that carries face morph targets?
+    // Being in the skeleton of SOME skinned mesh (e.g. the body) is not
+    // enough -- see the section comment above for why that measurement
+    // was wrong.
+    function boneReachesFace(faceSkinnedMeshes, bone) {
+        return faceSkinnedMeshes.some(function (mesh) {
+            return mesh.skeleton && mesh.skeleton.bones.indexOf(bone) !== -1;
+        });
+    }
+    function boneIsSkinnedToAny(skinnedMeshes, bone) {
+        return skinnedMeshes.some(function (mesh) {
+            return mesh.skeleton && mesh.skeleton.bones.indexOf(bone) !== -1;
+        });
+    }
+
+    // Builds the idle poser for one loaded gltfScene, or returns a no-op
+    // if this rig cannot show the motion. Never throws -- a malformed or
+    // unexpected rig disables the feature instead of breaking the model.
+    // morphMeshes is the SAME array the caller already built by looking
+    // for node.isMesh && node.morphTargetDictionary -- those meshes are,
+    // by construction, the face, regardless of what anything is named.
+    function createIdleBonePoser(gltfScene, morphMeshes) {
+        const NOOP = { update: function () {} };
+        try {
+            const bones = [];
+            const skinnedMeshes = [];
+            gltfScene.traverse(function (node) {
+                if (node.isBone) bones.push(node);
+                if (node.isSkinnedMesh) skinnedMeshes.push(node);
+            });
+            // Of the face meshes, only the ones actually bound to a
+            // skeleton can be moved by posing a bone at all.
+            const faceSkinnedMeshes = morphMeshes.filter(function (m) {
+                return m.isSkinnedMesh && m.skeleton;
+            });
+
+            const neckBonesAll = findBones(bones, /neck/i)
+                .sort(function (a, b) { return a.name.localeCompare(b.name); });
+            const eyeCandidates = findBones(bones, /eye/i);
+            let leftEye = null, rightEye = null;
+            for (const b of eyeCandidates) {
+                const side = boneSide(b.name);
+                if (side === "left" && !leftEye) leftEye = b;
+                if (side === "right" && !rightEye) rightEye = b;
+            }
+            const spineBonesAll = findBones(bones, /spine/i)
+                .sort(function (a, b) { return a.name.localeCompare(b.name); });
+
+            // Per-channel readiness. Each motion only runs if the bone it
+            // would drive is bound into a FACE mesh's skeleton -- not just
+            // present in the armature, and not just skinned to the body.
+            // Neck bones that don't reach the face are filtered out
+            // individually rather than gating all-or-nothing on the whole
+            // chain, so a rig that partially reaches the face still gets
+            // partial, still-correct motion instead of none.
+            const neckBones = neckBonesAll.filter(function (b) {
+                return boneReachesFace(faceSkinnedMeshes, b);
+            });
+            const eyesReady = Boolean(leftEye && rightEye &&
+                boneReachesFace(faceSkinnedMeshes, leftEye) &&
+                boneReachesFace(faceSkinnedMeshes, rightEye));
+            // Not "either eye" -- one eye tracking while the other stares
+            // fixed would read as more broken than both staying still.
+
+            const faceReady = neckBones.length > 0 || eyesReady;
+            if (!faceReady) {
+                console.info("MAE avatar: idle bone motion disabled -- " +
+                    "neck/eye bones exist but are not skinned to the mesh that " +
+                    "carries the face's morph targets on this rig (posing them " +
+                    "would move the body, not the face).");
+                return NOOP;
+            }
+
+            // Breathing sways the spine, which is squarely BODY geometry --
+            // today's shipped character has that part genuinely skinned
+            // (arms/cap/ankles all use these joints). But a torso that
+            // breathes under a face that cannot move AT ALL is the same
+            // "alive body, dead head" mismatch this whole fix exists to
+            // remove, just lower down -- so breathing only runs once the
+            // face itself is doing SOME motion (faceReady), rather than
+            // being offered independently the moment any spine bone is
+            // skinned to anything. Once faceReady, ordinary body skinning
+            // is the legitimate signal for spine bones (breathing is not
+            // a face channel), so any skinned mesh counts here.
+            const spineBones = faceReady ? spineBonesAll.filter(function (b) {
+                return boneIsSkinnedToAny(skinnedMeshes, b);
+            }) : [];
+
+            // Rest pose captured ONCE. Every frame composes an offset onto
+            // this, never onto the bone's current (possibly already-posed)
+            // quaternion -- that is what keeps this from drifting over a
+            // long dispatch-floor session.
+            const restQuat = new Map();
+            const posedBones = neckBones.concat(spineBones);
+            if (eyesReady) posedBones.push(leftEye, rightEye);
+            for (const b of posedBones) {
+                restQuat.set(b, b.quaternion.clone());
+            }
+
+            const _euler = new THREE.Euler();
+            const _quat = new THREE.Quaternion();
+            function poseBone(bone, pitch, yaw, roll, clamp) {
+                const p = THREE.MathUtils.clamp(pitch, -clamp, clamp);
+                const y = THREE.MathUtils.clamp(yaw, -clamp, clamp);
+                const r = THREE.MathUtils.clamp(roll, -clamp, clamp);
+                _euler.set(p, y, r, "XYZ");
+                _quat.setFromEuler(_euler);
+                bone.quaternion.copy(restQuat.get(bone)).multiply(_quat);
+            }
+
+            const gaze = {
+                baseYaw: 0, basePitch: 0,        // slow-wandering fixation point
+                nextWanderAt: 0,
+                targetYaw: 0, targetPitch: 0,     // current saccade fixation
+                nextSaccadeAt: 0,
+                yaw: 0, pitch: 0                  // eased value actually applied
+            };
+            const head = { yaw: 0, pitch: 0 };
+
+            function updateUnsafe(now) {
+                const speaking = isSpeaking();
+                const wanderGain = speaking ? SPEAKING_GAZE_WANDER_GAIN : 1.0;
+
+                // Slow wandering fixation point.
+                if (now >= gaze.nextWanderAt) {
+                    gaze.baseYaw = (Math.random() * 2 - 1) * GAZE_WANDER_AMPLITUDE_RAD * wanderGain;
+                    gaze.basePitch = (Math.random() * 2 - 1) * GAZE_WANDER_AMPLITUDE_RAD * 0.6 * wanderGain;
+                    gaze.nextWanderAt = now + GAZE_WANDER_INTERVAL_MIN_MS +
+                        Math.random() * (GAZE_WANDER_INTERVAL_MAX_MS - GAZE_WANDER_INTERVAL_MIN_MS);
+                }
+                // Micro-saccades: quick darts to a new fixation near the
+                // wandering point, then hold (fixate) until the next one.
+                if (now >= gaze.nextSaccadeAt) {
+                    gaze.targetYaw = gaze.baseYaw + (Math.random() * 2 - 1) * SACCADE_AMPLITUDE_RAD;
+                    gaze.targetPitch = gaze.basePitch + (Math.random() * 2 - 1) * SACCADE_AMPLITUDE_RAD;
+                    gaze.nextSaccadeAt = now + SACCADE_INTERVAL_MIN_MS +
+                        Math.random() * (SACCADE_INTERVAL_MAX_MS - SACCADE_INTERVAL_MIN_MS);
+                }
+                gaze.yaw += (gaze.targetYaw - gaze.yaw) * EYE_EASE;
+                gaze.pitch += (gaze.targetPitch - gaze.pitch) * EYE_EASE;
+                // gaze.yaw/pitch keep being computed even when eyesReady is
+                // false -- head-follow below still wants a lead signal to
+                // lag behind. Only the bone WRITE is gated; an unskinned
+                // eye bone must never actually be posed.
+                if (eyesReady) {
+                    poseBone(leftEye, gaze.pitch, gaze.yaw, 0, MAX_EYE_ROTATION_RAD);
+                    poseBone(rightEye, gaze.pitch, gaze.yaw, 0, MAX_EYE_ROTATION_RAD);
+                }
+
+                // Head follows the eyes, later and less -- lag comes from
+                // the slower ease constant, not a time delay buffer.
+                const t = now / 1000;
+                const driftGain = speaking ? SPEAKING_HEAD_DRIFT_GAIN : 1.0;
+                const drift = (Math.sin(t * (2 * Math.PI / HEAD_DRIFT_PERIOD_A_S)) * 0.6 +
+                    Math.sin(t * (2 * Math.PI / HEAD_DRIFT_PERIOD_B_S)) * 0.4) *
+                    HEAD_DRIFT_AMPLITUDE_RAD * driftGain;
+                const headTargetYaw = gaze.yaw * HEAD_FOLLOW_GAIN + drift;
+                const headTargetPitch = gaze.pitch * HEAD_FOLLOW_GAIN * 0.5;
+                head.yaw += (headTargetYaw - head.yaw) * HEAD_FOLLOW_EASE;
+                head.pitch += (headTargetPitch - head.pitch) * HEAD_FOLLOW_EASE;
+                for (const b of neckBones) {
+                    poseBone(b, head.pitch, head.yaw, 0, MAX_NECK_ROTATION_RAD);
+                }
+
+                // Breathing: slower, smaller, spread evenly across however
+                // many spine bones are actually skinned so a longer chain
+                // doesn't compound into a bigger sway than a short one.
+                if (spineBones.length > 0) {
+                    const perBone = BREATH_AMPLITUDE_RAD / spineBones.length;
+                    const breath = Math.sin(t * (2 * Math.PI / BREATH_PERIOD_S)) * perBone;
+                    for (const b of spineBones) {
+                        poseBone(b, breath, 0, 0, MAX_SPINE_ROTATION_RAD);
+                    }
+                }
+            }
+
+            // draw() calls update() unconditionally every frame; a throw
+            // here must never skip the morph/render work that follows it
+            // in draw(). Disable permanently on first failure instead of
+            // relying on the caller's try/catch, which would otherwise
+            // silently freeze the whole avatar (not just this feature) if
+            // this kept throwing frame after frame.
+            let broken = false;
+            function update(now) {
+                if (broken) return;
+                try {
+                    updateUnsafe(now);
+                } catch (error) {
+                    broken = true;
+                    console.info("MAE avatar: idle bone motion disabled after a runtime error -- " +
+                        (error && error.message || error));
+                }
+            }
+
+            return { update: update };
+        } catch (error) {
+            console.info("MAE avatar: idle bone motion disabled -- " +
+                (error && error.message || error));
+            return NOOP;
+        }
+    }
+
+    // ------------------------------------------------------------------
     // three.js renderer: takes over when the CC5 character exists.
     // ------------------------------------------------------------------
 
@@ -626,6 +887,10 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
                 found.add(name);
             });
         }
+        // Self-disables to a zero-cost no-op unless the loaded rig's face
+        // meshes are actually skinned to the bones it would pose -- see the
+        // "Idle BONE motion" section above for why that check exists.
+        const bonePoser = createIdleBonePoser(gltfScene, morphMeshes);
         console.info(
             "MAE avatar: model exposes " + found.size + " morph targets:",
             Array.from(found).sort().join(", "));
@@ -720,6 +985,7 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
             applyFrame();
             const t = now / 1000;
             gltfScene.rotation.y = Math.sin(t * 0.11) * 0.02;
+            bonePoser.update(now);
             for (const mesh of morphMeshes) {
                 const dict = mesh.morphTargetDictionary;
                 for (const name of Object.keys(dict)) {
