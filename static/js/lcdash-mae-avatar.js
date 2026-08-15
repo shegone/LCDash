@@ -93,11 +93,35 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
         return Boolean(audio && !audio.paused && !audio.ended);
     }
 
+    // Co-articulation window: how far ahead of a mark's own time the mouth
+    // starts blending toward it. The VALUE is still unmeasured -- it is the
+    // same 60 ms guess the old fixed lookahead used, and we have not
+    // measured the right one. What changed is HOW it is used: blended
+    // proportionally across this window as the audio clock approaches the
+    // next mark, instead of shifting the whole timeline forward by a fixed
+    // amount. Shifting the timeline made every shape arrive uniformly 60 ms
+    // early; blending makes a shape begin early and still land ON TIME at
+    // its mark. Reusing an unmeasured constant as a blend window rather
+    // than a timeline shift is strictly less wrong, not a claim that 60 ms
+    // is correct.
+    const COARTICULATION_WINDOW_MS = 60;
+
+    function blendVisemeTargets(from, to, fraction) {
+        const blended = Object.create(null);
+        const keys = new Set(Object.keys(from).concat(Object.keys(to)));
+        keys.forEach(function (key) {
+            const a = from[key] || 0;
+            const b = to[key] || 0;
+            blended[key] = a + (b - a) * fraction;
+        });
+        return blended;
+    }
+
     function activeVisemeTargets() {
         if (!isSpeaking()) return VISEME_TARGETS.sil;
-        // 60 ms lookahead approximates co-articulation: the mouth starts
-        // forming a shape slightly before the sound lands.
-        const now = speechState.audio.currentTime * 1000 + 60;
+        // True audio clock -- no fixed offset. Shapes are selected for the
+        // mark that has actually started, not one 60 ms in the future.
+        const now = speechState.audio.currentTime * 1000;
         const marks = speechState.visemes;
         while (
             speechState.cursor + 1 < marks.length &&
@@ -107,7 +131,149 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
         }
         const mark = marks[speechState.cursor];
         if (!mark || mark.time_ms > now) return VISEME_TARGETS.sil;
-        return VISEME_TARGETS[mark.viseme] || VISEME_TARGETS.sil;
+        const current = VISEME_TARGETS[mark.viseme] || VISEME_TARGETS.sil;
+
+        // Co-articulation: once within COARTICULATION_WINDOW_MS of the next
+        // mark, blend from the current shape toward it so the mouth is
+        // already moving before the next sound lands, rather than snapping
+        // to it late (or, as the old code did, uniformly early).
+        const nextMark = marks[speechState.cursor + 1];
+        if (!nextMark) return current;
+        const untilNext = nextMark.time_ms - now;
+        if (untilNext > COARTICULATION_WINDOW_MS) return current;
+        const next = VISEME_TARGETS[nextMark.viseme] || VISEME_TARGETS.sil;
+        const fraction = Math.max(0, Math.min(1, 1 - untilNext / COARTICULATION_WINDOW_MS));
+        return blendVisemeTargets(current, next, fraction);
+    }
+
+    // ------------------------------------------------------------------
+    // Amplitude-driven mouth gain: louder speech opens the mouth wider,
+    // quiet or trailing-off speech opens it less, so loudness reads on her
+    // face instead of the mouth opening identically for every syllable.
+    // Every failure mode here (no Web Audio, CORS-tainted audio, a throw
+    // building the graph, a context stuck suspended) must fall back to
+    // gain exactly 1.0 -- today's behaviour -- and must never throw into
+    // the animation loop.
+    // ------------------------------------------------------------------
+
+    // Gain stays inside a modest band, floored so a quiet moment never
+    // fully closes an opening shape and ceilinged so emphasis never blows
+    // the mouth open. Centred on 1.0 for average speech level.
+    const AMPLITUDE_GAIN_MIN = 0.75;
+    const AMPLITUDE_GAIN_MAX = 1.25;
+    // RMS (of a byte time-domain sample, 0..1 scale) treated as "average"
+    // speech loudness, used to normalize the analyser reading onto the
+    // gain band above. Tuned by ear, not measured -- same caveat as
+    // COARTICULATION_WINDOW_MS: a placeholder, not a calibrated value.
+    const AMPLITUDE_REFERENCE_RMS = 0.18;
+
+    // viseme_p and its ARKit equivalents are lip-CLOSURE shapes, not
+    // openings -- scaling them down by loudness would make a quiet "p"
+    // fail to close the lips, a visible, wrong-looking regression. They
+    // are driven at their authored weight regardless of amplitude.
+    const AMPLITUDE_EXEMPT_KEYS = new Set([
+        "viseme_p", "mouthClose", "mouthPressLeft", "mouthPressRight"
+    ]);
+
+    // One AnalyserNode per HTMLAudioElement -- createMediaElementSource()
+    // throws if called twice on the same element. play() below creates a
+    // fresh Audio object per utterance/chunk, so the map just grows and
+    // its entries fall away naturally as old elements are garbage
+    // collected; nothing here needs to evict them.
+    const amplitudeNodesByElement = new WeakMap();
+    let audioCtx = null;
+    let audioCtxUnavailable = false;
+
+    function getAudioCtx() {
+        if (audioCtx || audioCtxUnavailable) return audioCtx;
+        try {
+            const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new AudioContextCtor();
+        } catch (error) {
+            audioCtxUnavailable = true;
+            audioCtx = null;
+        }
+        return audioCtx;
+    }
+
+    // Called once per Audio element, right after it is assigned to
+    // speechState.audio, so playback is analysed from the start.
+    function attachAmplitudeAnalyser(audioEl) {
+        let source = null;
+        try {
+            const ctx = getAudioCtx();
+            if (!ctx) return null;
+            // Do NOT capture the element unless the context is actually
+            // running. createMediaElementSource() reroutes the element's
+            // audio through the graph permanently, so capturing it into a
+            // SUSPENDED context and then failing to resume leaves her
+            // mute -- and the mouth would look fine the whole time, since
+            // currentAmplitudeGain() correctly falls back to 1.0. Skipping
+            // the capture keeps playback on the plain element: no
+            // amplitude scaling for this utterance, but sound. Autoplay
+            // policy usually leaves the first context suspended, so this
+            // is the normal path on the first utterance, not an edge case.
+            if (ctx.state !== "running") return null;
+            if (amplitudeNodesByElement.has(audioEl)) {
+                return amplitudeNodesByElement.get(audioEl);
+            }
+            source = ctx.createMediaElementSource(audioEl);
+            const analyser = ctx.createAnalyser();
+            analyser.fftSize = 256;
+            // MUST stay connected to destination -- createMediaElementSource
+            // captures the element's audio for the Web Audio graph, and an
+            // element routed through the graph but not wired back to
+            // destination goes silent. A silent MAE is a far worse
+            // regression than a flat mouth, so this connection matters more
+            // than the analyser itself.
+            source.connect(analyser);
+            analyser.connect(ctx.destination);
+            const entry = { analyser: analyser, buffer: new Uint8Array(analyser.fftSize) };
+            amplitudeNodesByElement.set(audioEl, entry);
+            return entry;
+        } catch (error) {
+            console.warn("MAE avatar: amplitude analysis unavailable; mouth gain stays flat.", error);
+            // If the source was captured but wiring the analyser failed
+            // partway through, reconnect it straight to destination so
+            // speech is never lost even though amplitude scaling is not
+            // available for this element.
+            if (source && audioCtx) {
+                try { source.connect(audioCtx.destination); } catch (fallbackError) { /* best effort */ }
+            }
+            return null;
+        }
+    }
+
+    // Resume must happen on the same user gesture that starts playback, or
+    // autoplay policy leaves the context suspended and the analyser reads
+    // silence forever. If it cannot be resumed, currentAmplitudeGain()
+    // below falls back to 1.0 on its own.
+    function resumeAudioCtxOnGesture() {
+        const ctx = getAudioCtx();
+        if (ctx && ctx.state === "suspended") {
+            ctx.resume().catch(function () { /* stays suspended; gain falls back to 1.0 */ });
+        }
+    }
+
+    function currentAmplitudeGain() {
+        try {
+            const audioEl = speechState.audio;
+            if (!audioEl || !audioCtx || audioCtx.state !== "running") return 1.0;
+            const entry = amplitudeNodesByElement.get(audioEl);
+            if (!entry) return 1.0;
+            entry.analyser.getByteTimeDomainData(entry.buffer);
+            let sumSquares = 0;
+            for (let i = 0; i < entry.buffer.length; i++) {
+                const sample = (entry.buffer[i] - 128) / 128;
+                sumSquares += sample * sample;
+            }
+            const rms = Math.sqrt(sumSquares / entry.buffer.length);
+            const normalized = rms / AMPLITUDE_REFERENCE_RMS;
+            const gain = 1.0 + (normalized - 1) * (AMPLITUDE_GAIN_MAX - 1.0);
+            return Math.max(AMPLITUDE_GAIN_MIN, Math.min(AMPLITUDE_GAIN_MAX, gain));
+        } catch (error) {
+            return 1.0;
+        }
     }
 
     // ------------------------------------------------------------------
@@ -618,12 +784,19 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
         try {
             idleStep(now);
             const targets = activeVisemeTargets();
+            // Loudness scales mouth-OPENING shapes only; falls back to 1.0
+            // (today's behaviour) on any Web Audio failure -- see
+            // currentAmplitudeGain(), which never throws.
+            const amplitudeGain = currentAmplitudeGain();
             // Attack faster than release so consonant closures register.
             // Every driven key decays to zero unless the active viseme
             // names it -- including the native viseme_* morphs, or a
             // Sumerian-baked mouth would hold its last shape forever.
             for (const key of DRIVEN_MOUTH_KEYS) {
-                const target = targets[key] || 0;
+                let target = targets[key] || 0;
+                if (target > 0 && !AMPLITUDE_EXEMPT_KEYS.has(key)) {
+                    target *= amplitudeGain;
+                }
                 const current = weight(key);
                 const alpha = target > current ? 0.45 : 0.28;
                 setWeight(key, current + (target - current) * alpha);
@@ -733,6 +906,17 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
                 speechState.cursor = 0;
                 speaking += 1;
                 stopButton.style.display = "";
+                // Resume first, THEN attach: attachAmplitudeAnalyser
+                // refuses to capture the element while the context is
+                // suspended, so asking for the resume first is what lets
+                // amplitude scaling switch on at all. resume() is async, so
+                // the first utterance typically still plays unanalysed and
+                // later ones pick it up -- sound always wins over gain.
+                resumeAudioCtxOnGesture();
+                // Amplitude analysis is best-effort: attachAmplitudeAnalyser
+                // already swallows its own failures and returns null, so a
+                // failure here never blocks playback below.
+                attachAmplitudeAnalyser(audio);
                 function finish() {
                     URL.revokeObjectURL(url);
                     if (speechState.audio === audio) {
