@@ -592,6 +592,16 @@ class Phase1FoundationStack(cdk.Stack):
             "LCDASH_ALB_IDENTITY_LOAD_BALANCER_ARN": load_balancer.load_balancer_arn,
             "LCDASH_ALB_IDENTITY_USER_POOL_ID": user_pool.user_pool_id,
             "LCDASH_ALB_IDENTITY_CLIENT_ID": user_pool_client.user_pool_client_id,
+            # Rapport avatar flag + publishable scene token. Placed in this
+            # late add_environment block purely for tidiness -- neither value
+            # depends on resources, but keeping every reviewed-toggle env var
+            # in one place has kept this stack auditable.
+            "MAE_RAPPORT_ENABLED": parameters[
+                "mae_rapport_enabled"
+            ].value_as_string,
+            "MAE_RAPPORT_PROJECT_TOKEN": parameters[
+                "mae_rapport_project_token"
+            ].value_as_string,
         }.items():
             container.add_environment(name, value)
         https_listener = load_balancer.add_listener(
@@ -1018,6 +1028,34 @@ class Phase1FoundationStack(cdk.Stack):
                     "per-user identity and role from the ALB's verified OIDC "
                     "headers. While false, every request keeps the previous "
                     "deployment-wide viewer identity."
+                ),
+            ),
+            "mae_rapport_enabled": cdk.CfnParameter(
+                self,
+                "MaeRapportEnabled",
+                type="String",
+                allowed_values=["true", "false"],
+                default="false",
+                description=(
+                    "Set to true only in a separately reviewed update to render "
+                    "MAE's replies through the Rapport avatar widget on "
+                    "/mae/avatar. While false (or while the project token below "
+                    "is blank) the page ships zero Rapport markup and the local "
+                    "renderer chain is all there is."
+                ),
+            ),
+            "mae_rapport_project_token": cdk.CfnParameter(
+                self,
+                "MaeRapportProjectToken",
+                type="String",
+                default="",
+                description=(
+                    "Rapport scene project token for MAE's avatar. This is a "
+                    "PUBLISHABLE client-visible token by Rapport's own design "
+                    "(their embed places it in page HTML), not a secret -- it "
+                    "lives here as a parameter so rotating it is a deploy, not "
+                    "a code change. Blank disables the widget regardless of "
+                    "MaeRapportEnabled; the application fails closed."
                 ),
             ),
             "analytics_collector_enabled": cdk.CfnParameter(
