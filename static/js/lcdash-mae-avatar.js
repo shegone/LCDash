@@ -189,6 +189,15 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
             }
         }
 
+        // Eager first connection: Ted watched the parked-by-default flow
+        // and wanted her present when the page opens rather than arriving
+        // on the second reply. The session therefore starts at load -- the
+        // meter runs from page-open -- and the 3-minute idle park above is
+        // what keeps an abandoned tab from running it all shift. A parked
+        // session still wakes on the next reply exactly as before; only
+        // the FIRST appearance moved.
+        ensureSession();
+
         return { isActive: isActive, speak: speak, stop: stop };
     })();
 
