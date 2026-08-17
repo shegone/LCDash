@@ -61,6 +61,17 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
         let state = "idle";
         let idleStopTimer = null;
 
+        // The stage is display:none except while CONNECTED. It paints over
+        // the local avatar, so showing it any earlier curtains Grace behind
+        // an empty pane -- that exact blank shipped in the first flag-on
+        // deploy, because visibility was tied to the flag instead of the
+        // session and the lazy session never connects at page load.
+        const stage = document.getElementById("rapport-stage");
+        function setStageVisible(visible) {
+            if (!stage) return;
+            stage.classList.toggle("live", Boolean(visible));
+        }
+
         function ensureSession() {
             if (state !== "idle") return;
             state = "connecting";
@@ -68,6 +79,7 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
                 const request = rapportElement.sessionRequest({
                     sessionConnected: function () {
                         state = "connected";
+                        setStageVisible(true);
                         // A session that connects and then never gets a
                         // single sendText (user asked one question, walked
                         // away before the reply arrived) must still park.
@@ -75,6 +87,7 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
                     },
                     sessionDisconnected: function () {
                         state = "idle";
+                        setStageVisible(false);
                         console.info("MAE avatar: Rapport session ended; the local avatar speaks until the next reply restarts it.");
                     }
                 });
@@ -103,6 +116,7 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
             if (state === "idle") return;
             if (idleStopTimer) { clearTimeout(idleStopTimer); idleStopTimer = null; }
             state = "idle";
+            setStageVisible(false);
             // Their embed sample documents no disconnect API, so this
             // feature-detects the plausible names and, failing all of
             // them, removes the element from the DOM -- a custom element
@@ -152,6 +166,7 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
             } catch (error) {
                 console.warn("MAE avatar: Rapport sendText failed; falling back to local speech for this reply.", error);
                 state = "idle"; // fail closed: later utterances go local until a reply wakes it again
+                setStageVisible(false);
                 return false;
             }
         }

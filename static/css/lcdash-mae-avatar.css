@@ -33,6 +33,16 @@ html, body {
     position: fixed;
     inset: 0;
     overflow: hidden;
+    /* Hidden until the session is CONNECTED, shown by lcdash-mae-avatar.js
+       toggling .live. This stage sits over the local avatar, and with the
+       lazy session (nothing connects at page load) an always-visible stage
+       is an opaque blank curtain over Grace -- which shipped, briefly: the
+       first flag-on deploy showed dispatchers an empty pale pane and no
+       avatar at all. Visibility must follow the session, never the flag. */
+    display: none;
+}
+#rapport-stage.live {
+    display: block;
 }
 #rapport-stage rapport-scene {
     display: block;
