@@ -15,6 +15,26 @@
     <div id="portrait-fallback">
         <img src="/static/img/mae/mae-neutral.jpg" alt="MAE virtual assistant portrait">
     </div>
+    {%- if mae_rapport_enabled %}
+    {#- Rapport is a cloud-rendered MetaHuman layered over the same visual
+        slot as avatar-stage/portrait-fallback above, not a replacement for
+        that chain -- it sits later in the DOM so it paints on top while its
+        session is connected. The Sumerian model still loads underneath, and
+        lcdash-mae-avatar.js falls back to it per-utterance any time the
+        Rapport session is not connected (still negotiating, or failed), so
+        the local renderer is never actually removed, just usually hidden
+        behind this element. MAE_RAPPORT_ENABLED default-off and
+        MAE_RAPPORT_PROJECT_TOKEN empty-by-default (see app/config/settings.py)
+        keep this block emitting nothing -- no script tag, no container --
+        on every deployment that hasn't explicitly turned it on. -#}
+    <div id="rapport-stage" aria-hidden="true">
+        <script src="https://cdn.rapport.cloud/rapport-web-viewer/rapport.js"></script>
+        <rapport-scene id="rapport-scene"
+            project-token="{{ mae_rapport_project_token }}"
+            style="width: 100%; height: 100%; max-width: 100%; max-height: 100%; background: #e7edf1">
+        </rapport-scene>
+    </div>
+    {%- endif %}
 
     <header id="hud-top" class="hud">
         <div class="hud-brand">
@@ -37,7 +57,15 @@
         {#- CC-BY-4.0 requires this credit to stay user-visible for as long
             as the shipped character is a Sumerian Host. Removed on
             2026-08-14 when Grace was pulled, restored the same day when the
-            rebaked v12 shipped -- it goes wherever she goes. -#}
+            rebaked v12 shipped -- it goes wherever she goes.
+
+            Left unconditional here even while MAE_RAPPORT_ENABLED puts
+            Rapport's Vivian on screen instead: the Sumerian model is still
+            loaded underneath (see #rapport-stage above and the per-utterance
+            fallback in lcdash-mae-avatar.js), and a session drop hands
+            speech back to her mid-conversation with no reload. The credit
+            would otherwise have to flicker on and off with connection
+            state, which is worse than just leaving it up. -#}
         <span id="character-credit">3D character: Amazon Sumerian Hosts
             (<a href="https://creativecommons.org/licenses/by/4.0/"
                 target="_blank" rel="noopener">CC&#8209;BY&#8209;4.0</a>)</span>

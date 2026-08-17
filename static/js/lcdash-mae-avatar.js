@@ -30,6 +30,103 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
     if (params.get("kiosk") === "1") document.body.classList.add("kiosk");
 
     // ------------------------------------------------------------------
+    // Rapport.cloud avatar (MAE_RAPPORT_ENABLED, app/config/settings.py).
+    // Detected once here, not re-queried per utterance: when the flag is
+    // off, templates/mae_avatar.html emits no #rapport-stage at all, so
+    // rapportElement is null and every rapport.* call below is a single
+    // boolean check with no DOM query, no fetch, no behavior change --
+    // this page must stay byte-for-byte the page it is today unless the
+    // flag is on.
+    // ------------------------------------------------------------------
+
+    const rapportElement = document.getElementById("rapport-scene");
+
+    const rapport = (function () {
+        if (!rapportElement) {
+            return { isActive: function () { return false; }, speak: function () { return false; }, stop: function () {} };
+        }
+
+        // Per-utterance, not a load-time constant: a session that is still
+        // negotiating (or that drops mid-conversation) must fall back to
+        // the local voice+viseme path for the NEXT reply, not leave MAE
+        // silent until Rapport reconnects on its own schedule.
+        let connected = false;
+
+        try {
+            // sessionDisconnected is not documented in the Integrate
+            // sample either way; passing it is harmless if unsupported,
+            // and if their component DOES call it, a dropped session
+            // flips the very next reply back to local playback instead
+            // of speak() discovering the corpse one failed sendText later.
+            const request = rapportElement.sessionRequest({
+                sessionConnected: function () {
+                    connected = true;
+                },
+                sessionDisconnected: function () {
+                    connected = false;
+                    console.warn("MAE avatar: Rapport session ended; using the local avatar until it returns.");
+                }
+            });
+            // Their sample treats sessionRequest as fire-and-forget, but
+            // if it returns a promise, an async rejection would otherwise
+            // surface as an unhandled-rejection console error with no
+            // fallback bookkeeping attached to it.
+            if (request && typeof request.catch === "function") {
+                request.catch(function (error) {
+                    connected = false;
+                    console.warn("MAE avatar: Rapport session failed to start; using the local avatar instead.", error);
+                });
+            }
+        } catch (error) {
+            // This project has been burned by silent failure modes all
+            // week -- a Rapport session failing to start must be loud in
+            // the console and invisible in behavior. connected stays
+            // false, so speak() below is never even attempted and the
+            // existing three.js/portrait renderer chain does exactly what
+            // it does when this flag does not exist.
+            console.warn("MAE avatar: Rapport session failed to start; using the local avatar instead.", error);
+        }
+
+        function isActive() {
+            return connected;
+        }
+
+        // Returns whether Rapport actually took the utterance. Callers must
+        // fall back to local synthesis+playback when this returns false --
+        // an utterance rejected here would otherwise be spoken nowhere.
+        function speak(text) {
+            try {
+                rapportElement.modules.tts.sendText(text);
+                return true;
+            } catch (error) {
+                console.warn("MAE avatar: Rapport sendText failed; falling back to local speech for this reply.", error);
+                connected = false; // fail closed: later utterances skip straight to local playback too
+                return false;
+            }
+        }
+
+        function stop() {
+            // Rapport's own Integrate-dialog embed sample exposes
+            // scene.modules.tts.sendText() but documents no stop/cancel
+            // call anywhere in it. Feature-detect a handful of plausible
+            // names defensively; if none exist, the Stop button silences
+            // only OUR audio (see stopButton handler below) and Rapport
+            // keeps talking -- a known, documented limitation, not a bug.
+            try {
+                const tts = rapportElement.modules && rapportElement.modules.tts;
+                if (!tts) return;
+                if (typeof tts.stop === "function") tts.stop();
+                else if (typeof tts.cancel === "function") tts.cancel();
+                else if (typeof tts.interrupt === "function") tts.interrupt();
+            } catch (error) {
+                console.warn("MAE avatar: Rapport stop failed.", error);
+            }
+        }
+
+        return { isActive: isActive, speak: speak, stop: stop };
+    })();
+
+    // ------------------------------------------------------------------
     // Blendshape state. ARKit names only -- this is the portable contract.
     // ------------------------------------------------------------------
 
@@ -1213,6 +1310,18 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
         function enqueue(id, text) {
             const spoken = String(text || "").trim();
             if (!spoken || id !== sessionId) return;
+            // Decided per chunk, at speak time: if Rapport's session is
+            // connected AND it accepts this chunk, it is now the one saying
+            // these words through Polly Ruth. Playing our own synthesis on
+            // top would speak the reply twice, and driving speechState's
+            // visemes would move the idle local mouth for words coming out
+            // of a different face -- so skip local synthesis+playback
+            // entirely and leave the local renderer idling. If Rapport is
+            // not connected (never started, still negotiating, or dropped
+            // mid-conversation), rapport.speak() returns false and this
+            // chunk falls straight through to the local path below, same
+            // as if the flag were off.
+            if (rapport.isActive() && rapport.speak(spoken)) return;
             // Synthesis for the next chunk overlaps playback of the current
             // one; a failed chunk is skipped without breaking the chain.
             const synthesis = synthesize(spoken).catch(function (error) {
@@ -1233,7 +1342,10 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
         return { begin: begin, enqueue: enqueue, idle: idle, stop: stop };
     })();
 
-    stopButton.addEventListener("click", function () { speech.stop(); });
+    stopButton.addEventListener("click", function () {
+        speech.stop();
+        rapport.stop();
+    });
 
     // ------------------------------------------------------------------
     // Transcript UI

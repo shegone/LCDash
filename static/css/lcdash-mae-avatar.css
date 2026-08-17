@@ -21,6 +21,24 @@ html, body {
     inset: 0;
 }
 #avatar-stage canvas { display: block; }
+/* Same fixed-inset slot as #avatar-stage/#portrait-fallback above -- it sits
+   later in the DOM (see templates/mae_avatar.html) so it paints over them
+   while a Rapport session is connected, without displacing either from the
+   layout when it is not. overflow:hidden constrains whatever UI Rapport's
+   web component renders internally to our container; there is no documented
+   attribute in their Integrate-dialog embed sample for suppressing an
+   in-scene mic/text control, so the rest of that surface (their "Controls"
+   project setting) is governed from the Rapport dashboard, not from here. */
+#rapport-stage {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+}
+#rapport-stage rapport-scene {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
 #portrait-fallback {
     position: fixed;
     inset: 0;

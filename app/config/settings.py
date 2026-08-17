@@ -367,6 +367,16 @@ class Settings:
         "KNOWLEDGE_SEMANTIC_CANDIDATES",
         5000,
     )
+    # Rapport.cloud's pixel-streamed MetaHuman avatar, layered over (not
+    # replacing) the local three.js/portrait renderer chain on /mae/avatar.
+    # Ships dormant: the project-token below is publishable and safe to sit
+    # in page HTML by Rapport's own design, but it is still plumbed through
+    # env rather than hardcoded so rotating it is a config change, not a
+    # code change. mae_avatar_page() in app/main.py ANDs this with a
+    # non-empty token before it ever reaches the template -- a flag left on
+    # with no token configured must render nothing, not a broken widget.
+    mae_rapport_enabled: bool = _env_bool("MAE_RAPPORT_ENABLED", False)
+    mae_rapport_project_token: str = _env("MAE_RAPPORT_PROJECT_TOKEN").strip()
 
 
 settings = Settings()

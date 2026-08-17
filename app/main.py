@@ -2330,12 +2330,22 @@ def mae_avatar_page(request: Request):
     audience this page exists for.
     """
 
+    # Defensive AND, not just settings.mae_rapport_enabled: a flag left on
+    # with no token configured (env drift between the two vars) must render
+    # the page exactly as if the flag were off, not hand the template a
+    # <rapport-scene> with an empty project-token that fails in the browser
+    # instead of failing here.
+    rapport_enabled = bool(
+        settings.mae_rapport_enabled and settings.mae_rapport_project_token
+    )
     return templates.TemplateResponse(
         request=request,
         name="mae_avatar.html",
         context={
             "version": "0.3.0",
             "cloud_mode": cloud_mode_enabled(settings),
+            "mae_rapport_enabled": rapport_enabled,
+            "mae_rapport_project_token": settings.mae_rapport_project_token,
         },
         headers={"Cache-Control": "no-store"},
     )
