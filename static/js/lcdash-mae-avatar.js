@@ -46,61 +46,112 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
             return { isActive: function () { return false; }, speak: function () { return false; }, stop: function () {} };
         }
 
-        // Per-utterance, not a load-time constant: a session that is still
-        // negotiating (or that drops mid-conversation) must fall back to
-        // the local voice+viseme path for the NEXT reply, not leave MAE
-        // silent until Rapport reconnects on its own schedule.
-        let connected = false;
+        // The session is LAZY and it PARKS. No connection is made at page
+        // load, and one is torn down again after IDLE_STOP_MS without any
+        // speech -- Rapport bills session minutes, and a dispatcher leaving
+        // this page open for a whole shift must not run the meter while
+        // nobody is talking. The costs of this shape are paid in the two
+        // places they belong: the FIRST reply after an idle gap speaks
+        // through the local avatar while the session spins up (the
+        // per-utterance fallback below was already built for exactly that),
+        // and the character visibly leaves/returns as the session does.
+        const IDLE_STOP_MS = 3 * 60 * 1000;
 
-        try {
-            // sessionDisconnected is not documented in the Integrate
-            // sample either way; passing it is harmless if unsupported,
-            // and if their component DOES call it, a dropped session
-            // flips the very next reply back to local playback instead
-            // of speak() discovering the corpse one failed sendText later.
-            const request = rapportElement.sessionRequest({
-                sessionConnected: function () {
-                    connected = true;
-                },
-                sessionDisconnected: function () {
-                    connected = false;
-                    console.warn("MAE avatar: Rapport session ended; using the local avatar until it returns.");
-                }
-            });
-            // Their sample treats sessionRequest as fire-and-forget, but
-            // if it returns a promise, an async rejection would otherwise
-            // surface as an unhandled-rejection console error with no
-            // fallback bookkeeping attached to it.
-            if (request && typeof request.catch === "function") {
-                request.catch(function (error) {
-                    connected = false;
-                    console.warn("MAE avatar: Rapport session failed to start; using the local avatar instead.", error);
+        // idle -> connecting -> connected -> (idle timer fires) -> idle
+        let state = "idle";
+        let idleStopTimer = null;
+
+        function ensureSession() {
+            if (state !== "idle") return;
+            state = "connecting";
+            try {
+                const request = rapportElement.sessionRequest({
+                    sessionConnected: function () {
+                        state = "connected";
+                        // A session that connects and then never gets a
+                        // single sendText (user asked one question, walked
+                        // away before the reply arrived) must still park.
+                        scheduleIdleStop();
+                    },
+                    sessionDisconnected: function () {
+                        state = "idle";
+                        console.info("MAE avatar: Rapport session ended; the local avatar speaks until the next reply restarts it.");
+                    }
                 });
+                // Their sample treats sessionRequest as fire-and-forget,
+                // but if it returns a promise, an async rejection would
+                // otherwise surface as an unhandled-rejection error with
+                // no fallback bookkeeping attached to it.
+                if (request && typeof request.catch === "function") {
+                    request.catch(function (error) {
+                        state = "idle";
+                        console.warn("MAE avatar: Rapport session failed to start; using the local avatar instead.", error);
+                    });
+                }
+            } catch (error) {
+                state = "idle";
+                console.warn("MAE avatar: Rapport session failed to start; using the local avatar instead.", error);
             }
-        } catch (error) {
-            // This project has been burned by silent failure modes all
-            // week -- a Rapport session failing to start must be loud in
-            // the console and invisible in behavior. connected stays
-            // false, so speak() below is never even attempted and the
-            // existing three.js/portrait renderer chain does exactly what
-            // it does when this flag does not exist.
-            console.warn("MAE avatar: Rapport session failed to start; using the local avatar instead.", error);
+        }
+
+        function scheduleIdleStop() {
+            if (idleStopTimer) clearTimeout(idleStopTimer);
+            idleStopTimer = setTimeout(stopSession, IDLE_STOP_MS);
+        }
+
+        function stopSession() {
+            if (state === "idle") return;
+            if (idleStopTimer) { clearTimeout(idleStopTimer); idleStopTimer = null; }
+            state = "idle";
+            // Their embed sample documents no disconnect API, so this
+            // feature-detects the plausible names and, failing all of
+            // them, removes the element from the DOM -- a custom element
+            // torn out of the document must release its WebRTC transport,
+            // and the element is re-inserted (still holding its
+            // project-token attribute) before the next sessionRequest.
+            try {
+                if (typeof rapportElement.sessionDisconnect === "function") {
+                    rapportElement.sessionDisconnect();
+                } else if (typeof rapportElement.disconnect === "function") {
+                    rapportElement.disconnect();
+                } else if (typeof rapportElement.sessionEnd === "function") {
+                    rapportElement.sessionEnd();
+                } else {
+                    const parent = rapportElement.parentNode;
+                    if (parent) {
+                        const next = rapportElement.nextSibling;
+                        parent.removeChild(rapportElement);
+                        parent.insertBefore(rapportElement, next);
+                    }
+                }
+                console.info("MAE avatar: Rapport session parked after 3 idle minutes; next reply restarts it.");
+            } catch (error) {
+                console.warn("MAE avatar: parking the Rapport session failed.", error);
+            }
         }
 
         function isActive() {
-            return connected;
+            return state === "connected";
         }
 
         // Returns whether Rapport actually took the utterance. Callers must
         // fall back to local synthesis+playback when this returns false --
         // an utterance rejected here would otherwise be spoken nowhere.
+        // A reply arriving while parked is what WAKES the session: this
+        // one speaks locally, the connection comes up behind it, and the
+        // following replies go through Rapport.
         function speak(text) {
+            if (state !== "connected") {
+                ensureSession();
+                return false;
+            }
             try {
                 rapportElement.modules.tts.sendText(text);
+                scheduleIdleStop();
                 return true;
             } catch (error) {
                 console.warn("MAE avatar: Rapport sendText failed; falling back to local speech for this reply.", error);
-                connected = false; // fail closed: later utterances skip straight to local playback too
+                state = "idle"; // fail closed: later utterances go local until a reply wakes it again
                 return false;
             }
         }
