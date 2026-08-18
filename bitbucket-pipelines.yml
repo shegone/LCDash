@@ -1,0 +1,30 @@
+# Bitbucket Pipelines CI for LCDash / CAD Intelligence.
+# Mirrors .github/workflows/ci.yml: install both dependency sets, then run
+# the full suite from the repo root. pytest.ini's testpaths pulls in BOTH
+# tests/ and infrastructure/tests/ -- naming only tests/ silently skips the
+# CDK template/guardrail tests, so keep the bare invocation.
+
+image: python:3.13
+
+definitions:
+  caches:
+    pip: ~/.cache/pip
+
+pipelines:
+  default:
+    - step:
+        name: Run tests
+        caches:
+          - pip
+        script:
+          - python -m pip install -r requirements-dev.txt -r infrastructure/requirements.txt
+          - python -m pytest -q
+  pull-requests:
+    '**':
+      - step:
+          name: Run tests
+          caches:
+            - pip
+          script:
+            - python -m pip install -r requirements-dev.txt -r infrastructure/requirements.txt
+            - python -m pytest -q
