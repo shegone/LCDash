@@ -197,3 +197,49 @@ body.kiosk #hud-top .hud-pills .pill:not(#pill-voice) { display: none; }
 .rapport-primary #portrait-fallback {
     display: none !important;
 }
+
+/* The Rapport splash: what fills the pane while the session is
+   connecting or parked, instead of the black void that shipped first.
+   Visible only in rapport-primary mode and only while the session is
+   not live; the moment lcdash-mae-avatar.js stamps rapport-live on the
+   body, the splash yields to the video. */
+#rapport-splash {
+    display: none;
+    position: fixed;
+    inset: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    background: radial-gradient(ellipse at center, #16202c 0%, #0b1017 70%);
+    color: #dce6f2;
+    text-align: center;
+    z-index: 1;
+}
+.rapport-primary #rapport-splash { display: flex; }
+.rapport-primary.rapport-live #rapport-splash { display: none; }
+#rapport-splash img {
+    width: 130px;
+    height: auto;
+    filter: drop-shadow(0 4px 18px rgba(0, 0, 0, 0.55));
+}
+#rapport-splash-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+}
+#rapport-splash-sub {
+    font-size: 1.0rem;
+    opacity: 0.85;
+}
+#rapport-splash-note {
+    font-size: 0.85rem;
+    opacity: 0.6;
+    animation: rapport-splash-pulse 2.2s ease-in-out infinite;
+}
+@keyframes rapport-splash-pulse {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 0.75; }
+}
+/* Keep the stage itself above the splash when live. */
+.rapport-primary #rapport-stage.live { z-index: 2; }

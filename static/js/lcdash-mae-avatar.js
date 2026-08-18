@@ -67,9 +67,20 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
         // deploy, because visibility was tied to the flag instead of the
         // session and the lazy session never connects at page load.
         const stage = document.getElementById("rapport-stage");
+        const splashNote = document.getElementById("rapport-splash-note");
         function setStageVisible(visible) {
             if (!stage) return;
             stage.classList.toggle("live", Boolean(visible));
+            // rapport-live on the body is what swaps the splash for the
+            // video (see the CSS); the caption distinguishes a cold start
+            // from a deliberate between-conversations park so a dispatcher
+            // never reads "connecting" for three parked hours.
+            document.body.classList.toggle("rapport-live", Boolean(visible));
+            if (splashNote && !visible) {
+                splashNote.textContent = (state === "connecting")
+                    ? "Advisory AI assistant — connecting…"
+                    : "Advisory AI assistant — resting; ask MAE anything to wake her";
+            }
         }
 
         // While Rapport is enabled the local renderers are hidden by the

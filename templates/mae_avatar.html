@@ -8,7 +8,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>MAE | Logan County 911</title>
     <link rel="icon" href="/static/img/logan911-logo.png">
-    <link rel="stylesheet" href="/static/css/lcdash-mae-avatar.css?v=20260817-rapport-v4">
+    <link rel="stylesheet" href="/static/css/lcdash-mae-avatar.css?v=20260817-rapport-v5">
 </head>
 <body data-cloud-mode="{{ 'true' if cloud_mode else 'false' }}"{% if mae_rapport_enabled %} class="rapport-primary"{% endif %}>
     <div id="avatar-stage" aria-hidden="true"></div>
@@ -27,6 +27,19 @@
         MAE_RAPPORT_PROJECT_TOKEN empty-by-default (see app/config/settings.py)
         keep this block emitting nothing -- no script tag, no container --
         on every deployment that hasn't explicitly turned it on. -#}
+    {#- Shown whenever Rapport is enabled but the session is not yet live:
+        the MetaHuman renderer has a genuine cold start on Rapport's side,
+        and the alternative is a black pane with disembodied audio -- which
+        shipped, briefly, and Ted asked for something visual instead. The
+        same layer covers the parked state between conversations. JS swaps
+        the caption between "connecting" and "resting" via rapport-live on
+        body. -#}
+    <div id="rapport-splash" aria-hidden="true">
+        <img src="/static/img/logan911-logo.png" alt="">
+        <div id="rapport-splash-title">Logan County 911</div>
+        <div id="rapport-splash-sub">MAE &middot; Mission Assistance Engine</div>
+        <div id="rapport-splash-note">Advisory AI assistant &mdash; connecting&hellip;</div>
+    </div>
     <div id="rapport-stage" aria-hidden="true">
         <script src="https://cdn.rapport.cloud/rapport-web-viewer/rapport.js"></script>
         <rapport-scene id="rapport-scene"
@@ -97,6 +110,6 @@
         }
     }
     </script>
-    <script type="module" src="/static/js/lcdash-mae-avatar.js?v=20260817-rapport-v4"></script>
+    <script type="module" src="/static/js/lcdash-mae-avatar.js?v=20260817-rapport-v5"></script>
 </body>
 </html>
