@@ -8,9 +8,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>MAE | Logan County 911</title>
     <link rel="icon" href="/static/img/logan911-logo.png">
-    <link rel="stylesheet" href="/static/css/lcdash-mae-avatar.css?v=20260817-rapport-v3">
+    <link rel="stylesheet" href="/static/css/lcdash-mae-avatar.css?v=20260817-rapport-v4">
 </head>
-<body data-cloud-mode="{{ 'true' if cloud_mode else 'false' }}">
+<body data-cloud-mode="{{ 'true' if cloud_mode else 'false' }}"{% if mae_rapport_enabled %} class="rapport-primary"{% endif %}>
     <div id="avatar-stage" aria-hidden="true"></div>
     <div id="portrait-fallback">
         <img src="/static/img/mae/mae-neutral.jpg" alt="MAE virtual assistant portrait">
@@ -97,6 +97,6 @@
         }
     }
     </script>
-    <script type="module" src="/static/js/lcdash-mae-avatar.js?v=20260817-rapport-v3"></script>
+    <script type="module" src="/static/js/lcdash-mae-avatar.js?v=20260817-rapport-v4"></script>
 </body>
 </html>

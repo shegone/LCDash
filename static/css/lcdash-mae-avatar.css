@@ -183,3 +183,17 @@ body.kiosk #hud-top .hud-pills .pill:not(#pill-voice) { display: none; }
 @media (max-width: 640px) {
     .hud-brand small { display: none; }
 }
+
+/* Rapport-primary: while the Rapport widget is enabled, the local
+   renderer chain (3D character, portrait photos) stays hidden so the
+   page does not flash portrait -> local character -> Vivian while the
+   session connects -- Ted watched that exact sequence and asked for it
+   gone. The locals keep RUNNING underneath (cheap, and instantly
+   revealable); lcdash-mae-avatar.js strips this class the moment the
+   Rapport session actually fails, which is the only time a dispatcher
+   should ever see them again. A deliberately PARKED session keeps the
+   pane dark instead -- parked is expected, not failure. */
+.rapport-primary #avatar-stage,
+.rapport-primary #portrait-fallback {
+    display: none !important;
+}

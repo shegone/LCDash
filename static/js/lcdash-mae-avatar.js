@@ -72,13 +72,44 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
             stage.classList.toggle("live", Boolean(visible));
         }
 
+        // While Rapport is enabled the local renderers are hidden by the
+        // rapport-primary body class (see the CSS), because the boot
+        // sequence otherwise flashes portrait -> local character -> Vivian.
+        // Revealing them is a one-way door reserved for genuine FAILURE:
+        // a connect attempt that times out, or a send that dies. A parked
+        // session does not qualify -- parked is the design, and the pane
+        // simply stays dark until the next reply wakes her.
+        function revealLocalAvatar(reason) {
+            if (!document.body.classList.contains("rapport-primary")) return;
+            document.body.classList.remove("rapport-primary");
+            console.warn("MAE avatar: falling back to the local avatar -- " + reason);
+        }
+
+        // Watchdog for each connect attempt. Rapport's sample gives no
+        // error callback for a session that simply never comes up, so the
+        // absence of sessionConnected within this window is the failure
+        // signal. Generous on purpose: MetaHuman pixel streaming has to
+        // spin up a renderer on their side, and revealing the locals at
+        // second 9 of a 10-second cold start would be defeat snatched
+        // from the jaws of victory.
+        const CONNECT_TIMEOUT_MS = 20000;
+        let connectWatchdog = null;
+
         function ensureSession() {
             if (state !== "idle") return;
             state = "connecting";
+            if (connectWatchdog) clearTimeout(connectWatchdog);
+            connectWatchdog = setTimeout(function () {
+                if (state === "connecting") {
+                    state = "idle";
+                    revealLocalAvatar("the session did not connect within 20 seconds");
+                }
+            }, CONNECT_TIMEOUT_MS);
             try {
                 const request = rapportElement.sessionRequest({
                     sessionConnected: function () {
                         state = "connected";
+                        if (connectWatchdog) { clearTimeout(connectWatchdog); connectWatchdog = null; }
                         setStageVisible(true);
                         // A session that connects and then never gets a
                         // single sendText (user asked one question, walked
@@ -98,11 +129,15 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
                 if (request && typeof request.catch === "function") {
                     request.catch(function (error) {
                         state = "idle";
+                        if (connectWatchdog) { clearTimeout(connectWatchdog); connectWatchdog = null; }
+                        revealLocalAvatar("the session request was rejected");
                         console.warn("MAE avatar: Rapport session failed to start; using the local avatar instead.", error);
                     });
                 }
             } catch (error) {
                 state = "idle";
+                if (connectWatchdog) { clearTimeout(connectWatchdog); connectWatchdog = null; }
+                revealLocalAvatar("the session request threw at start");
                 console.warn("MAE avatar: Rapport session failed to start; using the local avatar instead.", error);
             }
         }
@@ -167,6 +202,7 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
                 console.warn("MAE avatar: Rapport sendText failed; falling back to local speech for this reply.", error);
                 state = "idle"; // fail closed: later utterances go local until a reply wakes it again
                 setStageVisible(false);
+                revealLocalAvatar("a send to the connected session failed");
                 return false;
             }
         }
