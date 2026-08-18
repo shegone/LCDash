@@ -161,7 +161,7 @@ These checks need only the Python standard library:
 
 ```powershell
 python -m unittest discover infrastructure/tests -v
-python -m py_compile infrastructure/app.py infrastructure/lcdash_pilot/config.py infrastructure/lcdash_pilot/certificate_stack.py infrastructure/lcdash_pilot/foundation_stack.py
+python -m py_compile infrastructure/cdk_app.py infrastructure/lcdash_pilot/config.py infrastructure/lcdash_pilot/certificate_stack.py infrastructure/lcdash_pilot/foundation_stack.py
 ```
 
 The CDK template assertion module skips automatically when `aws-cdk-lib` is

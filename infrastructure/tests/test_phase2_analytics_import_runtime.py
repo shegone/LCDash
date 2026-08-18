@@ -5,14 +5,20 @@ from pathlib import Path
 import sys
 import unittest
 
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-
-
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from app.tools import phase2_analytics_import_runtime as runtime
-from app.tools.phase2_analytics_import import TABLE_PLANS
+# The runtime under test needs the application's dependencies (cryptography,
+# boto3, psycopg), which the CDK-only infrastructure venv does not carry.
+# Skip rather than error there, mirroring the aws-cdk-lib guard in
+# test_cdk_template.py.
+try:
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    from app.tools import phase2_analytics_import_runtime as runtime
+    from app.tools.phase2_analytics_import import TABLE_PLANS
+except ImportError:
+    runtime = None
 
 
 class FakeKms:
@@ -79,6 +85,7 @@ def empty_bundle():
     }
 
 
+@unittest.skipUnless(runtime is not None, "application runtime dependencies are not installed")
 class AnalyticsImportRuntimeTests(unittest.TestCase):
     def test_environment_requires_exact_bucket_object_database_and_checksum(self):
         values = {

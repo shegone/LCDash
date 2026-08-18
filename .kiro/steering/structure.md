@@ -33,7 +33,7 @@ config/
     schema.json            non-secret county profile schema
     synthetic-demo.yaml    safe example only
 infrastructure/
-  app.py                   CDK entrypoint
+  cdk_app.py               CDK entrypoint
   stacks/
     foundation.py          VPC, endpoints, KMS, baseline logging
     county_data.py         database, S3, backup, county key

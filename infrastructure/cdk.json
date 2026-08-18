@@ -1,5 +1,5 @@
 {
-  "app": "python app.py",
+  "app": "python cdk_app.py",
   "versionReporting": false,
   "context": {
     "@aws-cdk/aws-ecs:arnFormatIncludesClusterName": true,

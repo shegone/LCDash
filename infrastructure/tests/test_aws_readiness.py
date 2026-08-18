@@ -1,6 +1,12 @@
 import json
+from pathlib import Path
+import sys
 from unittest.mock import patch
 import unittest
+
+# Repo root on sys.path so the `infrastructure` namespace package resolves
+# when the suite runs from infrastructure/ as well as from the repo root.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from infrastructure.tools.check_aws_readiness import (
     APPLICATION_STACKS,
