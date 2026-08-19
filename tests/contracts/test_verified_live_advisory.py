@@ -78,7 +78,7 @@ class VerifiedLiveResponseTests(unittest.TestCase):
 
     def test_answer_length_is_bounded(self):
         with self.assertRaises(ValueError):
-            VerifiedLiveResponse("req-0000001", "x" * 801, (), denied=False)
+            VerifiedLiveResponse("req-0000001", "x" * 2401, (), denied=False)
 
     def test_supported_and_deny_factories_round_trip(self):
         response = VerifiedLiveResponse.supported("req-0000001", "3 calls", _sources())
@@ -96,6 +96,49 @@ class VerifiedLiveAdvisoryTests(unittest.TestCase):
             VerifiedLiveAdvisory(converse_client=_Client(), model_id="m", max_output_tokens=10)
         with self.assertRaises(ValueError):
             VerifiedLiveAdvisory(converse_client=_Client(), model_id="m", max_output_tokens=400)
+
+    def test_rejects_detail_budget_below_base_or_above_1200(self):
+        with self.assertRaises(ValueError):
+            VerifiedLiveAdvisory(
+                converse_client=_Client(), model_id="m",
+                max_output_tokens=200, detail_max_output_tokens=100,
+            )
+        with self.assertRaises(ValueError):
+            VerifiedLiveAdvisory(
+                converse_client=_Client(), model_id="m",
+                detail_max_output_tokens=1300,
+            )
+
+    def test_command_log_facts_get_the_detail_token_budget(self):
+        client = _Client()
+        advisory = VerifiedLiveAdvisory(
+            converse_client=client, model_id="m",
+            max_output_tokens=200, detail_max_output_tokens=600,
+        )
+        advisory.answer(
+            request_id="req-0000001",
+            tenant_id="logan-synthetic",
+            facts=(
+                VerifiedFact("CFS26-0001 Incident", "Complaint"),
+                VerifiedFact("CFS26-0001 Command log (most recent 2)", "a | b"),
+            ),
+            data_sources=_sources(),
+        )
+        self.assertEqual(client.calls[0]["inferenceConfig"]["maxTokens"], 600)
+
+    def test_plain_facts_keep_the_base_token_budget(self):
+        client = _Client()
+        advisory = VerifiedLiveAdvisory(
+            converse_client=client, model_id="m",
+            max_output_tokens=200, detail_max_output_tokens=600,
+        )
+        advisory.answer(
+            request_id="req-0000001",
+            tenant_id="logan-synthetic",
+            facts=_facts(),
+            data_sources=_sources(),
+        )
+        self.assertEqual(client.calls[0]["inferenceConfig"]["maxTokens"], 200)
 
     def test_no_facts_denies_without_calling_the_model(self):
         client = _Client()
@@ -176,7 +219,11 @@ class VerifiedLiveAdvisoryTests(unittest.TestCase):
             facts=_facts(),
             data_sources=_sources(),
         )
-        self.assertLessEqual(len(response.answer), 800)
+        from app.integrations.cloud_ai.verified_live_advisory import (
+            MAX_VERIFIED_ANSWER_CHARACTERS,
+        )
+
+        self.assertLessEqual(len(response.answer), MAX_VERIFIED_ANSWER_CHARACTERS)
 
     def test_invalid_request_identity_is_rejected_before_any_model_call(self):
         client = _Client()

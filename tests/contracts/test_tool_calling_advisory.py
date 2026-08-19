@@ -226,7 +226,11 @@ class ToolCallingLiveAdvisoryAnswerTests(unittest.TestCase):
             question="how many active calls?",
             registry=_registry(),
         )
-        self.assertLessEqual(len(response.answer), 800)
+        from app.integrations.cloud_ai.verified_live_advisory import (
+            MAX_VERIFIED_ANSWER_CHARACTERS,
+        )
+
+        self.assertLessEqual(len(response.answer), MAX_VERIFIED_ANSWER_CHARACTERS)
 
     def test_thinking_preamble_is_stripped_from_the_answer(self):
         # Nova Pro wraps its reasoning in <thinking>...</thinking> in the text

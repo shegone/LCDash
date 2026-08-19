@@ -30,7 +30,9 @@ def _validate_request_identity(request_id: str, tenant_id: str) -> None:
         raise ValueError("A stable tenant identifier is required.")
 
 
-MAX_VERIFIED_ANSWER_CHARACTERS = 800
+# Wide enough for a full command-log recount (12 bounded entries); ordinary
+# status answers stay two-to-three sentences via the system prompt.
+MAX_VERIFIED_ANSWER_CHARACTERS = 2400
 
 
 class BedrockConverseClient(Protocol):
@@ -73,12 +75,15 @@ class VerifiedLiveResponse:
 
 
 _SYSTEM_PROMPT = (
-    "You are MAE/JACK, phrasing a short status update from a fixed list of "
-    "already-verified facts. Use only the facts given to you. Never add, "
-    "infer, estimate, round, or restate a number that is not explicitly "
-    "listed. Do not mention documents, citations, or sources. Do not offer "
-    "to take any action. If a fact says data is unavailable, say so plainly "
-    "rather than guessing. Keep the answer to two or three sentences."
+    "You are MAE/JACK, phrasing a status update from a fixed list of "
+    "already-verified facts. Use only the facts given to you, and include "
+    "every fact you are given -- do not drop one. Never add, infer, "
+    "estimate, round, or restate a number that is not explicitly listed. "
+    "Do not mention documents, citations, or sources. Do not offer to take "
+    "any action. If a fact says data is unavailable, say so plainly rather "
+    "than guessing. Keep the answer to two or three sentences -- unless the "
+    "facts include a command log, in which case recount each log entry in "
+    "chronological order with its time, briefly, after the summary."
 )
 
 
@@ -91,13 +96,21 @@ class VerifiedLiveAdvisory:
         converse_client: BedrockConverseClient,
         model_id: str,
         max_output_tokens: int = 200,
+        detail_max_output_tokens: int = 600,
         budget: Any = None,
     ) -> None:
         if not 32 <= max_output_tokens <= 300:
             raise ValueError("Verified-live phrasing is capped at 32-300 tokens.")
+        # Same two-tier shape as the document path: the larger budget applies
+        # only when the facts carry a command log to recount.
+        if not max_output_tokens <= detail_max_output_tokens <= 1200:
+            raise ValueError(
+                "Verified-live detail phrasing is capped at the base budget-1200 tokens."
+            )
         self._client = converse_client
         self._model_id = model_id
         self._max_output_tokens = max_output_tokens
+        self._detail_max_output_tokens = detail_max_output_tokens
         self._budget = budget
 
     def _reserve_request(self) -> bool:
@@ -123,6 +136,7 @@ class VerifiedLiveAdvisory:
                 request_id, "The daily advisory usage limit has been reached."
             )
         fact_lines = "\n".join(f"- {fact.label}: {fact.value}" for fact in facts)
+        wants_detail = any("Command log" in fact.label for fact in facts)
         response = self._client.converse(
             modelId=self._model_id,
             system=[{"text": _SYSTEM_PROMPT}],
@@ -133,7 +147,10 @@ class VerifiedLiveAdvisory:
                 }
             ],
             inferenceConfig={
-                "maxTokens": self._max_output_tokens,
+                "maxTokens": (
+                    self._detail_max_output_tokens if wants_detail
+                    else self._max_output_tokens
+                ),
                 "temperature": 0.0,
                 "topP": 1.0,
             },
