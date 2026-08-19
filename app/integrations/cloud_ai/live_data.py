@@ -234,12 +234,23 @@ def compute_cad_facts(
                 ("Incident", "incident_description"),
                 ("Priority", "priority"),
                 ("Status", "status"),
+                ("Call received", "call_datetime"),
                 ("Location", "location_label"),
                 ("Assigned units", "assigned_units"),
             ):
                 value = match.get(field)
                 if value not in (None, "", (), []):
-                    facts.append(VerifiedFact(f"{intent.target_cfs_number} {label}", str(value)))
+                    rendered = (
+                        _format_local_time(value) if field == "call_datetime" else str(value)
+                    )
+                    facts.append(VerifiedFact(f"{intent.target_cfs_number} {label}", rendered))
+            log_fact = _command_log_fact(
+                intent.target_cfs_number,
+                match.get("command_logs") or (),
+                include_command_logs=include_command_logs,
+            )
+            if log_fact is not None:
+                facts.append(log_fact)
         elif call_lookup_fn is None:
             facts.append(
                 VerifiedFact(
@@ -263,6 +274,39 @@ def compute_cad_facts(
 # long-running incident cannot flood the fact list handed to the model.
 _COMMAND_LOG_FACT_LIMIT = 12
 _COMMAND_LOG_TEXT_LIMIT = 200
+
+
+def _command_log_fact(
+    cfs_number: str,
+    logs: Sequence[Any],
+    *,
+    include_command_logs: bool,
+) -> VerifiedFact | None:
+    """One bounded, chronological command-log fact, or None while gated off."""
+    if not include_command_logs or not logs:
+        return None
+    lines = []
+    for log in tuple(logs)[-_COMMAND_LOG_FACT_LIMIT:]:
+        if not isinstance(log, Mapping):
+            continue
+        text = str(log.get("text") or "").strip()
+        if not text:
+            continue
+        prefix = " ".join(
+            part for part in (
+                _format_local_time(log.get("timestamp")),
+                str(log.get("unit_number") or "").strip(),
+            )
+            if part
+        )
+        entry = f"{prefix}: {text}" if prefix else text
+        lines.append(entry[:_COMMAND_LOG_TEXT_LIMIT])
+    if not lines:
+        return None
+    return VerifiedFact(
+        f"{cfs_number} Command log (most recent {len(lines)})",
+        " | ".join(lines),
+    )
 
 
 def _lookup_call_facts(
@@ -328,31 +372,13 @@ def _lookup_call_facts(
     if unit_labels:
         facts.append(VerifiedFact(f"{cfs_number} Assigned units", ", ".join(unit_labels)))
 
-    logs = call.get("command_logs") or ()
-    if include_command_logs and logs:
-        lines = []
-        for log in tuple(logs)[-_COMMAND_LOG_FACT_LIMIT:]:
-            if not isinstance(log, Mapping):
-                continue
-            text = str(log.get("text") or "").strip()
-            if not text:
-                continue
-            prefix = " ".join(
-                part for part in (
-                    _format_local_time(log.get("timestamp")),
-                    str(log.get("unit_number") or "").strip(),
-                )
-                if part
-            )
-            entry = f"{prefix}: {text}" if prefix else text
-            lines.append(entry[:_COMMAND_LOG_TEXT_LIMIT])
-        if lines:
-            facts.append(
-                VerifiedFact(
-                    f"{cfs_number} Command log (most recent {len(lines)})",
-                    " | ".join(lines),
-                )
-            )
+    log_fact = _command_log_fact(
+        cfs_number,
+        call.get("command_logs") or (),
+        include_command_logs=include_command_logs,
+    )
+    if log_fact is not None:
+        facts.append(log_fact)
 
     if not facts:
         facts.append(

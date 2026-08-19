@@ -298,6 +298,46 @@ class CallLookupFallbackTests(unittest.TestCase):
         self.assertIn("Caller reports a complaint at the ER.", log_fact)
         self.assertIn("02:38 MED50: MED50 dispatched.", log_fact)
 
+    def test_active_snapshot_hits_also_carry_times_and_gated_logs(self):
+        calls = [
+            {
+                "cfs_number": "CFS26-27243",
+                "incident_description": "Shoplifting",
+                "status": "On Scene",
+                "call_datetime": "2026-08-19T19:10:40.935411Z",
+                "command_logs": (
+                    {
+                        "timestamp": "2026-08-19T19:11:15.661614Z",
+                        "unit_number": "LPD57",
+                        "text": "Assigned to the call.",
+                    },
+                ),
+            }
+        ]
+        facts, _ = self._run(None, include_command_logs=True, calls=calls)
+        labels = {fact.label: fact.value for fact in facts}
+        self.assertEqual(
+            labels["CFS26-27243 Call received"], "08/19/2026 03:10:40 PM EDT"
+        )
+        self.assertIn(
+            "08/19/2026 03:11:15 PM EDT LPD57: Assigned to the call.",
+            labels["CFS26-27243 Command log (most recent 1)"],
+        )
+
+    def test_active_snapshot_hits_keep_logs_out_when_gated_off(self):
+        calls = [
+            {
+                "cfs_number": "CFS26-27243",
+                "incident_description": "Shoplifting",
+                "command_logs": (
+                    {"timestamp": "", "unit_number": "", "text": "Sensitive line."},
+                ),
+            }
+        ]
+        facts, _ = self._run(None, include_command_logs=False, calls=calls)
+        rendered = " ".join(f"{fact.label} {fact.value}" for fact in facts)
+        self.assertNotIn("Sensitive line.", rendered)
+
     def test_timestamps_render_as_county_local_time_not_raw_iso(self):
         call = _normalized_lookup_call(
             command_logs=(
