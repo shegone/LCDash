@@ -602,6 +602,12 @@ class Phase1FoundationStack(cdk.Stack):
             "MAE_RAPPORT_PROJECT_TOKEN": parameters[
                 "mae_rapport_project_token"
             ].value_as_string,
+            "LCDASH_CLOUD_CAD_CALL_LOOKUP_ENABLED": parameters[
+                "cloud_cad_call_lookup_enabled"
+            ].value_as_string,
+            "LCDASH_CLOUD_CAD_COMMAND_LOGS_ENABLED": parameters[
+                "cloud_cad_command_logs_enabled"
+            ].value_as_string,
         }.items():
             container.add_environment(name, value)
         https_listener = load_balancer.add_listener(
@@ -1056,6 +1062,35 @@ class Phase1FoundationStack(cdk.Stack):
                     "lives here as a parameter so rotating it is a deploy, not "
                     "a code change. Blank disables the widget regardless of "
                     "MaeRapportEnabled; the application fails closed."
+                ),
+            ),
+            "cloud_cad_call_lookup_enabled": cdk.CfnParameter(
+                self,
+                "CloudCadCallLookupEnabled",
+                type="String",
+                allowed_values=["true", "false"],
+                default="false",
+                description=(
+                    "Set to true only in a separately reviewed update to let "
+                    "MAE fetch one call by CFS number from the read-only "
+                    "connector when it is not in the active snapshot (closed "
+                    "or older calls). Uses the already-allowlisted get_call "
+                    "read; never a CAD write."
+                ),
+            ),
+            "cloud_cad_command_logs_enabled": cdk.CfnParameter(
+                self,
+                "CloudCadCommandLogsEnabled",
+                type="String",
+                allowed_values=["true", "false"],
+                default="false",
+                description=(
+                    "Set to true only in a separately reviewed update to "
+                    "include CAD command-log (narrative) lines in MAE's "
+                    "call-lookup answers. Deliberately independent of the "
+                    "lookup flag: narratives are where CJI-adjacent content "
+                    "lives, so a deployment claiming non-CJI scope keeps this "
+                    "false and can prove it from the task definition."
                 ),
             ),
             "analytics_collector_enabled": cdk.CfnParameter(

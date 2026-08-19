@@ -210,6 +210,118 @@ class ComputeCadFactsTests(unittest.TestCase):
         self.assertNotIn("SECRET NARRATIVE", rendered)
 
 
+def _normalized_lookup_call(**overrides):
+    call = {
+        "cfs_number": "CFS26-27243",
+        "incident_description": "Complaint",
+        "priority": "30",
+        "status": "Closed",
+        "call_datetime": "2026-08-19T02:25:18Z",
+        "agency": "DPS",
+        "location_label": "Logan Regional Medical Center",
+        "assigned_units": (
+            {"unit_number": "MED50", "status": "Cleared"},
+            {"unit_number": "SO23", "status": "Cleared"},
+        ),
+        "command_logs": (
+            {"timestamp": "02:25", "unit_number": "", "text": "Caller reports a complaint at the ER."},
+            {"timestamp": "02:38", "unit_number": "MED50", "text": "MED50 dispatched."},
+        ),
+    }
+    call.update(overrides)
+    return call
+
+
+class CallLookupFallbackTests(unittest.TestCase):
+    """The live get_call fallback for CFS numbers missing from the snapshot."""
+
+    def _run(self, lookup, *, include_command_logs=False, calls=()):
+        intent = LiveDataIntent(wants_call_detail=True, target_cfs_number="CFS26-27243")
+        return compute_cad_facts(
+            intent,
+            cad_state=_cad_state(calls=list(calls)),
+            cad_status={"freshness": "fresh", "age_seconds": 5},
+            call_lookup_fn=lookup,
+            include_command_logs=include_command_logs,
+        )
+
+    def test_lookup_is_not_called_when_the_call_is_in_the_snapshot(self):
+        calls = [{"cfs_number": "CFS26-27243", "incident_description": "Complaint"}]
+        invoked = []
+
+        def lookup(cfs_number):
+            invoked.append(cfs_number)
+            return {"status": "ok", "call": _normalized_lookup_call()}
+
+        facts, sources = self._run(lookup, calls=calls)
+        self.assertEqual(invoked, [])
+        self.assertEqual(len(sources), 1)
+        labels = {fact.label for fact in facts}
+        self.assertIn("CFS26-27243 Incident", labels)
+
+    def test_snapshot_miss_without_lookup_keeps_the_original_message(self):
+        facts, sources = self._run(None)
+        self.assertEqual(len(facts), 1)
+        self.assertIn("not in the current active-call snapshot", facts[0].value.lower())
+        self.assertEqual(len(sources), 1)
+
+    def test_successful_lookup_yields_call_facts_and_a_second_source(self):
+        facts, sources = self._run(
+            lambda cfs: {"status": "ok", "call": _normalized_lookup_call()}
+        )
+        labels = {fact.label: fact.value for fact in facts}
+        self.assertEqual(labels["CFS26-27243 Incident"], "Complaint")
+        self.assertEqual(labels["CFS26-27243 Status"], "Closed")
+        self.assertEqual(
+            labels["CFS26-27243 Assigned units"], "MED50 (Cleared), SO23 (Cleared)"
+        )
+        self.assertEqual(len(sources), 2)
+        self.assertEqual(sources[1].name, "CentralSquare CAD (live call lookup)")
+        self.assertTrue(sources[1].available)
+
+    def test_command_logs_stay_out_of_facts_unless_explicitly_enabled(self):
+        facts, _ = self._run(
+            lambda cfs: {"status": "ok", "call": _normalized_lookup_call()}
+        )
+        rendered = " ".join(f"{fact.label} {fact.value}" for fact in facts)
+        self.assertNotIn("Caller reports", rendered)
+        self.assertNotIn("Command log", rendered)
+
+    def test_command_logs_appear_when_the_flag_is_on(self):
+        facts, _ = self._run(
+            lambda cfs: {"status": "ok", "call": _normalized_lookup_call()},
+            include_command_logs=True,
+        )
+        labels = {fact.label: fact.value for fact in facts}
+        log_fact = labels.get("CFS26-27243 Command log (most recent 2)")
+        self.assertIsNotNone(log_fact)
+        self.assertIn("Caller reports a complaint at the ER.", log_fact)
+        self.assertIn("02:38 MED50: MED50 dispatched.", log_fact)
+
+    def test_not_found_is_an_honest_fact_from_an_available_source(self):
+        facts, sources = self._run(lambda cfs: {"status": "not_found", "call": None})
+        self.assertEqual(len(facts), 1)
+        self.assertIn("no cad record found", facts[0].value.lower())
+        self.assertTrue(sources[1].available)
+
+    def test_connector_error_is_an_honest_fact_from_an_unavailable_source(self):
+        facts, sources = self._run(lambda cfs: {"status": "error", "call": None})
+        self.assertEqual(len(facts), 1)
+        self.assertIn("could not be retrieved", facts[0].value.lower())
+        self.assertFalse(sources[1].available)
+
+    def test_build_live_data_facts_threads_the_lookup_through(self):
+        facts, sources = build_live_data_facts(
+            "Can you pull CFS26-27243 and summarize it?",
+            cad_state=_cad_state(),
+            cad_status={"freshness": "fresh", "age_seconds": 5},
+            call_lookup_fn=lambda cfs: {"status": "ok", "call": _normalized_lookup_call()},
+        )
+        labels = {fact.label: fact.value for fact in facts}
+        self.assertEqual(labels["CFS26-27243 Incident"], "Complaint")
+        self.assertEqual(len(sources), 2)
+
+
 class ComputeAnalyticsFactsTests(unittest.TestCase):
     def test_returns_nothing_when_intent_does_not_want_analytics(self):
         facts, sources = compute_analytics_facts(LiveDataIntent(), overview={})

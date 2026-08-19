@@ -143,6 +143,19 @@ class Settings:
     cloud_cad_reconciliation_overlap_seconds: int = _env_int(
         "LCDASH_CLOUD_CAD_RECONCILIATION_OVERLAP_SECONDS", 120
     )
+    # Lets MAE fetch one call by CFS number from the read-only connector when
+    # it is not in the active snapshot (closed or older calls). Off by default:
+    # a deployment must opt in per review.
+    cloud_cad_call_lookup_enabled: bool = _env_bool(
+        "LCDASH_CLOUD_CAD_CALL_LOOKUP_ENABLED", False
+    )
+    # Command-log (narrative) lines stay out of MAE's answers unless this is
+    # explicitly enabled. Narratives are where CJI-adjacent content lives, so
+    # a deployment claiming non-CJI scope keeps this false and can prove it
+    # from the task definition.
+    cloud_cad_command_logs_enabled: bool = _env_bool(
+        "LCDASH_CLOUD_CAD_COMMAND_LOGS_ENABLED", False
+    )
     cloud_ai_mode: str = _env("LCDASH_CLOUD_AI_MODE", "advisory-rag").strip().lower()
     cloud_ai_knowledge_base_id: str = _env(
         "LCDASH_CLOUD_AI_KNOWLEDGE_BASE_ID"

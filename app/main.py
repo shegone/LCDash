@@ -2843,6 +2843,9 @@ def cloud_ai_advisory_api(
         analytics_overview_fn=lambda period: get_analytics_overview(
             period=period, tenant_context=tenant_context
         ),
+        cad_connector_provider=cloud_cad_connector_provider,
+        call_lookup_enabled=settings.cloud_cad_call_lookup_enabled,
+        include_command_logs=settings.cloud_cad_command_logs_enabled,
     )
     if result is None and settings.cloud_ai_tool_calling_enabled:
         result = answer_tool_calling_or_none(
@@ -2894,6 +2897,9 @@ def cloud_ai_advisory_stream_api(
         analytics_overview_fn=lambda period: get_analytics_overview(
             period=period, tenant_context=tenant_context
         ),
+        cad_connector_provider=cloud_cad_connector_provider,
+        call_lookup_enabled=settings.cloud_cad_call_lookup_enabled,
+        include_command_logs=settings.cloud_cad_command_logs_enabled,
     )
     if live_result is None and settings.cloud_ai_tool_calling_enabled:
         live_result = answer_tool_calling_or_none(
@@ -3204,6 +3210,9 @@ def mindshare_chat_api(
             analytics_overview_fn=lambda period: get_analytics_overview(
                 period=period, tenant_context=tenant_context
             ),
+            cad_connector_provider=cloud_cad_connector_provider,
+            call_lookup_enabled=settings.cloud_cad_call_lookup_enabled,
+            include_command_logs=settings.cloud_cad_command_logs_enabled,
         )
         if result is None:
             result = answer_cloud_advisory(
@@ -3259,6 +3268,9 @@ def mindshare_chat_stream_api(
             analytics_overview_fn=lambda period: get_analytics_overview(
                 period=period, tenant_context=tenant_context
             ),
+            cad_connector_provider=cloud_cad_connector_provider,
+            call_lookup_enabled=settings.cloud_cad_call_lookup_enabled,
+            include_command_logs=settings.cloud_cad_command_logs_enabled,
         )
         if result is None:
             result = answer_cloud_advisory(

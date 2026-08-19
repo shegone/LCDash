@@ -147,12 +147,17 @@ def compute_cad_facts(
     *,
     cad_state: Any,
     cad_status: Mapping[str, Any],
+    call_lookup_fn: Callable[[str], Mapping[str, Any]] | None = None,
+    include_command_logs: bool = False,
 ) -> tuple[tuple[VerifiedFact, ...], tuple[LiveDataSource, ...]]:
     """Compute facts from the already-polled, in-memory CAD snapshot.
 
     Reads only ``cad_state.calls``/``cad_state.units`` -- the same
     normalized, allowlisted tuples the dashboard and map already render.
-    Performs no new CAD API call.
+    Performs no new CAD API call itself; when a requested CFS number is not
+    in the snapshot and ``call_lookup_fn`` is provided, that callable makes
+    exactly one read-only ``get_call`` fetch (closed calls included) and
+    returns ``{"status": "ok"|"not_found"|"error", "call": <normalized>}``.
     """
     if not intent.wants_cad:
         return (), ()
@@ -194,6 +199,8 @@ def compute_cad_facts(
             )
             facts.append(VerifiedFact("Units by status", breakdown))
 
+    sources: list[LiveDataSource] = [source]
+
     if intent.wants_call_detail and intent.target_cfs_number:
         match = next(
             (
@@ -202,14 +209,7 @@ def compute_cad_facts(
             ),
             None,
         )
-        if match is None:
-            facts.append(
-                VerifiedFact(
-                    f"Call {intent.target_cfs_number}",
-                    "Not in the current active-call snapshot.",
-                )
-            )
-        else:
+        if match is not None:
             for label, field in (
                 ("Incident", "incident_description"),
                 ("Priority", "priority"),
@@ -220,8 +220,124 @@ def compute_cad_facts(
                 value = match.get(field)
                 if value not in (None, "", (), []):
                     facts.append(VerifiedFact(f"{intent.target_cfs_number} {label}", str(value)))
+        elif call_lookup_fn is None:
+            facts.append(
+                VerifiedFact(
+                    f"Call {intent.target_cfs_number}",
+                    "Not in the current active-call snapshot.",
+                )
+            )
+        else:
+            lookup_facts, lookup_source = _lookup_call_facts(
+                intent.target_cfs_number,
+                call_lookup_fn,
+                include_command_logs=include_command_logs,
+            )
+            facts.extend(lookup_facts)
+            sources.append(lookup_source)
 
-    return tuple(facts), (source,)
+    return tuple(facts), tuple(sources)
+
+
+# Command-log lines shown per call when narratives are enabled. Bounded so a
+# long-running incident cannot flood the fact list handed to the model.
+_COMMAND_LOG_FACT_LIMIT = 12
+_COMMAND_LOG_TEXT_LIMIT = 200
+
+
+def _lookup_call_facts(
+    cfs_number: str,
+    call_lookup_fn: Callable[[str], Mapping[str, Any]],
+    *,
+    include_command_logs: bool,
+) -> tuple[tuple[VerifiedFact, ...], LiveDataSource]:
+    """Facts for one call fetched live by CFS number (closed calls included).
+
+    The callable owns transport and normalization and never raises; it
+    reports ``status`` so a connector failure becomes an honest fact instead
+    of an invented answer or a silent fall-through to document RAG.
+    """
+    result = call_lookup_fn(cfs_number)
+    status = str(result.get("status") or "error")
+    call = result.get("call")
+
+    def _source(available: bool, detail: str) -> LiveDataSource:
+        return LiveDataSource(
+            name="CentralSquare CAD (live call lookup)",
+            kind="live",
+            detail=detail,
+            available=available,
+        )
+
+    if status == "not_found":
+        return (
+            (VerifiedFact(f"Call {cfs_number}", "No CAD record found for this call number."),),
+            _source(True, "Direct read-only fetch by CFS number"),
+        )
+    if status != "ok" or not isinstance(call, Mapping):
+        return (
+            (
+                VerifiedFact(
+                    f"Call {cfs_number}",
+                    "The live CAD record could not be retrieved right now.",
+                ),
+            ),
+            _source(False, "Direct read-only fetch by CFS number"),
+        )
+
+    facts: list[VerifiedFact] = []
+    for label, field in (
+        ("Incident", "incident_description"),
+        ("Priority", "priority"),
+        ("Status", "status"),
+        ("Call received", "call_datetime"),
+        ("Agency", "agency"),
+        ("Location", "location_label"),
+    ):
+        value = call.get(field)
+        if value not in (None, "", (), []):
+            facts.append(VerifiedFact(f"{cfs_number} {label}", str(value)))
+
+    assigned = call.get("assigned_units") or ()
+    unit_labels = [
+        f"{unit.get('unit_number')} ({unit.get('status') or 'Assigned'})"
+        for unit in assigned
+        if isinstance(unit, Mapping) and unit.get("unit_number")
+    ]
+    if unit_labels:
+        facts.append(VerifiedFact(f"{cfs_number} Assigned units", ", ".join(unit_labels)))
+
+    logs = call.get("command_logs") or ()
+    if include_command_logs and logs:
+        lines = []
+        for log in tuple(logs)[-_COMMAND_LOG_FACT_LIMIT:]:
+            if not isinstance(log, Mapping):
+                continue
+            text = str(log.get("text") or "").strip()
+            if not text:
+                continue
+            prefix = " ".join(
+                part for part in (str(log.get("timestamp") or "").strip(), str(log.get("unit_number") or "").strip())
+                if part
+            )
+            entry = f"{prefix}: {text}" if prefix else text
+            lines.append(entry[:_COMMAND_LOG_TEXT_LIMIT])
+        if lines:
+            facts.append(
+                VerifiedFact(
+                    f"{cfs_number} Command log (most recent {len(lines)})",
+                    " | ".join(lines),
+                )
+            )
+
+    if not facts:
+        facts.append(
+            VerifiedFact(
+                f"Call {cfs_number}",
+                "A CAD record exists but carries no reportable fields.",
+            )
+        )
+    return tuple(facts), _source(True, "Direct read-only fetch by CFS number")
 
 
 def compute_analytics_facts(
@@ -282,16 +398,24 @@ def build_live_data_facts(
     cad_state: Any,
     cad_status: Mapping[str, Any],
     analytics_overview_fn: Callable[[str], Mapping[str, Any]] | None = None,
+    call_lookup_fn: Callable[[str], Mapping[str, Any]] | None = None,
+    include_command_logs: bool = False,
 ) -> tuple[tuple[VerifiedFact, ...], tuple[LiveDataSource, ...]]:
     """Detect intent and compute every relevant fact for one question.
 
     ``analytics_overview_fn`` is called only if the question actually needs
     analytics data, so a purely operational question never touches the
-    database.
+    database. ``call_lookup_fn`` is called only when a CFS number is asked
+    about and missing from the snapshot, so ordinary questions never make a
+    new CAD request.
     """
     intent = detect_live_data_intent(question)
     cad_facts, cad_sources = compute_cad_facts(
-        intent, cad_state=cad_state, cad_status=cad_status
+        intent,
+        cad_state=cad_state,
+        cad_status=cad_status,
+        call_lookup_fn=call_lookup_fn,
+        include_command_logs=include_command_logs,
     )
     analytics_facts: tuple[VerifiedFact, ...] = ()
     analytics_sources: tuple[LiveDataSource, ...] = ()

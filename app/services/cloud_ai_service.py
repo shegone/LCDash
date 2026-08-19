@@ -8,7 +8,11 @@ from functools import cached_property
 import boto3
 
 from app.config.settings import Settings
-from app.integrations.cad.cloud_read_runtime import build_cloud_cad_connector
+from app.integrations.cad.cloud_read_connector import CloudCadConnectorError
+from app.integrations.cad.cloud_read_runtime import (
+    _normalize_calls,
+    build_cloud_cad_connector,
+)
 from app.integrations.cloud_ai import (
     AdvisoryRagRequest,
     AwsPollySpeechProvider,
@@ -152,6 +156,48 @@ def build_verified_live_advisory(
     )
 
 
+def build_call_lookup_fn(
+    cad_connector_provider: Any,
+) -> Any:
+    """Wrap the read-only connector's ``get_call`` for the verified-facts path.
+
+    Returns None when no connector is configured (cloud CAD disabled), so
+    ``build_live_data_facts`` keeps its unchanged snapshot-only behavior.
+    The returned callable never raises: transport failures become
+    ``{"status": "error"}`` and a CentralSquare 404 becomes ``"not_found"``,
+    which the fact builder renders as honest statements.
+    """
+    if cad_connector_provider is None:
+        return None
+
+    def _lookup(cfs_number: str) -> dict[str, Any]:
+        # Resolved here, not at wrap time, so the lazy connector (and its
+        # Secrets Manager fetch) is only ever built when a question actually
+        # names a CFS number missing from the snapshot.
+        connector = cad_connector_provider.connector
+        if connector is None:
+            return {"status": "error", "call": None}
+        try:
+            raw = connector.get_call(cfs_number)
+        except CloudCadConnectorError as error:
+            if getattr(error, "status_code", None) == 404:
+                return {"status": "not_found", "call": None}
+            return {"status": "error", "call": None}
+        except ValueError:
+            # get_call rejects CFS numbers unsafe for a URL path.
+            return {"status": "not_found", "call": None}
+        items = raw if isinstance(raw, list) else [raw]
+        items = [item for item in items if isinstance(item, dict)]
+        if not items:
+            return {"status": "not_found", "call": None}
+        normalized = _normalize_calls(items)
+        if not normalized:
+            return {"status": "not_found", "call": None}
+        return {"status": "ok", "call": normalized[0]}
+
+    return _lookup
+
+
 def answer_verified_live_or_none(
     advisory: VerifiedLiveAdvisory,
     *,
@@ -161,6 +207,9 @@ def answer_verified_live_or_none(
     cad_state: Any,
     cad_status: dict[str, Any],
     analytics_overview_fn: Any = None,
+    cad_connector_provider: Any = None,
+    call_lookup_enabled: bool = False,
+    include_command_logs: bool = False,
 ) -> dict[str, Any] | None:
     """Answer from verified live CAD/analytics facts, or return None.
 
@@ -170,11 +219,16 @@ def answer_verified_live_or_none(
     not silently fall through again, so a question never gets two different
     kinds of answer.
     """
+    call_lookup_fn = (
+        build_call_lookup_fn(cad_connector_provider) if call_lookup_enabled else None
+    )
     facts, data_sources = build_live_data_facts(
         question,
         cad_state=cad_state,
         cad_status=cad_status,
         analytics_overview_fn=analytics_overview_fn,
+        call_lookup_fn=call_lookup_fn,
+        include_command_logs=include_command_logs,
     )
     if not facts:
         return None

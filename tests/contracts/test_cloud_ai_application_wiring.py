@@ -261,5 +261,76 @@ class CloudAiApplicationWiringTests(unittest.TestCase):
         self.assertIn("No CAD, dispatch, paging, alert, radio, or ESInet tools", template)
 
 
+class BuildCallLookupFnTests(unittest.TestCase):
+    """The get_call wrapper the verified-facts path uses for CFS lookups."""
+
+    def test_returns_none_without_a_connector_provider(self):
+        from app.services.cloud_ai_service import build_call_lookup_fn
+
+        self.assertIsNone(build_call_lookup_fn(None))
+
+    def test_connector_is_resolved_lazily_not_at_wrap_time(self):
+        from app.services.cloud_ai_service import build_call_lookup_fn
+
+        class ExplodingProvider:
+            @property
+            def connector(self):
+                raise AssertionError("connector built before a lookup was needed")
+
+        # Wrapping must not touch the lazy connector; only calling may.
+        lookup = build_call_lookup_fn(ExplodingProvider())
+        self.assertTrue(callable(lookup))
+
+    def test_disabled_connector_reports_error_status(self):
+        from app.services.cloud_ai_service import build_call_lookup_fn
+
+        provider = SimpleNamespace(connector=None)
+        lookup = build_call_lookup_fn(provider)
+        self.assertEqual(lookup("CFS26-27243")["status"], "error")
+
+    def test_404_maps_to_not_found_and_other_errors_to_error(self):
+        from app.integrations.cad.cloud_read_connector import CloudCadConnectorError
+        from app.services.cloud_ai_service import build_call_lookup_fn
+
+        class Connector:
+            def __init__(self, error):
+                self._error = error
+
+            def get_call(self, cfs_number):
+                raise self._error
+
+        missing = CloudCadConnectorError("not_found", "get_call", status_code=404)
+        lookup = build_call_lookup_fn(SimpleNamespace(connector=Connector(missing)))
+        self.assertEqual(lookup("CFS26-27243")["status"], "not_found")
+
+        outage = CloudCadConnectorError("upstream_unavailable", "get_call", status_code=503)
+        lookup = build_call_lookup_fn(SimpleNamespace(connector=Connector(outage)))
+        self.assertEqual(lookup("CFS26-27243")["status"], "error")
+
+    def test_raw_call_is_normalized_to_the_snapshot_shape(self):
+        from app.services.cloud_ai_service import build_call_lookup_fn
+
+        raw = {
+            "CFSNumber": "CFS26-27243",
+            "Priority": {"Level": "30"},
+            "CallDateTime": "2026-08-19T02:25:18Z",
+            "CommandLog": [
+                {"Timestamp": "02:25", "Text": "Complaint reported at the ER."}
+            ],
+        }
+
+        class Connector:
+            def get_call(self, cfs_number):
+                return raw
+
+        lookup = build_call_lookup_fn(SimpleNamespace(connector=Connector()))
+        result = lookup("CFS26-27243")
+        self.assertEqual(result["status"], "ok")
+        call = result["call"]
+        self.assertEqual(call["cfs_number"], "CFS26-27243")
+        self.assertEqual(call["priority"], "30")
+        self.assertEqual(call["command_logs"][0]["text"], "Complaint reported at the ER.")
+
+
 if __name__ == "__main__":
     unittest.main()
