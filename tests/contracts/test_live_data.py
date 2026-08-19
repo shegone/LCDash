@@ -298,6 +298,34 @@ class CallLookupFallbackTests(unittest.TestCase):
         self.assertIn("Caller reports a complaint at the ER.", log_fact)
         self.assertIn("02:38 MED50: MED50 dispatched.", log_fact)
 
+    def test_timestamps_render_as_county_local_time_not_raw_iso(self):
+        call = _normalized_lookup_call(
+            command_logs=(
+                {
+                    "timestamp": "2026-08-19T19:10:40.935411Z",
+                    "unit_number": "LPD57",
+                    "text": "Assigned to the call.",
+                },
+            )
+        )
+        facts, _ = self._run(
+            lambda cfs: {"status": "ok", "call": call}, include_command_logs=True
+        )
+        labels = {fact.label: fact.value for fact in facts}
+        # 2026-08-19T02:25:18Z is 10:25:18 PM EDT on Aug 18.
+        self.assertEqual(
+            labels["CFS26-27243 Call received"], "08/18/2026 10:25:18 PM EDT"
+        )
+        log_fact = labels["CFS26-27243 Command log (most recent 1)"]
+        self.assertIn("08/19/2026 03:10:40 PM EDT LPD57: Assigned to the call.", log_fact)
+        self.assertNotIn("935411Z", log_fact)
+
+    def test_unparseable_timestamps_pass_through_unchanged(self):
+        call = _normalized_lookup_call(call_datetime="around suppertime")
+        facts, _ = self._run(lambda cfs: {"status": "ok", "call": call})
+        labels = {fact.label: fact.value for fact in facts}
+        self.assertEqual(labels["CFS26-27243 Call received"], "around suppertime")
+
     def test_not_found_is_an_honest_fact_from_an_available_source(self):
         facts, sources = self._run(lambda cfs: {"status": "not_found", "call": None})
         self.assertEqual(len(facts), 1)

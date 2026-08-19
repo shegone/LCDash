@@ -15,11 +15,31 @@ the same allowlisted, sanitized fields the dashboard and map already use
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import re
 from typing import Any, Callable, Mapping, Sequence
+from zoneinfo import ZoneInfo
 
 
 CFS_PATTERN = re.compile(r"\bCFS\d{2}-\d{4,6}\b", re.IGNORECASE)
+
+# Same county-local presentation on-prem MAE uses
+# (mae_service._format_mae_local_datetime): raw CAD ISO stamps like
+# "2026-08-19T19:10:40.935411Z" read as machine noise in an answer.
+LOCAL_TIMEZONE = ZoneInfo("America/New_York")
+
+
+def _format_local_time(timestamp_value: Any) -> str:
+    clean_value = str(timestamp_value or "").strip()
+    if not clean_value:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(clean_value.replace("Z", "+00:00"))
+    except ValueError:
+        return clean_value
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(LOCAL_TIMEZONE).strftime("%m/%d/%Y %I:%M:%S %p %Z")
 
 _ACTIVE_CALL_TERMS = re.compile(
     r"\b(active call|how many calls?|current call|call volume|call count)s?\b",
@@ -296,7 +316,8 @@ def _lookup_call_facts(
     ):
         value = call.get(field)
         if value not in (None, "", (), []):
-            facts.append(VerifiedFact(f"{cfs_number} {label}", str(value)))
+            rendered = _format_local_time(value) if field == "call_datetime" else str(value)
+            facts.append(VerifiedFact(f"{cfs_number} {label}", rendered))
 
     assigned = call.get("assigned_units") or ()
     unit_labels = [
@@ -317,7 +338,10 @@ def _lookup_call_facts(
             if not text:
                 continue
             prefix = " ".join(
-                part for part in (str(log.get("timestamp") or "").strip(), str(log.get("unit_number") or "").strip())
+                part for part in (
+                    _format_local_time(log.get("timestamp")),
+                    str(log.get("unit_number") or "").strip(),
+                )
                 if part
             )
             entry = f"{prefix}: {text}" if prefix else text
