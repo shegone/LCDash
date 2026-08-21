@@ -108,7 +108,7 @@
       "AWS::Cognito::UserPool": 1,
       "AWS::Cognito::UserPoolClient": 1,
       "AWS::Cognito::UserPoolDomain": 1,
-      "AWS::Cognito::UserPoolGroup": 4,
+      "AWS::Cognito::UserPoolGroup": 5,
       "AWS::EC2::InternetGateway": 1,
       "AWS::EC2::Route": 2,
       "AWS::EC2::RouteTable": 4,

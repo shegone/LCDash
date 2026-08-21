@@ -10,8 +10,10 @@
 
     // "avatar" is the conversation-only tier from the avatar plan: the
     // account can talk with MAE at /mae/avatar and reach nothing else.
-    const ROLES = ["user", "supervisor", "admin", "avatar"];
-    const ROLE_ORDER = { admin: 0, supervisor: 1, user: 2, avatar: 3 };
+    // "dispatcher" is supervisor minus MAE Avatar, Mindshare/JACK, and
+    // Tools & Quality.
+    const ROLES = ["user", "supervisor", "dispatcher", "admin", "avatar"];
+    const ROLE_ORDER = { admin: 0, supervisor: 1, dispatcher: 2, user: 3, avatar: 4 };
     const CONFIRM_WINDOW_MS = 5000;
 
     const loading = document.getElementById("admin-users-loading");

@@ -522,6 +522,18 @@ class Phase1FoundationStack(cdk.Stack):
         )
         cognito.CfnUserPoolGroup(
             self,
+            "PilotDispatcherGroup",
+            user_pool_id=user_pool.user_pool_id,
+            group_name="lcdash-pilot-dispatcher",
+            description=(
+                "Read-only supervisor-scope pilot access minus the avatar, "
+                "Mindshare, and quality surfaces; no tenant or operational "
+                "authority."
+            ),
+            precedence=15,
+        )
+        cognito.CfnUserPoolGroup(
+            self,
             "PilotAvatarGroup",
             user_pool_id=user_pool.user_pool_id,
             group_name="lcdash-pilot-avatar",

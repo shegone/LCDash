@@ -29,6 +29,12 @@
     mean exactly what it means server-side, a verified user-role caller. -#}
 {% set restricted = nav_identity.verified and nav_identity.role == "user" %}
 
+{#- The dispatcher tier (app/core/dispatcher_tier.py): supervisor minus MAE
+    Avatar, Mindshare/JACK, and Tools & Quality. Same rule as `restricted`:
+    only a VERIFIED dispatcher identity hides these entries, matching exactly
+    what the server-side gate denies. -#}
+{% set dispatcher = nav_identity.verified and nav_identity.role == "dispatcher" %}
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -113,13 +119,17 @@
                 {#- Avatar surface: inside the not-restricted block on purpose.
                     The user tier must not reach MAE, who narrates live CAD;
                     avatar-group accounts land on /mae/avatar directly and
-                    never see this sidebar at all. -#}
+                    never see this sidebar at all. Dispatchers keep MAE
+                    herself but not her avatar page or JACK. -#}
+                {% if not dispatcher %}
                 {{ nav_item("/mae/avatar", "bi-person-video3", "MAE Avatar", current_path == "/mae/avatar") }}
                 {{ nav_item("/mindshare", "bi-broadcast", "Mindshare / JACK", current_path.startswith("/mindshare")) }}
+                {% endif %}
                 {{ nav_item("/knowledge", "bi-journal-text", "Knowledge Library", current_path == "/knowledge") }}
             </div>
         </section>
 
+        {% if not dispatcher %}
         <section class="nav-section" aria-labelledby="nav-tools">
             <div class="nav-section-label" id="nav-tools">Tools & Quality</div>
             <div class="nav flex-column">
@@ -132,6 +142,7 @@
                 {% endif %}
             </div>
         </section>
+        {% endif %}
         {% endif %}
     </nav>
 </aside>

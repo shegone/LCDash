@@ -93,6 +93,33 @@ class CloudPilotRoleContractTests(unittest.TestCase):
                         ["lcdash-pilot-admin"], permission
                     )
 
+    def test_dispatcher_group_maps_precedence_and_permissions(self):
+        self.assertEqual(
+            resolve_pilot_role(["lcdash-pilot-dispatcher"]),
+            PilotRole.DISPATCHER,
+        )
+        # Supervisor outranks dispatcher; dispatcher outranks user and avatar.
+        self.assertEqual(
+            resolve_pilot_role(["lcdash-pilot-dispatcher", "lcdash-pilot-supervisor"]),
+            PilotRole.SUPERVISOR,
+        )
+        self.assertEqual(
+            resolve_pilot_role(["lcdash-pilot-dispatcher", "lcdash-pilot-user"]),
+            PilotRole.DISPATCHER,
+        )
+        self.assertEqual(
+            resolve_pilot_role(["lcdash-pilot-dispatcher", "lcdash-pilot-avatar"]),
+            PilotRole.DISPATCHER,
+        )
+        # Supervisor surface minus the avatar conversation, exactly.
+        self.assertEqual(
+            ROLE_PERMISSIONS[PilotRole.DISPATCHER],
+            ROLE_PERMISSIONS[PilotRole.SUPERVISOR] - {"avatar.converse"},
+        )
+        authorize_pilot_permission(["lcdash-pilot-dispatcher"], "rag.advisory.query")
+        with self.assertRaises(PilotAuthorizationDenied):
+            authorize_pilot_permission(["lcdash-pilot-dispatcher"], "avatar.converse")
+
     def test_avatar_group_maps_to_the_avatar_role(self):
         self.assertEqual(
             resolve_pilot_role(["lcdash-pilot-avatar"]),

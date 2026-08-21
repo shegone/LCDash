@@ -22,7 +22,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config.settings import settings
 from app.core.alb_identity import AlbIdentity, resolve_alb_identity
-from app.core import avatar_tier, sanitized_tier
+from app.core import avatar_tier, dispatcher_tier, sanitized_tier
 from app.core.cloud_pilot_roles import (
     PilotAuthorizationDenied,
     PilotRole,
@@ -1001,6 +1001,39 @@ async def restrict_avatar_tier(request: Request, call_next):
                     "detail": (
                         "This account is for talking with MAE only. "
                         "Ask an administrator if you need more access."
+                    )
+                },
+            )
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def restrict_dispatcher_tier(request: Request, call_next):
+    """Path gate for the dispatcher role: supervisor minus three areas.
+
+    Inverse short-circuit from the two allowlist gates above: the common
+    case (a path NOT on the denylist) skips identity resolution entirely,
+    and only requests into a blocked area pay for the signature check.
+    Only a verified dispatcher identity is denied; every other role passes
+    through untouched, so this gate cannot narrow what anyone else reaches.
+    """
+
+    if not dispatcher_tier.is_path_blocked_for_dispatcher(request.url.path):
+        return await call_next(request)
+
+    resolved = _resolve_pilot_identity(request)
+    if resolved is not None:
+        _identity, role = resolved
+        if dispatcher_tier.restricts(role):
+            logger.info(
+                "Dispatcher tier denied %s for %s", request.url.path, role
+            )
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "detail": (
+                        "This view is not part of the dispatcher role. "
+                        "Ask an administrator if you need access."
                     )
                 },
             )
@@ -2136,7 +2169,9 @@ def _require_cloud_report_identity(
 ) -> TenantContext:
     if tenant_context is None or tenant_context.tenant_id != settings.tenant_id:
         raise HTTPException(status_code=403, detail="Trusted tenant identity is required.")
-    if write and not tenant_context.roles.intersection({"supervisor", "admin"}):
+    if write and not tenant_context.roles.intersection(
+        {"supervisor", "dispatcher", "admin"}
+    ):
         raise HTTPException(status_code=403, detail="Supervisor report permission is required.")
     return tenant_context
 

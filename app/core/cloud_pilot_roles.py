@@ -36,6 +36,7 @@ class PilotRole(StrEnum):
 
     USER = "user"
     SUPERVISOR = "supervisor"
+    DISPATCHER = "dispatcher"
     ADMIN = "admin"
     AVATAR = "avatar"
 
@@ -43,6 +44,7 @@ class PilotRole(StrEnum):
 COGNITO_GROUP_ROLE_MAP = {
     "lcdash-pilot-user": PilotRole.USER,
     "lcdash-pilot-supervisor": PilotRole.SUPERVISOR,
+    "lcdash-pilot-dispatcher": PilotRole.DISPATCHER,
     "lcdash-pilot-admin": PilotRole.ADMIN,
     "lcdash-pilot-avatar": PilotRole.AVATAR,
 }
@@ -57,6 +59,10 @@ COGNITO_GROUP_ROLE_MAP = {
 ROLE_PRECEDENCE = {
     PilotRole.USER: 30,
     PilotRole.SUPERVISOR: 20,
+    # Between supervisor and user: someone in both the supervisor and
+    # dispatcher groups is a supervisor; someone in dispatcher and user
+    # groups is a dispatcher.
+    PilotRole.DISPATCHER: 25,
     PilotRole.ADMIN: 10,
     PilotRole.AVATAR: 40,
 }
@@ -90,6 +96,14 @@ ADMIN_PERMISSIONS = SUPERVISOR_PERMISSIONS | {
     "pilot.access.review",
 }
 
+# Dispatcher (scoped by Ted, 2026-08-20): everything a supervisor has --
+# live CAD, call detail, analytics, reports, knowledge, MAE herself --
+# except MAE's avatar page, Mindshare/JACK, and the Tools & Quality
+# section. Enforcement lives in app/core/dispatcher_tier.py (a denylist,
+# not an allowlist -- see that module for why); this set is the
+# vocabulary, kept in agreement.
+DISPATCHER_PERMISSIONS = SUPERVISOR_PERMISSIONS - {"avatar.converse"}
+
 # The avatar surface and nothing else. Deliberately NOT a superset of
 # USER_PERMISSIONS: an avatar account gets no dashboard, no map, no alerts.
 # ``user`` deliberately lacks avatar.converse -- MAE answers from live CAD,
@@ -99,6 +113,7 @@ AVATAR_PERMISSIONS = frozenset({"avatar.converse"})
 ROLE_PERMISSIONS = {
     PilotRole.USER: USER_PERMISSIONS,
     PilotRole.SUPERVISOR: SUPERVISOR_PERMISSIONS,
+    PilotRole.DISPATCHER: DISPATCHER_PERMISSIONS,
     PilotRole.ADMIN: ADMIN_PERMISSIONS,
     PilotRole.AVATAR: AVATAR_PERMISSIONS,
 }

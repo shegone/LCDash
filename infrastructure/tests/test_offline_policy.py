@@ -47,6 +47,7 @@ class OfflinePolicyTests(unittest.TestCase):
             "cognito_groups": [
                 "lcdash-pilot-user",
                 "lcdash-pilot-supervisor",
+                "lcdash-pilot-dispatcher",
                 "lcdash-pilot-admin",
                 "lcdash-pilot-avatar",
             ],

@@ -47,6 +47,9 @@
             <select id="admin-invite-role" name="role">
                 <option value="user">User</option>
                 <option value="supervisor" selected>Supervisor</option>
+                {#- Dispatcher: supervisor access minus MAE Avatar,
+                    Mindshare/JACK, and Tools & Quality. -#}
+                <option value="dispatcher">Dispatcher</option>
                 <option value="admin">Admin</option>
                 {#- Avatar-only: can talk with MAE at /mae/avatar and reach
                     nothing else. The booth/demo tier from the avatar plan. -#}
@@ -100,6 +103,6 @@
     </div>
 </section>
 
-<script src="/static/js/lcdash-admin-users.js?v=20260809-avatar-role"></script>
+<script src="/static/js/lcdash-admin-users.js?v=20260820-dispatcher-role"></script>
 </div>
 {% endblock %}
