@@ -75,6 +75,18 @@ PARAMETERIZED_PAGES = {
     "/calls/{cfs_number}": "/calls/CFS26-1234",
 }
 
+# Pages served verbatim as complete, self-contained HTML documents (one inline
+# <style> block, no /static/ stylesheets). The incident this suite guards -- a
+# block deleted from a shared static CSS file -- cannot affect them, and the
+# class extraction cannot evaluate them: their markup is built by JavaScript
+# template literals, so class="..." tokens found in the raw text include
+# un-rendered `${...}` fragments. They still render in the sweep; only the
+# static-stylesheet and class-backing checks are skipped, replaced by an
+# assertion that the inline style block is actually there and substantial.
+SELF_CONTAINED_PAGES = {
+    "/callflow-cards",  # Nexis Call Flow Cards build (templates/nexis_callflow_cards.html)
+}
+
 
 def _discover_html_pages() -> list[str]:
     paths = sorted({getattr(route, "path", "") for route in app.routes})
@@ -250,6 +262,14 @@ class PageRenderSmokeTests(_RenderSmokeTestCase):
         for path in pages:
             with self.subTest(path=path):
                 html = self._render(path)
+                if path in SELF_CONTAINED_PAGES:
+                    inline_css = _extract_inline_style_css(html)
+                    self.assertGreater(
+                        len(inline_css),
+                        500,
+                        f"{path} is registered self-contained but carries no real inline CSS",
+                    )
+                    continue
                 hrefs = _extract_stylesheet_hrefs(html)
                 self.assertTrue(hrefs, f"{path} links no stylesheets at all")
                 for href in hrefs:
@@ -270,6 +290,8 @@ class PageRenderSmokeTests(_RenderSmokeTestCase):
         pages = _discover_html_pages()
         failures: list[str] = []
         for path in pages:
+            if path in SELF_CONTAINED_PAGES:
+                continue
             html = self._render(path)
             hrefs = _extract_stylesheet_hrefs(html)
             rel_paths = [

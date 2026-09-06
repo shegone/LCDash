@@ -2696,6 +2696,28 @@ def knowledge_document_pdf(
     )
 
 
+@app.get("/callflow-cards")
+def callflow_cards_page():
+    """Nexis Call Flow Cards -- the NGA911 guide-card library as a clickable page.
+
+    A self-contained prototype build (both card editions inlined; no external
+    data or network calls), served verbatim rather than through Jinja so its
+    own template syntax can never collide with ours. It lives behind the ALB
+    login like every page; the user/avatar allowlist tiers do not include this
+    path, so only supervisor, dispatcher, and admin accounts reach it. The
+    page carries its own "prototype -- not for operational use" banner until
+    NGA911 authorizes operational use.
+    """
+    return FileResponse(
+        path="templates/nexis_callflow_cards.html",
+        media_type="text/html",
+        headers={
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
 @app.get("/mindshare")
 def mindshare_page(request: Request):
     presentation = _cloud_presentation_status(get_knowledge_status())

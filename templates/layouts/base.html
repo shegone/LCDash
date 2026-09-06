@@ -99,6 +99,7 @@
                 {% if not restricted %}
                 {{ nav_item("/active-calls", "bi-telephone-fill", "Active Calls", current_path == "/active-calls" or current_path.startswith("/calls/")) }}
                 {{ nav_item("/units", "bi-truck", "Units", current_path == "/units") }}
+                {{ nav_item("/callflow-cards", "bi-journal-medical", "Call Flow Cards", current_path == "/callflow-cards") }}
                 {% endif %}
                 {{ nav_item("/station-alerts", "bi-bell-fill", "Station Alerts", current_path == "/station-alerts") }}
                 {#- The heat map has no sidebar entry of its own for any role; it
