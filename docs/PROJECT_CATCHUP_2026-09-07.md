@@ -32,6 +32,18 @@ disagree, trust the code and live status.
   container carried placeholder AWS keys. It has not been merged and its
   base branch is now stale relative to `main`.
 
+## Deployment and service state at this record
+
+This record was written from a remote session without AWS credentials, so
+no live ECS, ALB, log, or cost state was verified. The last revision named
+in the repository record is task definition revision 83 of
+`lcdash-p1-logan-use1-web`, cited in the August 18 comment on PR #2 as the
+Rapport-enabled release under watch. Treat the running revision, task
+health, and month-to-date spend as unverified until a session with the
+read-only observer access or a human with console access confirms them.
+Nothing in this session started, stopped, deployed, or changed any service;
+everything that was running before this record was left running.
+
 ## Test state at this record
 
 With the application dependencies (`requirements-dev.txt`) and the CDK
@@ -216,8 +228,9 @@ what matters; the history explains why the code looks the way it does.
   `templates/nexis_callflow_cards.html`: card navigation with skill-card
   cross-links, a CPR metronome, and inline diagrams, with no external
   calls. Supervisor, dispatcher, and admin reach it; the user and avatar
-  tiers do not. The page carries its own "Prototype, not for operational
-  use, pending agency authorization and medical review" ribbon.
+  tiers do not. The page carries its own prototype ribbon stating that it
+  is not for operational use pending agency authorization and medical
+  review.
 - September 7 added original in-house diagrams for tourniquet application,
   direct pressure, and emergency delivery, and embedded two AI-generated
   demonstration clips (tourniquet, direct pressure) as data URIs, each
@@ -303,5 +316,12 @@ call by CFS number with command logs behind their own flag; and the Nexis
 Call Flow Cards prototype page exists behind a not-for-operational-use
 ribbon. No live CAD activation, credential, SES, certificate, or knowledge
 base gate was cleared in this period. Nothing on `.227` or `.15` was
-touched. The next work should start from the open gates above, and any
-further `.15` avatar work needs a pipeline decision first.
+touched.
+
+Exact next action: verify the live AWS state that this record could not
+(running revision, task and target health, spend against the USD 200
+budget), either by supplying the read-only observer credentials from PR #2
+to a remote session or by a human reading the console, and append the
+result to this document. After that, work the open gates above in the
+order listed; any further `.15` avatar work needs a pipeline decision
+first.
