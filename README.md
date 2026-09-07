@@ -37,6 +37,7 @@ supervisor tools, local AI, and controlled technical knowledge libraries.
 
 Operational and technical guides are maintained under `docs/`, including:
 
+- `PROJECT_CATCHUP_2026-09-07.md` - latest consolidated catch-up record
 - `SERVER_DEPLOYMENT.md`
 - `ANALYTICS_FOUNDATION.md`
 - `MAE_RELIABILITY.md`
