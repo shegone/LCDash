@@ -1,5 +1,9 @@
 # AWS Move Thread Handoff
 
+> **Superseded for current state.** This record is the August 5, 2026
+> snapshot. For everything since then, read
+> `docs/PROJECT_CATCHUP_2026-09-07.md` first.
+
 ## Current verified state — 2026-08-05
 
 The separate synthetic/disconnected Logan County cloud pilot is running in AWS
