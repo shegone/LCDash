@@ -10,7 +10,8 @@ verified, what is not, and the one next action.
 
 Point a new thread at this path. Verify live AWS state before deploying or
 changing anything; this snapshot records what is on disk and in Git, not
-what is running at `aws.logan911.com` (see "Not verified" below).
+what was running at `aws.logan911.com` until the "Live deployment" section
+below was verified on 2026-09-11.
 
 ## Repository state (verified 2026-09-11)
 
