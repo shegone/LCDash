@@ -13,9 +13,12 @@ the known-good on-premises code but has a different deployment objective.
 
 ## Non-negotiable boundary
 
-The production server at `.227`, its deployment branch, its secrets, its
+The retired on-premises server at `.227` (now the Hermes link's LLM host, not
+LCDash), its old deployment branch, its secrets, its
 database, and its running services are outside this workspace. Nothing in this
-workspace may deploy to, connect to, or reconfigure `.227`.
+workspace may deploy to, connect to, or reconfigure `.227`. Since 2026-09-14
+this workspace IS the only LCDash; there is no on-premises production to protect
+from it, only the Hermes host to leave alone.
 
 The AWS sandbox starts with synthetic data. Reuse of Logan County's existing
 CentralSquare API credentials is a later, separately approved read-only

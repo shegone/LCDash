@@ -1,5 +1,9 @@
 # Offline Agent Operations
 
+> **Partly retired 2026-09-14.** The `.227` side of this document described the
+> on-premises LCDash agent; there is no LCDash on `.227` any more. The `.15`
+> avatar-workstation procedures still apply.
+
 ## Purpose
 
 Use a local coding agent for routine LCDash, MAE, avatar, documentation, and

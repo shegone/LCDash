@@ -142,7 +142,7 @@ Build a secure web-based operations dashboard for Logan County 911 using the Cen
   Open Interpreter, Goose, Qwen Code, OpenHands, Cline, and Aider
 - Benchmark Qwen3.5 27B, Qwen3-Coder 30B-A3B, Devstral Small 2 24B,
   gpt-oss-20b, and GLM-4.7-Flash using the same local acceptance suite
-- Keep production `.227` workloads higher priority than coding inference
+- (Retired 2026-09-14: `.227` no longer runs LCDash; it hosts the Hermes LLM only.) Keep `.227` Hermes workloads higher priority than coding inference
 - Use PC `.15` for Unreal, MetaHuman, video generation, rendering, Pixel
   Streaming, and portrait LED output
 - Prefer structured browser DOM/accessibility tools; allow general Windows or

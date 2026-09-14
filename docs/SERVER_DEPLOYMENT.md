@@ -1,5 +1,9 @@
 # LCDash Server Deployment
 
+> **Retired 2026-09-14.** This describes the on-premises LCDash platform on
+> `.227`, which is no longer LCDash. The AWS pilot at `aws.logan911.com` is the
+> only LCDash; `.227` now hosts only the Hermes link's LLM. Kept as history.
+
 LCDash runs as a private Docker Compose platform on the Logan County server.
 
 ## Production services

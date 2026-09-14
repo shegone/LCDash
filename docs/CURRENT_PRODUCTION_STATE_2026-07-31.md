@@ -1,5 +1,9 @@
 # LCDash Production State - July 31, 2026
 
+> **Retired 2026-09-14.** This describes the on-premises LCDash platform on
+> `.227`, which is no longer LCDash. The AWS pilot at `aws.logan911.com` is the
+> only LCDash; `.227` now hosts only the Hermes link's LLM. Kept as history.
+
 This is a non-secret stopping-point record for the Logan County on-premises
 LCDash platform. It does not replace the protected credential record or the
 backup restore procedure.

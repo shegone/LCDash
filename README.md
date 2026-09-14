@@ -6,6 +6,12 @@ LCDash is a private public-safety operations platform that combines live
 CentralSquare CAD information, historical analytics, station alerting,
 supervisor tools, local AI, and controlled technical knowledge libraries.
 
+## Where it runs
+
+Since 2026-09-14 the AWS pilot is the only LCDash: account `862772137583`,
+`us-east-1`, `https://aws.logan911.com`, released from branch `main` through
+the guarded path in `AGENTS.md`. The on-premises platform on `.227` is retired.
+
 ## Current application areas
 
 - `/dashboard` - live operations overview
