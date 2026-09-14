@@ -154,20 +154,48 @@ class AlbIdentityTests(unittest.TestCase):
         self.assertEqual(identity.groups, ("lcdash-pilot-reviewer",))
         self.assertEqual(identity.email, "dispatcher@911logan.com")
 
-    def test_padded_alb_segments_are_accepted(self):
-        # The ALB emits base64url segments WITH '=' padding, which RFC 7515
-        # forbids and PyJWT 2.14.0 started rejecting ("Invalid payload
-        # padding"). That took the pilot's identity down 2026-09-11 to 09-14.
-        # The verifier must strip the padding itself rather than depend on
-        # the library's tolerance.
-        def pad(segment: str) -> str:
-            return segment + "=" * (-len(segment) % 4)
+    def _alb_token_as_the_load_balancer_emits_it(self, **claims) -> str:
+        """Padded base64url segments, signed over the padded bytes.
 
-        padded = ".".join(pad(part) for part in self._alb_token().split("."))
-        self.assertIn("=", padded, "test token must actually carry padding")
-        identity = self._resolve(self._headers(**{OIDC_DATA_HEADER: padded}))
+        This is the real ALB wire format (RFC 7515 forbids the padding, but
+        the ALB sends it), and it is what PyJWT 2.14.0 rejects. jwt.encode()
+        can only produce unpadded segments, so the token is built by hand.
+        """
+
+        import base64
+        import json
+
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.asymmetric import ec
+        from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
+
+        def segment(obj) -> str:
+            return base64.urlsafe_b64encode(json.dumps(obj).encode()).decode()
+
+        header = segment({"alg": "ES256", "kid": KEY_ID, "signer": ALB_ARN, "exp": time.time() + 300})
+        payload = segment({"sub": SUBJECT, "email": "dispatcher@911logan.com", **claims})
+        signing_input = f"{header}.{payload}".encode("ascii")
+        r, s = decode_dss_signature(self.alb_private.sign(signing_input, ec.ECDSA(hashes.SHA256())))
+        signature = base64.urlsafe_b64encode(r.to_bytes(32, "big") + s.to_bytes(32, "big")).decode()
+        return f"{header}.{payload}.{signature}"
+
+    def test_padded_alb_segments_are_accepted(self):
+        # PyJWT 2.14.0 rejects the ALB's padded segments ("Invalid payload
+        # padding"); that took the pilot's identity down 2026-09-11 to 09-14.
+        # The verifier must decode tolerantly AND verify the signature over
+        # the bytes as sent: stripping the padding first passes parsing and
+        # then fails every signature (the first attempt at the fix did this).
+        token = self._alb_token_as_the_load_balancer_emits_it()
+        self.assertIn("=", token.rsplit(".", 1)[0], "test token must carry padding in the signed part")
+        identity = self._resolve(self._headers(**{OIDC_DATA_HEADER: token}))
         self.assertIsNotNone(identity)
         self.assertEqual(identity.subject, SUBJECT)
+
+    def test_padded_alb_token_with_a_bad_signature_is_still_rejected(self):
+        token = self._alb_token_as_the_load_balancer_emits_it()
+        head, _sig = token.rsplit(".", 1)
+        forged = head + "." + "A" * len(_sig)
+        self.assertIsNone(self._resolve(self._headers(**{OIDC_DATA_HEADER: forged})))
 
     def test_groups_arriving_as_a_delimited_string_are_still_read(self):
         token = jwt.encode(

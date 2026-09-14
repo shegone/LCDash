@@ -28,6 +28,8 @@ access on a verification bug.
 
 from __future__ import annotations
 
+import base64
+import json
 import logging
 import threading
 import time
@@ -129,18 +131,11 @@ def _cognito_jwk_client(*, region: str, user_pool_id: str) -> jwt.PyJWKClient:
         return client
 
 
-def _strip_segment_padding(token: str) -> str:
-    """Return the token with base64 '=' padding removed from each segment.
+def _b64url_decode(segment: str) -> bytes:
+    """Decode one base64url segment whether or not it carries '=' padding."""
 
-    The load balancer emits its JWT with padded base64url segments, which
-    RFC 7515 forbids and which PyJWT began rejecting in 2.14.0 (released
-    2026-09-11; it took the pilot's identity down for three days). Padding
-    carries no information, so stripping it is lossless and the signature
-    still verifies over the stripped signing input, which is what the ALB
-    actually signed.
-    """
-
-    return ".".join(part.rstrip("=") for part in token.strip().split("."))
+    stripped = segment.strip().rstrip("=")
+    return base64.urlsafe_b64decode(stripped + "=" * (-len(stripped) % 4))
 
 
 def _verify_alb_assertion(
@@ -150,11 +145,27 @@ def _verify_alb_assertion(
     expected_alb_arn: str,
     keys: _AlbPublicKeys,
 ) -> Mapping[str, object]:
-    """Verify the load balancer's own signature over the userInfo claims."""
+    """Verify the load balancer's own signature over the userInfo claims.
 
-    token = _strip_segment_padding(token)
+    Parsed and verified by hand rather than through ``jwt.decode``: the load
+    balancer emits its segments WITH base64 '=' padding, which RFC 7515
+    forbids and which PyJWT began rejecting in 2.14.0 (2026-09-11; it took
+    the pilot's identity down for three days). The signature covers the
+    header and payload bytes exactly as sent, padding included, so the
+    signing input must be used verbatim and only the decoding of each
+    segment is padding-tolerant. Stripping the padding first (the first
+    attempt at this fix) parses fine and then fails every signature.
+    """
+
+    parts = token.strip().split(".")
+    if len(parts) != 3:
+        raise AlbIdentityError("ALB assertion header was unreadable.")
+    header_segment, payload_segment, signature_segment = parts
+
     try:
-        header = jwt.get_unverified_header(token)
+        header = json.loads(_b64url_decode(header_segment))
+        if not isinstance(header, dict):
+            raise ValueError("header is not an object")
     except Exception as exc:  # noqa: BLE001
         raise AlbIdentityError("ALB assertion header was unreadable.") from exc
 
@@ -167,8 +178,7 @@ def _verify_alb_assertion(
     if not expected_alb_arn or signer != expected_alb_arn:
         raise AlbIdentityError("ALB assertion was not signed by this load balancer.")
 
-    # The ALB puts expiry in the JWT *header*, which PyJWT does not police --
-    # it only validates payload claims. So check it explicitly.
+    # The ALB puts expiry in the JWT *header*, so check it explicitly.
     expires_at = header.get("exp")
     if expires_at is not None:
         try:
@@ -183,17 +193,20 @@ def _verify_alb_assertion(
 
     key = keys.get(region=region, key_id=key_id)
     try:
+        signing_input = f"{header_segment}.{payload_segment}".encode("ascii")
+        signature = _b64url_decode(signature_segment)
+        algorithm = jwt.algorithms.get_default_algorithms()["ES256"]
+        if not algorithm.verify(signing_input, key, signature):
+            raise ValueError("signature mismatch")
         # The payload holds arbitrary userInfo claims rather than standard
         # registered claims, so there is no audience or issuer to check here.
         # Provenance is established by the signature and the signer check above.
-        return jwt.decode(
-            token,
-            key=key,
-            algorithms=["ES256"],
-            options={"verify_aud": False, "verify_iss": False, "verify_exp": False},
-        )
+        claims = json.loads(_b64url_decode(payload_segment))
+        if not isinstance(claims, dict):
+            raise ValueError("payload is not an object")
     except Exception as exc:  # noqa: BLE001
         raise AlbIdentityError("ALB assertion signature was invalid.") from exc
+    return claims
 
 
 def _verify_cognito_access_token(
