@@ -5,6 +5,16 @@ Decision: Ted Sparks, 2026-09-14. The AWS pilot is the only LCDash. Server
 `14.1.1.227` keeps only the Hermes link's LLM (the two Hermes stacks, n8n and
 its backup sidecar). Everything LCDash on it is to be removed.
 
+**Status: COMPLETE 2026-09-14.** Part A (archive) was done by the agent. In
+Part B the agent removed the containers and images; Ted ran the volume,
+secrets, recordings, and data-folder deletions himself. Verified afterwards
+over SSH: zero LCDash volumes or containers, `/srv/lcdash-platform` gone,
+`/srv/lcdash-data` holds only `backups/` (n8n backups and the final archive,
+sha256 re-checked) and `lost+found`; `hermes-brain`, `hermes-media`, and
+`n8n` running and healthy; disk use 451 GB down to 327 GB. Still open outside
+the server: CentralSquare credential revocation and, last, the Google OAuth
+client.
+
 This record has two parts. Part A is done and verified. Part B is the
 deletion itself, which is irreversible and is run by a person, not an agent.
 
