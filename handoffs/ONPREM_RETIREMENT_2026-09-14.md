@@ -100,10 +100,12 @@ The data disk itself stays mounted for those.
 
 These are account-level changes and need you in the respective dashboards:
 
-- Cloudflare: delete the Zero Trust Access application for
-  `supervisor.logan911.com` (it still answers with an Access login page),
-  delete the tunnel that carried it and the alarm webhook, remove their DNS
-  records, and revoke the tunnel token.
+- Cloudflare: **done 2026-09-14** (Ted approved; performed in his browser session,
+  each item confirmed in Cloudflare's own dialog): Access applications
+  "LCDash Supervisor Portal" and "LCDash CentralSquare Webhooks" deleted,
+  DNS record `supervisor.logan911.com` deleted (zone 33 -> 32 records),
+  tunnel `lcdash-supervisor` deleted. The tunnel token in the secrets
+  directory is now useless and goes with step 4.
 - CentralSquare: the read credential and webhook secret that lived in the
   secrets directory are no longer used anywhere; ask the vendor to revoke
   them.
