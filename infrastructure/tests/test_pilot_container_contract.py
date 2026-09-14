@@ -35,12 +35,15 @@ class PilotContainerContractTests(unittest.TestCase):
         for line in self.source.splitlines():
             if line.startswith("COPY "):
                 normalized = re.sub(r"^COPY\s+--chown=\S+\s+", "", line)
-                copy_sources.append(normalized.split()[1 if normalized.startswith("COPY ") else 0])
+                tokens = normalized.split()
+                # Every source on the line, the destination dropped.
+                copy_sources.extend(tokens[1:-1] if tokens[0] == "COPY" else tokens[:-1])
 
         self.assertEqual(
             copy_sources,
             [
                 "requirements.txt",
+                "constraints.txt",
                 "app",
                 "config/counties/schema.json",
                 "config/counties/logan-synthetic.json",

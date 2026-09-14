@@ -16,6 +16,7 @@ APPROVED_INPUTS = (
     "Dockerfile.aws-pilot",
     "Dockerfile.aws-pilot-alpine-experimental",
     "requirements.txt",
+    "constraints.txt",
     "app",
     "config/counties/schema.json",
     "config/counties/logan-synthetic.json",

@@ -9,9 +9,9 @@ WORKDIR /app
 RUN addgroup --system lcdash \
     && adduser --system --ingroup lcdash lcdash
 
-COPY requirements.txt .
+COPY requirements.txt constraints.txt .
 RUN python -m pip install --upgrade pip \
-    && python -m pip install -r requirements.txt
+    && python -m pip install --constraint constraints.txt --requirement requirements.txt
 
 COPY app ./app
 COPY database ./database

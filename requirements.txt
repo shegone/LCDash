@@ -1,17 +1,22 @@
-fastapi>=0.139,<1
-uvicorn>=0.50,<1
-httpx>=0.28,<1
-boto3>=1.35,<2
+# Direct dependencies, pinned to the versions in the known-good image
+# (release-d3a26412939a, task definition revision 100, 2026-09-14).
+# constraints.txt pins the full transitive set; the Dockerfile installs with
+# both so a release build is reproducible. Bump deliberately, one line at a
+# time, and re-run the full suite: an open pin let PyJWT 2.14.0 into the
+# 2026-09-11 build and broke ALB identity for three days.
+
+fastapi==0.141.1
+uvicorn==0.52.4
+httpx==0.28.1
+boto3==1.43.93
 amazon-transcribe==0.6.4
 awscrt==0.26.1
 cryptography==45.0.7
-# <2.14: 2.14.0 rejects the padded base64 segments the ALB emits in x-amzn-oidc-data.
-# app/core/alb_identity.py now strips the padding itself; the ceiling is belt-and-braces.
-PyJWT>=2.10,<2.14
-python-dotenv>=1.2,<2
-jinja2>=3.1,<4
-psycopg[binary]>=3.2,<4
-pypdf>=6,<7
-python-docx>=1.2,<2
-reportlab>=4.2,<5
-python-multipart>=0.0.20,<1
+PyJWT==2.13.0
+python-dotenv==1.2.3
+jinja2==3.1.6
+psycopg[binary]==3.3.5
+pypdf==6.18.1
+python-docx==1.2.0
+reportlab==4.5.1
+python-multipart==0.0.32
