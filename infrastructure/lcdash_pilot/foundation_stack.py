@@ -7,6 +7,8 @@ from aws_cdk import (
     aws_budgets as budgets,
     aws_certificatemanager as acm,
     aws_cloudtrail as cloudtrail,
+    aws_cloudwatch as cloudwatch,
+    aws_cloudwatch_actions as cloudwatch_actions,
     aws_cognito as cognito,
     aws_ec2 as ec2,
     aws_ecr as ecr,
@@ -19,6 +21,8 @@ from aws_cdk import (
     aws_logs as logs,
     aws_rds as rds,
     aws_s3 as s3,
+    aws_sns as sns,
+    aws_sns_subscriptions as sns_subscriptions,
 )
 from constructs import Construct
 
@@ -156,6 +160,7 @@ class Phase1FoundationStack(cdk.Stack):
             retention=logs.RetentionDays.ONE_WEEK,
             removal_policy=cdk.RemovalPolicy.DESTROY,
         )
+        self._add_identity_rejection_alarm(log_group, parameters)
 
         task_role = iam.Role(
             self,
@@ -1499,6 +1504,66 @@ class Phase1FoundationStack(cdk.Stack):
                 conditions=region_condition,
             )
         )
+
+    def _add_identity_rejection_alarm(
+        self, log_group: logs.LogGroup, parameters: dict[str, cdk.CfnParameter]
+    ) -> None:
+        """Email the operator when ALB identity verification starts failing.
+
+        Every failed verification writes one warning and drops the caller into
+        the restricted fallback, which looks to the user like a permissions
+        problem rather than an outage. On 2026-09-11 a dependency change made
+        every request fail that way, and nobody knew for three days until a
+        user reported "restricted". Three rejections in five minutes is above
+        the noise floor (an expired session logs at most one or two before the
+        ALB sends the browser back to Cognito) and far below one dashboard
+        session's steady polling once verification is broken.
+
+        The topic reuses the budget subscriber address: it is the one operator
+        address the stack already holds, and the email subscription must be
+        confirmed once from that inbox before the first alert can arrive.
+        """
+
+        topic = sns.Topic(
+            self,
+            "OperationsAlerts",
+            topic_name=f"{NAME_PREFIX}-alerts",
+            display_name="LCDash pilot alerts",
+        )
+        topic.add_subscription(
+            sns_subscriptions.EmailSubscription(parameters["budget_email"].value_as_string)
+        )
+        rejections = logs.MetricFilter(
+            self,
+            "AlbIdentityRejections",
+            log_group=log_group,
+            filter_pattern=logs.FilterPattern.any_term(
+                "Rejected ALB identity headers",
+                "Denied ALB identity",
+                "ALB identity verification is not configured",
+            ),
+            metric_namespace="LCDash/Pilot",
+            metric_name="AlbIdentityRejections",
+            metric_value="1",
+            default_value=0,
+        )
+        alarm = cloudwatch.Alarm(
+            self,
+            "AlbIdentityRejectionAlarm",
+            alarm_name=f"{NAME_PREFIX}-alb-identity-rejections",
+            alarm_description=(
+                "LCDash pilot: the application is rejecting the identity the load "
+                "balancer forwards; signed-in users are landing in the restricted "
+                "fallback. Read the web log for the rejection reason."
+            ),
+            metric=rejections.metric(statistic="Sum", period=cdk.Duration.minutes(5)),
+            threshold=3,
+            evaluation_periods=1,
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+        )
+        alarm.add_alarm_action(cloudwatch_actions.SnsAction(topic))
+        alarm.add_ok_action(cloudwatch_actions.SnsAction(topic))
 
     def _add_budget(self, parameters: dict[str, cdk.CfnParameter]) -> None:
         subscriber = budgets.CfnBudget.SubscriberProperty(

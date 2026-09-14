@@ -40,6 +40,52 @@ class CdkTemplateTests(unittest.TestCase):
         self.template.resource_count_is("Custom::S3AutoDeleteObjects", 2)
         self.template.resource_count_is("AWS::Route53::RecordSet", 0)
 
+    def test_identity_rejections_page_the_operator(self):
+        # 2026-09-11: every request failed ALB identity verification for three
+        # days and nobody knew until a user reported "restricted". The log line
+        # the verifier writes on every failure must drive an alarm that emails
+        # the operator address the stack already holds.
+        self.template.resource_count_is("AWS::SNS::Topic", 1)
+        # One subscription, email only: the sns_alerts_exception in
+        # phase1_deployment_allowlist.json is scoped to exactly this.
+        self.template.resource_count_is("AWS::SNS::Subscription", 1)
+        self.template.has_resource_properties(
+            "AWS::SNS::Subscription",
+            {"Protocol": "email", "Endpoint": {"Ref": "BudgetSubscriberEmail"}},
+        )
+        self.template.has_resource_properties(
+            "AWS::Logs::MetricFilter",
+            {
+                "LogGroupName": {"Ref": Match.string_like_regexp("ApplicationLogs.*")},
+                "FilterPattern": Match.string_like_regexp(".*Rejected ALB identity headers.*"),
+                "MetricTransformations": [
+                    Match.object_like(
+                        {
+                            "MetricNamespace": "LCDash/Pilot",
+                            "MetricName": "AlbIdentityRejections",
+                            "MetricValue": "1",
+                        }
+                    )
+                ],
+            },
+        )
+        self.template.has_resource_properties(
+            "AWS::CloudWatch::Alarm",
+            {
+                "AlarmName": "lcdash-p1-logan-use1-alb-identity-rejections",
+                "Namespace": "LCDash/Pilot",
+                "MetricName": "AlbIdentityRejections",
+                "Statistic": "Sum",
+                "Period": 300,
+                "EvaluationPeriods": 1,
+                "Threshold": 3,
+                "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+                "TreatMissingData": "notBreaching",
+                "AlarmActions": [{"Ref": Match.string_like_regexp("OperationsAlerts.*")}],
+                "OKActions": [{"Ref": Match.string_like_regexp("OperationsAlerts.*")}],
+            },
+        )
+
     def test_database_uses_verified_postgresql_engine_version(self):
         self.template.has_resource_properties(
             "AWS::RDS::DBInstance",

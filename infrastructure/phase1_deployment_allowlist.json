@@ -28,7 +28,10 @@
     "image_digest_parameter": "PilotImageDigest",
     "initial_image_digest_value": "NOT_PUBLISHED",
     "activation_image_digest_pattern": "^sha256:[a-f0-9]{64}$",
-    "allowed_values": [0, 1],
+    "allowed_values": [
+      0,
+      1
+    ],
     "initial_foundation_value": 0,
     "later_reviewed_value": 1,
     "separate_authorization_required": true,
@@ -64,6 +67,8 @@
       "lcdash-p1-logan-use1-management",
       "/lcdash/lcdash-p1-logan-use1/web",
       "/aws/rds/instance/lcdash-p1-logan-use1-db/postgresql",
+      "lcdash-p1-logan-use1-alerts",
+      "lcdash-p1-logan-use1-alb-identity-rejections",
       "lcdash-pilot-viewer",
       "lcdash-pilot-reviewer"
     ],
@@ -105,6 +110,7 @@
     "lcdash-p1-logan-use1-foundation": {
       "AWS::Budgets::Budget": 2,
       "AWS::CloudTrail::Trail": 1,
+      "AWS::CloudWatch::Alarm": 1,
       "AWS::Cognito::UserPool": 1,
       "AWS::Cognito::UserPoolClient": 1,
       "AWS::Cognito::UserPoolDomain": 1,
@@ -132,10 +138,13 @@
       "AWS::IAM::Role": 6,
       "AWS::Lambda::Function": 1,
       "AWS::Logs::LogGroup": 3,
+      "AWS::Logs::MetricFilter": 1,
       "AWS::RDS::DBInstance": 1,
       "AWS::RDS::DBSubnetGroup": 1,
       "AWS::S3::Bucket": 2,
       "AWS::S3::BucketPolicy": 2,
+      "AWS::SNS::Subscription": 1,
+      "AWS::SNS::Topic": 1,
       "AWS::SecretsManager::Secret": 1,
       "AWS::SecretsManager::SecretTargetAttachment": 1,
       "Custom::S3AutoDeleteObjects": 2
@@ -169,12 +178,16 @@
     "AWS::EC2::NatGateway",
     "AWS::Route53::HostedZone",
     "AWS::Route53::RecordSet",
-    "AWS::SNS::Topic",
     "AWS::SQS::Queue"
   ],
   "listener_rule_exception": {
     "granted": "2026-08-14",
     "reason": "ListenerRule left prohibited_resource_types when AWS became the authoritative platform. The all-paths-authenticate rule broke first login: background requests (service worker, manifest, favicon) each restarted the ALB auth flow and clobbered the AWSALBAuthNonce the real login depended on, so every session's first Cognito callback got a 401. Exactly one rule is permitted, forwarding only the static secret-free paths in lcdash_pilot/config.py ALB_UNAUTHENTICATED_PATHS without authentication; test_cdk_template.py pins the count and the paths.",
+    "approved_by": "Ted Sparks"
+  },
+  "sns_alerts_exception": {
+    "granted": "2026-09-14",
+    "reason": "SNS::Topic left prohibited_resource_types for exactly one operator-alert topic (lcdash-p1-logan-use1-alerts). From 2026-09-11 15:10 to 2026-09-14 01:37 every request failed ALB identity verification (PyJWT 2.14.0 rejected the load balancer's padded JWT segments) and all 39 pilot users sat in the restricted fallback; the failure was logged on every request and nobody was told. The topic carries platform-health alarms only, never operational content; its only subscription is the email protocol to the BudgetSubscriberEmail operator address the stack already holds; test_cdk_template.py pins one topic, one email subscription, and the alarm that feeds it. Paging, station alerts, EMS delivery, public warning, and every other operational output remain prohibited.",
     "approved_by": "Ted Sparks"
   },
   "prohibited_scope": [
