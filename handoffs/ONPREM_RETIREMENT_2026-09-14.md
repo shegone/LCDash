@@ -34,9 +34,8 @@ Nothing was deleted in Part A.
 
 ## B. Deletion runbook (a person runs this)
 
-Run as `administrator` on `.227`, in order. Each step is separately
-reversible until step 4, which is the point of no return. Read the whole
-list first.
+Run as `administrator` on `.227`, in order. Steps 2b and 4 are the
+irreversible ones. Read the whole list first.
 
 ### 1. Confirm the archive is where you expect
 
@@ -49,29 +48,33 @@ Both must show 62790645 bytes and the sha256 above. Optionally copy the file
 to a second place you control (a USB drive or your workstation, never a Git
 repository) before continuing.
 
-### 2. Remove the compose project, its containers, and every LCDash volume
+### 2 and 3. Containers and images: done 2026-09-14 (volumes kept)
 
-This deletes the live database volume (229 MB), the Open WebUI data (chat
-history, 1 GB), the model caches (about 78 GB), and the rclone config volume.
+Run by the agent on Ted's instruction, with the data left in place:
+
+- `docker compose -p lcdash-platform down --remove-orphans` (without
+  `--volumes`): all 24 LCDash containers removed; the 12 named volumes are
+  untouched.
+- Every LCDash image removed, including the four Speaches and TTS images and
+  the Open WebUI, Open Terminal, Postgres, rclone, and cloudflared images.
+  `ollama/ollama:latest` was kept: it is the image `hermes-brain-ollama` runs
+  on. Disk went from 451 GB used to 406 GB.
+- Verified afterwards: `hermes-brain`, `hermes-media`, and `n8n` running and
+  healthy.
+
+### 2b. Delete the volumes (a person runs this; this is data)
+
+The database volume is the CAD-derived analytics history (archived in Part
+A), `openwebui_data` is chat history, and the rest are model caches and a
+tiny rclone config. All twelve go:
 
 ```bash
-cd /srv/lcdash-platform/current/deploy
-docker compose -p lcdash-platform down --volumes --remove-orphans
+docker volume rm lcdash-platform_lcdash_postgres_data lcdash-platform_lcdash_openwebui_data lcdash-platform_lcdash_rclone_config lcdash-platform_lcdash_open_terminal_data lcdash-platform_lcdash_open_webui_computer_data lcdash-platform_lcdash_synthetic_voice_library lcdash-platform_lcdash_ollama_data lcdash-platform_lcdash_chatterbox_models lcdash-platform_lcdash_parakeet_models lcdash-platform_lcdash_qwen3_tts_jack_models lcdash-platform_lcdash_qwen3_tts_models lcdash-platform_lcdash_speaches_models
 docker volume ls | grep lcdash
 ```
 
-The second command must print nothing.
-
-### 3. Remove the LCDash images (about 110 GB)
-
-```bash
-docker image ls --format '{{.Repository}}:{{.Tag}}' | grep -E '^(lcdash-|ghcr.io/open-webui/|ghcr.io/speaches-ai/|ollama/ollama|postgres:17|rclone/rclone|cloudflare/cloudflared)' | xargs -r docker image rm
-docker image prune -f
-```
-
-Hermes uses its own images under its own compose projects; this pattern does
-not touch them. Check with `docker compose ls` afterwards: `hermes-brain`,
-`hermes-media`, and `n8n` must still be running.
+The second command must print nothing. Note the rclone config volume is the
+one the offsite listing command in step 1 uses, so run step 1 first.
 
 ### 4. Remove the deployment tree and the data folders (point of no return)
 
