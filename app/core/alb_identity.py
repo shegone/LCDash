@@ -129,6 +129,20 @@ def _cognito_jwk_client(*, region: str, user_pool_id: str) -> jwt.PyJWKClient:
         return client
 
 
+def _strip_segment_padding(token: str) -> str:
+    """Return the token with base64 '=' padding removed from each segment.
+
+    The load balancer emits its JWT with padded base64url segments, which
+    RFC 7515 forbids and which PyJWT began rejecting in 2.14.0 (released
+    2026-09-11; it took the pilot's identity down for three days). Padding
+    carries no information, so stripping it is lossless and the signature
+    still verifies over the stripped signing input, which is what the ALB
+    actually signed.
+    """
+
+    return ".".join(part.rstrip("=") for part in token.strip().split("."))
+
+
 def _verify_alb_assertion(
     token: str,
     *,
@@ -138,6 +152,7 @@ def _verify_alb_assertion(
 ) -> Mapping[str, object]:
     """Verify the load balancer's own signature over the userInfo claims."""
 
+    token = _strip_segment_padding(token)
     try:
         header = jwt.get_unverified_header(token)
     except Exception as exc:  # noqa: BLE001

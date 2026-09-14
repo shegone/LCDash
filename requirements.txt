@@ -5,7 +5,9 @@ boto3>=1.35,<2
 amazon-transcribe==0.6.4
 awscrt==0.26.1
 cryptography==45.0.7
-PyJWT>=2.10,<3
+# <2.14: 2.14.0 rejects the padded base64 segments the ALB emits in x-amzn-oidc-data.
+# app/core/alb_identity.py now strips the padding itself; the ceiling is belt-and-braces.
+PyJWT>=2.10,<2.14
 python-dotenv>=1.2,<2
 jinja2>=3.1,<4
 psycopg[binary]>=3.2,<4

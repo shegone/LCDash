@@ -154,6 +154,21 @@ class AlbIdentityTests(unittest.TestCase):
         self.assertEqual(identity.groups, ("lcdash-pilot-reviewer",))
         self.assertEqual(identity.email, "dispatcher@911logan.com")
 
+    def test_padded_alb_segments_are_accepted(self):
+        # The ALB emits base64url segments WITH '=' padding, which RFC 7515
+        # forbids and PyJWT 2.14.0 started rejecting ("Invalid payload
+        # padding"). That took the pilot's identity down 2026-09-11 to 09-14.
+        # The verifier must strip the padding itself rather than depend on
+        # the library's tolerance.
+        def pad(segment: str) -> str:
+            return segment + "=" * (-len(segment) % 4)
+
+        padded = ".".join(pad(part) for part in self._alb_token().split("."))
+        self.assertIn("=", padded, "test token must actually carry padding")
+        identity = self._resolve(self._headers(**{OIDC_DATA_HEADER: padded}))
+        self.assertIsNotNone(identity)
+        self.assertEqual(identity.subject, SUBJECT)
+
     def test_groups_arriving_as_a_delimited_string_are_still_read(self):
         token = jwt.encode(
             {
