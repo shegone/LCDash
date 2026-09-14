@@ -71,7 +71,11 @@ class IamPolicyTemplateTests(unittest.TestCase):
         self.assertFalse(self.trust["session"]["long_lived_access_keys_allowed"])
         self.assertEqual(self.trust["service_principals_allowed_to_assume_operator_role"], [])
 
-    def test_cloudformation_scope_is_exactly_three_reviewed_stacks(self):
+    def test_cloudformation_scope_is_exactly_the_four_reviewed_stacks(self):
+        # The release-builder stack joined the scope 2026-09-14: the guarded
+        # release path deploys it to publish the source asset before every
+        # CodeBuild, and until then only the admin permission set could run
+        # a release (seen during the identity-outage fix).
         statement = statements(self.deployment)["OperateOnlyApprovedCloudFormationStacks"]
         self.assertEqual(
             set(statement["Resource"]),
@@ -79,8 +83,48 @@ class IamPolicyTemplateTests(unittest.TestCase):
                 f"arn:aws:cloudformation:{REGION}:{ACCOUNT}:stack/CDKToolkit/*",
                 f"arn:aws:cloudformation:{REGION}:{ACCOUNT}:stack/lcdash-p1-logan-use1-certificate/*",
                 f"arn:aws:cloudformation:{REGION}:{ACCOUNT}:stack/lcdash-p1-logan-use1-foundation/*",
+                f"arn:aws:cloudformation:{REGION}:{ACCOUNT}:stack/lcdash-p1-logan-use1-release-builder/*",
             },
         )
+
+    def test_release_builds_are_scoped_to_the_one_project(self):
+        statement = statements(self.deployment)["StartAndWatchReleaseBuildsOnly"]
+        self.assertEqual(
+            statement["Resource"],
+            f"arn:aws:codebuild:{REGION}:{ACCOUNT}:project/lcdash-p1-logan-use1-release-builder",
+        )
+        self.assertNotIn("codebuild:CreateProject", actions(statement))
+        self.assertNotIn("codebuild:UpdateProject", actions(statement))
+
+    def test_runtime_verification_grants_are_read_only(self):
+        # Rollback is a change set with an older digest, never a direct
+        # service update, so the deployment set gets describe/list/read only.
+        for sid in (
+            "ReadPilotRuntimeStateForReleaseVerification",
+            "ReadPilotImagesLogsAndAlertTopicOnly",
+        ):
+            for action in actions(statements(self.deployment)[sid]):
+                verb = action.split(":", 1)[1]
+                self.assertTrue(
+                    verb.startswith(("Describe", "List", "Get", "Filter")), action
+                )
+        self.assertNotIn("ecs:UpdateService", json.dumps(self.deployment))
+
+    def test_boundary_lets_the_deployment_set_assume_only_bootstrap_roles(self):
+        # The deployment policy always allowed sts:AssumeRole on the CDK
+        # bootstrap roles, but the boundary never did, so the effective
+        # permission was nothing and every cdk deploy fell back to the
+        # caller's own (insufficient) credentials. Both must agree.
+        statement = statements(self.boundary)["AllowAssumingBootstrapRolesOnly"]
+        self.assertEqual(statement["Resource"], f"arn:aws:iam::{ACCOUNT}:role/cdk-hnb659fds-*")
+        self.assertEqual(set(actions(statement)), {"sts:AssumeRole", "sts:TagSession"})
+        region_deny = statements(self.boundary)["DenyOutsideUsEast1ForRegionalActions"]
+        for action in ("sts:AssumeRole", "sts:TagSession"):
+            self.assertIn(action, region_deny["NotAction"])
+        allowed = actions(statements(self.boundary)["AllowApprovedRegionalServicesWithinBoundary"])
+        self.assertIn("codebuild:*", allowed)
+        self.assertNotIn("sns:*", allowed)
+        self.assertNotIn("sns:Publish", allowed)
 
     def test_boundary_uses_only_valid_budget_permission_families(self):
         statement = statements(self.boundary)["AllowPhase1BudgetManagement"]

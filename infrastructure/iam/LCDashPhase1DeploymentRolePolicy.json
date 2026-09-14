@@ -30,7 +30,8 @@
       "Resource": [
         "arn:aws:cloudformation:us-east-1:862772137583:stack/CDKToolkit/*",
         "arn:aws:cloudformation:us-east-1:862772137583:stack/lcdash-p1-logan-use1-certificate/*",
-        "arn:aws:cloudformation:us-east-1:862772137583:stack/lcdash-p1-logan-use1-foundation/*"
+        "arn:aws:cloudformation:us-east-1:862772137583:stack/lcdash-p1-logan-use1-foundation/*",
+        "arn:aws:cloudformation:us-east-1:862772137583:stack/lcdash-p1-logan-use1-release-builder/*"
       ]
     },
     {
@@ -135,6 +136,59 @@
         "ssm:DeleteParameter"
       ],
       "Resource": "arn:aws:ssm:us-east-1:862772137583:parameter/cdk-bootstrap/hnb659fds/version"
+    },
+    {
+      "Sid": "StartAndWatchReleaseBuildsOnly",
+      "Effect": "Allow",
+      "Action": [
+        "codebuild:StartBuild",
+        "codebuild:StopBuild",
+        "codebuild:BatchGetBuilds"
+      ],
+      "Resource": "arn:aws:codebuild:us-east-1:862772137583:project/lcdash-p1-logan-use1-release-builder"
+    },
+    {
+      "Sid": "ReadPilotRuntimeStateForReleaseVerification",
+      "Effect": "Allow",
+      "Action": [
+        "ecs:DescribeClusters",
+        "ecs:DescribeServices",
+        "ecs:DescribeTaskDefinition",
+        "ecs:DescribeTasks",
+        "ecs:ListClusters",
+        "ecs:ListServices",
+        "ecs:ListTasks",
+        "ecs:ListTaskDefinitions",
+        "elasticloadbalancing:DescribeLoadBalancers",
+        "elasticloadbalancing:DescribeListeners",
+        "elasticloadbalancing:DescribeRules",
+        "elasticloadbalancing:DescribeTargetGroups",
+        "elasticloadbalancing:DescribeTargetHealth",
+        "logs:DescribeLogGroups",
+        "cloudwatch:DescribeAlarms"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadPilotImagesLogsAndAlertTopicOnly",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:DescribeRepositories",
+        "ecr:DescribeImages",
+        "ecr:DescribeImageScanFindings",
+        "ecr:ListImages",
+        "logs:DescribeLogStreams",
+        "logs:FilterLogEvents",
+        "logs:GetLogEvents",
+        "sns:GetTopicAttributes",
+        "sns:ListSubscriptionsByTopic"
+      ],
+      "Resource": [
+        "arn:aws:ecr:us-east-1:862772137583:repository/lcdash-p1-logan-use1-web",
+        "arn:aws:logs:us-east-1:862772137583:log-group:/lcdash/lcdash-p1-logan-use1/*",
+        "arn:aws:logs:us-east-1:862772137583:log-group:/aws/codebuild/lcdash-p1-logan-use1-*",
+        "arn:aws:sns:us-east-1:862772137583:lcdash-p1-logan-use1-alerts"
+      ]
     },
     {
       "Sid": "DenyUnapprovedRegions",

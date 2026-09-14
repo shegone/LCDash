@@ -8,6 +8,8 @@
         "acm:*",
         "cloudformation:*",
         "cloudtrail:*",
+        "cloudwatch:DescribeAlarms",
+        "codebuild:*",
         "cognito-idp:*",
         "ec2:*",
         "ecr:*",
@@ -18,10 +20,12 @@
         "rds:*",
         "s3:*",
         "secretsmanager:*",
+        "sns:GetTopicAttributes",
+        "sns:ListSubscriptionsByTopic",
+        "ssm:DeleteParameter",
         "ssm:GetParameter",
         "ssm:GetParameters",
-        "ssm:PutParameter",
-        "ssm:DeleteParameter"
+        "ssm:PutParameter"
       ],
       "Resource": "*",
       "Condition": {
@@ -100,12 +104,23 @@
       "Resource": "*"
     },
     {
+      "Sid": "AllowAssumingBootstrapRolesOnly",
+      "Effect": "Allow",
+      "Action": [
+        "sts:AssumeRole",
+        "sts:TagSession"
+      ],
+      "Resource": "arn:aws:iam::862772137583:role/cdk-hnb659fds-*"
+    },
+    {
       "Sid": "DenyOutsideUsEast1ForRegionalActions",
       "Effect": "Deny",
       "NotAction": [
         "budgets:*",
         "iam:*",
-        "sts:GetCallerIdentity"
+        "sts:GetCallerIdentity",
+        "sts:AssumeRole",
+        "sts:TagSession"
       ],
       "Resource": "*",
       "Condition": {
