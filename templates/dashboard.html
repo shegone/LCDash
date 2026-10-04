@@ -106,7 +106,7 @@
                 <div class="realtime-detail" id="realtime-last-event">
                     30-second backup active
                 </div>
-                {%- if not restricted %}
+                {%- if not restricted and not fire_officer %}
                 <a class="realtime-health-link" href="/integrations/health">
                     Delivery health
                 </a>

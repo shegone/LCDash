@@ -539,6 +539,18 @@ class Phase1FoundationStack(cdk.Stack):
         )
         cognito.CfnUserPoolGroup(
             self,
+            "PilotFireOfficerGroup",
+            user_pool_id=user_pool.user_pool_id,
+            group_name="lcdash-pilot-fire-officer",
+            description=(
+                "Read-only live operations access with full call detail for "
+                "fire officers; no analytics, reports, knowledge, MAE, or "
+                "quality surfaces, and no tenant or operational authority."
+            ),
+            precedence=18,
+        )
+        cognito.CfnUserPoolGroup(
+            self,
             "PilotAvatarGroup",
             user_pool_id=user_pool.user_pool_id,
             group_name="lcdash-pilot-avatar",

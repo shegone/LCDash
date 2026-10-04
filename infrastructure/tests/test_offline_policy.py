@@ -48,6 +48,7 @@ class OfflinePolicyTests(unittest.TestCase):
                 "lcdash-pilot-user",
                 "lcdash-pilot-supervisor",
                 "lcdash-pilot-dispatcher",
+                "lcdash-pilot-fire-officer",
                 "lcdash-pilot-admin",
                 "lcdash-pilot-avatar",
             ],

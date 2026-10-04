@@ -35,6 +35,13 @@
     what the server-side gate denies. -#}
 {% set dispatcher = nav_identity.verified and nav_identity.role == "dispatcher" %}
 
+{#- The fire-officer tier (app/core/fire_officer_tier.py): live operations with
+    full call detail and nothing else. Same rule as `restricted` -- only a
+    VERIFIED fire-officer identity -- and the same job: hide what the server
+    would 403 anyway. Unlike `restricted` this is NOT a data reduction; the
+    pages render the full call. -#}
+{% set fire_officer = nav_identity.verified and nav_identity.role == "fire_officer" %}
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -99,7 +106,9 @@
                 {% if not restricted %}
                 {{ nav_item("/active-calls", "bi-telephone-fill", "Active Calls", current_path == "/active-calls" or current_path.startswith("/calls/")) }}
                 {{ nav_item("/units", "bi-truck", "Units", current_path == "/units") }}
+                {% if not fire_officer %}
                 {{ nav_item("/callflow-cards", "bi-journal-medical", "Call Flow Cards", current_path == "/callflow-cards") }}
+                {% endif %}
                 {% endif %}
                 {{ nav_item("/station-alerts", "bi-bell-fill", "Station Alerts", current_path == "/station-alerts") }}
                 {#- The heat map has no sidebar entry of its own for any role; it
@@ -109,7 +118,7 @@
             </div>
         </section>
 
-        {% if not restricted %}
+        {% if not restricted and not fire_officer %}
         <section class="nav-section" aria-labelledby="nav-intelligence">
             <div class="nav-section-label" id="nav-intelligence">Intelligence</div>
             <div class="nav flex-column">

@@ -18,6 +18,13 @@ class PilotRole(StrEnum):
     patient and reporter PII. ``ADMIN`` adds pilot access review on top and
     nothing else -- it confers no AWS, Cognito, or tenant authority.
 
+    ``FIRE_OFFICER`` is live operations with full call detail and nothing
+    else: dashboard, active calls, call detail, units, station alerts, and the
+    live map -- no analytics, reports, knowledge, MAE, Mindshare/JACK, or tools.
+    Enforcement is app/core/fire_officer_tier.py's deny-by-default path
+    allowlist; unlike ``USER`` there is no field-sanitizing half, because
+    seeing the whole call is the point of the role.
+
     ``AVATAR`` is not on that ladder: it is the conversation-only surface
     from the avatar plan (docs/planning/MAE_AVATAR_PLAN_2026-08-09.md).
     An avatar-group account can talk to MAE's face at ``/mae/avatar`` and
@@ -37,6 +44,7 @@ class PilotRole(StrEnum):
     USER = "user"
     SUPERVISOR = "supervisor"
     DISPATCHER = "dispatcher"
+    FIRE_OFFICER = "fire_officer"
     ADMIN = "admin"
     AVATAR = "avatar"
 
@@ -45,6 +53,7 @@ COGNITO_GROUP_ROLE_MAP = {
     "lcdash-pilot-user": PilotRole.USER,
     "lcdash-pilot-supervisor": PilotRole.SUPERVISOR,
     "lcdash-pilot-dispatcher": PilotRole.DISPATCHER,
+    "lcdash-pilot-fire-officer": PilotRole.FIRE_OFFICER,
     "lcdash-pilot-admin": PilotRole.ADMIN,
     "lcdash-pilot-avatar": PilotRole.AVATAR,
 }
@@ -63,6 +72,9 @@ ROLE_PRECEDENCE = {
     # dispatcher groups is a supervisor; someone in dispatcher and user
     # groups is a dispatcher.
     PilotRole.DISPATCHER: 25,
+    # Between dispatcher and user: dispatcher + fire officer is a dispatcher
+    # (the wider role wins); fire officer + user is a fire officer.
+    PilotRole.FIRE_OFFICER: 28,
     PilotRole.ADMIN: 10,
     PilotRole.AVATAR: 40,
 }
@@ -104,6 +116,14 @@ ADMIN_PERMISSIONS = SUPERVISOR_PERMISSIONS | {
 # vocabulary, kept in agreement.
 DISPATCHER_PERMISSIONS = SUPERVISOR_PERMISSIONS - {"avatar.converse"}
 
+# Fire officer (scoped by Ted): live operations with full call detail, and
+# nothing else -- no analytics, reports, knowledge, MAE, Mindshare/JACK, or
+# tools. The permission vocabulary is the restricted tier's four views; the
+# difference from ``user`` is that the data is unreduced, which is enforced by
+# the path gate in app/core/fire_officer_tier.py and by NOT being listed in
+# sanitized_tier.restricts. Kept in agreement with that module.
+FIRE_OFFICER_PERMISSIONS = USER_PERMISSIONS
+
 # The avatar surface and nothing else. Deliberately NOT a superset of
 # USER_PERMISSIONS: an avatar account gets no dashboard, no map, no alerts.
 # ``user`` deliberately lacks avatar.converse -- MAE answers from live CAD,
@@ -114,6 +134,7 @@ ROLE_PERMISSIONS = {
     PilotRole.USER: USER_PERMISSIONS,
     PilotRole.SUPERVISOR: SUPERVISOR_PERMISSIONS,
     PilotRole.DISPATCHER: DISPATCHER_PERMISSIONS,
+    PilotRole.FIRE_OFFICER: FIRE_OFFICER_PERMISSIONS,
     PilotRole.ADMIN: ADMIN_PERMISSIONS,
     PilotRole.AVATAR: AVATAR_PERMISSIONS,
 }

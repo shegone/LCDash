@@ -12,8 +12,11 @@
     // account can talk with MAE at /mae/avatar and reach nothing else.
     // "dispatcher" is supervisor minus MAE Avatar, Mindshare/JACK, and
     // Tools & Quality.
-    const ROLES = ["user", "supervisor", "dispatcher", "admin", "avatar"];
-    const ROLE_ORDER = { admin: 0, supervisor: 1, dispatcher: 2, user: 3, avatar: 4 };
+    // "fire_officer" is live operations with full call detail and nothing
+    // else: no analytics, reports, knowledge, MAE, or tools.
+    const ROLES = ["user", "supervisor", "dispatcher", "fire_officer", "admin", "avatar"];
+    const ROLE_ORDER = { admin: 0, supervisor: 1, dispatcher: 2, fire_officer: 3, user: 4, avatar: 5 };
+    const DISABLED_BAND = 6;
     const CONFIRM_WINDOW_MS = 5000;
 
     const loading = document.getElementById("admin-users-loading");
@@ -80,8 +83,8 @@
     // accounts, disabled accounts last; alphabetical by email within each band.
     function sortUsers(users) {
         return users.slice().sort(function (a, b) {
-            const bandA = a.enabled ? (ROLE_ORDER[a.role] !== undefined ? ROLE_ORDER[a.role] : 2) : 4;
-            const bandB = b.enabled ? (ROLE_ORDER[b.role] !== undefined ? ROLE_ORDER[b.role] : 2) : 4;
+            const bandA = a.enabled ? (ROLE_ORDER[a.role] !== undefined ? ROLE_ORDER[a.role] : 2) : DISABLED_BAND;
+            const bandB = b.enabled ? (ROLE_ORDER[b.role] !== undefined ? ROLE_ORDER[b.role] : 2) : DISABLED_BAND;
             if (bandA !== bandB) return bandA - bandB;
             return String(a.email).localeCompare(String(b.email));
         });
@@ -148,7 +151,9 @@
         ROLES.forEach(function (role) {
             const option = document.createElement("option");
             option.value = role;
-            option.textContent = role.charAt(0).toUpperCase() + role.slice(1);
+            option.textContent = role === "fire_officer"
+                ? "Fire Officer"
+                : role.charAt(0).toUpperCase() + role.slice(1);
             select.appendChild(option);
         });
         select.value = ROLES.includes(user.role) ? user.role : "user";

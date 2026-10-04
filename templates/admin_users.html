@@ -50,6 +50,9 @@
                 {#- Dispatcher: supervisor access minus MAE Avatar,
                     Mindshare/JACK, and Tools & Quality. -#}
                 <option value="dispatcher">Dispatcher</option>
+                {#- Fire officer: live operations with full call detail only.
+                    No analytics, reports, knowledge, MAE, or tools. -#}
+                <option value="fire_officer">Fire Officer</option>
                 <option value="admin">Admin</option>
                 {#- Avatar-only: can talk with MAE at /mae/avatar and reach
                     nothing else. The booth/demo tier from the avatar plan. -#}
@@ -103,6 +106,6 @@
     </div>
 </section>
 
-<script src="/static/js/lcdash-admin-users.js?v=20260820-dispatcher-role"></script>
+<script src="/static/js/lcdash-admin-users.js?v=20261003-fire-officer-role"></script>
 </div>
 {% endblock %}

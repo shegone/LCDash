@@ -22,7 +22,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config.settings import settings
 from app.core.alb_identity import AlbIdentity, resolve_alb_identity
-from app.core import avatar_tier, dispatcher_tier, sanitized_tier
+from app.core import avatar_tier, dispatcher_tier, fire_officer_tier, sanitized_tier
 from app.core.cloud_pilot_roles import (
     PilotAuthorizationDenied,
     PilotRole,
@@ -919,7 +919,7 @@ def pilot_identity_badge(request: Request | None) -> dict[str, object]:
         "verified": True,
         "name": identity.email or identity.subject,
         "role": str(role),
-        "role_label": str(role).capitalize(),
+        "role_label": str(role).replace("_", " ").title(),
         "source": "Verified by load balancer and Cognito",
     }
 
@@ -1001,6 +1001,40 @@ async def restrict_avatar_tier(request: Request, call_next):
                     "detail": (
                         "This account is for talking with MAE only. "
                         "Ask an administrator if you need more access."
+                    )
+                },
+            )
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def restrict_fire_officer_tier(request: Request, call_next):
+    """Deny-by-default path gate for the fire-officer role.
+
+    Same shape and short-circuit as ``restrict_avatar_tier``: paths on the
+    fire-officer allowlist skip identity resolution entirely, and only a
+    verified fire-officer identity is denied the rest. There is no field
+    sanitizing here on purpose -- this role sees the whole call -- so the gate
+    is purely about which pages and APIs exist for it. Independent of the other
+    tier gates, so it cannot widen or narrow what any other role reaches.
+    """
+
+    if fire_officer_tier.is_path_allowed_for_fire_officer(request.url.path):
+        return await call_next(request)
+
+    resolved = _resolve_pilot_identity(request)
+    if resolved is not None:
+        _identity, role = resolved
+        if fire_officer_tier.restricts(role):
+            logger.info(
+                "Fire officer tier denied %s for %s", request.url.path, role
+            )
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "detail": (
+                        "This view is not part of the fire officer role. "
+                        "Ask an administrator if you need access."
                     )
                 },
             )

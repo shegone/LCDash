@@ -614,7 +614,7 @@ class CdkTemplateTests(unittest.TestCase):
         self.assertNotIn("href=", code_message)
 
     def test_cognito_groups_are_named_read_only_roles_without_iam_roles(self):
-        self.template.resource_count_is("AWS::Cognito::UserPoolGroup", 5)
+        self.template.resource_count_is("AWS::Cognito::UserPoolGroup", 6)
         resources = self.template.to_json()["Resources"]
         groups = {
             resource["Properties"]["GroupName"]: resource["Properties"]
@@ -627,6 +627,7 @@ class CdkTemplateTests(unittest.TestCase):
                 "lcdash-pilot-user",
                 "lcdash-pilot-supervisor",
                 "lcdash-pilot-dispatcher",
+                "lcdash-pilot-fire-officer",
                 "lcdash-pilot-admin",
                 "lcdash-pilot-avatar",
             },
