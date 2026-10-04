@@ -501,3 +501,14 @@ a {
     font-weight: 800;
     cursor: pointer;
 }
+
+/* Confidentiality line at the foot of every dashboard page (base.html). Kept
+   quiet so it does not compete with operations, but always in view when a
+   page is captured. Wording: app/core/usage_notice.py FOOTER_TEXT. */
+.usage-footer {
+    padding: 10px 16px 14px;
+    color: var(--lcdash-muted);
+    font-size: .72rem;
+    letter-spacing: .03em;
+    text-align: center;
+}

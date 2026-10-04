@@ -43,6 +43,8 @@ _FIRE_OFFICER_ALLOWED_EXACT = frozenset(
         "/map",
         "/station-alerts",
         "/logout",
+        # The confidentiality notice every account accepts after sign-in.
+        "/notice",
         "/health",
         "/api/identity/whoami",
         # Data behind the allowed views, unreduced.

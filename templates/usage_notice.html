@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+{#- Standalone on purpose: this is shown before any page opens, and every
+    role (including the restricted tiers) must be able to reach it, so it
+    carries none of the dashboard's navigation. Wording lives in
+    app/core/usage_notice.py so the page, the footer, and the tests agree. -#}
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#07111f">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Confidential Notice | Logan County 911</title>
+    <link rel="icon" type="image/png" href="/static/img/logan911-logo.png">
+    <link href="/static/css/lcdash-core.css" rel="stylesheet">
+    <link href="/static/css/lcdash-notice.css" rel="stylesheet">
+</head>
+<body class="notice-page">
+<main class="notice-wrap" id="main-content">
+    <section class="notice-card glass" aria-labelledby="notice-title">
+        <img src="/static/img/logan911-logo.png" class="notice-logo" alt="Logan County 911">
+        <p class="notice-eyebrow">LCDash &middot; Logan County 911</p>
+        <h1 id="notice-title">{{ notice_title }}</h1>
+
+        {% for paragraph in notice_paragraphs %}
+        <p class="notice-text">{{ paragraph }}</p>
+        {% endfor %}
+
+        {% if error %}
+        <p class="notice-error" role="alert">{{ error }}</p>
+        {% endif %}
+
+        <form method="post" action="/notice" class="notice-form">
+            <input type="hidden" name="next" value="{{ next_path }}">
+            <label class="notice-accept">
+                <input type="checkbox" name="agree" value="yes" required>
+                <span>{{ accept_label }}</span>
+            </label>
+            <div class="notice-actions">
+                <button type="submit" class="notice-continue">Continue</button>
+                <a class="notice-signout" href="/logout">Sign out</a>
+            </div>
+        </form>
+    </section>
+</main>
+</body>
+</html>

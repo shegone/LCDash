@@ -30,6 +30,8 @@ _AVATAR_ALLOWED_EXACT = frozenset(
         "/",
         "/mae/avatar",
         "/logout",
+        # The confidentiality notice every account accepts after sign-in.
+        "/notice",
         "/health",
         "/api/identity/whoami",
         # The conversation itself: MAE's cloud advisory chat (text in,

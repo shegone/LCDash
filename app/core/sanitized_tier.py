@@ -47,6 +47,8 @@ _USER_ALLOWED_EXACT = frozenset(
         "/map/heatmap",
         "/station-alerts",
         "/logout",
+        # The confidentiality notice every account accepts after sign-in.
+        "/notice",
         # Data behind the four allowed views. Their payloads are sanitized
         # below -- being listed here is permission to receive the reduced
         # form, never the full one.

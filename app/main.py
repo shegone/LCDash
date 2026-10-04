@@ -22,7 +22,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config.settings import settings
 from app.core.alb_identity import AlbIdentity, resolve_alb_identity
-from app.core import avatar_tier, dispatcher_tier, fire_officer_tier, sanitized_tier
+from app.core import avatar_tier, dispatcher_tier, fire_officer_tier, sanitized_tier, usage_notice
 from app.core.cloud_pilot_roles import (
     PilotAuthorizationDenied,
     PilotRole,
@@ -925,6 +925,7 @@ def pilot_identity_badge(request: Request | None) -> dict[str, object]:
 
 
 templates.env.globals["pilot_identity_badge"] = pilot_identity_badge
+templates.env.globals["usage_footer_text"] = usage_notice.FOOTER_TEXT
 
 
 @app.get("/api/identity/whoami")
@@ -1072,6 +1073,80 @@ async def restrict_dispatcher_tier(request: Request, call_next):
                 },
             )
     return await call_next(request)
+
+
+@app.middleware("http")
+async def require_usage_notice(request: Request, call_next):
+    """Send a person opening a page to the confidentiality notice first.
+
+    Added last so it runs outermost: the notice is shown before any tier gate
+    has an opinion, and every tier allowlists ``/notice`` so it can be reached.
+    Only browser page navigations are stopped (see app/core/usage_notice.py);
+    API calls, scripts and the event stream pass untouched. This is a notice,
+    not an access control, and it never changes who may see what.
+    """
+
+    if (
+        usage_notice.is_gate_exempt(request.url.path)
+        or not usage_notice.wants_html_page(
+            request.method, request.headers.get("accept")
+        )
+        or usage_notice.has_accepted(request.cookies.get(usage_notice.COOKIE_NAME))
+    ):
+        return await call_next(request)
+
+    return RedirectResponse(
+        url=usage_notice.notice_redirect_url(request.url.path, request.url.query),
+        status_code=303,
+    )
+
+
+def _render_usage_notice(request: Request, next_path: str, error: str = ""):
+    return templates.TemplateResponse(
+        request=request,
+        name="usage_notice.html",
+        context={
+            "notice_title": usage_notice.NOTICE_TITLE,
+            "notice_paragraphs": usage_notice.NOTICE_PARAGRAPHS,
+            "accept_label": usage_notice.ACCEPT_LABEL,
+            "next_path": next_path,
+            "error": error,
+        },
+        status_code=400 if error else 200,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/notice")
+def usage_notice_page(request: Request, next: str = "/"):
+    return _render_usage_notice(request, usage_notice.safe_next(next))
+
+
+@app.post("/notice")
+def usage_notice_accept(
+    request: Request,
+    next: Annotated[str, Form()] = "/",
+    agree: Annotated[str, Form()] = "",
+):
+    destination = usage_notice.safe_next(next)
+    if agree != "yes":
+        return _render_usage_notice(
+            request,
+            destination,
+            error="Please confirm that you have read and agree to this notice.",
+        )
+
+    response = RedirectResponse(destination, status_code=303)
+    response.set_cookie(
+        usage_notice.COOKIE_NAME,
+        usage_notice.NOTICE_VERSION,
+        max_age=usage_notice.COOKIE_MAX_AGE_SECONDS,
+        path="/",
+        httponly=True,
+        secure=request.headers.get("x-forwarded-proto", request.url.scheme) == "https",
+        samesite="lax",
+    )
+    return response
 
 
 def _alb_session_cookie_names() -> tuple[str, ...]:

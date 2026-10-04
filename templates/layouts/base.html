@@ -217,6 +217,10 @@
     {% block content %}
     {% endblock %}
 
+    {#- Confidentiality line: see app/core/usage_notice.py. A template global
+        rather than a context value so no route has to remember to pass it. -#}
+    <footer class="usage-footer" role="contentinfo">{{ usage_footer_text }}</footer>
+
 </main>
 
 <script>

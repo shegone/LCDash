@@ -1,0 +1,117 @@
+/* The confidentiality notice shown after sign-in (templates/usage_notice.html).
+   lcdash-core.css sets body to overflow:hidden for the dashboard shell; this
+   page scrolls like a document so the full notice is reachable on a phone. */
+body.notice-page {
+    overflow: auto;
+    min-height: 100vh;
+}
+
+.notice-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: clamp(16px, 5vw, 56px) 16px;
+}
+
+.notice-card {
+    width: 100%;
+    max-width: 720px;
+    padding: clamp(20px, 4vw, 40px);
+}
+
+.notice-logo {
+    display: block;
+    height: 56px;
+    width: auto;
+    margin-bottom: 14px;
+}
+
+.notice-eyebrow {
+    margin: 0 0 6px;
+    color: var(--lcdash-muted);
+    font-size: .8rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.notice-card h1 {
+    margin: 0 0 18px;
+    color: var(--lcdash-yellow);
+    font-size: clamp(1.35rem, 3.5vw, 1.75rem);
+    line-height: 1.25;
+}
+
+.notice-text {
+    margin: 0 0 14px;
+    color: var(--lcdash-text);
+    font-size: 1rem;
+    line-height: 1.55;
+}
+
+.notice-error {
+    margin: 0 0 14px;
+    padding: 10px 14px;
+    border: 1px solid rgba(255, 107, 120, .5);
+    border-radius: 10px;
+    background: rgba(255, 107, 120, .12);
+    color: #ffc2c8;
+}
+
+.notice-form {
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid var(--lcdash-border);
+}
+
+.notice-accept {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    cursor: pointer;
+    line-height: 1.45;
+}
+
+.notice-accept input {
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    margin-top: 2px;
+    accent-color: var(--lcdash-cyan);
+}
+
+.notice-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: center;
+    margin-top: 18px;
+}
+
+.notice-continue {
+    min-height: 44px;
+    padding: 0 28px;
+    border: 1px solid var(--lcdash-border-strong);
+    border-radius: 12px;
+    background: rgba(0, 158, 255, .22);
+    color: var(--lcdash-text);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.notice-continue:hover,
+.notice-continue:focus-visible {
+    background: rgba(0, 158, 255, .38);
+    outline: 2px solid var(--lcdash-cyan);
+    outline-offset: 2px;
+}
+
+.notice-signout {
+    color: var(--lcdash-muted);
+    text-decoration: underline;
+}
+
+.notice-signout:hover,
+.notice-signout:focus-visible {
+    color: var(--lcdash-text);
+}
