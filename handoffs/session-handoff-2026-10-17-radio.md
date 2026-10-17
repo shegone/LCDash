@@ -83,3 +83,34 @@ ends. The listener code now lives in this repo under `radio_listener/`; edit it
 here and copy to `/opt/mindshare-radio-capture` (use LF line endings: take
 files from `git show HEAD:radio_listener/<file>`, not the CRLF working copy).
 Applications and services were left running.
+
+## Update 2026-10-17 (later): page redesign and radio v2
+
+- `0198935`: tabbed card feeds with a real Play button (web revision 110).
+- `e540ba6` (web revision 111, image `release-e540ba61b2b9`, digest
+  `sha256:f61d7e06fa2d03d14d0ce79e07ee4abf40594c0992bbf34ec5e01d14683ceb5d`,
+  change set `radio-v2-e540ba6-20261017`): radio v2 per
+  `docs/MINDSHARE_RADIO_CORRECTIONS.md`.
+  - Open to every human role (user, supervisor, dispatcher, fire_officer,
+    admin); avatar and unidentified stay denied. Tier middlewares open exactly
+    the radio human routes (`app/core/radio_access.py`).
+  - Any user can correct a transcript; machine text and every edit are kept
+    (`lcdash_radio.corrections`). Corrected audio is copied to
+    `radio/corrected/` (365-day lifecycle) and the row kept 1 year
+    (`retain_until`). Uncorrected: audio 15 d, transcript 30 d.
+  - Admins manage fixes (find/replace at display time) and watch phrases;
+    matches raise advisory alerts in a dashboard panel (visual only; no sound,
+    no CAD/radio/paging/station-alert output).
+  - Schema applies under `pg_advisory_xact_lock` (concurrent appliers
+    deadlocked in a real-Postgres test). The SQL was verified on PostgreSQL 16
+    and 18 (upgrade from v1, fresh, idempotent); production is RDS 17.
+  - Same nine ECR CVEs as accepted earlier; no new findings.
+- Verified after release: foundation `UPDATE_COMPLETE`, rollout COMPLETED
+  1/1, ALB healthy, 41 ingest POSTs returned 201 in 15 minutes, no errors in
+  the web log, all three `.227` services active.
+- Known: corrected-audio lifecycle counts from the copy time while
+  `retain_until` moves with each edit, so audio can expire before the text
+  does (the UI shows "audio expired"). Ted has not yet signed in to confirm
+  the new UI.
+- Next ideas: Whisper hint words/glossary pushed to `.227`; training from the
+  corrections history; periodic capture stats logging; silent-listener alarm.
