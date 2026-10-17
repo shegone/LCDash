@@ -70,17 +70,17 @@ def make_transcriber(model, mode, glossary_path):
 
 
 def test_glossary_mode_normalization():
-    assert transcribe.normalize_glossary_mode(None) == ("hotwords", True)
+    assert transcribe.normalize_glossary_mode(None) == ("off", True)
     for mode in ("hotwords", "prompt", "off"):
         assert transcribe.normalize_glossary_mode(mode) == (mode, True)
     assert transcribe.normalize_glossary_mode(" Prompt ") == ("prompt", True)
-    assert transcribe.normalize_glossary_mode("shout") == ("hotwords", False)
-    assert transcribe.normalize_glossary_mode(7) == ("hotwords", False)
+    assert transcribe.normalize_glossary_mode("shout") == ("off", False)
+    assert transcribe.normalize_glossary_mode(7) == ("off", False)
 
 
 def test_repo_config_selects_hotwords_by_default():
     config = json.loads((TRANSCRIBE_PATH.parent / "config.json").read_text(encoding="utf-8"))
-    assert config["transcription"]["glossary_mode"] == "hotwords"
+    assert config["transcription"]["glossary_mode"] == "off"
     # The existing keys are untouched.
     assert config["transcription"]["model"] == "large-v3" and config["transcription"]["beam_size"] == 5
 

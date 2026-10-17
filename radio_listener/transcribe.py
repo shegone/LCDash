@@ -20,7 +20,7 @@ STOP = False
 # <root>/status/glossary.json; this worker only reads it. A missing or corrupt
 # file means "no hints", never a failure.
 GLOSSARY_MODES = ("hotwords", "prompt", "off")
-DEFAULT_GLOSSARY_MODE = "hotwords"
+DEFAULT_GLOSSARY_MODE = "off"  # A/B on real traffic (2026-10-17): hints did not help and added hallucinations
 GLOSSARY_DIR_NAME = "status"
 GLOSSARY_FILE_NAME = "glossary.json"
 MAX_VERSION_CHARS = 32

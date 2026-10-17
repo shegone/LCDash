@@ -11,7 +11,7 @@
     "compute_type": "int8_float16",
     "language": "en",
     "beam_size": 5,
-    "glossary_mode": "hotwords"
+    "glossary_mode": "off"
   },
   "channels": [
     {

@@ -296,6 +296,11 @@ class ListenerHealthPanelTests(unittest.TestCase):
             text,
         )
 
+    def test_hint_tab_says_hints_are_switched_off_at_the_listener(self):
+        text = re.sub(r"\s+", " ", self.template)
+        self.assertIn('id="radio-hint-mode-note"', text)
+        self.assertIn("Currently switched off at the listener", text)
+
     def test_hint_tab_uses_the_hint_api_with_a_two_step_delete(self):
         for needle in (
             "/api/radio/hints",
