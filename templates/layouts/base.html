@@ -111,6 +111,12 @@
                 {% endif %}
                 {% endif %}
                 {{ nav_item("/station-alerts", "bi-bell-fill", "Station Alerts", current_path == "/station-alerts") }}
+                {#- Radio Intelligence is open to every human role (listen-only
+                    transcripts, advisory). The avatar kiosk never sees this
+                    sidebar and the server denies it the page regardless. -#}
+                {% if nav_identity.role != "avatar" %}
+                {{ nav_item("/mindshare/radio", "bi-soundwave", "Radio Intelligence", current_path == "/mindshare/radio") }}
+                {% endif %}
                 {#- The heat map has no sidebar entry of its own for any role; it
                     is reached through the view tabs on the GIS Map page, which
                     stay in place for the restricted tier. -#}
@@ -149,7 +155,6 @@
                 {% if nav_identity.role == "admin" %}
                 {{ nav_item("/admin/users", "bi-people-fill", "User Admin", current_path == "/admin/users") }}
                 {{ nav_item("/admin/knowledge", "bi-cloud-arrow-up-fill", "Knowledge Uploads", current_path == "/admin/knowledge") }}
-                {{ nav_item("/mindshare/radio", "bi-soundwave", "Radio Intelligence", current_path == "/mindshare/radio") }}
                 {% endif %}
             </div>
         </section>

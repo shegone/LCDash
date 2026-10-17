@@ -1,6 +1,9 @@
-"""Mindshare Radio Intelligence: signed ingest, admin reads, audit, retention.
+"""Mindshare Radio Intelligence: signed ingest, reads, access, audit, retention.
 
-Contract under test: docs/MINDSHARE_RADIO_INGEST.md (v1). Everything here is
+Contract under test: docs/MINDSHARE_RADIO_INGEST.md (v1) and the access model
+of docs/MINDSHARE_RADIO_CORRECTIONS.md (v2). The v2 behaviors (corrections,
+fixes, watch terms, alerts) are exercised in test_radio_corrections.py, which
+reuses the fakes defined here. Everything here is
 offline and synthetic: a fake S3 client, an in-memory repository, a fixed
 WAV built in memory, and the contract's own golden Ed25519 vector (whose
 private seed is published in the contract precisely so both sides can test).
@@ -10,8 +13,9 @@ What is proved:
 * the signed-message layout against the golden vector, verbatim;
 * /api/radio/ingest authenticates ONLY by signature (identity headers are
   irrelevant), fails closed when unconfigured, and validates strictly;
-* every other radio route, including the page, is admin-only with a uniform
-  403 and never reaches the service for anyone else;
+* every other radio route, including the page, admits only the human roles
+  (admin only for the manage routes) with a uniform 403 for everyone else,
+  and never reaches the service for a forbidden caller;
 * list/playback are audited and playback fails closed when the audit write
   fails; keyset paging, ILIKE escaping, low-confidence, and the hourly purge.
 """
@@ -19,6 +23,7 @@ What is proved:
 from __future__ import annotations
 
 import base64
+import copy
 import hashlib
 import io
 import json
@@ -78,14 +83,24 @@ def _identity(email: str, group: str) -> AlbIdentity:
 
 
 ADMIN = _identity(ADMIN_EMAIL, "lcdash-pilot-admin")
-NON_ADMINS = (
-    ("supervisor", _identity("s@911logan.com", "lcdash-pilot-supervisor")),
+SUPERVISOR = _identity("s@911logan.com", "lcdash-pilot-supervisor")
+# Every human role. The radio page, feed, audio, corrections and alerts are
+# open to all of them; only admins manage fixes and watch terms.
+HUMAN_ROLES = (
+    ("admin", ADMIN),
+    ("supervisor", SUPERVISOR),
     ("user", _identity("u@911logan.com", "lcdash-pilot-user")),
     ("dispatcher", _identity("d@911logan.com", "lcdash-pilot-dispatcher")),
     ("fire_officer", _identity("f@911logan.com", "lcdash-pilot-fire-officer")),
+)
+NON_ADMIN_HUMANS = tuple(item for item in HUMAN_ROLES if item[0] != "admin")
+# The avatar kiosk and an unidentified request are denied everywhere.
+DENIED_CALLERS = (
     ("avatar", _identity("b@911logan.com", "lcdash-pilot-avatar")),
     ("none", None),
 )
+# Kept for the v1 tests below: every caller that is not an administrator.
+NON_ADMINS = NON_ADMIN_HUMANS + DENIED_CALLERS
 
 
 def make_wav(samples: int = 800, *, channels: int = 1, rate: int = 8000, width: int = 2) -> bytes:
@@ -141,13 +156,27 @@ class FakeS3:
     def __init__(self) -> None:
         self.objects: dict[str, dict] = {}
         self.put_calls: list[dict] = []
+        self.copy_calls: list[dict] = []
         self.fail_put = False
+        # None, "missing" (NoSuchKey on the source) or "down" (any other error).
+        self.copy_failure: str | None = None
 
     def put_object(self, **kwargs):
         if self.fail_put:
             raise RuntimeError("s3 down")
         self.put_calls.append(kwargs)
         self.objects[kwargs["Key"]] = kwargs
+
+    def copy_object(self, **kwargs):
+        if self.copy_failure == "down":
+            raise RuntimeError("s3 down")
+        source = kwargs["CopySource"]["Key"]
+        if self.copy_failure == "missing" or source not in self.objects:
+            error = RuntimeError("NoSuchKey")
+            error.response = {"Error": {"Code": "NoSuchKey"}}
+            raise error
+        self.copy_calls.append(kwargs)
+        self.objects[kwargs["Key"]] = {**self.objects[source], "Key": kwargs["Key"]}
 
     def get_object(self, *, Bucket, Key):
         if Key not in self.objects:
@@ -158,22 +187,63 @@ class FakeS3:
 
 
 class FakeStore:
-    """The state behind every FakeRepository a service opens."""
+    """The state behind every FakeRepository a service opens.
+
+    Segment rows use the repository's 16-column order (see
+    ``RadioRepository._SEGMENT_COLUMNS``): 0 id, 1 channel, 2 direction,
+    3 started_at, 4 ended_at, 5 duration, 6 transcript, 7 language, 8 model,
+    9 low_confidence, 10 audio_key, 11 received_at, 12 corrected_text,
+    13 corrected_by, 14 corrected_at, 15 retain_until.
+    """
 
     def __init__(self) -> None:
         self.segments: dict[str, tuple] = {}
+        self.corrections: list[dict] = []
+        self.replacements: list[dict] = []
+        self.terms: list[dict] = []
+        self.alerts: list[dict] = []
         self.audit: list[dict] = []
+        self._ids = {"replacement": 0, "term": 0, "alert": 0}
         self.schema_calls = 0
         self.purge_calls = 0
         self.purge_error: Exception | None = None
+        self.replacement_reads = 0
         self.fail_audit = False
         self.fail_connect = False
+        self.fail_term_read = False
+        self.fail_alert_insert = False
         self.received_at = FIXED_NOW
+        # The database's now(): used for purge and alert creation times.
+        self.db_now = FIXED_NOW
+
+    def next_id(self, kind: str) -> int:
+        self._ids[kind] += 1
+        return self._ids[kind]
+
+    def snapshot(self):
+        return copy.deepcopy((
+            self.segments, self.corrections, self.replacements, self.terms,
+            self.alerts, dict(self._ids),
+        ))
+
+    def restore(self, snapshot) -> None:
+        (self.segments, self.corrections, self.replacements, self.terms,
+         self.alerts, self._ids) = copy.deepcopy(snapshot)
 
 
 class FakeRepository:
+    """In-memory stand-in with the real repository's transaction semantics.
+
+    Write methods that the real repository leaves uncommitted take a snapshot
+    on first use; ``record_audit`` commits them (drops the snapshot) or, when
+    the audit write fails, rolls them back. Leaving without a commit also
+    rolls back. That is what lets the tests prove "no audit record, no
+    change" for every write.
+    """
+
     def __init__(self, store: FakeStore) -> None:
         self.store = store
+        self._undo = None
 
     def __enter__(self):
         if self.store.fail_connect:
@@ -181,7 +251,14 @@ class FakeRepository:
         return self
 
     def __exit__(self, *exc):
+        if self._undo is not None:
+            self.store.restore(self._undo)
+            self._undo = None
         return False
+
+    def _begin(self):
+        if self._undo is None:
+            self._undo = self.store.snapshot()
 
     def initialize_schema(self):
         self.store.schema_calls += 1
@@ -197,6 +274,7 @@ class FakeRepository:
             record.started_at, record.ended_at, record.duration_seconds,
             record.transcript, record.language, record.model,
             record.low_confidence, audio_key, self.store.received_at,
+            None, None, None, None,
         )
         return True
 
@@ -204,7 +282,21 @@ class FakeRepository:
         self.store.purge_calls += 1
         if self.store.purge_error:
             raise self.store.purge_error
-        return 0
+        now = self.store.db_now
+        doomed = [
+            row[0] for row in self.store.segments.values()
+            if row[11] < now - timedelta(days=30)
+            and (row[15] is None or row[15] < now)
+        ]
+        for segment_id in doomed:
+            del self.store.segments[segment_id]
+        self.store.corrections = [
+            c for c in self.store.corrections if c["segment_id"] not in doomed
+        ]
+        self.store.alerts = [
+            a for a in self.store.alerts if a["segment_id"] not in doomed
+        ]
+        return len(doomed)
 
     def list_segments(self, *, channel, direction, like_pattern, cursor, limit):
         rows = list(self.store.segments.values())
@@ -220,7 +312,10 @@ class FakeRepository:
                     index += 1
                 plain += needle[index]
                 index += 1
-            rows = [r for r in rows if plain.lower() in r[6].lower()]
+            rows = [
+                r for r in rows
+                if plain.lower() in (r[12] if r[12] is not None else r[6]).lower()
+            ]
         rows.sort(key=lambda r: (r[3], r[0]), reverse=True)
         if cursor is not None:
             rows = [r for r in rows if (r[3], r[0]) < cursor]
@@ -241,11 +336,181 @@ class FakeRepository:
 
     def record_audit(self, event_type, actor, segment_id, detail):
         if self.store.fail_audit:
+            # The real repository's _execute rolls the transaction back.
+            if self._undo is not None:
+                self.store.restore(self._undo)
+                self._undo = None
             raise RadioDatabaseError("audit write failed")
         self.store.audit.append({
             "event_type": event_type, "actor": actor,
             "segment_id": segment_id, "detail": detail,
         })
+        self._undo = None  # commit
+
+    # ------------------------------------------------------ corrections
+
+    def save_correction(self, segment_id, new_text, actor, now, retain_until,
+                        new_audio_key):
+        row = self.store.segments.get(segment_id)
+        if row is None:
+            return None
+        self._begin()
+        previous = row[12] if row[12] is not None else row[6]
+        self.store.corrections.append({
+            "segment_id": segment_id, "previous_text": previous,
+            "new_text": new_text, "actor": actor, "created_at": now,
+        })
+        updated = row[:10] + (new_audio_key or row[10], row[11],
+                              new_text, actor, now, retain_until)
+        self.store.segments[segment_id] = updated
+        return updated
+
+    def clear_correction(self, segment_id, actor, now):
+        row = self.store.segments.get(segment_id)
+        if row is None:
+            return None
+        if row[12] is None:
+            return row, False
+        self._begin()
+        self.store.corrections.append({
+            "segment_id": segment_id, "previous_text": row[12],
+            "new_text": None, "actor": actor, "created_at": now,
+        })
+        updated = row[:12] + (None, None, None, row[15])
+        self.store.segments[segment_id] = updated
+        return updated, True
+
+    # ------------------------------------------------------------ fixes
+
+    def list_replacements(self):
+        self.store.replacement_reads += 1
+        return [
+            (r["id"], r["find"], r["replace"], r["whole_word"],
+             r["created_by"], r["created_at"])
+            for r in self.store.replacements
+        ]
+
+    def count_replacements(self):
+        return len(self.store.replacements)
+
+    def insert_replacement(self, find_text, replace_text, whole_word, actor):
+        if any(r["find"].lower() == find_text.lower() for r in self.store.replacements):
+            return None
+        self._begin()
+        rule = {
+            "id": self.store.next_id("replacement"), "find": find_text,
+            "replace": replace_text, "whole_word": whole_word,
+            "created_by": actor, "created_at": FIXED_NOW,
+        }
+        self.store.replacements.append(rule)
+        return (rule["id"], find_text, replace_text, whole_word, actor, FIXED_NOW)
+
+    def delete_replacement(self, replacement_id):
+        for rule in self.store.replacements:
+            if rule["id"] == replacement_id:
+                self._begin()
+                self.store.replacements.remove(rule)
+                return (rule["id"], rule["find"], rule["replace"],
+                        rule["whole_word"], rule["created_by"], rule["created_at"])
+        return None
+
+    # ------------------------------------------------------- watch terms
+
+    @staticmethod
+    def _term_row(term):
+        return (term["id"], term["phrase"], list(term["channels"]),
+                term["enabled"], term["created_by"], term["created_at"])
+
+    def list_watch_terms(self):
+        return [self._term_row(t) for t in self.store.terms]
+
+    def list_enabled_watch_terms(self):
+        if self.store.fail_term_read:
+            raise RadioDatabaseError("terms unavailable")
+        return [
+            (t["id"], t["phrase"], list(t["channels"]))
+            for t in self.store.terms if t["enabled"]
+        ]
+
+    def count_watch_terms(self):
+        return len(self.store.terms)
+
+    def insert_watch_term(self, phrase, channels, enabled, actor):
+        if any(t["phrase"].lower() == phrase.lower() for t in self.store.terms):
+            return None
+        self._begin()
+        term = {
+            "id": self.store.next_id("term"), "phrase": phrase,
+            "channels": list(channels), "enabled": enabled,
+            "created_by": actor, "created_at": FIXED_NOW,
+        }
+        self.store.terms.append(term)
+        return self._term_row(term)
+
+    def update_watch_term(self, term_id, *, enabled, channels):
+        for term in self.store.terms:
+            if term["id"] == term_id:
+                self._begin()
+                if enabled is not None:
+                    term["enabled"] = enabled
+                if channels is not None:
+                    term["channels"] = list(channels)
+                return self._term_row(term)
+        return None
+
+    def delete_watch_term(self, term_id):
+        for term in self.store.terms:
+            if term["id"] == term_id:
+                self._begin()
+                self.store.terms.remove(term)
+                self.store.alerts = [
+                    a for a in self.store.alerts if a["term_id"] != term_id
+                ]
+                return self._term_row(term)
+        return None
+
+    # ------------------------------------------------------------ alerts
+
+    def insert_alert(self, segment_id, term_id, phrase):
+        if self.store.fail_alert_insert:
+            raise RadioDatabaseError("alert insert failed")
+        if any(a["segment_id"] == segment_id and a["term_id"] == term_id
+               for a in self.store.alerts):
+            return False
+        self.store.alerts.append({
+            "id": self.store.next_id("alert"), "segment_id": segment_id,
+            "term_id": term_id, "phrase": phrase,
+            "created_at": self.store.db_now, "dismissed_by": None,
+            "dismissed_at": None,
+        })
+        return True
+
+    def list_open_alerts(self, since, limit):
+        rows = []
+        for alert in self.store.alerts:
+            segment = self.store.segments.get(alert["segment_id"])
+            if segment is None or alert["dismissed_at"] is not None:
+                continue
+            if alert["created_at"] < since:
+                continue
+            rows.append((
+                alert["id"], alert["segment_id"], alert["phrase"],
+                alert["created_at"], segment[1], segment[2], segment[3],
+                segment[6], segment[10], segment[11], segment[12], segment[15],
+            ))
+        rows.sort(key=lambda r: (r[3], r[0]), reverse=True)
+        return rows[:limit]
+
+    def dismiss_alert(self, alert_id, actor, now):
+        for alert in self.store.alerts:
+            if alert["id"] == alert_id:
+                if alert["dismissed_at"] is not None:
+                    return "already", alert["segment_id"]
+                self._begin()
+                alert["dismissed_by"] = actor
+                alert["dismissed_at"] = now
+                return "dismissed", alert["segment_id"]
+        return None
 
 
 def build_service(store=None, s3=None, clock=None):
@@ -254,11 +519,27 @@ def build_service(store=None, s3=None, clock=None):
     service = RadioService(
         bucket="test-content-bucket",
         audio_prefix="radio/audio/",
+        corrected_prefix="radio/corrected/",
         s3_client=s3,
         repository_factory=lambda: FakeRepository(store),
         clock=clock or time.monotonic,
-        utcnow=lambda: FIXED_NOW,
+        utcnow=lambda: store.db_now,
     )
+    return service, store, s3
+
+
+def install_radio_service(testcase, *, seeded=True):
+    """Patch ``app.main._radio_service`` with a fake-backed service.
+
+    Used by the tier test suites to prove the radio routes are reachable for a
+    role without touching a database or S3. Returns ``(service, store, s3)``.
+    """
+    service, store, s3 = build_service()
+    if seeded:
+        ingest_record(service)
+    patcher = patch("app.main._radio_service", return_value=service)
+    testcase.addCleanup(patcher.stop)
+    patcher.start()
     return service, store, s3
 
 
@@ -499,7 +780,10 @@ class RepositorySqlTests(unittest.TestCase):
         )
         query, params = connection.calls[-1]
         self.assertIn("(started_at, segment_id) < (%s, %s)", query)
-        self.assertIn("transcript ILIKE %s ESCAPE '!'", query)
+        # Search covers what people read: the correction when there is one.
+        self.assertIn(
+            "COALESCE(corrected_text, transcript) ILIKE %s ESCAPE '!'", query
+        )
         self.assertIn("ORDER BY started_at DESC, segment_id DESC LIMIT %s", query)
         self.assertNotIn("DROP", query)
         self.assertNotIn("law_rx", query)
@@ -527,14 +811,17 @@ class RepositorySqlTests(unittest.TestCase):
         self.assertFalse(duplicate)
         self.assertIn("ON CONFLICT (segment_id) DO NOTHING", duplicate_connection.calls[-1][0])
 
-    def test_purge_touches_only_segments_older_than_30_days(self):
+    def test_purge_touches_only_segments_older_than_30_days_and_not_retained(self):
         connection = FakeConnection(rowcount=3)
         deleted = repository_with(connection).purge_expired()
         query = connection.calls[-1][0]
         self.assertEqual(deleted, 3)
         self.assertIn("DELETE FROM lcdash_radio.segments", query)
         self.assertIn("received_at < now() - interval '30 days'", query)
+        # A human-corrected segment survives until its retain_until passes.
+        self.assertIn("(retain_until IS NULL OR retain_until < now())", query)
         self.assertNotIn("audit_events", query)
+        self.assertNotIn("corrections", query)
 
     def test_schema_file_is_idempotent_and_never_destructive(self):
         sql = (Path(radio_service.__file__).resolve().parents[2]
@@ -543,11 +830,39 @@ class RepositorySqlTests(unittest.TestCase):
             for line in sql.splitlines():
                 if line.startswith(statement):
                     self.assertIn("IF NOT EXISTS", line, line)
-        self.assertNotIn("DROP ", sql.upper())
-        self.assertNotIn("TRUNCATE", sql.upper())
+        # The one constraint change (widening the audit event list for v2) is
+        # the only DROP allowed, and only for that named constraint. Nothing
+        # may drop a table, schema, column or index, or truncate anything.
+        upper = sql.upper()
+        self.assertEqual(upper.count("DROP "), 1)
+        self.assertIn("DROP CONSTRAINT RADIO_AUDIT_EVENT_TYPE_CHECK", upper)
+        for forbidden in ("DROP TABLE", "DROP SCHEMA", "DROP COLUMN", "DROP INDEX",
+                          "TRUNCATE", "CASCADE;"):
+            self.assertNotIn(forbidden, upper)
         self.assertIn("lcdash_radio.audit_events", sql)
-        self.assertIn("radio.segments.list", sql)
-        self.assertIn("radio.segment.listen", sql)
+        for event in (
+            "radio.segments.list", "radio.segment.listen",
+            "radio.segment.correct", "radio.segment.correct_revert",
+            "radio.fix.add", "radio.fix.remove", "radio.watch.add",
+            "radio.watch.change", "radio.watch.remove", "radio.alert.dismiss",
+        ):
+            self.assertIn(event, sql)
+
+    def test_schema_adds_the_v2_columns_and_tables_idempotently(self):
+        sql = (Path(radio_service.__file__).resolve().parents[2]
+               / "database" / "radio_schema.sql").read_text(encoding="utf-8")
+        for column in ("corrected_text TEXT", "corrected_by TEXT",
+                       "corrected_at TIMESTAMPTZ", "retain_until TIMESTAMPTZ"):
+            self.assertIn(
+                f"ALTER TABLE lcdash_radio.segments ADD COLUMN IF NOT EXISTS {column}",
+                sql,
+            )
+        for table in ("corrections", "replacements", "watch_terms", "alerts"):
+            self.assertIn(f"CREATE TABLE IF NOT EXISTS lcdash_radio.{table}", sql)
+        self.assertIn("UNIQUE (segment_id, term_id)", sql)
+        self.assertIn("lcdash_radio.watch_terms (lower(phrase))", sql)
+        # corrections.segment_id, alerts.segment_id, alerts.term_id
+        self.assertEqual(sql.count("ON DELETE CASCADE"), 3)
 
 
 # ----------------------------------------------------------- service tests
@@ -829,38 +1144,188 @@ class _RouteCase(unittest.TestCase):
         patcher.start()
 
 
-ADMIN_ROUTES = (
-    ("/mindshare/radio", "page"),
-    ("/api/radio/segments", "list"),
-    ("/api/radio/segments?limit=not-a-number&channel=BAD", "list with bad params"),
-    ("/api/radio/segments/law_rx_20261016_140500_0001/audio", "audio"),
-    ("/api/radio/stats", "stats"),
+SEGMENT_ID = "law_rx_20261016_140500_0001"
+
+# (method, path, JSON body, label). The page, the feed, audio, stats,
+# corrections and keyword alerts are open to every human role.
+HUMAN_ROUTES = (
+    ("GET", "/mindshare/radio", None, "page"),
+    ("GET", "/api/radio/segments", None, "list"),
+    ("GET", "/api/radio/segments?limit=not-a-number&channel=BAD", None, "list with bad params"),
+    ("GET", f"/api/radio/segments/{SEGMENT_ID}/audio", None, "audio"),
+    ("GET", "/api/radio/stats", None, "stats"),
+    ("PUT", f"/api/radio/segments/{SEGMENT_ID}/correction", {"text": "Corrected."}, "correct"),
+    ("DELETE", f"/api/radio/segments/{SEGMENT_ID}/correction", None, "revert"),
+    ("GET", "/api/radio/alerts", None, "alerts"),
+    ("POST", "/api/radio/alerts/1/dismiss", None, "dismiss"),
 )
 
+# Admin only: the replacement fixes and the watch terms.
+ADMIN_ROUTES = (
+    ("GET", "/api/radio/replacements", None, "list fixes"),
+    ("POST", "/api/radio/replacements", {"find": "log in", "replace": "Logan"}, "add fix"),
+    ("DELETE", "/api/radio/replacements/1", None, "remove fix"),
+    ("GET", "/api/radio/watch-terms", None, "list terms"),
+    ("POST", "/api/radio/watch-terms", {"phrase": "structure fire"}, "add term"),
+    ("PATCH", "/api/radio/watch-terms/1", {"enabled": False}, "change term"),
+    ("DELETE", "/api/radio/watch-terms/1", None, "remove term"),
+)
 
-class AdminOnlyTests(_RouteCase):
-    def test_every_admin_route_denies_every_non_admin_uniformly(self):
+# Deliberately malformed input for each route: a forbidden caller must see the
+# same 403 whether or not their request was well formed (no validation oracle).
+_GARBAGE = {"content": b"{{ not json", "headers": {"content-type": "text/plain"}}
+
+
+class AccessTests(_RouteCase):
+    def request(self, method, path, body=None, *, garbage=False):
+        if garbage:
+            return self.client.request(method, path, **_GARBAGE)
+        if body is None:
+            return self.client.request(method, path)
+        return self.client.request(method, path, json=body)
+
+    def test_forbidden_callers_get_a_403_and_never_reach_the_service(self):
         mock_service = MagicMock()
         self.use_service(mock_service)
-        for role, identity in NON_ADMINS:
+        forbidden = [
+            (role, identity, HUMAN_ROUTES + ADMIN_ROUTES)
+            for role, identity in DENIED_CALLERS
+        ] + [
+            (role, identity, ADMIN_ROUTES) for role, identity in NON_ADMIN_HUMANS
+        ]
+        for role, identity, routes in forbidden:
             self.sign_in_as(identity)
-            for path, label in ADMIN_ROUTES:
+            for method, path, body, label in routes:
                 with self.subTest(role=role, route=label):
-                    response = self.client.get(path)
+                    response = self.request(method, path, body)
                     self.assertEqual(response.status_code, 403)
                     self.assertNotIn("audio/wav", response.headers.get("content-type", ""))
         self.assertEqual(mock_service.mock_calls, [])
 
-    def test_admin_routes_never_fall_back_to_the_unauthenticated_path_when_identity_is_off(self):
+    def test_a_forbidden_caller_cannot_tell_a_bad_request_from_a_good_one(self):
+        # Validation (400/413/415/422) must come AFTER the access check, or a
+        # forbidden caller could probe which routes exist and what they take.
+        mock_service = MagicMock()
+        self.use_service(mock_service)
+        forbidden = [
+            (role, identity, HUMAN_ROUTES + ADMIN_ROUTES)
+            for role, identity in DENIED_CALLERS
+        ] + [
+            (role, identity, ADMIN_ROUTES) for role, identity in NON_ADMIN_HUMANS
+        ]
+        for role, identity, routes in forbidden:
+            self.sign_in_as(identity)
+            for method, path, body, label in routes:
+                with self.subTest(role=role, route=label):
+                    good = self.request(method, path, body)
+                    bad = self.request(method, path, garbage=True)
+                    self.assertEqual(bad.status_code, 403)
+                    self.assertEqual(good.json(), bad.json())
+        self.assertEqual(mock_service.mock_calls, [])
+
+    def test_oversize_or_malformed_queries_are_403_for_the_avatar_before_validation(self):
+        self.use_service(MagicMock())
+        self.sign_in_as(DENIED_CALLERS[0][1])
+        for path in (
+            "/api/radio/segments?limit=999999&channel=%00&before=!!!",
+            "/api/radio/segments?q=" + "x" * 5000,
+            "/api/radio/segments/%20/audio",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(self.client.get(path).status_code, 403)
+
+    def test_routes_never_fall_back_to_the_unauthenticated_path_when_identity_is_off(self):
         mock_service = MagicMock()
         self.use_service(mock_service)
         with patch.object(settings, "alb_identity_enabled", False):
-            for path, label in ADMIN_ROUTES:
+            for method, path, body, label in HUMAN_ROUTES + ADMIN_ROUTES:
                 with self.subTest(route=label):
-                    self.assertEqual(self.client.get(path).status_code, 403)
+                    self.assertEqual(self.request(method, path, body).status_code, 403)
         self.assertEqual(mock_service.mock_calls, [])
 
-    def test_admin_list_passes_filters_and_the_verified_actor(self):
+    def test_an_unrecognized_group_is_denied_like_everyone_else(self):
+        mock_service = MagicMock()
+        self.use_service(mock_service)
+        self.sign_in_as(_identity("x@911logan.com", "some-other-group"))
+        for method, path, body, label in HUMAN_ROUTES + ADMIN_ROUTES:
+            with self.subTest(route=label):
+                self.assertEqual(self.request(method, path, body).status_code, 403)
+        self.assertEqual(mock_service.mock_calls, [])
+
+    def _seeded_service(self):
+        service, store, s3 = build_service()
+        record, _ = ingest_record(service)
+        self.use_service(service)
+        return service, store, s3
+
+    def test_every_human_role_reaches_every_human_route(self):
+        # A gate that denies everything is safe and useless: the tier
+        # middlewares AND the route gate must let each human role through.
+        expected = {
+            "page": 200, "list": 200, "list with bad params": 400, "audio": 200,
+            "stats": 200, "correct": 200, "revert": 200, "alerts": 200,
+            # No alert exists in this fixture; 404 proves the route ran.
+            "dismiss": 404,
+        }
+        for role, identity in HUMAN_ROLES:
+            service, store, s3 = self._seeded_service()
+            self.sign_in_as(identity)
+            for method, path, body, label in HUMAN_ROUTES:
+                with self.subTest(role=role, route=label):
+                    response = self.request(method, path, body)
+                    self.assertEqual(response.status_code, expected[label], response.text[:200])
+
+    def test_only_admins_reach_the_manage_routes(self):
+        for role, identity in HUMAN_ROLES:
+            service, store, s3 = self._seeded_service()
+            self.sign_in_as(identity)
+            for method, path, body, label in ADMIN_ROUTES:
+                with self.subTest(role=role, route=label):
+                    response = self.request(method, path, body)
+                    if role == "admin":
+                        self.assertNotEqual(response.status_code, 403, label)
+                        self.assertLess(response.status_code, 500, label)
+                    else:
+                        self.assertEqual(response.status_code, 403, label)
+
+    def test_the_page_tells_the_template_whether_the_caller_is_an_admin(self):
+        from app import main as app_main
+
+        for role, identity in HUMAN_ROLES:
+            self.sign_in_as(identity)
+            captured = {}
+            real = app_main.templates.TemplateResponse
+
+            def spy(*args, **kwargs):
+                captured.update(kwargs.get("context") or {})
+                return real(*args, **kwargs)
+
+            with self.subTest(role=role), patch.object(
+                app_main.templates, "TemplateResponse", side_effect=spy
+            ):
+                response = self.client.get("/mindshare/radio")
+                self.assertEqual(response.status_code, 200)
+                self.assertIs(captured["is_admin"], role == "admin")
+
+    def test_the_page_carries_the_unverified_banner_for_every_human_role(self):
+        for role, identity in HUMAN_ROLES:
+            self.sign_in_as(identity)
+            with self.subTest(role=role):
+                page = self.client.get("/mindshare/radio")
+                self.assertEqual(page.status_code, 200)
+                self.assertIn("Machine-generated transcripts. Unverified.", page.text)
+                self.assertEqual(page.headers["cache-control"], "no-store")
+
+    def test_admin_hub_card_links_to_radio_and_stays_separate_from_jack(self):
+        self.sign_in_as(ADMIN)
+        hub = self.client.get("/mindshare")
+        self.assertIn('href="/mindshare/radio"', hub.text)
+        self.assertIn('href="/mindshare/technical"', hub.text)
+        self.assertNotIn("FUTURE MODULE", hub.text)
+
+
+class AdminListAndErrorTests(_RouteCase):
+    def test_list_passes_filters_and_the_verified_actor(self):
         mock_service = MagicMock()
         mock_service.list_segments.return_value = {
             "segments": [], "has_more": False, "next_before": None,
@@ -913,28 +1378,6 @@ class AdminOnlyTests(_RouteCase):
         self.assertIn("expired", response.json()["detail"])
         mock_service.stats.side_effect = RadioStorageError("x")
         self.assertEqual(self.client.get("/api/radio/stats").status_code, 503)
-
-    def test_admin_sees_the_page_and_nav_entry_but_a_supervisor_does_not(self):
-        self.sign_in_as(ADMIN)
-        page = self.client.get("/mindshare/radio")
-        self.assertEqual(page.status_code, 200)
-        self.assertIn("Machine-generated transcripts. Unverified.", page.text)
-        # The page references its own script and stylesheet (cache-busted).
-        self.assertIn("/static/js/lcdash-admin-radio.js?v=20261017-radio2", page.text)
-        self.assertIn("/static/css/lcdash-admin-radio.css?v=20261017-radio2", page.text)
-        reports = self.client.get("/reports")
-        self.assertIn('href="/mindshare/radio"', reports.text)
-        self.sign_in_as(_identity("s@911logan.com", "lcdash-pilot-supervisor"))
-        reports = self.client.get("/reports")
-        self.assertEqual(reports.status_code, 200)
-        self.assertNotIn('href="/mindshare/radio"', reports.text)
-
-    def test_admin_hub_card_links_to_radio_and_stays_separate_from_jack(self):
-        self.sign_in_as(ADMIN)
-        hub = self.client.get("/mindshare")
-        self.assertIn('href="/mindshare/radio"', hub.text)
-        self.assertIn('href="/mindshare/technical"', hub.text)
-        self.assertNotIn("FUTURE MODULE", hub.text)
 
 
 class PlaybackThroughRoutesTests(_RouteCase):
@@ -1235,77 +1678,40 @@ class IngestRouteTests(_RouteCase):
             "cf-access-authenticated-user-email": "forged@evil.test",
         })
         self.assertEqual(ok.status_code, 201, ok.text)
-        # The ingest route is POST-only; the admin routes stay admin-only.
+        # The ingest route is POST-only; the human routes still need a role.
         self.assertEqual(self.client.get("/api/radio/ingest").status_code, 405)
-        self.sign_in_as(_identity("s@911logan.com", "lcdash-pilot-supervisor"))
+        self.sign_in_as(_identity("b@911logan.com", "lcdash-pilot-avatar"))
         self.assertEqual(self.client.get("/api/radio/segments").status_code, 403)
 
     def test_ingest_is_not_disabled_by_synthetic_disconnected_mode(self):
         self.assertEqual(settings.deployment_mode, "synthetic-disconnected")
         self.assertEqual(self.post().status_code, 201)
 
-    def test_ingested_segment_is_then_visible_to_an_admin_only(self):
+    def test_ingested_segment_is_then_visible_to_human_roles_but_not_the_avatar(self):
         self.assertEqual(self.post().status_code, 201)
-        self.sign_in_as(_identity("s@911logan.com", "lcdash-pilot-supervisor"))
+        self.sign_in_as(_identity("b@911logan.com", "lcdash-pilot-avatar"))
         self.assertEqual(self.client.get("/api/radio/segments").status_code, 403)
-        self.sign_in_as(ADMIN)
-        body = self.client.get("/api/radio/segments").json()
-        self.assertEqual([i["segment_id"] for i in body["segments"]], [self.segment_id])
-        self.assertEqual(
-            body["segments"][0]["transcript"],
-            "Synthetic unit check, traffic stop at the test lot.",
-        )
+        for role, identity in HUMAN_ROLES:
+            self.sign_in_as(identity)
+            with self.subTest(role=role):
+                body = self.client.get("/api/radio/segments").json()
+                self.assertEqual(
+                    [i["segment_id"] for i in body["segments"]], [self.segment_id]
+                )
+                self.assertEqual(
+                    body["segments"][0]["transcript"],
+                    "Synthetic unit check, traffic stop at the test lot.",
+                )
+                self.assertEqual(body["segments"][0]["text"], body["segments"][0]["transcript"])
 
 
-class SettingsAndAssetsTests(unittest.TestCase):
+class SettingsTests(unittest.TestCase):
+    # The page script and template assertions that used to live here moved to
+    # tests/contracts/test_radio_ui_assets.py with the v2 UI.
     def test_radio_settings_defaults(self):
         self.assertEqual(settings.radio_bucket, "lcdash-p1-logan-use1-862772137583-content")
         self.assertEqual(settings.radio_audio_prefix, "radio/audio/")
-
-    def test_page_script_never_uses_innerhtml(self):
-        # Transcripts are untrusted machine output; only textContent may carry them.
-        script = (Path(__file__).resolve().parents[2]
-                  / "static" / "js" / "lcdash-admin-radio.js").read_text(encoding="utf-8")
-        self.assertNotIn("innerHTML", script)
-        self.assertNotIn("outerHTML", script)
-        self.assertNotIn("insertAdjacentHTML", script)
-        self.assertNotIn("document.write", script)
-        self.assertIn('preload = "none"', script)
-        # Server text is only ever assigned through textContent.
-        self.assertIn("textContent", script)
-
-    def test_page_template_has_channel_tabs_and_card_feed(self):
-        # The transcripts are a tabbed feed of cards (an <ol> built by the
-        # script), not a wide table: a table clipped the transcript and play
-        # columns off-screen at phone width.
-        template = (Path(__file__).resolve().parents[2]
-                    / "templates" / "mindshare_radio.html").read_text(encoding="utf-8")
-        self.assertIn('role="tablist"', template)
-        self.assertEqual(template.count('role="tab"'), 4)
-        for channel, label in (("", "All channels"), ("law", "Law"),
-                               ("ems", "EMS"), ("fire", "Fire")):
-            self.assertIn(f'data-channel="{channel}"', template)
-            self.assertIn(f'<span class="radio-tab-label">{label}</span>', template)
-        self.assertIn('id="radio-tab-all"', template)
-        self.assertIn('aria-selected="true"', template)
-        self.assertIn('id="radio-panels"', template)
-        self.assertNotIn("<table", template)
-        self.assertNotIn("<audio", template)
-        self.assertIn("Machine-generated transcripts. Unverified.", template)
-        script = (Path(__file__).resolve().parents[2]
-                  / "static" / "js" / "lcdash-admin-radio.js").read_text(encoding="utf-8")
-        for needle in ('"tabpanel"', '"ol"', "ArrowRight", "ArrowLeft", "new Audio()",
-                       "/api/radio/segments/", "(no speech recognized)", "Audio expired",
-                       "Low confidence", "LCDashSession"):
-            self.assertIn(needle, script)
-        # No native <audio controls> element and no modal dialogs (comments
-        # that merely mention them are not code).
-        code = "\n".join(
-            line for line in script.splitlines() if not line.strip().startswith("//")
-        )
-        self.assertNotIn('createElement("audio")', code)
-        self.assertNotIn("alert(", code)
-        self.assertNotIn("confirm(", code)
+        self.assertEqual(settings.radio_corrected_prefix, "radio/corrected/")
 
 
 if __name__ == "__main__":

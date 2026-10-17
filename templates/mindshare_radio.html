@@ -4,7 +4,7 @@
 
 {% block content %}
 <link rel="stylesheet" href="/static/css/lcdash-admin.css?v=20260809-admin-knowledge">
-<link rel="stylesheet" href="/static/css/lcdash-admin-radio.css?v=20261017-radio2">
+<link rel="stylesheet" href="/static/css/lcdash-admin-radio.css?v=20261017-radio3">
 
 <div class="command-page">
 <div class="command-safety-banner radio-banner mb-4" role="note">
@@ -17,8 +17,8 @@
         <h1>Radio Intelligence</h1>
         <p>
             Transcripts and audio of completed radio segments, captured by a
-            listen-only service and stored for review. Administrators only
-            while testing.
+            listen-only service and stored for review. Anyone signed in can
+            read them and correct a transcript.
         </p>
     </div>
     <div class="admin-safety">
@@ -49,7 +49,7 @@
         <div>
             <div class="admin-eyebrow">SEGMENTS</div>
             <h2 id="radio-segments-title">Transcripts</h2>
-            <p>Newest first, one feed per channel. Opening a feed and playing audio are both recorded in the audit log. Audio is kept 15 days, transcripts 30.</p>
+            <p>Newest first, one feed per channel. Opening a feed and playing audio are both recorded in the audit log. Audio is kept 15 days, transcripts 30. Use Edit on a card to correct what was heard: corrected audio and text are kept for 1 year.</p>
         </div>
     </div>
 
@@ -89,6 +89,19 @@
                     data-channel="fire" aria-selected="false" aria-controls="radio-panel-fire" tabindex="-1">
                 <span class="radio-tab-label">Fire</span><span class="radio-tab-count" aria-hidden="true"></span>
             </button>
+            {#- Administrator tabs. Rendered only for an administrator (the API
+                403s everyone else regardless). The script gives these buttons
+                their tab role and wiring; they are not channel feeds. -#}
+            {% if is_admin %}
+            <button type="button" id="radio-tab-watch" class="radio-tab" data-admin-tab="watch"
+                    data-panel="radio-panel-watch">
+                <span class="radio-tab-label">Alert keywords</span>
+            </button>
+            <button type="button" id="radio-tab-fixes" class="radio-tab" data-admin-tab="fixes"
+                    data-panel="radio-panel-fixes">
+                <span class="radio-tab-label">Transcript fixes</span>
+            </button>
+            {% endif %}
         </div>
         <div class="radio-refresh">
             <span id="radio-updated" class="radio-updated" aria-live="off">Not updated yet</span>
@@ -100,9 +113,97 @@
 
     <p id="radio-play-status" class="radio-play-status" role="status" aria-live="polite"></p>
 
-    <div id="radio-panels" class="radio-panels"></div>
+    <div id="radio-panels" class="radio-panels">
+        {% if is_admin %}
+        <div id="radio-panel-watch" class="radio-panel radio-admin-panel" hidden>
+            <p class="radio-admin-intro">
+                Words or phrases to watch for. When a segment's text contains one, an alert
+                appears on the dashboard. Matching is whole-word and ignores capitals. It is
+                checked when a segment arrives and again when a correction is saved.
+            </p>
+            <p id="radio-watch-total" class="radio-admin-note" aria-live="polite"></p>
+            <div id="radio-watch-loading" class="admin-progress" hidden>
+                <div class="admin-progress-spinner" aria-hidden="true"></div>
+                <div><strong>Loading alert keywords&hellip;</strong></div>
+            </div>
+            <div id="radio-watch-error" class="admin-error" role="alert" hidden></div>
+            <p id="radio-watch-empty" class="admin-empty" hidden>No alert keywords yet. Add one below.</p>
+            <ul id="radio-watch-list" class="radio-admin-list" aria-label="Alert keywords"></ul>
+
+            <form id="radio-watch-form" class="radio-admin-form" novalidate>
+                <h3>Add an alert keyword</h3>
+                <div class="radio-admin-fields">
+                    <label class="radio-field">
+                        <span>Word or phrase (2 to 80 characters)</span>
+                        <input id="radio-watch-phrase" type="text" minlength="2" maxlength="80"
+                               autocomplete="off" placeholder="for example: structure fire">
+                    </label>
+                    <fieldset>
+                        <legend>Channels</legend>
+                        <div class="radio-check-group">
+                            <label class="radio-check"><input type="checkbox" name="channel" value="all" checked> All channels</label>
+                            <label class="radio-check"><input type="checkbox" name="channel" value="law"> Law</label>
+                            <label class="radio-check"><input type="checkbox" name="channel" value="ems"> EMS</label>
+                            <label class="radio-check"><input type="checkbox" name="channel" value="fire"> Fire</label>
+                        </div>
+                    </fieldset>
+                </div>
+                <div id="radio-watch-form-error" class="radio-inline-error" role="alert" hidden></div>
+                <button id="radio-watch-add" class="radio-admin-add" type="submit">
+                    <i class="bi bi-plus-lg" aria-hidden="true"></i> Add keyword
+                </button>
+                <p class="radio-admin-note">
+                    A match raises a visible alert on the dashboard. It makes no sound and sends
+                    nothing to CAD, radio, or paging.
+                </p>
+            </form>
+        </div>
+
+        <div id="radio-panel-fixes" class="radio-panel radio-admin-panel" hidden>
+            <p class="radio-admin-intro">
+                Find-and-replace rules for words the transcriber keeps getting wrong, such as
+                unit names or local place names.
+            </p>
+            <p id="radio-fix-total" class="radio-admin-note" aria-live="polite"></p>
+            <div id="radio-fix-loading" class="admin-progress" hidden>
+                <div class="admin-progress-spinner" aria-hidden="true"></div>
+                <div><strong>Loading transcript fixes&hellip;</strong></div>
+            </div>
+            <div id="radio-fix-error" class="admin-error" role="alert" hidden></div>
+            <p id="radio-fix-empty" class="admin-empty" hidden>No transcript fixes yet. Add one below.</p>
+            <ul id="radio-fix-list" class="radio-admin-list" aria-label="Transcript fixes"></ul>
+
+            <form id="radio-fix-form" class="radio-admin-form" novalidate>
+                <h3>Add a transcript fix</h3>
+                <div class="radio-admin-fields">
+                    <label class="radio-field">
+                        <span>Find (1 to 80 characters)</span>
+                        <input id="radio-fix-find" type="text" maxlength="80" autocomplete="off"
+                               placeholder="what the machine heard">
+                    </label>
+                    <label class="radio-field">
+                        <span>Replace with</span>
+                        <input id="radio-fix-replace" type="text" maxlength="80" autocomplete="off"
+                               placeholder="what it should say (may be blank)">
+                    </label>
+                </div>
+                <label class="radio-check">
+                    <input id="radio-fix-whole" type="checkbox" checked> Whole word only
+                </label>
+                <div id="radio-fix-form-error" class="radio-inline-error" role="alert" hidden></div>
+                <button id="radio-fix-add" class="radio-admin-add" type="submit">
+                    <i class="bi bi-plus-lg" aria-hidden="true"></i> Add fix
+                </button>
+                <p class="radio-admin-note">
+                    Fixes are applied to machine transcripts when displayed. Human corrections
+                    are never changed by a fix.
+                </p>
+            </form>
+        </div>
+        {% endif %}
+    </div>
 </section>
 
-<script src="/static/js/lcdash-admin-radio.js?v=20261017-radio2"></script>
+<script src="/static/js/lcdash-admin-radio.js?v=20261017-radio3"></script>
 </div>
 {% endblock %}

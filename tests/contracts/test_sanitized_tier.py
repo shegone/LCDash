@@ -44,6 +44,8 @@ from app.core import sanitized_tier
 from app.core.alb_identity import AlbIdentity
 from app.main import app
 
+from .test_radio_routes import install_radio_service
+
 # --------------------------------------------------------------------------
 # Fixtures: a realistic full payload, PII and all.
 # --------------------------------------------------------------------------
@@ -314,6 +316,68 @@ class _SanitizedTierTestCase(unittest.TestCase):
             patcher.start()
 
 
+
+RADIO_ALLOWED_PATHS = (
+    "/mindshare/radio",
+    "/mindshare/radio/",
+    "/mindshare/radio?x=1",
+    "/api/radio/segments",
+    "/api/radio/segments?limit=5",
+    "/api/radio/stats",
+    "/api/radio/alerts",
+    "/api/radio/segments/law_rx_20261016_140500_0001/audio",
+    "/api/radio/segments/law_rx_20261016_140500_0001/correction",
+    "/api/radio/alerts/7/dismiss",
+)
+
+# Shapes that must stay closed for a deny-by-default tier even though they
+# sit next to the open ones: the machine-signed ingest, the admin-only manage
+# routes, and any extra segment or suffix.
+RADIO_STILL_DENIED_PATHS = (
+    "/api/radio/ingest",
+    "/api/radio/replacements",
+    "/api/radio/replacements/1",
+    "/api/radio/watch-terms",
+    "/api/radio/watch-terms/1",
+    "/api/radio",
+    "/api/radio/",
+    "/api/radio/other",
+    "/api/radio/alerts/7",
+    "/api/radio/alerts/7/other",
+    "/api/radio/segments/law_rx_20261016_140500_0001",
+    "/api/radio/segments/law_rx_20261016_140500_0001/other",
+    "/api/radio/segments/a/b/audio",
+    "/api/radio/segments/x/audio/extra",
+    "/mindshare/radio/extra",
+    "/mindshare/radio2",
+    "/mindshare",
+    "/mindshare/technical",
+    "/api/mindshare/status",
+)
+
+RADIO_REACHABLE_REQUESTS = (
+    ("GET", "/mindshare/radio", None),
+    ("GET", "/api/radio/segments", None),
+    ("GET", "/api/radio/segments/law_rx_20261016_140500_0001/audio", None),
+    ("PUT", "/api/radio/segments/law_rx_20261016_140500_0001/correction", {"text": "ok"}),
+    ("DELETE", "/api/radio/segments/law_rx_20261016_140500_0001/correction", None),
+    ("GET", "/api/radio/stats", None),
+    ("GET", "/api/radio/alerts", None),
+    ("POST", "/api/radio/alerts/1/dismiss", None),
+)
+
+RADIO_MANAGE_REQUESTS = (
+    ("GET", "/api/radio/replacements"),
+    ("POST", "/api/radio/replacements"),
+    ("DELETE", "/api/radio/replacements/1"),
+    ("GET", "/api/radio/watch-terms"),
+    ("POST", "/api/radio/watch-terms"),
+    ("PATCH", "/api/radio/watch-terms/1"),
+    ("DELETE", "/api/radio/watch-terms/1"),
+    ("POST", "/api/radio/ingest"),
+)
+
+
 # --------------------------------------------------------------------------
 # The path gate
 # --------------------------------------------------------------------------
@@ -457,6 +521,52 @@ class PathGateTests(_SanitizedTierTestCase):
         self.assertFalse(sanitized_tier.restricts("admin"))
         self.assertFalse(sanitized_tier.restricts(None))
         self.assertFalse(sanitized_tier.restricts(""))
+
+
+class UserRadioAccessTests(_SanitizedTierTestCase):
+    """Radio intelligence is open to the user tier; nothing else changed."""
+
+    def test_the_allowlist_admits_exactly_the_radio_shapes(self):
+        for path in RADIO_ALLOWED_PATHS:
+            with self.subTest(path=path):
+                self.assertTrue(sanitized_tier.is_path_allowed_for_user(path))
+        for path in RADIO_STILL_DENIED_PATHS:
+            with self.subTest(path=path):
+                self.assertFalse(sanitized_tier.is_path_allowed_for_user(path))
+
+    def test_radio_stays_out_of_the_module_level_allowlists(self):
+        listed = set(sanitized_tier._USER_ALLOWED_EXACT) | set(
+            sanitized_tier._USER_ALLOWED_PREFIXES
+        )
+        self.assertFalse(any(path.startswith("/mindshare") for path in listed))
+        self.assertFalse(any(path.startswith("/api/radio") for path in listed))
+
+    def test_radio_routes_are_reachable_for_the_user_tier(self):
+        install_radio_service(self)
+        self._sign_in_as(USER)
+        for method, path, body in RADIO_REACHABLE_REQUESTS:
+            with self.subTest(method=method, path=path):
+                kwargs = {"json": body} if body is not None else {}
+                response = self.client.request(method, path, **kwargs)
+                self.assertNotEqual(response.status_code, 403)
+                self.assertLess(response.status_code, 500)
+
+    def test_the_manage_routes_and_ingest_stay_denied_by_the_tier(self):
+        install_radio_service(self)
+        self._sign_in_as(USER)
+        for method, path in RADIO_MANAGE_REQUESTS:
+            with self.subTest(method=method, path=path):
+                response = self.client.request(method, path)
+                self.assertEqual(response.status_code, 403)
+                self.assertEqual(response.json()["detail"], DENIAL_DETAIL)
+
+    def test_every_non_radio_denial_is_unchanged(self):
+        self._sign_in_as(USER)
+        for path in DENIED_PATHS:
+            with self.subTest(path=path):
+                response = self.client.get(path, follow_redirects=False)
+                self.assertEqual(response.status_code, 403)
+                self.assertEqual(response.json()["detail"], DENIAL_DETAIL)
 
 
 # --------------------------------------------------------------------------

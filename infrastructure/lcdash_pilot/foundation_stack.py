@@ -37,6 +37,8 @@ from .config import (
     PILOT_MAIL_FROM_ADDRESS,
     RADIO_AUDIO_PREFIX,
     RADIO_AUDIO_RETENTION_DAYS,
+    RADIO_CORRECTED_PREFIX,
+    RADIO_CORRECTED_RETENTION_DAYS,
     RADIO_INGEST_PUBLIC_KEY,
 )
 
@@ -143,6 +145,12 @@ class Phase1FoundationStack(cdk.Stack):
                     id="RadioAudioExpiry15Days",
                     prefix=RADIO_AUDIO_PREFIX,
                     expiration=cdk.Duration.days(RADIO_AUDIO_RETENTION_DAYS),
+                ),
+                # Operator-corrected radio items are kept a year.
+                s3.LifecycleRule(
+                    id="RadioCorrectedAudioExpiry365Days",
+                    prefix=RADIO_CORRECTED_PREFIX,
+                    expiration=cdk.Duration.days(RADIO_CORRECTED_RETENTION_DAYS),
                 ),
             ],
             removal_policy=cdk.RemovalPolicy.DESTROY,
@@ -279,6 +287,7 @@ class Phase1FoundationStack(cdk.Stack):
                 "LCDASH_RADIO_INGEST_PUBLIC_KEY": RADIO_INGEST_PUBLIC_KEY,
                 "LCDASH_RADIO_BUCKET": content_bucket.bucket_name,
                 "LCDASH_RADIO_AUDIO_PREFIX": RADIO_AUDIO_PREFIX,
+                "LCDASH_RADIO_CORRECTED_PREFIX": RADIO_CORRECTED_PREFIX,
                 "EMS_DELAY_ALERT_ENABLED": "false",
                 "EMS_DELAY_ALERT_MODE": "disabled",
                 "NGA911_PROVIDER_MODE": "mock",
@@ -1309,22 +1318,27 @@ class Phase1FoundationStack(cdk.Stack):
     def _grant_radio_audio_access(self, role: iam.Role, bucket: s3.Bucket) -> None:
         """Radio ingest stores a WAV and the admin player streams it back.
 
-        Put and Get on the radio audio prefix only, plus ListBucket limited to
-        that prefix: without it S3 answers AccessDenied instead of NoSuchKey
-        for an expired object, and the player could not say "audio expired".
-        Deliberately absent: Delete (the 15-day lifecycle rule owns removal).
+        Put and Get on the radio audio and radio corrected prefixes only (the
+        corrections copy needs GetObject on the source and PutObject on the
+        destination), plus ListBucket limited to those two prefixes: without it
+        S3 answers AccessDenied instead of NoSuchKey for an expired object, and
+        the player could not say "audio expired". Deliberately absent: Delete
+        (the lifecycle rules own removal).
         """
+        prefixes = [RADIO_AUDIO_PREFIX, RADIO_CORRECTED_PREFIX]
         role.add_to_policy(
             iam.PolicyStatement(
                 actions=["s3:ListBucket"],
                 resources=[bucket.bucket_arn],
-                conditions={"StringLike": {"s3:prefix": [f"{RADIO_AUDIO_PREFIX}*"]}},
+                conditions={
+                    "StringLike": {"s3:prefix": [f"{prefix}*" for prefix in prefixes]}
+                },
             )
         )
         role.add_to_policy(
             iam.PolicyStatement(
                 actions=["s3:GetObject", "s3:PutObject"],
-                resources=[bucket.arn_for_objects(f"{RADIO_AUDIO_PREFIX}*")],
+                resources=[bucket.arn_for_objects(f"{prefix}*") for prefix in prefixes],
             )
         )
 

@@ -1,6 +1,9 @@
-"""Mindshare Radio Intelligence: signed ingest, storage, and admin reads.
+"""Mindshare Radio Intelligence: signed ingest, storage, reads, and corrections.
 
-Contract: docs/MINDSHARE_RADIO_INGEST.md (v1). The listener on the Hermes host
+Contract: docs/MINDSHARE_RADIO_INGEST.md (v1) and
+docs/MINDSHARE_RADIO_CORRECTIONS.md (v2: human corrections kept for a year,
+admin find-and-replace fixes, keyword alerts, access for every human role).
+The listener on the Hermes host
 captures a finished radio segment, transcribes it locally, and POSTs the WAV
 plus a metadata document, signed with an Ed25519 private key that exists only
 on that host. This module holds everything that is not HTTP plumbing:
@@ -9,8 +12,10 @@ on that host. This module holds everything that is not HTTP plumbing:
   low-confidence rule), each raising ``RadioIngestError`` with a short,
   transcript-free ``detail``;
 - ``RadioRepository``, raw psycopg3 SQL against the ``lcdash_radio`` schema;
-- ``RadioService``, which orchestrates S3 + Postgres for ingest and the three
-  admin reads (list, audio, stats) and records the audit trail.
+- ``RadioService``, which orchestrates S3 + Postgres for ingest, the reads
+  (list, audio, stats, alerts), corrections, fixes and watch terms, and
+  records the audit trail. Every write is audited in the same transaction and
+  fails closed: no audit record, no change.
 
 This feature is inquiry-only. Nothing here writes to CAD, radio, paging, or any
 operational output, and transcripts are machine generated and unverified.
@@ -42,6 +47,8 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from app.config.settings import settings
+from app.services import radio_text
+from app.services.radio_text import FixRule, FixSet, TextRuleError
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +77,14 @@ LOW_CONFIDENCE_NO_SPEECH = 0.6
 
 AUDIO_RETENTION_DAYS = 15
 TRANSCRIPT_RETENTION_DAYS = 30
+# A segment a person corrected keeps its audio and corrected transcript this
+# long, extended on every edit.
+CORRECTED_RETENTION_DAYS = 365
+DEFAULT_CORRECTED_PREFIX = "radio/corrected/"
+FIX_CACHE_SECONDS = 60
+ALERT_WINDOW_HOURS = 24
+MAX_ALERTS = 50
+SNIPPET_CHARS = 300
 PURGE_INTERVAL_SECONDS = 3600
 STATS_WINDOW_HOURS = 24
 
@@ -79,6 +94,14 @@ MAX_QUERY_CHARS = 200
 
 EVENT_LIST = "radio.segments.list"
 EVENT_LISTEN = "radio.segment.listen"
+EVENT_CORRECT = "radio.segment.correct"
+EVENT_CORRECT_REVERT = "radio.segment.correct_revert"
+EVENT_FIX_ADD = "radio.fix.add"
+EVENT_FIX_REMOVE = "radio.fix.remove"
+EVENT_WATCH_ADD = "radio.watch.add"
+EVENT_WATCH_CHANGE = "radio.watch.change"
+EVENT_WATCH_REMOVE = "radio.watch.remove"
+EVENT_ALERT_DISMISS = "radio.alert.dismiss"
 
 _METADATA_FIELDS = frozenset({
     "schema_version", "segment_id", "channel", "direction", "started_at",
@@ -122,7 +145,11 @@ class RadioQueryError(ValueError):
 
 
 class RadioNotFoundError(Exception):
-    """The segment, or its audio object, does not exist (HTTP 404)."""
+    """The segment, rule, term or alert (or its audio) does not exist (HTTP 404)."""
+
+
+class RadioConflictError(Exception):
+    """A duplicate or over-limit write (HTTP 409). The message is caller-safe."""
 
 
 # ----------------------------------------------------------- signature check
@@ -552,18 +579,26 @@ class RadioRepository(AbstractContextManager):
         return created
 
     def purge_expired(self) -> int:
-        """Delete transcript rows past retention. Never touches audit_events."""
+        """Delete transcript rows past retention. Never touches audit_events.
+
+        A segment a person corrected carries ``retain_until``; it survives the
+        30-day rule until that date passes.
+        """
         cursor = self._execute(
             "DELETE FROM lcdash_radio.segments "
-            "WHERE received_at < now() - interval '30 days'"
+            "WHERE received_at < now() - interval '30 days' "
+            "AND (retain_until IS NULL OR retain_until < now())"
         )
         deleted = max(int(cursor.rowcount or 0), 0)
         self._commit()
         return deleted
 
+    # Column order is the row contract used by RadioService._item: indexes
+    # 0-11 are the v1 columns, 12-15 the v2 correction columns.
     _SEGMENT_COLUMNS = (
         "segment_id, channel, direction, started_at, ended_at, duration_seconds, "
-        "transcript, language, model, low_confidence, audio_key, received_at"
+        "transcript, language, model, low_confidence, audio_key, received_at, "
+        "corrected_text, corrected_by, corrected_at, retain_until"
     )
 
     def list_segments(
@@ -589,7 +624,8 @@ class RadioRepository(AbstractContextManager):
             clauses.append("direction = %s")
             params.append(direction)
         if like_pattern:
-            clauses.append("transcript ILIKE %s ESCAPE '!'")
+            # Search what people read: the correction when there is one.
+            clauses.append("COALESCE(corrected_text, transcript) ILIKE %s ESCAPE '!'")
             params.append(like_pattern)
         if cursor is not None:
             clauses.append("(started_at, segment_id) < (%s, %s)")
@@ -623,6 +659,216 @@ class RadioRepository(AbstractContextManager):
         ).fetchone()
         return row[0] if row else None
 
+    # ----------------------------------------------------- corrections (v2)
+    #
+    # The write methods in this section deliberately do NOT commit. The
+    # service follows each with ``record_audit`` (which commits), so a change
+    # and its audit row land together or not at all: if the audit write fails,
+    # ``_execute`` rolls the whole transaction back and the change never
+    # happened.
+
+    def save_correction(
+        self,
+        segment_id: str,
+        new_text: str,
+        actor: str,
+        now: datetime,
+        retain_until: datetime,
+        new_audio_key: str | None,
+    ) -> tuple | None:
+        """Set the correction, append a history row, return the updated row."""
+        current = self._execute(
+            "SELECT corrected_text, transcript FROM lcdash_radio.segments "
+            "WHERE segment_id = %s FOR UPDATE",
+            (segment_id,),
+        ).fetchone()
+        if current is None:
+            return None
+        previous = current[0] if current[0] is not None else current[1]
+        self._execute(
+            "INSERT INTO lcdash_radio.corrections "
+            "(segment_id, previous_text, new_text, actor, created_at) "
+            "VALUES (%s, %s, %s, %s, %s)",
+            (segment_id, previous, new_text, actor[:320], now),
+        )
+        self._execute(
+            "UPDATE lcdash_radio.segments SET corrected_text = %s, "
+            "corrected_by = %s, corrected_at = %s, retain_until = %s, "
+            "audio_key = COALESCE(%s, audio_key) WHERE segment_id = %s",
+            (new_text, actor[:320], now, retain_until, new_audio_key, segment_id),
+        )
+        return self.get_segment(segment_id)
+
+    def clear_correction(
+        self, segment_id: str, actor: str, now: datetime
+    ) -> tuple[tuple, bool] | None:
+        """Revert to the machine transcript. ``(row, changed)``; None if missing.
+
+        Retention already granted (``retain_until``) is left alone: once kept,
+        kept until that date.
+        """
+        current = self._execute(
+            "SELECT corrected_text FROM lcdash_radio.segments "
+            "WHERE segment_id = %s FOR UPDATE",
+            (segment_id,),
+        ).fetchone()
+        if current is None:
+            return None
+        if current[0] is None:
+            return self.get_segment(segment_id), False
+        self._execute(
+            "INSERT INTO lcdash_radio.corrections "
+            "(segment_id, previous_text, new_text, actor, created_at) "
+            "VALUES (%s, %s, NULL, %s, %s)",
+            (segment_id, current[0], actor[:320], now),
+        )
+        self._execute(
+            "UPDATE lcdash_radio.segments SET corrected_text = NULL, "
+            "corrected_by = NULL, corrected_at = NULL WHERE segment_id = %s",
+            (segment_id,),
+        )
+        return self.get_segment(segment_id), True
+
+    # --------------------------------------------------------- fixes (v2)
+
+    def list_replacements(self) -> list[tuple]:
+        return self._execute(
+            "SELECT replacement_id, find_text, replace_text, whole_word, "
+            "created_by, created_at FROM lcdash_radio.replacements "
+            "ORDER BY replacement_id"
+        ).fetchall()
+
+    def count_replacements(self) -> int:
+        return int(self._execute(
+            "SELECT COUNT(*) FROM lcdash_radio.replacements"
+        ).fetchone()[0])
+
+    def insert_replacement(
+        self, find_text: str, replace_text: str, whole_word: bool, actor: str
+    ) -> tuple | None:
+        """None when a rule with the same find text (any case) already exists."""
+        return self._execute(
+            "INSERT INTO lcdash_radio.replacements "
+            "(find_text, replace_text, whole_word, created_by) "
+            "VALUES (%s, %s, %s, %s) ON CONFLICT ((lower(find_text))) DO NOTHING "
+            "RETURNING replacement_id, find_text, replace_text, whole_word, "
+            "created_by, created_at",
+            (find_text, replace_text, whole_word, actor[:320]),
+        ).fetchone()
+
+    def delete_replacement(self, replacement_id: int) -> tuple | None:
+        return self._execute(
+            "DELETE FROM lcdash_radio.replacements WHERE replacement_id = %s "
+            "RETURNING replacement_id, find_text, replace_text, whole_word, "
+            "created_by, created_at",
+            (replacement_id,),
+        ).fetchone()
+
+    # --------------------------------------------------- watch terms (v2)
+
+    _TERM_COLUMNS = "term_id, phrase, channels, enabled, created_by, created_at"
+
+    def list_watch_terms(self) -> list[tuple]:
+        return self._execute(
+            f"SELECT {self._TERM_COLUMNS} FROM lcdash_radio.watch_terms "
+            "ORDER BY term_id"
+        ).fetchall()
+
+    def list_enabled_watch_terms(self) -> list[tuple]:
+        """``(term_id, phrase, channels)`` for every enabled term."""
+        return self._execute(
+            "SELECT term_id, phrase, channels FROM lcdash_radio.watch_terms "
+            "WHERE enabled ORDER BY term_id"
+        ).fetchall()
+
+    def count_watch_terms(self) -> int:
+        return int(self._execute(
+            "SELECT COUNT(*) FROM lcdash_radio.watch_terms"
+        ).fetchone()[0])
+
+    def insert_watch_term(
+        self, phrase: str, channels: list[str], enabled: bool, actor: str
+    ) -> tuple | None:
+        """None when the phrase already exists (case-insensitive)."""
+        return self._execute(
+            "INSERT INTO lcdash_radio.watch_terms "
+            "(phrase, channels, enabled, created_by) "
+            "VALUES (%s, %s::TEXT[], %s, %s) ON CONFLICT ((lower(phrase))) DO NOTHING "
+            f"RETURNING {self._TERM_COLUMNS}",
+            (phrase, channels, enabled, actor[:320]),
+        ).fetchone()
+
+    def update_watch_term(
+        self, term_id: int, *, enabled: bool | None, channels: list[str] | None
+    ) -> tuple | None:
+        """Change only the supplied fields; None when the term is missing."""
+        assignments: list[str] = []
+        params: list[Any] = []
+        if enabled is not None:
+            assignments.append("enabled = %s")
+            params.append(enabled)
+        if channels is not None:
+            assignments.append("channels = %s::TEXT[]")
+            params.append(channels)
+        if not assignments:
+            raise RadioDatabaseError("No watch term change was supplied.")
+        params.append(term_id)
+        return self._execute(
+            f"UPDATE lcdash_radio.watch_terms SET {', '.join(assignments)} "
+            f"WHERE term_id = %s RETURNING {self._TERM_COLUMNS}",
+            tuple(params),
+        ).fetchone()
+
+    def delete_watch_term(self, term_id: int) -> tuple | None:
+        return self._execute(
+            "DELETE FROM lcdash_radio.watch_terms WHERE term_id = %s "
+            f"RETURNING {self._TERM_COLUMNS}",
+            (term_id,),
+        ).fetchone()
+
+    # ------------------------------------------------------- alerts (v2)
+
+    def insert_alert(self, segment_id: str, term_id: int, phrase: str) -> bool:
+        """One alert per (segment, term). True when a new alert was created."""
+        cursor = self._execute(
+            "INSERT INTO lcdash_radio.alerts (segment_id, term_id, phrase) "
+            "VALUES (%s, %s, %s) ON CONFLICT (segment_id, term_id) DO NOTHING",
+            (segment_id, term_id, phrase),
+        )
+        created = cursor.rowcount == 1
+        self._commit()
+        return created
+
+    def list_open_alerts(self, since: datetime, limit: int) -> list[tuple]:
+        """Undismissed alerts created at or after ``since``, newest first."""
+        return self._execute(
+            "SELECT a.alert_id, a.segment_id, a.phrase, a.created_at, "
+            "s.channel, s.direction, s.started_at, s.transcript, s.audio_key, "
+            "s.received_at, s.corrected_text, s.retain_until "
+            "FROM lcdash_radio.alerts a "
+            "JOIN lcdash_radio.segments s ON s.segment_id = a.segment_id "
+            "WHERE a.dismissed_at IS NULL AND a.created_at >= %s "
+            "ORDER BY a.created_at DESC, a.alert_id DESC LIMIT %s",
+            (since, limit),
+        ).fetchall()
+
+    def dismiss_alert(
+        self, alert_id: int, actor: str, now: datetime
+    ) -> tuple[str, str] | None:
+        """``('dismissed' | 'already', segment_id)``; None when no such alert."""
+        row = self._execute(
+            "UPDATE lcdash_radio.alerts SET dismissed_by = %s, dismissed_at = %s "
+            "WHERE alert_id = %s AND dismissed_at IS NULL RETURNING segment_id",
+            (actor[:320], now, alert_id),
+        ).fetchone()
+        if row is not None:
+            return "dismissed", row[0]
+        existing = self._execute(
+            "SELECT segment_id FROM lcdash_radio.alerts WHERE alert_id = %s",
+            (alert_id,),
+        ).fetchone()
+        return ("already", existing[0]) if existing is not None else None
+
     def record_audit(
         self, event_type: str, actor: str, segment_id: str | None, detail: dict
     ) -> None:
@@ -640,11 +886,40 @@ class RadioRepository(AbstractContextManager):
 # ------------------------------------------------------------------- service
 
 
+def _iso(value: datetime | None) -> str | None:
+    return value.isoformat() if value is not None else None
+
+
+def _parse_id(value: object) -> int:
+    """A numeric path id, or 'not found' (the id cannot exist)."""
+    text = str(value if value is not None else "").strip()
+    if not re.fullmatch(r"[0-9]{1,18}", text):
+        raise RadioNotFoundError("Not found.")
+    number = int(text)
+    if number < 1:
+        raise RadioNotFoundError("Not found.")
+    return number
+
+
+def _require_object(payload: object, allowed: frozenset[str]) -> dict:
+    """A JSON object whose keys are all known (unknown keys are a 400)."""
+    if not isinstance(payload, dict):
+        raise RadioQueryError("The request body must be a JSON object.")
+    if set(payload) - allowed:
+        raise RadioQueryError("The request body contains unknown fields.")
+    return payload
+
+
+def _rule_error(error: TextRuleError) -> RadioQueryError:
+    return RadioQueryError(str(error))
+
+
 class RadioService:
-    """Orchestrates S3 + Postgres for ingest and the admin reads.
+    """Orchestrates S3 + Postgres for ingest, reads, corrections and alerts.
 
     One instance is shared per process (see ``app.main._radio_service``): the
-    schema is applied once and the hourly purge throttle lives here.
+    schema is applied once, the hourly purge throttle lives here, and so does
+    the 60-second cache of the replacement fixes.
     """
 
     def __init__(
@@ -652,6 +927,7 @@ class RadioService:
         *,
         bucket: str,
         audio_prefix: str,
+        corrected_prefix: str = DEFAULT_CORRECTED_PREFIX,
         region: str = "us-east-1",
         s3_client=None,
         repository_factory: Callable[[], Any] | None = None,
@@ -662,6 +938,12 @@ class RadioService:
             raise ValueError("Radio storage requires a bucket.")
         self._bucket = bucket
         self._audio_prefix = audio_prefix
+        clean_corrected = str(corrected_prefix or "").strip().lstrip("/")
+        if not clean_corrected:
+            clean_corrected = DEFAULT_CORRECTED_PREFIX
+        if not clean_corrected.endswith("/"):
+            clean_corrected += "/"
+        self._corrected_prefix = clean_corrected
         self._region = region
         # Injected in tests; built lazily otherwise so a request that never
         # touches audio never pays for credential resolution.
@@ -673,6 +955,8 @@ class RadioService:
         self._schema_lock = threading.Lock()
         self._purge_lock = threading.Lock()
         self._last_purge: float | None = None
+        self._fix_lock = threading.Lock()
+        self._fix_cache: tuple[float, FixSet] | None = None
 
     @property
     def s3(self):
@@ -697,7 +981,29 @@ class RadioService:
             raise
         return repository
 
-    # ---------------------------------------------------------------- ingest
+    # ------------------------------------------------------------------ fixes
+
+    def _fixes(self, repository) -> FixSet:
+        """The compiled replacement fixes, cached in-process for 60 seconds."""
+        now = self._clock()
+        with self._fix_lock:
+            cached = self._fix_cache
+            if cached is not None and now - cached[0] < FIX_CACHE_SECONDS:
+                return cached[1]
+        rules = [
+            FixRule(row[1], row[2], bool(row[3]))
+            for row in repository.list_replacements()
+        ]
+        fixes = FixSet(rules)
+        with self._fix_lock:
+            self._fix_cache = (now, fixes)
+        return fixes
+
+    def _drop_fix_cache(self) -> None:
+        with self._fix_lock:
+            self._fix_cache = None
+
+    # ----------------------------------------------------------------- ingest
 
     def ingest(self, record: RadioSegmentRecord, audio: bytes) -> str:
         """Store a validated, signature-verified segment. 'created' or 'duplicate'."""
@@ -727,13 +1033,67 @@ class RadioService:
                 record.segment_id, record.channel, record.direction,
                 record.low_confidence,
             )
+            if created:
+                # Keyword alerts are advisory and must never fail an ingest.
+                self._match_new_segment(repository, record)
             self._maybe_purge(repository)
             return "created" if created else "duplicate"
         finally:
             repository.__exit__(None, None, None)
 
+    def _match_new_segment(self, repository, record: RadioSegmentRecord) -> None:
+        try:
+            text = self._fixes(repository).apply(record.transcript)
+            self._evaluate_alerts(
+                repository, segment_id=record.segment_id,
+                channel=record.channel, text=text,
+            )
+        except Exception as error:  # noqa: BLE001 - matching must never fail an ingest
+            logger.warning(
+                "radio-alerts matching failed at ingest segment=%s: %s",
+                record.segment_id, type(error).__name__,
+            )
+
+    def _evaluate_alerts(
+        self, repository, *, segment_id: str, channel: str, text: str
+    ) -> int:
+        """Raise one alert per (segment, enabled matching term). Returns new count.
+
+        A failure on one term is logged and skipped so the others still run;
+        nothing here ever raises into an ingest or a correction.
+        """
+        if not text:
+            return 0
+        created = 0
+        try:
+            terms = repository.list_enabled_watch_terms()
+        except Exception as error:  # noqa: BLE001
+            logger.warning(
+                "radio-alerts could not load watch terms segment=%s: %s",
+                segment_id, type(error).__name__,
+            )
+            return 0
+        for term_id, phrase, channels in terms:
+            try:
+                if not radio_text.term_applies_to_channel(channels, channel):
+                    continue
+                if not radio_text.find_match(radio_text.compile_phrase(phrase), text):
+                    continue
+                if repository.insert_alert(segment_id, term_id, phrase):
+                    created += 1
+                    logger.info(
+                        "radio-alert segment=%s term=%s channel=%s",
+                        segment_id, term_id, channel,
+                    )
+            except Exception as error:  # noqa: BLE001
+                logger.warning(
+                    "radio-alerts match failed segment=%s term=%s: %s",
+                    segment_id, term_id, type(error).__name__,
+                )
+        return created
+
     def _maybe_purge(self, repository) -> None:
-        """Lazy 30-day purge, at most once per hour per process."""
+        """Lazy 30-day purge (respecting retain_until), at most once per hour."""
         with self._purge_lock:
             now = self._clock()
             if (
@@ -750,14 +1110,31 @@ class RadioService:
         if deleted:
             logger.info("radio-ingest purged %d expired transcript rows", deleted)
 
-    # ----------------------------------------------------------------- reads
+    # ------------------------------------------------------------------ reads
 
-    def _item(self, row: tuple) -> dict:
+    def _audio_available(
+        self, audio_key: str | None, received_at: datetime,
+        retain_until: datetime | None,
+    ) -> bool:
+        """Whether the WAV should still exist.
+
+        A key under the corrected prefix lives until ``retain_until``; a key
+        under the normal prefix lives 15 days from receipt.
+        """
+        if not audio_key:
+            return False
+        now = self._utcnow()
+        if audio_key.startswith(self._corrected_prefix):
+            return retain_until is not None and retain_until > now
+        return received_at > now - timedelta(days=AUDIO_RETENTION_DAYS)
+
+    def _item(self, row: tuple, fixes: FixSet) -> dict:
         (segment_id, channel, direction, started_at, ended_at, duration, transcript,
-         language, model, low_confidence, audio_key, received_at) = row
-        audio_available = bool(audio_key) and received_at > (
-            self._utcnow() - timedelta(days=AUDIO_RETENTION_DAYS)
-        )
+         language, model, low_confidence, audio_key, received_at,
+         corrected_text, corrected_by, corrected_at, retain_until) = row
+        corrected = corrected_text is not None
+        # A human correction wins outright; fixes only ever touch machine text.
+        text = corrected_text if corrected else fixes.apply(transcript)
         return {
             "segment_id": segment_id,
             "channel": channel,
@@ -765,11 +1142,20 @@ class RadioService:
             "started_at": started_at.isoformat(),
             "ended_at": ended_at.isoformat(),
             "duration_seconds": float(duration),
-            "transcript": transcript,
+            "text": text,
+            # Alias of ``text`` so clients written for v1 keep working.
+            "transcript": text,
+            "machine_transcript": transcript,
+            "corrected": corrected,
+            "corrected_by": corrected_by if corrected else None,
+            "corrected_at": _iso(corrected_at) if corrected else None,
+            "retained_until": _iso(retain_until),
             "language": language,
             "model": model,
             "low_confidence": bool(low_confidence),
-            "audio_available": audio_available,
+            "audio_available": self._audio_available(
+                audio_key, received_at, retain_until
+            ),
             "received_at": received_at.isoformat(),
         }
 
@@ -817,7 +1203,8 @@ class RadioService:
             )
             has_more = len(rows) > page_size
             rows = rows[:page_size]
-            items = [self._item(row) for row in rows]
+            fixes = self._fixes(repository)
+            items = [self._item(row, fixes) for row in rows]
             # Audited in the same connection AFTER the read and BEFORE the
             # result leaves this method: if the audit write fails, the caller
             # gets an error and no transcript.
@@ -843,8 +1230,9 @@ class RadioService:
     def fetch_audio(self, segment_id: str, *, actor: str) -> bytes:
         """Return the WAV bytes for one segment, after auditing the listen.
 
-        Fails closed: the object is fetched, then the audit event is written,
-        and the bytes are only returned if that write succeeded.
+        Works for both prefixes (``audio_key`` says which). Fails closed: the
+        object is fetched, then the audit event is written, and the bytes are
+        only returned if that write succeeded.
         """
         if not SEGMENT_ID_PATTERN.fullmatch(str(segment_id or "")):
             raise RadioNotFoundError("Segment not found.")
@@ -890,7 +1278,368 @@ class RadioService:
             "last_received_at": newest.isoformat() if newest else None,
         }
 
-    # ----------------------------------------------------------------- audit
+    # ------------------------------------------------------------ corrections
+
+    def correct_segment(self, segment_id: str, text: object, *, actor: str) -> dict:
+        """Save a human correction; keep the audio for a year; re-check alerts.
+
+        Last write wins; the corrections table keeps every version. Audited in
+        the same transaction as the change (fail closed).
+        """
+        try:
+            clean = radio_text.clean_correction_text(text)
+        except TextRuleError as error:
+            raise _rule_error(error) from None
+        if not SEGMENT_ID_PATTERN.fullmatch(str(segment_id or "")):
+            raise RadioNotFoundError("Segment not found.")
+
+        repository = self._open()
+        try:
+            row = repository.get_segment(segment_id)
+            if row is None:
+                raise RadioNotFoundError("Segment not found.")
+            now = self._utcnow()
+            retain_until = now + timedelta(days=CORRECTED_RETENTION_DAYS)
+            first_correction = row[12] is None and row[15] is None
+            new_key = self._copy_for_retention(row, now)
+            updated = repository.save_correction(
+                segment_id, clean, actor, now, retain_until, new_key
+            )
+            if updated is None:  # purged between the read and the write
+                raise RadioNotFoundError("Segment not found.")
+            self._audit(
+                repository, EVENT_CORRECT, actor, segment_id,
+                {
+                    "channel": row[1], "direction": row[2],
+                    "chars": len(clean), "first_correction": first_correction,
+                    "audio_retained": bool(new_key),
+                },
+                log_extra=(
+                    f"channel={row[1]} chars={len(clean)} "
+                    f"audio_retained={bool(new_key)}"
+                ),
+            )
+            # The correction is saved. Watch terms are checked against the
+            # corrected text; a failure here is logged, never surfaced.
+            self._evaluate_alerts(
+                repository, segment_id=segment_id, channel=row[1], text=clean
+            )
+            item = self._item(updated, self._safe_fixes(repository))
+        finally:
+            repository.__exit__(None, None, None)
+        return item
+
+    def revert_correction(self, segment_id: str, *, actor: str) -> dict:
+        """Clear a correction (history keeps both versions). A no-op if none."""
+        if not SEGMENT_ID_PATTERN.fullmatch(str(segment_id or "")):
+            raise RadioNotFoundError("Segment not found.")
+        repository = self._open()
+        try:
+            result = repository.clear_correction(segment_id, actor, self._utcnow())
+            if result is None:
+                raise RadioNotFoundError("Segment not found.")
+            updated, changed = result
+            if changed:
+                self._audit(
+                    repository, EVENT_CORRECT_REVERT, actor, segment_id,
+                    {"channel": updated[1], "direction": updated[2]},
+                    log_extra=f"channel={updated[1]}",
+                )
+            item = self._item(updated, self._safe_fixes(repository))
+        finally:
+            repository.__exit__(None, None, None)
+        return item
+
+    def _safe_fixes(self, repository) -> FixSet:
+        """Fixes for display after a committed write: never fail the response."""
+        try:
+            return self._fixes(repository)
+        except Exception as error:  # noqa: BLE001
+            logger.warning("radio fixes unavailable: %s", type(error).__name__)
+            return radio_text.EMPTY_FIXES
+
+    def _copy_for_retention(self, row: tuple, now: datetime) -> str | None:
+        """On the first correction, copy the WAV to the corrected prefix.
+
+        Returns the new key, or None when there is nothing to copy (no audio,
+        already under the corrected prefix, or the audio is already gone, in
+        which case the text is still saved). Any other storage failure raises
+        so nothing is changed.
+        """
+        segment_id, channel = row[0], row[1]
+        started_at, audio_key, received_at = row[3], row[10], row[11]
+        if not audio_key or audio_key.startswith(self._corrected_prefix):
+            return None
+        if received_at <= now - timedelta(days=AUDIO_RETENTION_DAYS):
+            return None
+        destination = build_audio_key(
+            self._corrected_prefix, channel, started_at, segment_id
+        )
+        try:
+            self.s3.copy_object(
+                Bucket=self._bucket,
+                Key=destination,
+                CopySource={"Bucket": self._bucket, "Key": audio_key},
+                ServerSideEncryption="AES256",
+                ContentType="audio/wav",
+                MetadataDirective="REPLACE",
+            )
+        except Exception as error:
+            if _aws_error_code(error) in ("NoSuchKey", "404", "NotFound"):
+                return None
+            logger.warning(
+                "radio copy_object failed key=%s: %s", destination, error
+            )
+            raise RadioStorageError("Radio audio storage failed.") from error
+        return destination
+
+    # ------------------------------------------------------------------ fixes
+
+    @staticmethod
+    def _rule_item(row: tuple) -> dict:
+        return {
+            "replacement_id": row[0],
+            "find": row[1],
+            "replace": row[2],
+            "whole_word": bool(row[3]),
+            "created_by": row[4],
+            "created_at": _iso(row[5]),
+        }
+
+    def list_replacements(self) -> dict:
+        repository = self._open()
+        try:
+            rows = repository.list_replacements()
+        finally:
+            repository.__exit__(None, None, None)
+        return {
+            "replacements": [self._rule_item(row) for row in rows],
+            "max_rules": radio_text.MAX_FIX_RULES,
+        }
+
+    def add_replacement(self, payload: object, *, actor: str) -> dict:
+        body = _require_object(payload, frozenset({"find", "replace", "whole_word"}))
+        try:
+            find = radio_text.clean_single_line(
+                body.get("find"), label="find", minimum=1,
+                maximum=radio_text.MAX_FIND_CHARS,
+            )
+            replace = radio_text.clean_replacement(body.get("replace", ""))
+        except TextRuleError as error:
+            raise _rule_error(error) from None
+        whole_word = body.get("whole_word", True)
+        if not isinstance(whole_word, bool):
+            raise RadioQueryError("The 'whole_word' value must be true or false.")
+        if find == replace:
+            raise RadioQueryError("The 'replace' value must differ from 'find'.")
+
+        repository = self._open()
+        try:
+            if repository.count_replacements() >= radio_text.MAX_FIX_RULES:
+                raise RadioConflictError(
+                    f"At most {radio_text.MAX_FIX_RULES} fixes are allowed."
+                )
+            row = repository.insert_replacement(find, replace, whole_word, actor)
+            if row is None:
+                raise RadioConflictError("A fix for that text already exists.")
+            self._audit(
+                repository, EVENT_FIX_ADD, actor, None,
+                {"replacement_id": row[0], "find": find, "replace": replace,
+                 "whole_word": whole_word},
+                log_extra=f"replacement={row[0]}",
+            )
+        finally:
+            repository.__exit__(None, None, None)
+        self._drop_fix_cache()
+        return self._rule_item(row)
+
+    def remove_replacement(self, replacement_id: object, *, actor: str) -> dict:
+        number = _parse_id(replacement_id)
+        repository = self._open()
+        try:
+            row = repository.delete_replacement(number)
+            if row is None:
+                raise RadioNotFoundError("Fix not found.")
+            self._audit(
+                repository, EVENT_FIX_REMOVE, actor, None,
+                {"replacement_id": row[0], "find": row[1], "replace": row[2],
+                 "whole_word": bool(row[3])},
+                log_extra=f"replacement={row[0]}",
+            )
+        finally:
+            repository.__exit__(None, None, None)
+        self._drop_fix_cache()
+        return {"replacement_id": number, "removed": True}
+
+    # ------------------------------------------------------------ watch terms
+
+    @staticmethod
+    def _term_item(row: tuple) -> dict:
+        return {
+            "term_id": row[0],
+            "phrase": row[1],
+            "channels": list(row[2] or []),
+            "enabled": bool(row[3]),
+            "created_by": row[4],
+            "created_at": _iso(row[5]),
+        }
+
+    def list_watch_terms(self) -> dict:
+        repository = self._open()
+        try:
+            rows = repository.list_watch_terms()
+        finally:
+            repository.__exit__(None, None, None)
+        return {
+            "terms": [self._term_item(row) for row in rows],
+            "max_terms": radio_text.MAX_WATCH_TERMS,
+        }
+
+    def add_watch_term(self, payload: object, *, actor: str) -> dict:
+        body = _require_object(payload, frozenset({"phrase", "channels", "enabled"}))
+        try:
+            phrase = radio_text.clean_single_line(
+                body.get("phrase"), label="phrase",
+                minimum=radio_text.MIN_PHRASE_CHARS,
+                maximum=radio_text.MAX_PHRASE_CHARS,
+            )
+            channels = radio_text.clean_channels(body.get("channels"))
+        except TextRuleError as error:
+            raise _rule_error(error) from None
+        enabled = body.get("enabled", True)
+        if not isinstance(enabled, bool):
+            raise RadioQueryError("The 'enabled' value must be true or false.")
+
+        repository = self._open()
+        try:
+            if repository.count_watch_terms() >= radio_text.MAX_WATCH_TERMS:
+                raise RadioConflictError(
+                    f"At most {radio_text.MAX_WATCH_TERMS} watch terms are allowed."
+                )
+            row = repository.insert_watch_term(phrase, channels, enabled, actor)
+            if row is None:
+                raise RadioConflictError("That watch term already exists.")
+            self._audit(
+                repository, EVENT_WATCH_ADD, actor, None,
+                {"term_id": row[0], "phrase": phrase, "channels": channels,
+                 "enabled": enabled},
+                log_extra=f"term={row[0]}",
+            )
+        finally:
+            repository.__exit__(None, None, None)
+        return self._term_item(row)
+
+    def update_watch_term(self, term_id: object, payload: object, *, actor: str) -> dict:
+        number = _parse_id(term_id)
+        body = _require_object(payload, frozenset({"enabled", "channels"}))
+        if not body:
+            raise RadioQueryError("Supply 'enabled' and/or 'channels'.")
+        enabled = None
+        channels = None
+        if "enabled" in body:
+            if not isinstance(body["enabled"], bool):
+                raise RadioQueryError("The 'enabled' value must be true or false.")
+            enabled = body["enabled"]
+        if "channels" in body:
+            try:
+                channels = radio_text.clean_channels(body["channels"])
+            except TextRuleError as error:
+                raise _rule_error(error) from None
+
+        repository = self._open()
+        try:
+            row = repository.update_watch_term(
+                number, enabled=enabled, channels=channels
+            )
+            if row is None:
+                raise RadioNotFoundError("Watch term not found.")
+            detail: dict[str, Any] = {"term_id": number}
+            if enabled is not None:
+                detail["enabled"] = enabled
+            if channels is not None:
+                detail["channels"] = channels
+            self._audit(
+                repository, EVENT_WATCH_CHANGE, actor, None, detail,
+                log_extra=f"term={number}",
+            )
+        finally:
+            repository.__exit__(None, None, None)
+        return self._term_item(row)
+
+    def remove_watch_term(self, term_id: object, *, actor: str) -> dict:
+        number = _parse_id(term_id)
+        repository = self._open()
+        try:
+            row = repository.delete_watch_term(number)
+            if row is None:
+                raise RadioNotFoundError("Watch term not found.")
+            self._audit(
+                repository, EVENT_WATCH_REMOVE, actor, None,
+                {"term_id": number, "phrase": row[1]},
+                log_extra=f"term={number}",
+            )
+        finally:
+            repository.__exit__(None, None, None)
+        return {"term_id": number, "removed": True}
+
+    # ----------------------------------------------------------------- alerts
+
+    def list_alerts(self) -> dict:
+        """Undismissed alerts from the last 24 hours, newest first, max 50.
+
+        Not audited per call: the dashboard polls this every 15 seconds.
+        Transcript access is still audited where audio is played and where the
+        full list is fetched.
+        """
+        repository = self._open()
+        try:
+            since = self._utcnow() - timedelta(hours=ALERT_WINDOW_HOURS)
+            rows = repository.list_open_alerts(since, MAX_ALERTS)
+            fixes = self._fixes(repository)
+        finally:
+            repository.__exit__(None, None, None)
+        alerts = []
+        for (alert_id, segment_id, phrase, created_at, channel, direction,
+             started_at, transcript, audio_key, received_at, corrected_text,
+             retain_until) in rows:
+            corrected = corrected_text is not None
+            text = corrected_text if corrected else fixes.apply(transcript)
+            alerts.append({
+                "alert_id": alert_id,
+                "segment_id": segment_id,
+                "channel": channel,
+                "direction": direction,
+                "started_at": started_at.isoformat(),
+                "phrase": phrase,
+                "snippet": radio_text.make_snippet(text, SNIPPET_CHARS),
+                "created_at": created_at.isoformat(),
+                "audio_available": self._audio_available(
+                    audio_key, received_at, retain_until
+                ),
+                "text_corrected": corrected,
+            })
+        return {"alerts": alerts, "window_hours": ALERT_WINDOW_HOURS}
+
+    def dismiss_alert(self, alert_id: object, *, actor: str) -> dict:
+        """Dismiss for everyone. Visual state only, not an acknowledgement."""
+        number = _parse_id(alert_id)
+        repository = self._open()
+        try:
+            result = repository.dismiss_alert(number, actor, self._utcnow())
+            if result is None:
+                raise RadioNotFoundError("Alert not found.")
+            state, segment_id = result
+            if state == "dismissed":
+                self._audit(
+                    repository, EVENT_ALERT_DISMISS, actor, segment_id,
+                    {"alert_id": number},
+                    log_extra=f"alert={number}",
+                )
+        finally:
+            repository.__exit__(None, None, None)
+        return {"alert_id": number, "dismissed": True}
+
+    # ------------------------------------------------------------------ audit
 
     @staticmethod
     def _audit(

@@ -4,6 +4,7 @@
 
 {% block page_styles %}
 <link href="/static/css/lcdash-dashboard.css" rel="stylesheet">
+<link href="/static/css/lcdash-radio-alerts.css?v=20261017-radio3" rel="stylesheet">
 {% endblock %}
 
 {% block content %}
@@ -246,6 +247,29 @@
 </section>
 {% endif %}
 
+{#- Radio keyword alerts: every human role. Starts hidden; the script reveals it
+    once /api/radio/alerts answers, and leaves it hidden for a role the API
+    refuses (403/404). Visual only: no sound, no notifications. -#}
+<section
+    class="glass radio-alerts mb-4"
+    id="radio-alerts-panel"
+    aria-labelledby="radio-alerts-heading"
+    hidden
+>
+    <div class="radio-alerts-head">
+        <div class="radio-alerts-title">
+            <h2 class="h5 text-warning mb-0" id="radio-alerts-heading">Radio keyword alerts</h2>
+            <span class="radio-alerts-count" id="radio-alerts-count" aria-hidden="true">0</span>
+        </div>
+        <div class="radio-alerts-label">Machine-generated. Unverified. Advisory only.</div>
+    </div>
+    <div class="radio-alerts-error" id="radio-alerts-error" role="alert" hidden></div>
+    <p class="radio-alerts-empty" id="radio-alerts-empty">No radio keyword alerts</p>
+    <ul class="radio-alerts-list" id="radio-alerts-list" aria-label="Radio keyword alerts, newest first"></ul>
+    <p class="radio-alerts-more" id="radio-alerts-more" hidden></p>
+    <p class="radio-alerts-sr" id="radio-alerts-status" role="status" aria-live="polite"></p>
+</section>
+
 <section class="glass p-4 incident-feed-wrap" aria-labelledby="active-incident-heading">
 
     <div class="feed-header d-flex justify-content-between align-items-center flex-wrap gap-3">
@@ -307,4 +331,5 @@
 
 {% block page_scripts %}
 <script src="/static/js/lcdash-dashboard.js?v=20260809-sanitized-tier"></script>
+<script src="/static/js/lcdash-radio-alerts.js?v=20261017-radio3"></script>
 {% endblock %}

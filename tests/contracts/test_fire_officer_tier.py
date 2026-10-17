@@ -36,7 +36,12 @@ from app.core.cloud_pilot_roles import (
 )
 from app.main import app
 
+from .test_radio_routes import install_radio_service
 from .test_sanitized_tier import (
+    RADIO_ALLOWED_PATHS,
+    RADIO_MANAGE_REQUESTS,
+    RADIO_REACHABLE_REQUESTS,
+    RADIO_STILL_DENIED_PATHS,
     _full_map_snapshot,
     _full_operations_snapshot,
     _full_station_alert_snapshot,
@@ -374,6 +379,59 @@ class FireOfficerPathGateTests(_FireOfficerTestCase):
 
 
 # --------------------------------------------------------------------------
+# Radio intelligence is open to every human role
+# --------------------------------------------------------------------------
+
+
+class FireOfficerRadioAccessTests(_FireOfficerTestCase):
+    def test_the_allowlist_admits_exactly_the_radio_shapes(self):
+        for path in RADIO_ALLOWED_PATHS:
+            with self.subTest(path=path):
+                self.assertTrue(fire_officer_tier.is_path_allowed_for_fire_officer(path))
+        for path in RADIO_STILL_DENIED_PATHS:
+            with self.subTest(path=path):
+                self.assertFalse(fire_officer_tier.is_path_allowed_for_fire_officer(path))
+
+    def test_radio_stays_out_of_the_module_level_allowlists(self):
+        """The forbidden-prefix guard above stays literally true: radio is
+        reachable through app/core/radio_access.py, not by listing /mindshare."""
+        listed = set(fire_officer_tier._FIRE_OFFICER_ALLOWED_EXACT) | set(
+            fire_officer_tier._FIRE_OFFICER_ALLOWED_PREFIXES
+        )
+        self.assertFalse(any(path.startswith("/mindshare") for path in listed))
+        self.assertFalse(any(path.startswith("/api/radio") for path in listed))
+
+    def test_radio_routes_are_reachable_for_fire_officers(self):
+        install_radio_service(self)
+        self._sign_in_as(FIRE_OFFICER)
+        for method, path, body in RADIO_REACHABLE_REQUESTS:
+            with self.subTest(method=method, path=path):
+                kwargs = {"json": body} if body is not None else {}
+                response = self.client.request(method, path, **kwargs)
+                self.assertNotEqual(response.status_code, 403)
+                self.assertLess(response.status_code, 500)
+
+    def test_the_manage_routes_and_ingest_stay_denied_by_the_tier(self):
+        install_radio_service(self)
+        self._sign_in_as(FIRE_OFFICER)
+        for method, path in RADIO_MANAGE_REQUESTS:
+            with self.subTest(method=method, path=path):
+                response = self.client.request(method, path)
+                self.assertEqual(response.status_code, 403)
+                self.assertEqual(response.json()["detail"], DENIAL_DETAIL)
+
+    def test_every_other_mindshare_path_is_still_denied(self):
+        self._sign_in_as(FIRE_OFFICER)
+        for path in ("/mindshare", "/mindshare/technical", "/mindshare/library",
+                     "/mindshare/coverage", "/api/mindshare/status",
+                     "/mindshare/radio/extra"):
+            with self.subTest(path=path):
+                response = self.client.get(path, follow_redirects=False)
+                self.assertEqual(response.status_code, 403)
+                self.assertEqual(response.json()["detail"], DENIAL_DETAIL)
+
+
+# --------------------------------------------------------------------------
 # Full call detail: the data is NOT reduced
 # --------------------------------------------------------------------------
 
@@ -464,13 +522,16 @@ class FireOfficerNavigationTests(_FireOfficerTestCase):
         self._mock_data_sources()
         self._sign_in_as(FIRE_OFFICER)
         body = self.client.get("/dashboard").text
-        for path in ("/dashboard", "/active-calls", "/units", "/station-alerts", "/map"):
+        # Radio Intelligence is open to every human role, fire officers included.
+        for path in ("/dashboard", "/active-calls", "/units", "/station-alerts", "/map",
+                     "/mindshare/radio"):
             with self.subTest(offered=path):
                 self.assertIn(f'href="{path}"', body)
         for path in self.HIDDEN_ENTRIES:
             with self.subTest(hidden=path):
                 self.assertNotIn(f'href="{path}"', body)
-        self.assertNotIn("Intelligence", body)
+        # No "Intelligence" section other than the Radio Intelligence entry.
+        self.assertNotIn("Intelligence", body.replace("Radio Intelligence", ""))
         self.assertNotIn("Tools &amp; Quality", body)
         self.assertNotIn("Tools & Quality", body)
 

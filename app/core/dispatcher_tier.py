@@ -28,6 +28,7 @@ Reliability and are blocked with it.
 
 from __future__ import annotations
 
+from app.core import radio_access
 from app.core.cloud_pilot_roles import PilotRole
 
 # Exact paths this tier may NOT request.
@@ -54,7 +55,8 @@ _DISPATCHER_BLOCKED_EXACT = frozenset(
 _DISPATCHER_BLOCKED_PREFIXES = (
     # (a) any future avatar-page API.
     "/api/mae/avatar/",
-    # (b) Mindshare/JACK: every page and every API.
+    # (b) Mindshare/JACK: every page and every API. (Radio intelligence,
+    # /mindshare/radio, is excepted in is_path_blocked_for_dispatcher.)
     "/mindshare",
     "/api/mindshare/",
     # (c) Integration Health page and APIs.
@@ -70,6 +72,11 @@ def is_path_blocked_for_dispatcher(path: str) -> bool:
     """Allow by default. A path is denied only if it is named above."""
 
     clean = (path or "").split("?", 1)[0].rstrip("/") or "/"
+    # Radio intelligence is the one page under /mindshare that is open to
+    # every human role (docs/MINDSHARE_RADIO_CORRECTIONS.md). The exception
+    # is the exact page only; the rest of /mindshare stays blocked below.
+    if radio_access.is_radio_page(clean):
+        return False
     if clean in _DISPATCHER_BLOCKED_EXACT or f"{clean}/" in _DISPATCHER_BLOCKED_EXACT:
         return True
     return any(clean.startswith(prefix) for prefix in _DISPATCHER_BLOCKED_PREFIXES)

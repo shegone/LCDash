@@ -1,0 +1,197 @@
+/* Dashboard panel: Radio keyword alerts (static/js/lcdash-radio-alerts.js).
+   Visual only. No sound, no notifications. Sits beside the other .glass panels. */
+
+.radio-alerts[hidden],
+.radio-alerts [hidden] { display: none !important; }
+
+.radio-alerts {
+    padding: 17px 19px;
+}
+
+.radio-alerts.has-alerts {
+    border-color: rgba(255, 214, 107, .5);
+    box-shadow: 0 14px 34px rgba(255, 214, 107, .07);
+}
+
+.radio-alerts-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 16px;
+}
+
+.radio-alerts-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.radio-alerts-count {
+    min-width: 1.9em;
+    padding: 1px 9px;
+    border-radius: 999px;
+    color: #dff8ff;
+    background: rgba(76, 201, 255, .16);
+    font-size: .82rem;
+    font-weight: 900;
+    text-align: center;
+}
+
+.radio-alerts-count.is-active { color: #1d1400; background: #ffd66b; }
+
+.radio-alerts-label {
+    color: #ffd98a;
+    font-size: .78rem;
+    font-weight: 850;
+    letter-spacing: .3px;
+}
+
+.radio-alerts-list {
+    display: grid;
+    gap: 10px;
+    max-height: 360px;
+    margin: 14px 0 0;
+    padding: 0 2px 0 0;
+    overflow-y: auto;
+    list-style: none;
+}
+
+.radio-alerts-empty {
+    margin: 12px 0 0;
+    color: #91afc9;
+}
+
+.radio-alerts-error,
+.radio-alert-failure {
+    margin-top: 10px;
+    padding: 8px 12px;
+    border: 1px solid rgba(255, 138, 160, .55);
+    border-radius: 9px;
+    color: #ffd0da;
+    background: rgba(255, 91, 126, .1);
+    font-size: .88rem;
+    overflow-wrap: anywhere;
+}
+
+.radio-alerts-more { margin: 10px 0 0; color: #91afc9; font-size: .82rem; }
+
+.radio-alert {
+    padding: 11px 13px;
+    border: 1px solid rgba(76, 201, 255, .22);
+    border-radius: 12px;
+    background: rgba(5, 16, 30, .55);
+}
+
+.radio-alert-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+    color: #91afc9;
+    font-size: .82rem;
+}
+
+.radio-alert-time { color: #dff8ff; font-weight: 800; white-space: nowrap; }
+
+.radio-alert-chip {
+    padding: 2px 10px;
+    border: 1px solid #4cc9ff;
+    border-radius: 999px;
+    color: #4cc9ff;
+    background: rgba(76, 201, 255, .12);
+    font-size: .74rem;
+    font-weight: 850;
+    letter-spacing: .4px;
+    text-transform: uppercase;
+}
+
+.radio-alert-chip.is-ems { border-color: #ff8aa0; color: #ff8aa0; background: rgba(255, 91, 126, .14); }
+.radio-alert-chip.is-fire { border-color: #ffab5e; color: #ffab5e; background: rgba(255, 140, 40, .14); }
+
+.radio-alert-tag {
+    padding: 1px 9px;
+    border: 1px solid rgba(105, 255, 185, .5);
+    border-radius: 999px;
+    color: #9dffd2;
+    font-size: .72rem;
+    font-weight: 850;
+}
+
+.radio-alert-snippet {
+    margin: 7px 0 0;
+    color: #eaf8ff;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+}
+
+.radio-alert-mark {
+    padding: 0 4px;
+    border-radius: 4px;
+    color: #1d1400;
+    background: #ffd66b;
+    font-weight: 900;
+}
+
+.radio-alert-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
+    margin-top: 9px;
+}
+
+.radio-alert-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 38px;
+    padding: 5px 14px;
+    border: 1px solid rgba(76, 201, 255, .4);
+    border-radius: 9px;
+    color: #dff8ff;
+    background: rgba(76, 201, 255, .1);
+    font-size: .88rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.radio-alert-button.is-primary { border-color: #4cc9ff; color: #031018; background: #4cc9ff; }
+.radio-alert-button.is-playing { border-color: #69ffb9; background: #69ffb9; }
+.radio-alert-button:disabled { opacity: .55; cursor: not-allowed; }
+
+.radio-alert-link {
+    margin-left: auto;
+    color: #8fd8ff;
+    font-size: .84rem;
+    font-weight: 800;
+    text-decoration: none;
+}
+
+.radio-alert-link:hover { text-decoration: underline; }
+
+.radio-alert-note { color: #ffbdc9; font-size: .82rem; }
+
+.radio-alert-button:focus-visible,
+.radio-alert-link:focus-visible {
+    outline: 3px solid rgba(85, 212, 255, .62);
+    outline-offset: 2px;
+}
+
+.radio-alerts-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+@media (max-width: 600px) {
+    .radio-alerts { padding: 14px 13px; }
+    .radio-alert-link { margin-left: 0; }
+    .radio-alert-button { min-height: 42px; }
+}

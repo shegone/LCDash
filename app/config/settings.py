@@ -225,6 +225,12 @@ class Settings:
     radio_audio_prefix: str = _env(
         "LCDASH_RADIO_AUDIO_PREFIX", "radio/audio/"
     ).strip()
+    # Segments a person corrected keep their audio for a year: the first
+    # correction copies the WAV here (docs/MINDSHARE_RADIO_CORRECTIONS.md).
+    # This prefix has its own 365-day lifecycle rule in the content bucket.
+    radio_corrected_prefix: str = _env(
+        "LCDASH_RADIO_CORRECTED_PREFIX", "radio/corrected/"
+    ).strip()
     cloud_ai_polly_voice: str = _env(
         "LCDASH_CLOUD_AI_POLLY_VOICE", "Ruth"
     ).strip()

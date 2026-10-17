@@ -31,6 +31,7 @@ What is deliberately NOT on the list, and why:
 
 from __future__ import annotations
 
+from app.core import radio_access
 from app.core.cloud_pilot_roles import PilotRole
 
 # Exact paths this tier may request.
@@ -75,6 +76,10 @@ def is_path_allowed_for_fire_officer(path: str) -> bool:
 
     clean = (path or "").split("?", 1)[0].rstrip("/") or "/"
     if clean in _FIRE_OFFICER_ALLOWED_EXACT or f"{clean}/" in _FIRE_OFFICER_ALLOWED_EXACT:
+        return True
+    # Radio intelligence is open to every human role (anchored shapes in
+    # app/core/radio_access.py; no admin routes, no ingest).
+    if radio_access.is_radio_human_path(clean):
         return True
     return any(clean.startswith(prefix) for prefix in _FIRE_OFFICER_ALLOWED_PREFIXES)
 

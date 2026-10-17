@@ -27,6 +27,9 @@ from app.core import dispatcher_tier
 from app.core.alb_identity import AlbIdentity
 from app.main import app
 
+from .test_radio_routes import install_radio_service
+from .test_sanitized_tier import RADIO_MANAGE_REQUESTS, RADIO_REACHABLE_REQUESTS
+
 
 # The supervisor surface a dispatcher keeps, in the form a browser requests it.
 ALLOWED_PATHS = (
@@ -45,6 +48,12 @@ ALLOWED_PATHS = (
     "/health",
     "/api/identity/whoami",
     "/api/operations/snapshot",
+    # Radio intelligence is open to every human role
+    # (docs/MINDSHARE_RADIO_CORRECTIONS.md).
+    "/mindshare/radio",
+    "/api/radio/segments",
+    "/api/radio/stats",
+    "/api/radio/alerts",
     "/api/cloud-ai/status",
     "/api/mae/status",
     "/api/voice/speech",
@@ -63,7 +72,6 @@ DENIED_PATHS = (
     "/mindshare/library",
     "/mindshare/reliability",
     "/mindshare/coverage",
-    "/mindshare/radio",
     "/api/mindshare/status",
     "/api/mindshare/chat",
     "/api/mindshare/memory",
@@ -168,9 +176,70 @@ class DispatcherDenylistUnitTests(unittest.TestCase):
                 self.assertFalse(blocked(path), f"{path} would break the /mae page")
 
 
+class DispatcherRadioAccessTests(_DispatcherTierTestCase):
+    """Radio intelligence is the one page under /mindshare dispatchers keep."""
+
+    STILL_BLOCKED = (
+        "/mindshare",
+        "/mindshare/technical",
+        "/mindshare/jack-hines",
+        "/mindshare/library",
+        "/mindshare/reliability",
+        "/mindshare/coverage",
+        "/mindshare/radio/extra",
+        "/mindshare/radio2",
+        "/mindshare/radiox",
+        "/api/mindshare/status",
+        "/api/mindshare/chat",
+        "/mae/avatar",
+        "/voice",
+        "/integrations/health",
+        "/admin/users",
+        "/admin/knowledge",
+    )
+
+    def test_the_gate_excepts_exactly_the_radio_page(self):
+        blocked = dispatcher_tier.is_path_blocked_for_dispatcher
+        for path in ("/mindshare/radio", "/mindshare/radio/", "/mindshare/radio?x=1"):
+            with self.subTest(path=path):
+                self.assertFalse(blocked(path))
+        for path in self.STILL_BLOCKED:
+            with self.subTest(path=path):
+                self.assertTrue(blocked(path), f"{path} must stay blocked for dispatchers")
+
+    def test_every_radio_route_is_reachable_for_dispatchers(self):
+        install_radio_service(self)
+        self._sign_in_as(DISPATCHER)
+        for method, path, body in RADIO_REACHABLE_REQUESTS:
+            with self.subTest(method=method, path=path):
+                kwargs = {"json": body} if body is not None else {}
+                response = self.client.request(method, path, **kwargs)
+                self.assertNotEqual(response.status_code, 403)
+                self.assertLess(response.status_code, 500)
+
+    def test_the_admin_manage_routes_still_answer_403_from_the_route_gate(self):
+        install_radio_service(self)
+        self._sign_in_as(DISPATCHER)
+        for method, path in RADIO_MANAGE_REQUESTS:
+            if path.endswith("/ingest"):
+                continue  # machine-signed; not a human route
+            with self.subTest(method=method, path=path):
+                response = self.client.request(method, path)
+                self.assertEqual(response.status_code, 403)
+
+    def test_the_rest_of_mindshare_is_still_denied_with_the_dispatcher_message(self):
+        self._sign_in_as(DISPATCHER)
+        for path in self.STILL_BLOCKED:
+            with self.subTest(path=path):
+                response = self.client.get(path, follow_redirects=False)
+                self.assertEqual(response.status_code, 403)
+                self.assertEqual(response.json()["detail"], DENIAL_DETAIL)
+
+
 class DispatcherPathGateTests(_DispatcherTierTestCase):
     def test_every_allowed_path_is_reachable(self):
         """A gate that denies everything is trivially safe and useless."""
+        install_radio_service(self)
         self._sign_in_as(DISPATCHER)
         for path in ALLOWED_PATHS:
             with self.subTest(path=path):

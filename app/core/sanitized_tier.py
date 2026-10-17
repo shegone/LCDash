@@ -32,6 +32,7 @@ from __future__ import annotations
 import hashlib
 from typing import Any, Mapping
 
+from app.core import radio_access
 from app.core.cloud_pilot_roles import PilotRole
 
 # --------------------------------------------------------------------------
@@ -79,6 +80,10 @@ def is_path_allowed_for_user(path: str) -> bool:
 
     clean = (path or "").split("?", 1)[0].rstrip("/") or "/"
     if clean in _USER_ALLOWED_EXACT or f"{clean}/" in _USER_ALLOWED_EXACT:
+        return True
+    # Radio intelligence is open to every human role. Its few shapes live in
+    # app/core/radio_access.py (anchored matches; no admin routes, no ingest).
+    if radio_access.is_radio_human_path(clean):
         return True
     # Prefix check must run against the same normalized `clean` path as the
     # exact-match check above, not the raw input. Matching against the raw

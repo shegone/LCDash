@@ -39,6 +39,7 @@ from app.services.knowledge_upload_service import (
 )
 from app.services import radio_service
 from app.services.radio_service import (
+    RadioConflictError,
     RadioIngestError,
     RadioNotFoundError,
     RadioQueryError,
@@ -1437,12 +1438,19 @@ def admin_knowledge_sync_api(request: Request):
 # ---------------------------------------------------------------------------
 # Mindshare Radio Intelligence (docs/MINDSHARE_RADIO_INGEST.md)
 #
-# One machine route and four admin routes. The ingest route is NOT behind
+# One machine route plus the human routes. The ingest route is NOT behind
 # Cognito (an ALB listener rule lets exactly POST /api/radio/ingest through),
 # so this app is its only authenticator: an Ed25519 signature checked against
-# the public key in settings. It never looks at identity headers. Every other
-# radio route is admin-only and answers non-admins with the uniform 403.
-# Inquiry-only: nothing here writes to CAD, radio, paging, or any alert.
+# the public key in settings. It never looks at identity headers.
+#
+# Every other radio route answers a uniform 403 to anyone not allowed: the
+# human roles (user, supervisor, dispatcher, fire_officer, admin) for the
+# page, feed, audio, corrections and keyword alerts; admin only for the
+# replacement fixes and watch terms (docs/MINDSHARE_RADIO_CORRECTIONS.md).
+# Query and body values are plain strings/JSON validated in the service AFTER
+# the access check, so a forbidden caller can never tell routes apart by a
+# 400/422. Inquiry-only: nothing here writes to CAD, radio, paging, or any
+# station alert, and a dashboard alert is a visible panel entry only.
 # ---------------------------------------------------------------------------
 
 _radio_service_instance: RadioService | None = None
@@ -1457,6 +1465,7 @@ def _radio_service() -> RadioService:
             _radio_service_instance = RadioService(
                 bucket=settings.radio_bucket,
                 audio_prefix=settings.radio_audio_prefix,
+                corrected_prefix=settings.radio_corrected_prefix,
             )
         return _radio_service_instance
 
@@ -1603,6 +1612,113 @@ async def receive_radio_segment(request: Request):
     )
 
 
+_RADIO_HUMAN_ROLES = frozenset({
+    PilotRole.USER,
+    PilotRole.SUPERVISOR,
+    PilotRole.DISPATCHER,
+    PilotRole.FIRE_OFFICER,
+    PilotRole.ADMIN,
+})
+_RADIO_JSON_LIMIT_BYTES = 128 * 1024
+
+
+def _require_radio_human_role(request: Request) -> tuple[AlbIdentity, PilotRole]:
+    """Admit a verified human role; everyone else gets the same 403.
+
+    Mirrors ``_require_pilot_admin``: built on ``_resolve_pilot_identity``, so
+    an unidentified request, an unrecognized group and the ``avatar`` kiosk
+    role are all indistinguishable from each other.
+    """
+
+    resolved = _resolve_pilot_identity(request)
+    if resolved is None:
+        raise HTTPException(status_code=403, detail="Sign-in is required.")
+    identity, role = resolved
+    if role not in _RADIO_HUMAN_ROLES:
+        raise HTTPException(status_code=403, detail="Sign-in is required.")
+    return identity, role
+
+
+def _require_radio_human(request: Request) -> AlbIdentity:
+    return _require_radio_human_role(request)[0]
+
+
+def _radio_actor(identity: AlbIdentity) -> str:
+    return identity.email or identity.subject
+
+
+def _radio_write_guard(request: Request) -> None:
+    """Refuse a state change that a browser says was started by another site.
+
+    Defence in depth for cookie-authenticated writes: ``Sec-Fetch-Site`` is
+    set by the browser and cannot be forged by a web page. Absent (a script,
+    a test client) is allowed; the access check has already run.
+    """
+
+    if (request.headers.get("sec-fetch-site") or "").lower() == "cross-site":
+        raise HTTPException(status_code=403, detail="Cross-site requests are refused.")
+
+
+async def _read_radio_json(request: Request) -> object:
+    """Read a small JSON body AFTER the access check. 400 bad JSON, 413 large.
+
+    Requires ``Content-Type: application/json``: a cross-site form cannot send
+    that without a CORS preflight, which this app never answers.
+    """
+
+    _radio_write_guard(request)
+    media_type = str(request.headers.get("content-type") or "").split(";", 1)[0]
+    if media_type.strip().lower() != "application/json":
+        raise HTTPException(
+            status_code=415, detail="The request body must be application/json."
+        )
+    declared = request.headers.get("content-length")
+    if declared:
+        try:
+            too_large = int(declared) > _RADIO_JSON_LIMIT_BYTES
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400, detail="Invalid Content-Length header."
+            ) from exc
+        if too_large:
+            raise HTTPException(status_code=413, detail="Request is too large.")
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > _RADIO_JSON_LIMIT_BYTES:
+            raise HTTPException(status_code=413, detail="Request is too large.")
+    try:
+        return json.loads(bytes(body).decode("utf-8"))
+    except (UnicodeDecodeError, ValueError, RecursionError) as exc:
+        raise HTTPException(
+            status_code=400, detail="The request body must be valid JSON."
+        ) from exc
+
+
+async def _radio_call(func, *args, **kwargs):
+    """Run a blocking service call off the event loop and map its errors."""
+
+    try:
+        return await asyncio.to_thread(func, *args, **kwargs)
+    except RadioQueryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RadioNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RadioConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except RadioServiceError as exc:
+        # Includes a failed audit write: no audit record, no change.
+        raise HTTPException(
+            status_code=503, detail="Radio service is unavailable."
+        ) from exc
+
+
+def _radio_json(payload: object, status_code: int = 200) -> JSONResponse:
+    return JSONResponse(
+        payload, status_code=status_code, headers={"Cache-Control": "private, no-store"}
+    )
+
+
 @app.get("/api/radio/segments")
 def radio_segments_api(
     request: Request,
@@ -1613,10 +1729,10 @@ def radio_segments_api(
     limit: str = "",
 ):
     # Every query parameter is a plain string on purpose: typed parameters
-    # would be validated (422) before the admin gate, letting a non-admin
-    # tell routes apart. The service validates them after the gate.
-    _require_pilot_admin(request)
-    actor = _authenticated_user_email(request)
+    # would be validated (422) before the access gate, letting a forbidden
+    # caller tell routes apart. The service validates them after the gate.
+    identity = _require_radio_human(request)
+    actor = _radio_actor(identity)
     try:
         payload = _radio_service().list_segments(
             actor=actor, channel=channel, direction=direction, q=q,
@@ -1633,8 +1749,8 @@ def radio_segments_api(
 
 @app.get("/api/radio/segments/{segment_id}/audio")
 def radio_segment_audio_api(segment_id: str, request: Request):
-    _require_pilot_admin(request)
-    actor = _authenticated_user_email(request)
+    identity = _require_radio_human(request)
+    actor = _radio_actor(identity)
     try:
         audio = _radio_service().fetch_audio(segment_id, actor=actor)
     except RadioNotFoundError as exc:
@@ -1655,9 +1771,35 @@ def radio_segment_audio_api(segment_id: str, request: Request):
     )
 
 
+@app.put("/api/radio/segments/{segment_id}/correction")
+async def radio_segment_correct_api(segment_id: str, request: Request):
+    identity = _require_radio_human(request)
+    body = await _read_radio_json(request)
+    if not isinstance(body, dict) or set(body) - {"text"}:
+        raise HTTPException(
+            status_code=400, detail="The request body must be an object with 'text'."
+        )
+    item = await _radio_call(
+        _radio_service().correct_segment,
+        segment_id, body.get("text"), actor=_radio_actor(identity),
+    )
+    return _radio_json(item)
+
+
+@app.delete("/api/radio/segments/{segment_id}/correction")
+async def radio_segment_revert_api(segment_id: str, request: Request):
+    identity = _require_radio_human(request)
+    _radio_write_guard(request)
+    item = await _radio_call(
+        _radio_service().revert_correction,
+        segment_id, actor=_radio_actor(identity),
+    )
+    return _radio_json(item)
+
+
 @app.get("/api/radio/stats")
 def radio_stats_api(request: Request):
-    _require_pilot_admin(request)
+    _require_radio_human(request)
     try:
         payload = _radio_service().stats()
     except RadioServiceError as exc:
@@ -1665,6 +1807,96 @@ def radio_stats_api(request: Request):
             status_code=503, detail="Radio statistics are unavailable."
         ) from exc
     return JSONResponse(payload, headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/api/radio/alerts")
+async def radio_alerts_api(request: Request):
+    # Polled by the dashboard every 15 seconds; deliberately not audited.
+    _require_radio_human(request)
+    return _radio_json(await _radio_call(_radio_service().list_alerts))
+
+
+@app.post("/api/radio/alerts/{alert_id}/dismiss")
+async def radio_alert_dismiss_api(alert_id: str, request: Request):
+    identity = _require_radio_human(request)
+    _radio_write_guard(request)
+    return _radio_json(
+        await _radio_call(
+            _radio_service().dismiss_alert, alert_id, actor=_radio_actor(identity)
+        )
+    )
+
+
+@app.get("/api/radio/replacements")
+async def radio_replacements_api(request: Request):
+    _require_pilot_admin(request)
+    return _radio_json(await _radio_call(_radio_service().list_replacements))
+
+
+@app.post("/api/radio/replacements")
+async def radio_replacement_add_api(request: Request):
+    identity = _require_pilot_admin(request)
+    body = await _read_radio_json(request)
+    return _radio_json(
+        await _radio_call(
+            _radio_service().add_replacement, body, actor=_radio_actor(identity)
+        ),
+        status_code=201,
+    )
+
+
+@app.delete("/api/radio/replacements/{replacement_id}")
+async def radio_replacement_remove_api(replacement_id: str, request: Request):
+    identity = _require_pilot_admin(request)
+    _radio_write_guard(request)
+    return _radio_json(
+        await _radio_call(
+            _radio_service().remove_replacement, replacement_id,
+            actor=_radio_actor(identity),
+        )
+    )
+
+
+@app.get("/api/radio/watch-terms")
+async def radio_watch_terms_api(request: Request):
+    _require_pilot_admin(request)
+    return _radio_json(await _radio_call(_radio_service().list_watch_terms))
+
+
+@app.post("/api/radio/watch-terms")
+async def radio_watch_term_add_api(request: Request):
+    identity = _require_pilot_admin(request)
+    body = await _read_radio_json(request)
+    return _radio_json(
+        await _radio_call(
+            _radio_service().add_watch_term, body, actor=_radio_actor(identity)
+        ),
+        status_code=201,
+    )
+
+
+@app.patch("/api/radio/watch-terms/{term_id}")
+async def radio_watch_term_change_api(term_id: str, request: Request):
+    identity = _require_pilot_admin(request)
+    body = await _read_radio_json(request)
+    return _radio_json(
+        await _radio_call(
+            _radio_service().update_watch_term, term_id, body,
+            actor=_radio_actor(identity),
+        )
+    )
+
+
+@app.delete("/api/radio/watch-terms/{term_id}")
+async def radio_watch_term_remove_api(term_id: str, request: Request):
+    identity = _require_pilot_admin(request)
+    _radio_write_guard(request)
+    return _radio_json(
+        await _radio_call(
+            _radio_service().remove_watch_term, term_id,
+            actor=_radio_actor(identity),
+        )
+    )
 
 
 def _alb_user_tenant_context(request: Request | None) -> TenantContext | None:
@@ -3174,11 +3406,14 @@ def mindshare_coverage_page(request: Request):
 
 @app.get("/mindshare/radio")
 def mindshare_radio_page(request: Request):
-    _require_pilot_admin(request)
+    # Open to every human role (docs/MINDSHARE_RADIO_CORRECTIONS.md). The
+    # admin-only sections (fixes, watch terms) render only when is_admin.
+    _identity, role = _require_radio_human_role(request)
+    is_admin = role == PilotRole.ADMIN
     return templates.TemplateResponse(
         request=request,
         name="mindshare_radio.html",
-        context={"version": "0.4.0"},
+        context={"version": "0.4.0", "is_admin": is_admin},
         headers={"Cache-Control": "no-store"},
     )
 

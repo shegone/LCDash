@@ -818,12 +818,22 @@ class CdkTemplateTests(unittest.TestCase):
             rule["Id"]: rule for rule in content["LifecycleConfiguration"]["Rules"]
         }
         self.assertEqual(
-            set(rules), {"ExpireShortLivedReports", "RadioAudioExpiry15Days"}
+            set(rules),
+            {
+                "ExpireShortLivedReports",
+                "RadioAudioExpiry15Days",
+                "RadioCorrectedAudioExpiry365Days",
+            },
         )
         radio = rules["RadioAudioExpiry15Days"]
         self.assertEqual(radio["Prefix"], "radio/audio/")
         self.assertEqual(radio["ExpirationInDays"], 15)
         self.assertEqual(radio["Status"], "Enabled")
+        # Operator-corrected radio items: own exact prefix, kept 365 days.
+        corrected = rules["RadioCorrectedAudioExpiry365Days"]
+        self.assertEqual(corrected["Prefix"], "radio/corrected/")
+        self.assertEqual(corrected["ExpirationInDays"], 365)
+        self.assertEqual(corrected["Status"], "Enabled")
         reports = rules["ExpireShortLivedReports"]
         self.assertEqual(reports["Prefix"], "logan-synthetic/reports/")
         self.assertEqual(reports["ExpirationInDays"], 7)
@@ -839,7 +849,7 @@ class CdkTemplateTests(unittest.TestCase):
         self.template.resource_count_is("AWS::S3::Bucket", 2)
         self.template.resource_count_is("AWS::KMS::Key", 0)
 
-    def test_task_role_may_only_get_and_put_radio_audio_objects(self):
+    def test_task_role_may_only_get_and_put_radio_audio_and_corrected_objects(self):
         resources = self.template.to_json()["Resources"]
         radio_statements = []
         for resource in resources.values():
@@ -859,15 +869,23 @@ class CdkTemplateTests(unittest.TestCase):
             sorted(statement["Action"]), ["s3:GetObject", "s3:PutObject"]
         )
         self.assertNotIn("Condition", statement)
-        # Exactly one resource: <content bucket arn>/radio/audio/*.
-        resource_value = statement["Resource"]
-        self.assertIsInstance(resource_value, dict)
-        join_parts = resource_value["Fn::Join"][1]
-        self.assertEqual(join_parts[-1], "/radio/audio/*")
-        self.assertIn("ContentBucket", str(join_parts[0]))
+        # Exactly two resources, each <content bucket arn>/<radio prefix>*,
+        # and nothing bucket-wide or broader than those two prefixes.
+        resource_values = statement["Resource"]
+        self.assertIsInstance(resource_values, list)
+        self.assertEqual(len(resource_values), 2)
+        suffixes = []
+        for resource_value in resource_values:
+            self.assertIsInstance(resource_value, dict)
+            join_parts = resource_value["Fn::Join"][1]
+            self.assertIn("ContentBucket", str(join_parts[0]))
+            suffixes.append(join_parts[-1])
+        self.assertEqual(
+            sorted(suffixes), ["/radio/audio/*", "/radio/corrected/*"]
+        )
         # The only other radio-scoped statement is ListBucket, pinned to the
-        # radio prefix (so an expired object reads as NoSuchKey, not
-        # AccessDenied). No grant reaches the prefix with Delete, and
+        # two radio prefixes (so an expired object reads as NoSuchKey, not
+        # AccessDenied). No grant reaches either prefix with Delete, and
         # nothing bucket-wide was added.
         list_statements = []
         for resource in resources.values():
@@ -878,14 +896,17 @@ class CdkTemplateTests(unittest.TestCase):
                     list_statements.append(item)
                 actions = item["Action"]
                 actions = [actions] if isinstance(actions, str) else actions
-                if "radio/audio/" in str(item.get("Resource", "")):
+                item_resource = str(item.get("Resource", ""))
+                if "radio/audio/" in item_resource or "radio/corrected/" in item_resource:
                     self.assertNotIn("s3:DeleteObject", actions)
+                    self.assertNotIn("s3:*", actions)
         self.assertEqual(len(list_statements), 1)
         listing = list_statements[0]
         self.assertEqual(listing["Effect"], "Allow")
         self.assertEqual(listing["Action"], "s3:ListBucket")
         self.assertEqual(
-            listing["Condition"], {"StringLike": {"s3:prefix": ["radio/audio/*"]}}
+            listing["Condition"],
+            {"StringLike": {"s3:prefix": ["radio/audio/*", "radio/corrected/*"]}},
         )
         self.assertIn("ContentBucket", str(listing["Resource"]))
 
@@ -916,6 +937,9 @@ class CdkTemplateTests(unittest.TestCase):
 
         self.assertEqual(len(base64.b64decode(RADIO_INGEST_PUBLIC_KEY)), 32)
         self.assertEqual(environment["LCDASH_RADIO_AUDIO_PREFIX"], "radio/audio/")
+        self.assertEqual(
+            environment["LCDASH_RADIO_CORRECTED_PREFIX"], "radio/corrected/"
+        )
         # The bucket is a reference to this stack's own content bucket.
         bucket_logical_id = next(
             name

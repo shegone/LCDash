@@ -29,6 +29,14 @@ from app.core import avatar_tier
 from app.core.alb_identity import AlbIdentity
 from app.main import app
 
+from .test_radio_routes import install_radio_service
+from .test_sanitized_tier import (
+    RADIO_ALLOWED_PATHS,
+    RADIO_MANAGE_REQUESTS,
+    RADIO_REACHABLE_REQUESTS,
+    RADIO_STILL_DENIED_PATHS,
+)
+
 
 # Paths the avatar tier exists to reach, in the form a browser requests them.
 ALLOWED_PATHS = (
@@ -224,6 +232,30 @@ class AvatarPathGateTests(_AvatarTierTestCase):
         self._sign_in_as(USER)
         response = self.client.get("/mae/avatar", follow_redirects=False)
         self.assertEqual(response.status_code, 403)
+
+
+class AvatarRadioDeniedTests(_AvatarTierTestCase):
+    """Radio intelligence opened to the human roles; the kiosk stays out."""
+
+    def test_no_radio_path_is_on_the_avatar_allowlist(self):
+        for path in RADIO_ALLOWED_PATHS + RADIO_STILL_DENIED_PATHS:
+            with self.subTest(path=path):
+                self.assertFalse(avatar_tier.is_path_allowed_for_avatar(path))
+        for path in avatar_tier._AVATAR_ALLOWED_EXACT:
+            self.assertFalse(path.startswith(("/api/radio", "/mindshare")))
+
+    def test_every_radio_route_is_denied_with_the_avatar_message(self):
+        service, store, _ = install_radio_service(self)
+        self._sign_in_as(AVATAR)
+        requests = [(m, p) for m, p, _b in RADIO_REACHABLE_REQUESTS] + list(
+            RADIO_MANAGE_REQUESTS
+        )
+        for method, path in requests:
+            with self.subTest(method=method, path=path):
+                response = self.client.request(method, path)
+                self.assertEqual(response.status_code, 403)
+                self.assertEqual(response.json()["detail"], DENIAL_DETAIL)
+        self.assertIsNone(store.segments["law_rx_20261016_140500_0001"][12])
 
 
 class AvatarSpeechRouteTests(_AvatarTierTestCase):

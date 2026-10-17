@@ -64,6 +64,11 @@ RADIO_INGEST_PUBLIC_KEY = "sZTJKqLKu34SpH5JMwyvydrw6wXlq1zc9fp66aTgJfk="
 RADIO_AUDIO_PREFIX = "radio/audio/"
 RADIO_AUDIO_RETENTION_DAYS = 15
 
+# Operator-corrected radio transcripts and audio copies live under their own
+# prefix of the same bucket and are kept a year (docs/MINDSHARE_RADIO_CORRECTIONS.md).
+RADIO_CORRECTED_PREFIX = "radio/corrected/"
+RADIO_CORRECTED_RETENTION_DAYS = 365
+
 # Hostname serving Cognito managed login. Kept on our own domain rather than the
 # Cognito prefix domain for two reasons: a county-owned hostname is what users
 # should be asked to trust with a password, and WebAuthn passkeys bind to a

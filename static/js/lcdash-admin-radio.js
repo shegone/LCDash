@@ -1,32 +1,45 @@
 // Mindshare Radio Intelligence (/mindshare/radio).
 //
-// Admins browse machine-generated radio transcripts and play the audio. The
-// backend enforces admin-only access (403 otherwise) and records every list
-// and every playback in the audit log; this script renders honestly whatever
-// the API says. Every failure surfaces the HTTP status and the server's
-// `detail` string inline -- no alert()/confirm(). All server text goes in via
-// textContent only (no HTML injection): transcripts are untrusted machine output.
+// Every signed-in human role browses machine-generated radio transcripts,
+// plays the audio, and may correct a transcript. Administrators also manage
+// alert keywords and transcript fixes. The backend enforces who may do what
+// (403 otherwise) and records every list, playback, correction and admin
+// change in the audit log; this script renders honestly whatever the API says.
+// Every failure surfaces the HTTP status and the server's `detail` string
+// inline -- no alert()/confirm(). All server text goes in via textContent
+// only (no HTML injection): transcripts are untrusted machine or human text.
 //
-// Layout: one tab per channel plus "All channels". Each tab is a feed of
-// cards (an <ol>), not a table, so it reads the same on a phone. Each tab keeps
-// its own keyset cursor and is fetched the first time it is opened.
+// Layout: one tab per channel plus "All channels", and (administrators only)
+// "Alert keywords" and "Transcript fixes". Each channel tab is a feed of cards
+// (an <ol>), not a table, so it reads the same on a phone. Each tab keeps its
+// own keyset cursor and is fetched the first time it is opened.
+//
+// Corrections: each card has an Edit button that opens an inline editor. A
+// saved correction updates the card in place (its Play button and playback are
+// left alone). A corrected card can show the machine text and can be reverted
+// to it (inline two-step confirm).
 //
 // Audio: ONE shared Audio object serves every card. Its source is set only
 // when a person presses Play on a card, so nothing is fetched (or audited)
 // until then, and starting another card stops the current one.
 //
 // Auto-refresh: while the page is visible and nothing is playing, the active
-// tab fetches its newest page every 30 s and prepends segments not yet shown.
-// It never clears the list, moves the scroll position, or touches playback.
+// feed tab fetches its newest page every 30 s and prepends segments not yet
+// shown. It never clears the list, moves the scroll position, touches
+// playback, or overwrites a card that is being edited.
 (function () {
     "use strict";
 
     const STATS_REFRESH_MS = 60000;
     const FEED_REFRESH_MS = 30000;
     const PAGE_SIZE = 50;
+    const MAX_CORRECTION = 20000;
     const CHANNEL_PATTERN = /^[a-z0-9_]{1,32}$/;
+    const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
     const AUDIO_ERROR_TEXT =
         "Audio could not be played. It may have expired, or your session ended.";
+    const KEEP_NOTE = "Corrected audio and text are kept for 1 year.";
+    const NO_SPEECH = "(no speech recognized)";
 
     const statsBox = document.getElementById("radio-stats");
     const statsError = document.getElementById("radio-stats-error");
@@ -45,12 +58,15 @@
         return;
     }
 
-    // key ("" for all channels) -> tab state
+    // key ("" for all channels, "admin:watch", "admin:fixes") -> tab state
     const tabs = new Map();
-    const tabOrder = [];
     let activeKey = "";
     let statsTimer = null;
     let feedTimer = null;
+
+    // Per-card state, kept off the DOM so the DOM stays plain.
+    const itemState = new WeakMap();
+    let itemSeq = 0;
 
     // ---------------------------------------------------------------- helpers
 
@@ -61,9 +77,52 @@
     async function readDetail(response) {
         try {
             const body = await response.json();
-            return typeof body.detail === "string" ? body.detail : "";
+            if (typeof body.detail === "string") return body.detail;
+            if (Array.isArray(body.detail)) {
+                // Validation errors arrive as a list of {msg, loc}.
+                return body.detail
+                    .map(function (entry) {
+                        return entry && typeof entry.msg === "string" ? entry.msg : "";
+                    })
+                    .filter(Boolean)
+                    .join("; ");
+            }
+            return "";
         } catch (error) {
             return "";
+        }
+    }
+
+    // One JSON request. Resolves {ended: true} when the session has ended,
+    // {error: text} for a failure, or {payload} on success.
+    async function apiCall(method, url, body, failurePrefix) {
+        try {
+            const options = { method: method, headers: { "Accept": "application/json" } };
+            if (body !== undefined) {
+                options.headers["Content-Type"] = "application/json";
+                options.body = JSON.stringify(body);
+            }
+            const response = await fetch(url, options);
+            // A call bounced to the identity provider must stop, not retry
+            // (static/js/lcdash-session.js).
+            if (window.LCDashSession && window.LCDashSession.check(response)) {
+                return { ended: true };
+            }
+            if (!response.ok) {
+                const detail = await readDetail(response);
+                return { error: `${failurePrefix}${httpSuffix(response.status, detail)}` };
+            }
+            let payload = null;
+            if (response.status !== 204) {
+                try {
+                    payload = await response.json();
+                } catch (error) {
+                    payload = null;
+                }
+            }
+            return { payload: payload };
+        } catch (error) {
+            return { error: `${failurePrefix}${httpSuffix(0, "")}` };
         }
     }
 
@@ -103,9 +162,14 @@
         return `${Math.round(hours / 24)} days ago`;
     }
 
-    function showError(element, text) {
-        element.hidden = false;
-        element.textContent = text;
+    function showError(node, text) {
+        node.hidden = false;
+        node.textContent = text;
+    }
+
+    function hideError(node) {
+        node.hidden = true;
+        node.textContent = "";
     }
 
     function element(tag, className, text) {
@@ -119,6 +183,14 @@
         const node = element("i", `bi ${name}`);
         node.setAttribute("aria-hidden", "true");
         return node;
+    }
+
+    function iconButton(className, iconName, label) {
+        const button = element("button", className);
+        button.type = "button";
+        button.appendChild(icon(iconName));
+        button.appendChild(element("span", "", label));
+        return button;
     }
 
     // Small stable hash so an unknown channel always gets the same colour.
@@ -145,6 +217,30 @@
             parent = parent.parentElement;
         }
         return document.scrollingElement || document.documentElement;
+    }
+
+    function viewportTop(scroller) {
+        if (scroller === document.scrollingElement || scroller === document.documentElement) {
+            return 0;
+        }
+        return scroller.getBoundingClientRect().top;
+    }
+
+    function firstArray(payload, keys) {
+        if (Array.isArray(payload)) return payload;
+        if (payload && typeof payload === "object") {
+            for (let i = 0; i < keys.length; i += 1) {
+                if (Array.isArray(payload[keys[i]])) return payload[keys[i]];
+            }
+        }
+        return [];
+    }
+
+    function unwrapSegment(payload) {
+        if (!payload || typeof payload !== "object") return null;
+        if (payload.segment_id) return payload;
+        const inner = payload.segment || payload.item;
+        return inner && inner.segment_id ? inner : null;
     }
 
     // ------------------------------------------------------------------ audio
@@ -282,11 +378,14 @@
         failPlayback(current.controls);
     });
 
+    // Returns {area, controls, available}; controls is null when there is no
+    // audio. The area is kept across in-place card updates so a correction
+    // never interrupts playback.
     function buildAudioArea(segment, descriptor) {
         const area = element("div", "radio-item-audio");
         if (!segment.audio_available) {
             area.appendChild(element("span", "radio-audio-note", "Audio expired"));
-            return area;
+            return { area: area, controls: null, available: false };
         }
         const button = element("button", "radio-play");
         button.type = "button";
@@ -305,17 +404,136 @@
         });
         area.appendChild(button);
         area.appendChild(note);
-        return area;
+        return { area: area, controls: controls, available: true };
     }
 
     // ------------------------------------------------------------------ cards
 
-    function renderItem(segment) {
+    function displayText(segment) {
+        if (typeof segment.text === "string") return segment.text;
+        return typeof segment.transcript === "string" ? segment.transcript : "";
+    }
+
+    function segmentSig(segment) {
+        return [displayText(segment), segment.corrected_at || "", segment.corrected ? 1 : 0,
+                segment.audio_available ? 1 : 0, segment.low_confidence ? 1 : 0,
+                segment.retained_until || ""].join("|");
+    }
+
+    function setItemError(item, text) {
+        const state = itemState.get(item);
+        if (!state || !state.error) return;
+        if (text) showError(state.error, text);
+        else hideError(state.error);
+    }
+
+    function focusTool(item, name) {
+        const target = item.querySelector(`[data-tool="${name}"]`);
+        if (target) target.focus({ preventScroll: true });
+    }
+
+    function toolButton(name, iconName, label) {
+        const button = iconButton("radio-tool", iconName, label);
+        button.dataset.tool = name;
+        return button;
+    }
+
+    // The row of per-card actions. Rebuilt on its own (toggle, confirm) so the
+    // text, audio and any open editor are never disturbed.
+    function renderTools(item, focusName) {
+        const state = itemState.get(item);
+        const segment = state.segment;
+        const row = element("div", "radio-item-tools");
+        row.hidden = state.editing;
+
+        const edit = toolButton("edit", "bi-pencil-square", "Edit");
+        edit.setAttribute("aria-label", `Edit transcript of ${state.descriptor}`);
+        edit.disabled = state.busy;
+        edit.addEventListener("click", function () {
+            openEditor(item);
+        });
+        row.appendChild(edit);
+
+        if (segment.corrected) {
+            const toggle = toolButton("toggle",
+                state.showMachine ? "bi-eye-slash" : "bi-eye",
+                state.showMachine ? "Hide machine text" : "Show machine text");
+            toggle.setAttribute("aria-expanded", state.showMachine ? "true" : "false");
+            toggle.setAttribute("aria-controls", state.machineId);
+            toggle.addEventListener("click", function () {
+                state.showMachine = !state.showMachine;
+                state.machine.hidden = !state.showMachine;
+                renderTools(item, "toggle");
+            });
+            row.appendChild(toggle);
+
+            if (state.confirmRevert) {
+                const confirmBox = element("span", "radio-confirm");
+                confirmBox.setAttribute("role", "group");
+                confirmBox.setAttribute("aria-label", "Confirm revert to machine text");
+                confirmBox.appendChild(element("span", "radio-confirm-text",
+                    "Replace the correction with the machine text? The correction stays in the history."));
+                const yes = toolButton("revert-yes", "bi-arrow-counterclockwise", "Yes, revert");
+                yes.classList.add("is-danger");
+                yes.disabled = state.busy;
+                yes.addEventListener("click", function () {
+                    revertCorrection(item);
+                });
+                const no = toolButton("revert-no", "bi-x-lg", "Keep correction");
+                no.disabled = state.busy;
+                no.addEventListener("click", function () {
+                    state.confirmRevert = false;
+                    renderTools(item, "revert");
+                });
+                confirmBox.appendChild(yes);
+                confirmBox.appendChild(no);
+                row.appendChild(confirmBox);
+            } else {
+                const revert = toolButton("revert", "bi-arrow-counterclockwise",
+                    "Revert to machine text");
+                revert.disabled = state.busy;
+                revert.addEventListener("click", function () {
+                    state.confirmRevert = true;
+                    setItemError(item, "");
+                    renderTools(item, "revert-no");
+                });
+                row.appendChild(revert);
+            }
+        }
+
+        if (state.tools && state.tools.parentNode) {
+            state.tools.parentNode.replaceChild(row, state.tools);
+        }
+        state.tools = row;
+        if (focusName) focusTool(item, focusName);
+    }
+
+    // Build (or rebuild in place) everything on a card except the audio area,
+    // which is reused so a correction never interrupts playback.
+    function fillItem(item, segment) {
+        const state = itemState.get(item);
+        state.segment = segment;
+        state.sig = segmentSig(segment);
         const channel = String(segment.channel);
         const direction = String(segment.direction).toUpperCase();
         const time = formatTime(segment.started_at);
-        const item = element("li", "radio-item");
-        item.dataset.segmentId = String(segment.segment_id);
+        const corrected = Boolean(segment.corrected);
+        state.descriptor = `${channel} ${direction} segment from ${time}`;
+        if (!corrected) state.confirmRevert = false;
+
+        let audio = state.audio;
+        if (audio && audio.available !== Boolean(segment.audio_available)) {
+            if (audio.controls && current && current.controls === audio.controls) {
+                player.pause();
+                releaseCurrent();
+            }
+            audio = null;
+        }
+        if (!audio) audio = buildAudioArea(segment, state.descriptor);
+        state.audio = audio;
+
+        item.textContent = "";
+        item.classList.toggle("is-corrected", corrected);
 
         const meta = element("div", "radio-item-meta");
         meta.appendChild(element("span", "radio-item-time", time));
@@ -325,7 +543,14 @@
         meta.appendChild(dir);
         const length = formatDuration(segment.duration_seconds);
         if (length) meta.appendChild(element("span", "radio-length", length));
-        if (segment.low_confidence) {
+        if (corrected) {
+            const who = segment.corrected_by ? String(segment.corrected_by) : "a user";
+            const when = formatTime(segment.corrected_at);
+            const badge = element("span", "radio-badge is-corrected",
+                `Corrected by ${who}${when ? `, ${when}` : ""}`);
+            badge.title = "A person edited this transcript. The machine text is kept.";
+            meta.appendChild(badge);
+        } else if (segment.low_confidence) {
             const badge = element("span", "radio-badge", "Low confidence");
             badge.title = "The transcriber was unsure about part of this segment.";
             meta.appendChild(badge);
@@ -333,18 +558,300 @@
         item.appendChild(meta);
 
         const body = element("div", "radio-item-body");
+        const shown = displayText(segment);
         const text = element("p", "radio-item-text");
-        if (segment.transcript) {
-            text.textContent = segment.transcript;
+        if (shown) {
+            text.textContent = shown;
         } else {
             text.classList.add("is-empty");
-            text.textContent = "(no speech recognized)";
+            text.textContent = NO_SPEECH;
         }
+        text.hidden = state.editing;
+        state.textNode = text;
         body.appendChild(text);
-        body.appendChild(buildAudioArea(
-            segment, `${channel} ${direction} segment from ${time}`));
+        body.appendChild(audio.area);
         item.appendChild(body);
+
+        state.tools = element("div");
+        item.appendChild(state.tools);
+        state.machineId = `radio-machine-${state.seq}`;
+
+        const machine = element("div", "radio-machine");
+        machine.id = state.machineId;
+        machine.appendChild(element("span", "radio-machine-label", "Machine text"));
+        const machineText = element("p", "radio-machine-text");
+        if (segment.machine_transcript) {
+            machineText.textContent = String(segment.machine_transcript);
+        } else {
+            machineText.classList.add("is-empty");
+            machineText.textContent = NO_SPEECH;
+        }
+        machine.appendChild(machineText);
+        machine.hidden = !(corrected && state.showMachine);
+        state.machine = machine;
+        if (corrected) {
+            item.appendChild(machine);
+            const keep = element("p", "radio-keep-note", KEEP_NOTE);
+            if (segment.retained_until) {
+                keep.textContent = `${KEEP_NOTE} Kept until ${formatTime(segment.retained_until)}.`;
+            }
+            item.appendChild(keep);
+        }
+
+        const error = element("div", "radio-inline-error");
+        error.setAttribute("role", "alert");
+        error.hidden = true;
+        state.error = error;
+        item.appendChild(error);
+
+        renderTools(item);
+        if (state.editing && state.editor) {
+            item.insertBefore(state.editor, error);
+        }
+    }
+
+    function buildItem(segment) {
+        const item = element("li", "radio-item");
+        item.dataset.segmentId = String(segment.segment_id);
+        itemSeq += 1;
+        itemState.set(item, {
+            seq: itemSeq, segment: null, sig: "", descriptor: "", showMachine: false,
+            editing: false, editor: null, confirmRevert: false, busy: false,
+            audio: null, tools: null, textNode: null, machine: null, machineId: "",
+            error: null,
+        });
+        fillItem(item, segment);
         return item;
+    }
+
+    // Apply a new version of a segment to every card showing it, except one
+    // being edited, keeping the reader's scroll position.
+    function refreshItemInPlace(item, segment) {
+        const state = itemState.get(item);
+        if (!state || state.editing || state.busy) return;
+        const scroller = scrollParent(item);
+        const rect = item.getBoundingClientRect();
+        const wasAbove = rect.bottom <= viewportTop(scroller);
+        const oldHeight = rect.height;
+        fillItem(item, segment);
+        if (wasAbove) {
+            scroller.scrollTop += item.getBoundingClientRect().height - oldHeight;
+        }
+    }
+
+    function applySegmentEverywhere(segment, exceptItem) {
+        const id = String(segment.segment_id);
+        tabs.forEach(function (tab) {
+            if (tab.kind !== "feed") return;
+            const item = tab.items.get(id);
+            if (item && item !== exceptItem) refreshItemInPlace(item, segment);
+        });
+    }
+
+    // ----------------------------------------------------------- corrections
+
+    function hasEditingCard() {
+        return Boolean(panelsBox.querySelector(".radio-item.is-editing"));
+    }
+
+    function cardCount(length) {
+        return `${length.toLocaleString("en-US")} / ${MAX_CORRECTION.toLocaleString("en-US")} characters`;
+    }
+
+    function closeEditor(item, restoreFocus) {
+        const state = itemState.get(item);
+        if (!state || !state.editing) return;
+        state.editing = false;
+        item.classList.remove("is-editing");
+        if (state.editor && state.editor.parentNode) {
+            state.editor.parentNode.removeChild(state.editor);
+        }
+        state.editor = null;
+        if (state.textNode) state.textNode.hidden = false;
+        if (state.tools) state.tools.hidden = false;
+        if (restoreFocus) focusTool(item, "edit");
+    }
+
+    function openEditor(item) {
+        const state = itemState.get(item);
+        if (!state || state.editing || state.busy) return;
+        state.editing = true;
+        state.confirmRevert = false;
+        item.classList.add("is-editing");
+        setItemError(item, "");
+        renderTools(item);
+        if (state.textNode) state.textNode.hidden = true;
+
+        const initial = displayText(state.segment);
+        const editor = element("form", "radio-editor");
+        editor.noValidate = true;
+        editor.setAttribute("aria-label", `Edit transcript of ${state.descriptor}`);
+
+        const labelId = `radio-edit-label-${state.seq}`;
+        const label = element("label", "radio-editor-label", "Corrected transcript");
+        label.id = labelId;
+        const area = element("textarea", "radio-editor-input");
+        area.id = `radio-edit-${state.seq}`;
+        label.htmlFor = area.id;
+        area.maxLength = MAX_CORRECTION;
+        area.value = initial;
+        area.rows = Math.max(3, Math.min(12, Math.ceil(initial.length / 60) + 1));
+        area.spellcheck = true;
+
+        const count = element("span", "radio-editor-count", cardCount(initial.length));
+        const hint = element("span", "radio-editor-hint", "Ctrl+Enter saves. Esc cancels.");
+        const meta = element("div", "radio-editor-meta");
+        meta.appendChild(count);
+        meta.appendChild(hint);
+
+        const save = iconButton("radio-save", "bi-check-lg", "Save");
+        save.type = "submit";
+        const cancel = iconButton("radio-cancel", "bi-x-lg", "Cancel");
+        const actions = element("div", "radio-editor-actions");
+        actions.appendChild(save);
+        actions.appendChild(cancel);
+
+        const error = element("div", "radio-inline-error");
+        error.setAttribute("role", "alert");
+        error.hidden = true;
+
+        editor.appendChild(label);
+        editor.appendChild(area);
+        editor.appendChild(meta);
+        editor.appendChild(element("p", "radio-keep-note", KEEP_NOTE));
+        editor.appendChild(error);
+        editor.appendChild(actions);
+
+        area.addEventListener("input", function () {
+            count.textContent = cardCount(area.value.length);
+            count.classList.toggle("is-near-limit", area.value.length >= MAX_CORRECTION - 500);
+        });
+        cancel.addEventListener("click", function () {
+            if (state.busy) return;
+            closeEditor(item, true);
+        });
+        area.addEventListener("keydown", function (event) {
+            if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                if (!state.busy) closeEditor(item, true);
+            } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+                event.preventDefault();
+                editor.requestSubmit ? editor.requestSubmit() : save.click();
+            }
+        });
+        editor.addEventListener("submit", function (event) {
+            event.preventDefault();
+            saveCorrection(item, { area: area, save: save, cancel: cancel, error: error });
+        });
+
+        state.editor = editor;
+        item.insertBefore(editor, state.error);
+        area.focus({ preventScroll: true });
+        area.setSelectionRange(area.value.length, area.value.length);
+    }
+
+    async function saveCorrection(item, controls) {
+        const state = itemState.get(item);
+        if (!state || state.busy) return;
+        const text = controls.area.value.trim();
+        hideError(controls.error);
+        if (!text) {
+            showError(controls.error,
+                "Enter the corrected text. To go back to what the machine heard, cancel and use Revert to machine text.");
+            controls.area.focus({ preventScroll: true });
+            return;
+        }
+        if (text.length > MAX_CORRECTION) {
+            showError(controls.error,
+                `The correction is ${text.length.toLocaleString("en-US")} characters; the limit is ${MAX_CORRECTION.toLocaleString("en-US")}.`);
+            return;
+        }
+        if (CONTROL_CHARS.test(text)) {
+            showError(controls.error,
+                "The correction contains control characters. Only plain text, line breaks and tabs are allowed.");
+            return;
+        }
+        if (state.segment.corrected && text === displayText(state.segment)) {
+            closeEditor(item, true);
+            return;
+        }
+
+        state.busy = true;
+        controls.save.disabled = true;
+        controls.cancel.disabled = true;
+        controls.area.readOnly = true;
+        controls.save.querySelector("span").textContent = "Saving…";
+        const result = await apiCall(
+            "PUT",
+            `/api/radio/segments/${encodeURIComponent(state.segment.segment_id)}/correction`,
+            { text: text },
+            "The correction could not be saved");
+        state.busy = false;
+        controls.save.disabled = false;
+        controls.cancel.disabled = false;
+        controls.area.readOnly = false;
+        controls.save.querySelector("span").textContent = "Save";
+        if (result.ended) return;
+        if (result.error) {
+            showError(controls.error, result.error);
+            controls.area.focus({ preventScroll: true });
+            return;
+        }
+        const updated = unwrapSegment(result.payload);
+        closeEditor(item, false);
+        if (!updated) {
+            fillItem(item, state.segment);
+            setItemError(item,
+                "The correction was saved, but the server's reply was not understood. Use Refresh to see it.");
+            focusTool(item, "edit");
+            return;
+        }
+        fillItem(item, updated);
+        applySegmentEverywhere(updated, item);
+        item.classList.remove("is-saved");
+        // Restart the highlight animation.
+        void item.offsetWidth;
+        item.classList.add("is-saved");
+        focusTool(item, "edit");
+        announce("Correction saved");
+    }
+
+    async function revertCorrection(item) {
+        const state = itemState.get(item);
+        if (!state || state.busy) return;
+        state.busy = true;
+        setItemError(item, "");
+        renderTools(item);
+        const result = await apiCall(
+            "DELETE",
+            `/api/radio/segments/${encodeURIComponent(state.segment.segment_id)}/correction`,
+            undefined,
+            "The correction could not be reverted");
+        state.busy = false;
+        if (result.ended) {
+            renderTools(item);
+            return;
+        }
+        if (result.error) {
+            state.confirmRevert = false;
+            renderTools(item, "revert");
+            setItemError(item, result.error);
+            return;
+        }
+        const updated = unwrapSegment(result.payload);
+        state.confirmRevert = false;
+        state.showMachine = false;
+        if (!updated) {
+            renderTools(item, "edit");
+            setItemError(item,
+                "The correction was reverted, but the server's reply was not understood. Use Refresh to see it.");
+            return;
+        }
+        fillItem(item, updated);
+        applySegmentEverywhere(updated, item);
+        focusTool(item, "edit");
+        announce("Reverted to machine text");
     }
 
     // ------------------------------------------------------------------- tabs
@@ -415,9 +922,9 @@
 
     function registerTab(button) {
         const channel = button.dataset.channel || "";
-        const key = channel;
         const tab = {
-            key: key,
+            key: channel,
+            kind: "feed",
             channel: channel,
             button: button,
             countNode: button.querySelector(".radio-tab-count"),
@@ -429,14 +936,14 @@
             token: 0,
             nextBefore: "",
             seen: new Set(),
+            items: new Map(),
             updatedAt: 0,
             count: null,
         };
         buildPanel(tab);
-        tabs.set(key, tab);
-        tabOrder.push(key);
+        tabs.set(tab.key, tab);
         button.addEventListener("click", function () {
-            activateTab(key, false);
+            activateTab(tab.key, false);
         });
         return tab;
     }
@@ -455,7 +962,8 @@
         const count = element("span", "radio-tab-count");
         count.setAttribute("aria-hidden", "true");
         button.appendChild(count);
-        tablist.appendChild(button);
+        // New channels sit with the channels, before any administrator tab.
+        tablist.insertBefore(button, tablist.querySelector("[data-admin-tab]"));
         registerTab(button);
     }
 
@@ -472,6 +980,16 @@
             `${label}, ${value} segment${value === 1 ? "" : "s"} in the last 24 hours`);
     }
 
+    function tabsInOrder() {
+        const ordered = [];
+        Array.from(tablist.children).forEach(function (button) {
+            tabs.forEach(function (tab) {
+                if (tab.button === button) ordered.push(tab);
+            });
+        });
+        return ordered;
+    }
+
     function activateTab(key, focus) {
         const tab = tabs.get(key);
         if (!tab) return;
@@ -482,8 +1000,14 @@
             other.button.tabIndex = selected ? 0 : -1;
             other.panel.hidden = !selected;
         });
+        // The filters only apply to the transcript feeds.
+        form.hidden = tab.kind !== "feed";
         if (focus) tab.button.focus();
         showUpdated(tab);
+        if (tab.kind === "admin") {
+            tab.load();
+            return;
+        }
         if (!tab.loaded) {
             loadFirst(tab);
         } else if (Date.now() - tab.updatedAt > FEED_REFRESH_MS) {
@@ -492,15 +1016,18 @@
     }
 
     tablist.addEventListener("keydown", function (event) {
-        const index = tabOrder.indexOf(activeKey);
+        const ordered = tabsInOrder();
+        const index = ordered.findIndex(function (tab) {
+            return tab.key === activeKey;
+        });
         let next = -1;
-        if (event.key === "ArrowRight") next = (index + 1) % tabOrder.length;
-        else if (event.key === "ArrowLeft") next = (index - 1 + tabOrder.length) % tabOrder.length;
+        if (event.key === "ArrowRight") next = (index + 1) % ordered.length;
+        else if (event.key === "ArrowLeft") next = (index - 1 + ordered.length) % ordered.length;
         else if (event.key === "Home") next = 0;
-        else if (event.key === "End") next = tabOrder.length - 1;
+        else if (event.key === "End") next = ordered.length - 1;
         if (next < 0) return;
         event.preventDefault();
-        activateTab(tabOrder[next], true);
+        activateTab(ordered[next].key, true);
     });
 
     function showUpdated(tab) {
@@ -545,6 +1072,7 @@
             "Last segment received",
             true));
         tabs.forEach(function (tab) {
+            if (tab.kind !== "feed") return;
             if (tab.key === "") {
                 setTabCount(tab, Number.isFinite(Number(stats.total)) ? Number(stats.total) : total);
             } else {
@@ -554,24 +1082,15 @@
     }
 
     async function loadStats() {
-        try {
-            const response = await fetch("/api/radio/stats", {
-                headers: { "Accept": "application/json" },
-            });
-            // A poll bounced to the identity provider must stop, not retry
-            // (static/js/lcdash-session.js).
-            if (window.LCDashSession && window.LCDashSession.check(response)) return;
-            if (!response.ok) {
-                const detail = await readDetail(response);
-                showError(statsError,
-                    `Statistics could not be loaded${httpSuffix(response.status, detail)}`);
-                return;
-            }
-            statsError.hidden = true;
-            renderStats(await response.json());
-        } catch (error) {
-            showError(statsError, "Statistics could not be loaded (network error)");
+        const result = await apiCall("GET", "/api/radio/stats", undefined,
+            "Statistics could not be loaded");
+        if (result.ended) return;
+        if (result.error) {
+            showError(statsError, result.error);
+            return;
         }
+        hideError(statsError);
+        renderStats(result.payload || {});
     }
 
     function stopPolling() {
@@ -599,30 +1118,13 @@
         return params.toString();
     }
 
-    // Resolves {ended: true} when the session has ended, {error: text} for a
-    // failure, or {payload} on success.
-    async function requestSegments(tab, before) {
-        try {
-            const response = await fetch(
-                `/api/radio/segments?${currentQuery(tab, before)}`,
-                { headers: { "Accept": "application/json" } });
-            if (window.LCDashSession && window.LCDashSession.check(response)) {
-                return { ended: true };
-            }
-            if (!response.ok) {
-                const detail = await readDetail(response);
-                return {
-                    error: `Segments could not be loaded${httpSuffix(response.status, detail)}`,
-                };
-            }
-            return { payload: await response.json() };
-        } catch (error) {
-            return { error: "Segments could not be loaded (network error)" };
-        }
+    function requestSegments(tab, before) {
+        return apiCall("GET", `/api/radio/segments?${currentQuery(tab, before)}`,
+            undefined, "Segments could not be loaded");
     }
 
     function pageSegments(payload) {
-        return Array.isArray(payload.segments) ? payload.segments : [];
+        return payload && Array.isArray(payload.segments) ? payload.segments : [];
     }
 
     function updateSummary(tab) {
@@ -634,15 +1136,20 @@
             : "";
     }
 
+    function addItem(tab, segment, fresh) {
+        const id = String(segment.segment_id);
+        tab.seen.add(id);
+        const item = buildItem(segment);
+        tab.items.set(id, item);
+        if (fresh) item.classList.add("is-new");
+        return item;
+    }
+
     function appendItems(tab, segments, fresh) {
         const fragment = document.createDocumentFragment();
         segments.forEach(function (segment) {
-            const id = String(segment.segment_id);
-            if (tab.seen.has(id)) return;
-            tab.seen.add(id);
-            const item = renderItem(segment);
-            if (fresh) item.classList.add("is-new");
-            fragment.appendChild(item);
+            if (tab.seen.has(String(segment.segment_id))) return;
+            fragment.appendChild(addItem(tab, segment, fresh));
         });
         tab.list.appendChild(fragment);
     }
@@ -654,8 +1161,9 @@
         tab.nextBefore = "";
         tab.updatedAt = 0;
         tab.seen = new Set();
+        tab.items = new Map();
         tab.list.textContent = "";
-        tab.error.hidden = true;
+        hideError(tab.error);
         tab.empty.hidden = true;
         tab.older.hidden = true;
         tab.status.textContent = "";
@@ -692,7 +1200,7 @@
         tab.busy = true;
         const token = tab.token;
         tab.older.disabled = true;
-        tab.error.hidden = true;
+        hideError(tab.error);
         tab.status.textContent = "Loading older segments…";
         const result = await requestSegments(tab, tab.nextBefore);
         if (token !== tab.token) return;
@@ -712,7 +1220,9 @@
     }
 
     // Fetch the newest page and prepend what is not on screen yet, keeping the
-    // reader exactly where they are. Does not touch audio.
+    // reader exactly where they are. Cards already shown are updated in place
+    // only when somebody else changed them and they are not being edited.
+    // Does not touch audio.
     async function refreshNewest(tab) {
         if (tab.busy) return;
         if (!tab.loaded) {
@@ -731,7 +1241,7 @@
             showError(tab.error, result.error);
             return;
         }
-        tab.error.hidden = true;
+        hideError(tab.error);
         const segments = pageSegments(result.payload);
         const fresh = segments.filter(function (segment) {
             return !tab.seen.has(String(segment.segment_id));
@@ -742,20 +1252,27 @@
             // A whole page of unseen segments means older unseen ones may sit
             // between this page and what is on screen (the page was left
             // alone for a long time). Rebuild from the newest page rather
-            // than leave a silent gap.
-            loadFirst(tab);
-            return;
+            // than leave a silent gap -- but never while a card is open for
+            // editing: the draft is more important than the gap.
+            if (!hasEditingCard()) {
+                loadFirst(tab);
+                return;
+            }
         }
+        segments.forEach(function (segment) {
+            const item = tab.items.get(String(segment.segment_id));
+            const state = item && itemState.get(item);
+            if (state && !state.editing && !state.busy && state.sig !== segmentSig(segment)) {
+                refreshItemInPlace(item, segment);
+            }
+        });
         if (fresh.length) {
             const anchor = tab.list.firstElementChild;
             const scroller = scrollParent(tab.list);
             const before = anchor ? anchor.getBoundingClientRect().top : 0;
             const fragment = document.createDocumentFragment();
             fresh.forEach(function (segment) {
-                tab.seen.add(String(segment.segment_id));
-                const item = renderItem(segment);
-                item.classList.add("is-new");
-                fragment.appendChild(item);
+                fragment.appendChild(addItem(tab, segment, true));
             });
             tab.list.insertBefore(fragment, tab.list.firstChild);
             if (anchor && scroller.scrollTop > 0) {
@@ -772,15 +1289,22 @@
         if (document.visibilityState !== "visible") return;
         if (audioActive()) return;
         const tab = tabs.get(activeKey);
-        if (tab) refreshNewest(tab);
+        if (tab && tab.kind === "feed") refreshNewest(tab);
     }
 
     function applyFilters() {
+        const active = tabs.get(activeKey);
+        if (hasEditingCard()) {
+            // Reloading would throw away an unsaved correction.
+            if (active && active.kind === "feed") {
+                showError(active.error, "Save or cancel the open edit before changing the filter.");
+            }
+            return;
+        }
         tabs.forEach(function (tab) {
-            if (tab.key !== activeKey) clearTab(tab);
+            if (tab.kind === "feed" && tab.key !== activeKey) clearTab(tab);
         });
-        const tab = tabs.get(activeKey);
-        if (tab) loadFirst(tab);
+        if (active && active.kind === "feed") loadFirst(active);
     }
 
     form.addEventListener("submit", function (event) {
@@ -789,18 +1313,435 @@
     });
     refreshButton.addEventListener("click", function () {
         const tab = tabs.get(activeKey);
-        if (tab) refreshNewest(tab);
+        if (!tab) return;
+        if (tab.kind === "admin") {
+            tab.load();
+            return;
+        }
+        refreshNewest(tab);
         loadStats();
     });
     document.addEventListener("visibilitychange", function () {
         if (document.visibilityState !== "visible") return;
         const tab = tabs.get(activeKey);
-        if (tab && tab.loaded && Date.now() - tab.updatedAt > FEED_REFRESH_MS) autoRefresh();
+        if (tab && tab.kind === "feed" && tab.loaded &&
+            Date.now() - tab.updatedAt > FEED_REFRESH_MS) {
+            autoRefresh();
+        }
     });
+
+    // ----------------------------------------------------- administrator tabs
+
+    // Two-step delete: a plain Delete button turns into "Delete? Yes / Cancel".
+    // `run` resolves true when the row is gone, false when it failed (it shows
+    // its own error), so the control can return to its idle state.
+    function makeDeleteControl(label, run) {
+        const wrap = element("span", "radio-delete");
+        wrap.dataset.state = "idle";
+        function idle(focusIt) {
+            wrap.textContent = "";
+            wrap.dataset.state = "idle";
+            const button = iconButton("radio-tool is-danger", "bi-trash3", "Delete");
+            button.setAttribute("aria-label", `Delete ${label}`);
+            button.addEventListener("click", askConfirm);
+            wrap.appendChild(button);
+            if (focusIt) button.focus({ preventScroll: true });
+        }
+        function askConfirm() {
+            wrap.textContent = "";
+            wrap.dataset.state = "confirm";
+            wrap.setAttribute("role", "group");
+            wrap.appendChild(element("span", "radio-confirm-text", "Delete this?"));
+            const yes = iconButton("radio-tool is-danger", "bi-trash3", "Yes, delete");
+            yes.setAttribute("aria-label", `Yes, delete ${label}`);
+            const no = iconButton("radio-tool", "bi-x-lg", "Cancel");
+            yes.addEventListener("click", async function () {
+                yes.disabled = true;
+                no.disabled = true;
+                const gone = await run();
+                if (!gone) idle(true);
+            });
+            no.addEventListener("click", function () {
+                idle(true);
+            });
+            wrap.appendChild(yes);
+            wrap.appendChild(no);
+            no.focus({ preventScroll: true });
+        }
+        idle(false);
+        return wrap;
+    }
+
+    function registerAdminTab(button) {
+        const name = button.dataset.adminTab;
+        const panel = document.getElementById(button.dataset.panel || "");
+        if (!name || !panel) return null;
+        button.setAttribute("role", "tab");
+        button.setAttribute("aria-selected", "false");
+        button.setAttribute("aria-controls", panel.id);
+        button.tabIndex = -1;
+        panel.setAttribute("role", "tabpanel");
+        panel.setAttribute("aria-labelledby", button.id);
+        panel.tabIndex = 0;
+        panel.hidden = true;
+        const tab = {
+            key: `admin:${name}`,
+            kind: "admin",
+            name: name,
+            button: button,
+            panel: panel,
+            loaded: false,
+            busy: false,
+            updatedAt: 0,
+            load: function () {},
+        };
+        tabs.set(tab.key, tab);
+        button.addEventListener("click", function () {
+            activateTab(tab.key, false);
+        });
+        return tab;
+    }
+
+    function byId(id) {
+        return document.getElementById(id);
+    }
+
+    function channelChips(channels) {
+        const wrap = element("span", "radio-admin-channels");
+        if (!channels.length) {
+            wrap.appendChild(element("span", "radio-chip radio-chip-all", "All channels"));
+            return wrap;
+        }
+        channels.forEach(function (channel) {
+            const name = String(channel);
+            wrap.appendChild(element("span", `radio-chip ${channelClass(name)}`, name));
+        });
+        return wrap;
+    }
+
+    function rowError(row) {
+        let node = row.querySelector(".radio-inline-error");
+        if (!node) {
+            node = element("div", "radio-inline-error");
+            node.setAttribute("role", "alert");
+            node.hidden = true;
+            row.appendChild(node);
+        }
+        return node;
+    }
+
+    // ---- Alert keywords
+
+    function normalizeTerm(raw) {
+        if (!raw || typeof raw !== "object") return null;
+        const id = raw.term_id !== undefined ? raw.term_id : raw.id;
+        if (id === undefined || id === null || typeof raw.phrase !== "string") return null;
+        return {
+            id: id,
+            phrase: raw.phrase,
+            channels: Array.isArray(raw.channels) ? raw.channels.map(String) : [],
+            enabled: raw.enabled !== false,
+        };
+    }
+
+    function setupWatchTab(tab) {
+        const list = byId("radio-watch-list");
+        const empty = byId("radio-watch-empty");
+        const loading = byId("radio-watch-loading");
+        const error = byId("radio-watch-error");
+        const addForm = byId("radio-watch-form");
+        const phrase = byId("radio-watch-phrase");
+        const formError = byId("radio-watch-form-error");
+        const total = byId("radio-watch-total");
+        const addButton = byId("radio-watch-add");
+        if (!list || !empty || !loading || !error || !addForm || !phrase || !formError ||
+            !addButton) {
+            return;
+        }
+        const boxes = Array.from(addForm.querySelectorAll('input[name="channel"]'));
+        const allBox = boxes.find(function (box) {
+            return box.value === "all";
+        });
+
+        function updateSummaryText() {
+            const n = list.children.length;
+            empty.hidden = n > 0;
+            if (total) total.textContent = n ? `${n} alert keyword${n === 1 ? "" : "s"}` : "";
+        }
+
+        function renderTerm(term) {
+            const row = element("li", "radio-admin-row");
+            row.dataset.termId = String(term.id);
+            const main = element("div", "radio-admin-main");
+            main.appendChild(element("strong", "radio-admin-phrase", term.phrase));
+            main.appendChild(channelChips(term.channels));
+
+            const toggleLabel = element("label", "radio-switch");
+            const toggle = element("input");
+            toggle.type = "checkbox";
+            toggle.checked = term.enabled;
+            toggle.setAttribute("aria-label", `Enabled: ${term.phrase}`);
+            const toggleText = element("span", "", term.enabled ? "Enabled" : "Disabled");
+            toggleLabel.appendChild(toggle);
+            toggleLabel.appendChild(toggleText);
+            toggle.addEventListener("change", async function () {
+                const wanted = toggle.checked;
+                toggle.disabled = true;
+                hideError(rowError(row));
+                const result = await apiCall(
+                    "PATCH", `/api/radio/watch-terms/${encodeURIComponent(term.id)}`,
+                    { enabled: wanted }, "The keyword could not be changed");
+                toggle.disabled = false;
+                if (result.ended) return;
+                if (result.error) {
+                    toggle.checked = !wanted;
+                    showError(rowError(row), result.error);
+                    return;
+                }
+                toggleText.textContent = wanted ? "Enabled" : "Disabled";
+            });
+
+            const del = makeDeleteControl(`keyword ${term.phrase}`, async function () {
+                const result = await apiCall(
+                    "DELETE", `/api/radio/watch-terms/${encodeURIComponent(term.id)}`,
+                    undefined, "The keyword could not be deleted");
+                if (result.ended) return false;
+                if (result.error) {
+                    showError(rowError(row), result.error);
+                    return false;
+                }
+                row.remove();
+                updateSummaryText();
+                return true;
+            });
+
+            const controls = element("div", "radio-admin-controls");
+            controls.appendChild(toggleLabel);
+            controls.appendChild(del);
+            row.appendChild(main);
+            row.appendChild(controls);
+            return row;
+        }
+
+        async function load() {
+            if (tab.busy) return;
+            tab.busy = true;
+            loading.hidden = false;
+            const result = await apiCall("GET", "/api/radio/watch-terms", undefined,
+                "Alert keywords could not be loaded");
+            tab.busy = false;
+            loading.hidden = true;
+            if (result.ended) return;
+            if (result.error) {
+                showError(error, result.error);
+                return;
+            }
+            hideError(error);
+            list.textContent = "";
+            firstArray(result.payload, ["terms", "watch_terms", "items"])
+                .map(normalizeTerm)
+                .filter(Boolean)
+                .forEach(function (term) {
+                    list.appendChild(renderTerm(term));
+                });
+            updateSummaryText();
+            tab.loaded = true;
+            tab.updatedAt = Date.now();
+            if (tab.key === activeKey) showUpdated(tab);
+        }
+        tab.load = load;
+
+        // "All channels" and the specific channels exclude each other.
+        boxes.forEach(function (box) {
+            box.addEventListener("change", function () {
+                if (box === allBox && box.checked) {
+                    boxes.forEach(function (other) {
+                        if (other !== allBox) other.checked = false;
+                    });
+                } else if (box !== allBox && box.checked && allBox) {
+                    allBox.checked = false;
+                }
+                const anySpecific = boxes.some(function (other) {
+                    return other !== allBox && other.checked;
+                });
+                if (!anySpecific && allBox) allBox.checked = true;
+            });
+        });
+
+        addForm.addEventListener("submit", async function (event) {
+            event.preventDefault();
+            hideError(formError);
+            const text = phrase.value.trim();
+            if (text.length < 2 || text.length > 80) {
+                showError(formError, "Enter a phrase of 2 to 80 characters.");
+                phrase.focus();
+                return;
+            }
+            const channels = boxes
+                .filter(function (box) {
+                    return box !== allBox && box.checked;
+                })
+                .map(function (box) {
+                    return box.value;
+                });
+            addButton.disabled = true;
+            const result = await apiCall(
+                "POST", "/api/radio/watch-terms",
+                { phrase: text, channels: channels, enabled: true },
+                "The keyword could not be added");
+            addButton.disabled = false;
+            if (result.ended) return;
+            if (result.error) {
+                showError(formError, result.error);
+                return;
+            }
+            phrase.value = "";
+            await load();
+            phrase.focus();
+        });
+    }
+
+    // ---- Transcript fixes
+
+    function normalizeFix(raw) {
+        if (!raw || typeof raw !== "object") return null;
+        const id = raw.replacement_id !== undefined ? raw.replacement_id : raw.id;
+        const find = raw.find !== undefined ? raw.find : raw.find_text;
+        const replace = raw.replace !== undefined ? raw.replace : raw.replace_text;
+        if (id === undefined || id === null || typeof find !== "string") return null;
+        return {
+            id: id,
+            find: find,
+            replace: typeof replace === "string" ? replace : "",
+            wholeWord: raw.whole_word !== false,
+        };
+    }
+
+    function setupFixesTab(tab) {
+        const list = byId("radio-fix-list");
+        const empty = byId("radio-fix-empty");
+        const loading = byId("radio-fix-loading");
+        const error = byId("radio-fix-error");
+        const addForm = byId("radio-fix-form");
+        const findInput = byId("radio-fix-find");
+        const replaceInput = byId("radio-fix-replace");
+        const wholeBox = byId("radio-fix-whole");
+        const formError = byId("radio-fix-form-error");
+        const total = byId("radio-fix-total");
+        const addButton = byId("radio-fix-add");
+        if (!list || !empty || !loading || !error || !addForm || !findInput || !replaceInput ||
+            !wholeBox || !formError || !addButton) {
+            return;
+        }
+
+        function updateSummaryText() {
+            const n = list.children.length;
+            empty.hidden = n > 0;
+            if (total) total.textContent = n ? `${n} fix${n === 1 ? "" : "es"}` : "";
+        }
+
+        function renderFix(fix) {
+            const row = element("li", "radio-admin-row");
+            row.dataset.replacementId = String(fix.id);
+            const main = element("div", "radio-admin-main");
+            main.appendChild(element("code", "radio-fix-find", fix.find));
+            main.appendChild(icon("bi-arrow-right"));
+            const replacement = element("code", "radio-fix-replace", fix.replace || "(blank)");
+            if (!fix.replace) replacement.classList.add("is-empty");
+            main.appendChild(replacement);
+            main.appendChild(element("span",
+                `radio-badge ${fix.wholeWord ? "is-info" : ""}`,
+                fix.wholeWord ? "Whole word" : "Any match"));
+            const del = makeDeleteControl(`fix ${fix.find}`, async function () {
+                const result = await apiCall(
+                    "DELETE", `/api/radio/replacements/${encodeURIComponent(fix.id)}`,
+                    undefined, "The fix could not be deleted");
+                if (result.ended) return false;
+                if (result.error) {
+                    showError(rowError(row), result.error);
+                    return false;
+                }
+                row.remove();
+                updateSummaryText();
+                return true;
+            });
+            const controls = element("div", "radio-admin-controls");
+            controls.appendChild(del);
+            row.appendChild(main);
+            row.appendChild(controls);
+            return row;
+        }
+
+        async function load() {
+            if (tab.busy) return;
+            tab.busy = true;
+            loading.hidden = false;
+            const result = await apiCall("GET", "/api/radio/replacements", undefined,
+                "Transcript fixes could not be loaded");
+            tab.busy = false;
+            loading.hidden = true;
+            if (result.ended) return;
+            if (result.error) {
+                showError(error, result.error);
+                return;
+            }
+            hideError(error);
+            list.textContent = "";
+            firstArray(result.payload, ["replacements", "fixes", "rules", "items"])
+                .map(normalizeFix)
+                .filter(Boolean)
+                .forEach(function (fix) {
+                    list.appendChild(renderFix(fix));
+                });
+            updateSummaryText();
+            tab.loaded = true;
+            tab.updatedAt = Date.now();
+            if (tab.key === activeKey) showUpdated(tab);
+        }
+        tab.load = load;
+
+        addForm.addEventListener("submit", async function (event) {
+            event.preventDefault();
+            hideError(formError);
+            const find = findInput.value.trim();
+            const replace = replaceInput.value;
+            if (find.length < 1 || find.length > 80) {
+                showError(formError, "Enter text to find, 1 to 80 characters.");
+                findInput.focus();
+                return;
+            }
+            if (find.toLowerCase() === replace.trim().toLowerCase()) {
+                showError(formError, "The replacement must differ from the text to find.");
+                replaceInput.focus();
+                return;
+            }
+            addButton.disabled = true;
+            const result = await apiCall(
+                "POST", "/api/radio/replacements",
+                { find: find, replace: replace.trim(), whole_word: wholeBox.checked },
+                "The fix could not be added");
+            addButton.disabled = false;
+            if (result.ended) return;
+            if (result.error) {
+                showError(formError, result.error);
+                return;
+            }
+            findInput.value = "";
+            replaceInput.value = "";
+            await load();
+            findInput.focus();
+        });
+    }
 
     // ------------------------------------------------------------------- init
 
     Array.from(tablist.querySelectorAll('[role="tab"]')).forEach(registerTab);
+    Array.from(tablist.querySelectorAll("[data-admin-tab]")).forEach(function (button) {
+        const tab = registerAdminTab(button);
+        if (!tab) return;
+        if (tab.name === "watch") setupWatchTab(tab);
+        else if (tab.name === "fixes") setupFixesTab(tab);
+    });
     activateTab("", false);
     loadStats();
     statsTimer = window.setInterval(loadStats, STATS_REFRESH_MS);

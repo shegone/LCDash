@@ -27,13 +27,14 @@ class MindsharePageTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("JACK Technical Assistant", response.text)
         self.assertIn("Radio Intelligence", response.text)
-        # Radio is its own module: not folded into the technical assistant,
-        # no longer a "future" placeholder, and not offered as a link to
-        # anyone but an administrator (the unidentified fallback is not one).
+        # Radio is its own module: not folded into the technical assistant and
+        # no longer a "future" placeholder. It is open to every human role
+        # (docs/MINDSHARE_RADIO_CORRECTIONS.md), so it is a plain link now; the
+        # route itself still answers an unidentified caller with 403.
         self.assertNotIn("FUTURE MODULE", response.text)
-        self.assertIn("ADMIN ONLY", response.text)
+        self.assertNotIn("ADMIN ONLY", response.text)
         self.assertIn('href="/mindshare/technical"', response.text)
-        self.assertNotIn('href="/mindshare/radio"', response.text)
+        self.assertIn('href="/mindshare/radio"', response.text)
 
     def test_mindshare_technical_page_has_separate_chat_assets(self):
         response = self.client.get("/mindshare/technical")
@@ -166,16 +167,45 @@ class MindsharePageTests(unittest.TestCase):
             "mindshare",
         )
 
-    def test_radio_page_is_admin_only_and_says_transcripts_are_unverified(self):
-        # Without a verified administrator identity the page does not exist
-        # for the caller (uniform 403, covered per role in
-        # tests/contracts/test_radio_routes.py). With one, the page is the
-        # live transcript browser, separate from the technical assistant.
+    def test_radio_page_is_for_signed_in_humans_and_says_transcripts_are_unverified(self):
+        # Without a verified identity the page does not exist for the caller
+        # (uniform 403, covered per role in tests/contracts/test_radio_routes.py).
+        # With any human role, the page is the live transcript browser,
+        # separate from the technical assistant.
         response = self.client.get("/mindshare/radio")
         self.assertEqual(response.status_code, 403)
 
-        admin = AlbIdentity(
-            subject="sub-a", groups=("lcdash-pilot-admin",), email="a@911logan.com"
+        for group in (
+            "lcdash-pilot-admin", "lcdash-pilot-supervisor", "lcdash-pilot-user",
+            "lcdash-pilot-dispatcher", "lcdash-pilot-fire-officer",
+        ):
+            person = AlbIdentity(
+                subject="sub-a", groups=(group,), email="a@911logan.com"
+            )
+            with self.subTest(group=group), patch.object(
+                settings, "alb_identity_enabled", True
+            ), patch.object(settings, "alb_identity_region", "us-east-1"), patch.object(
+                settings, "alb_identity_load_balancer_arn", "arn:aws:elasticloadbalancing:x"
+            ), patch.object(
+                settings, "alb_identity_user_pool_id", "us-east-1_Example1"
+            ), patch.object(
+                settings, "alb_identity_client_id", "1example23456789"
+            ), patch("app.main.resolve_alb_identity", return_value=person):
+                response = self.client.get("/mindshare/radio")
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("Radio Intelligence", response.text)
+                self.assertIn(
+                    "Machine-generated transcripts. Unverified. Do not act on them operationally.",
+                    response.text,
+                )
+                self.assertNotIn("Not connected", response.text)
+                self.assertNotIn("No radio traffic is being captured", response.text)
+                self.assertNotIn("Roadmap only", response.text)
+
+        # The avatar kiosk is never a human reader of radio traffic.
+        avatar = AlbIdentity(
+            subject="sub-b", groups=("lcdash-pilot-avatar",), email="b@911logan.com"
         )
         with patch.object(settings, "alb_identity_enabled", True), patch.object(
             settings, "alb_identity_region", "us-east-1"
@@ -185,18 +215,8 @@ class MindsharePageTests(unittest.TestCase):
             settings, "alb_identity_user_pool_id", "us-east-1_Example1"
         ), patch.object(
             settings, "alb_identity_client_id", "1example23456789"
-        ), patch("app.main.resolve_alb_identity", return_value=admin):
-            response = self.client.get("/mindshare/radio")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("Radio Intelligence", response.text)
-        self.assertIn(
-            "Machine-generated transcripts. Unverified. Do not act on them operationally.",
-            response.text,
-        )
-        self.assertNotIn("Not connected", response.text)
-        self.assertNotIn("No radio traffic is being captured", response.text)
-        self.assertNotIn("Roadmap only", response.text)
+        ), patch("app.main.resolve_alb_identity", return_value=avatar):
+            self.assertEqual(self.client.get("/mindshare/radio").status_code, 403)
 
     @patch("app.main.ask_mindshare")
     def test_chat_endpoint_is_separate_from_mae(self, ask_mock):

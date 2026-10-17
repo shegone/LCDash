@@ -54,30 +54,18 @@
         <span>View library <i class="bi bi-arrow-right"></i></span>
     </a>
 
-    {% if pilot_identity_badge(request).role == "admin" %}
     <a class="mindshare-module glass" href="/mindshare/radio">
         <div class="mindshare-module-icon"><i class="bi bi-soundwave"></i></div>
-        <div class="mindshare-module-state">ADMIN TESTING</div>
+        <div class="mindshare-module-state">LISTEN-ONLY</div>
         <h2>Radio Intelligence</h2>
         <p>
             A separate listen-only area for machine-generated radio
-            transcripts and audio. It never transmits and is kept apart from
-            the technical assistant.
+            transcripts and audio. Anyone signed in can read and correct
+            transcripts. It never transmits and is kept apart from the
+            technical assistant.
         </p>
         <span>Open transcripts <i class="bi bi-arrow-right"></i></span>
     </a>
-    {% else %}
-    <div class="mindshare-module glass is-planned" aria-disabled="true">
-        <div class="mindshare-module-icon"><i class="bi bi-soundwave"></i></div>
-        <div class="mindshare-module-state">ADMIN ONLY</div>
-        <h2>Radio Intelligence</h2>
-        <p>
-            A separate listen-only area for machine-generated radio
-            transcripts and audio. Available to administrators while it is
-            being tested.
-        </p>
-    </div>
-    {% endif %}
 
     <a class="mindshare-module glass" href="/mindshare/reliability">
         <div class="mindshare-module-icon"><i class="bi bi-shield-check"></i></div>
