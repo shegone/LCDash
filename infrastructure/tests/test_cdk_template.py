@@ -86,6 +86,79 @@ class CdkTemplateTests(unittest.TestCase):
             },
         )
 
+    def test_silent_radio_listener_pages_the_operator(self):
+        # 2026-10-17: the Mindshare radio listener logs "radio-heartbeat ok"
+        # for each accepted heartbeat. Fewer than one in each of two 5-minute
+        # periods (missing data included) must email the operator through the
+        # same alerts topic the identity alarm uses.
+        self.template.resource_count_is("AWS::Logs::MetricFilter", 2)
+        self.template.resource_count_is("AWS::CloudWatch::Alarm", 2)
+        # Still one topic and one email subscription (sns_alerts_exception).
+        self.template.resource_count_is("AWS::SNS::Topic", 1)
+        self.template.resource_count_is("AWS::SNS::Subscription", 1)
+
+        filters = [
+            resource["Properties"]
+            for resource in self.template.to_json()["Resources"].values()
+            if resource["Type"] == "AWS::Logs::MetricFilter"
+            and resource["Properties"]["MetricTransformations"][0]["MetricName"]
+            == "HeartbeatCount"
+        ]
+        self.assertEqual(len(filters), 1)
+        heartbeat_filter = filters[0]
+        self.assertEqual(heartbeat_filter["FilterPattern"], '"radio-heartbeat ok"')
+        self.assertEqual(
+            heartbeat_filter["MetricTransformations"],
+            [
+                {
+                    "MetricNamespace": "LCDash/Radio",
+                    "MetricName": "HeartbeatCount",
+                    "MetricValue": "1",
+                }
+            ],
+            "No DefaultValue: a silent listener must yield missing data, not zeros",
+        )
+        self.template.has_resource_properties(
+            "AWS::Logs::MetricFilter",
+            {
+                "LogGroupName": {"Ref": Match.string_like_regexp("ApplicationLogs.*")},
+                "FilterPattern": '"radio-heartbeat ok"',
+            },
+        )
+
+        self.template.has_resource_properties(
+            "AWS::CloudWatch::Alarm",
+            {
+                "AlarmName": "lcdash-p1-logan-use1-radio-listener-silent",
+                "AlarmDescription": "Radio listener has not reported for 10 minutes",
+                "Namespace": "LCDash/Radio",
+                "MetricName": "HeartbeatCount",
+                "Statistic": "Sum",
+                "Period": 300,
+                "EvaluationPeriods": 2,
+                "Threshold": 1,
+                "ComparisonOperator": "LessThanThreshold",
+                "TreatMissingData": "breaching",
+                "AlarmActions": [{"Ref": Match.string_like_regexp("OperationsAlerts.*")}],
+                "OKActions": [{"Ref": Match.string_like_regexp("OperationsAlerts.*")}],
+            },
+        )
+        # Both alarms must share the one alerts topic.
+        topics = {
+            tuple(
+                action["Ref"]
+                for action in resource["Properties"]["AlarmActions"]
+            )
+            for resource in self.template.to_json()["Resources"].values()
+            if resource["Type"] == "AWS::CloudWatch::Alarm"
+        }
+        self.assertEqual(len(topics), 1)
+        # No em dashes anywhere in the alarm text.
+        for resource in self.template.to_json()["Resources"].values():
+            if resource["Type"] == "AWS::CloudWatch::Alarm":
+                for field in ("AlarmName", "AlarmDescription"):
+                    self.assertNotIn("—", resource["Properties"][field])
+
     def test_database_uses_verified_postgresql_engine_version(self):
         self.template.has_resource_properties(
             "AWS::RDS::DBInstance",
@@ -696,8 +769,9 @@ class CdkTemplateTests(unittest.TestCase):
         session got a 401.
 
         Rule 2 (priority 6, added 2026-10-16) forwards POST
-        ALB_MACHINE_INGEST_PATH for the signed Mindshare radio listener; the
-        application verifies an Ed25519 signature itself.
+        ALB_MACHINE_INGEST_PATH, and since 2026-10-17 also POST
+        ALB_MACHINE_HEARTBEAT_PATH, for the signed Mindshare radio listener;
+        the application verifies an Ed25519 signature itself.
 
         This test is the guardrail: broadening either list, adding a third
         rule, widening the ingest rule to another method or a wildcard, or
@@ -705,7 +779,9 @@ class CdkTemplateTests(unittest.TestCase):
         before it reaches a change set.
         """
         from lcdash_pilot.config import (
+            ALB_MACHINE_HEARTBEAT_PATH,
             ALB_MACHINE_INGEST_PATH,
+            ALB_MACHINE_PATHS,
             ALB_UNAUTHENTICATED_PATHS,
         )
 
@@ -745,10 +821,17 @@ class CdkTemplateTests(unittest.TestCase):
                 "Bypassed paths must be exact files, never wildcards",
             )
 
-        # Rule 2: exactly one more, POST-only, one exact path, forward-only.
+        # Rule 2: exactly one more, POST-only, two exact paths, forward-only.
         self.assertEqual(ALB_MACHINE_INGEST_PATH, "/api/radio/ingest")
-        self.assertNotIn("*", ALB_MACHINE_INGEST_PATH)
-        self.assertNotIn("?", ALB_MACHINE_INGEST_PATH)
+        self.assertEqual(ALB_MACHINE_HEARTBEAT_PATH, "/api/radio/heartbeat")
+        self.assertEqual(
+            ALB_MACHINE_PATHS,
+            ("/api/radio/ingest", "/api/radio/heartbeat"),
+            "The signed machine rule covers exactly ingest and heartbeat",
+        )
+        for path in ALB_MACHINE_PATHS:
+            self.assertNotIn("*", path)
+            self.assertNotIn("?", path)
         self.assertEqual(
             [action["Type"] for action in ingest_rule["Actions"]],
             ["forward"],
@@ -771,7 +854,8 @@ class CdkTemplateTests(unittest.TestCase):
         self.assertEqual(len(ingest_rule["Conditions"]), 2)
         self.assertEqual(
             conditions["path-pattern"]["PathPatternConfig"]["Values"],
-            [ALB_MACHINE_INGEST_PATH],
+            ["/api/radio/ingest", "/api/radio/heartbeat"],
+            "The machine rule must match exactly the two signed radio paths",
         )
         self.assertEqual(
             conditions["http-request-method"]["HttpRequestMethodConfig"]["Values"],
@@ -790,7 +874,7 @@ class CdkTemplateTests(unittest.TestCase):
         }
         self.assertEqual(
             bypassed,
-            set(ALB_UNAUTHENTICATED_PATHS) | {ALB_MACHINE_INGEST_PATH},
+            set(ALB_UNAUTHENTICATED_PATHS) | set(ALB_MACHINE_PATHS),
         )
         https = next(
             resource["Properties"]

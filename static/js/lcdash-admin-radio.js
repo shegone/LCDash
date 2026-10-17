@@ -1,8 +1,13 @@
 // Mindshare Radio Intelligence (/mindshare/radio).
 //
+// Listener health: GET /api/radio/stats feeds the health panel (24 h counts,
+// the Listener tile, per-channel capture lines, queue depths, and a warning
+// for audio the listener cannot decode). Polled every 15 s while the tab is
+// visible.
+//
 // Every signed-in human role browses machine-generated radio transcripts,
 // plays the audio, and may correct a transcript. Administrators also manage
-// alert keywords and transcript fixes. The backend enforces who may do what
+// alert keywords, transcript fixes and hint words. The backend enforces who may do what
 // (403 otherwise) and records every list, playback, correction and admin
 // change in the audit log; this script renders honestly whatever the API says.
 // Every failure surfaces the HTTP status and the server's `detail` string
@@ -30,7 +35,9 @@
 (function () {
     "use strict";
 
-    const STATS_REFRESH_MS = 60000;
+    const STATS_REFRESH_MS = 15000;
+    const MAX_HINT = 60;
+    const MIN_HINT = 2;
     const FEED_REFRESH_MS = 30000;
     const PAGE_SIZE = 50;
     const MAX_CORRECTION = 20000;
@@ -43,6 +50,7 @@
 
     const statsBox = document.getElementById("radio-stats");
     const statsError = document.getElementById("radio-stats-error");
+    const healthAnnounce = document.getElementById("radio-health-announce");
     const form = document.getElementById("radio-filter-form");
     const directionSelect = document.getElementById("radio-filter-direction");
     const textInput = document.getElementById("radio-filter-q");
@@ -58,7 +66,7 @@
         return;
     }
 
-    // key ("" for all channels, "admin:watch", "admin:fixes") -> tab state
+    // key ("" for all channels, "admin:watch", "admin:fixes", "admin:hints") -> tab state
     const tabs = new Map();
     let activeKey = "";
     let statsTimer = null;
@@ -1038,9 +1046,9 @@
 
     // ------------------------------------------------------------------ stats
 
-    function statTile(value, label, wide) {
+    function statTile(value, label, wide, tone) {
         const tile = document.createElement("div");
-        tile.className = `radio-stat${wide ? " is-wide" : ""}`;
+        tile.className = `radio-stat${wide ? " is-wide" : ""}${tone ? ` is-${tone}` : ""}`;
         const strong = document.createElement("strong");
         strong.textContent = value;
         const span = document.createElement("span");
@@ -1050,27 +1058,241 @@
         return tile;
     }
 
+    function wholeNumber(value) {
+        const n = Number(value);
+        return value !== null && value !== undefined && isFinite(n) && n >= 0 ? Math.round(n) : null;
+    }
+
+    function formatCount(value) {
+        const n = wholeNumber(value);
+        return n === null ? "unknown" : n.toLocaleString("en-US");
+    }
+
+    // "12 s ago", "4 min ago", "3 h ago": exact enough for a heartbeat.
+    function formatSecondsAgo(seconds) {
+        const n = wholeNumber(seconds);
+        if (n === null) return "";
+        if (n < 60) return `${n} s ago`;
+        if (n < 3600) return `${Math.round(n / 60)} min ago`;
+        if (n < 172800) return `${Math.round(n / 3600)} h ago`;
+        return `${Math.round(n / 86400)} days ago`;
+    }
+
+    function formatSpan(seconds) {
+        const n = wholeNumber(seconds);
+        if (n === null) return "unknown";
+        if (n < 60) return `${n} s`;
+        if (n < 3600) return `${Math.floor(n / 60)} min`;
+        const days = Math.floor(n / 86400);
+        const hours = Math.floor((n % 86400) / 3600);
+        if (days > 0) return `${days} d ${hours} h`;
+        return `${hours} h ${Math.floor((n % 3600) / 60)} min`;
+    }
+
+    function listenerName(row) {
+        const channel = typeof row.channel === "string" ? row.channel.slice(0, 32) : "?";
+        const direction = typeof row.direction === "string" ? row.direction.slice(0, 8) : "";
+        return direction ? `${channel} ${direction}` : channel;
+    }
+
+    // Per-minute packet rate from the interval counters; null when unusable.
+    function packetsPerMinute(row) {
+        const packets = wholeNumber(row.packets_interval);
+        const seconds = Number(row.interval_seconds);
+        if (packets === null || !isFinite(seconds) || seconds <= 0) return null;
+        return Math.round((packets * 60) / seconds);
+    }
+
+    function channelLine(row, reporting) {
+        const name = listenerName(row);
+        const perMinute = packetsPerMinute(row);
+        if (perMinute === null) return `${name}: no figures yet`;
+        if (perMinute === 0) {
+            return reporting ? `${name}: no traffic (quiet is normal)` : `${name}: no traffic`;
+        }
+        return `${name}: ${formatCount(perMinute)} packet${perMinute === 1 ? "" : "s"} in the last minute`;
+    }
+
+    // Undecoded payload types across all listener rows:
+    // [{type, packets, where: [names]}], sorted by payload type.
+    function undecodedAudio(rows) {
+        const byType = new Map();
+        rows.forEach(function (row) {
+            const other = row.other_payload_types;
+            if (!other || typeof other !== "object") return;
+            Object.keys(other).forEach(function (type) {
+                const packets = wholeNumber(other[type]);
+                if (!packets) return;
+                const label = String(type).slice(0, 8);
+                if (!byType.has(label)) byType.set(label, { type: label, packets: 0, where: [] });
+                const entry = byType.get(label);
+                entry.packets += packets;
+                const name = listenerName(row);
+                if (entry.where.indexOf(name) < 0) entry.where.push(name);
+            });
+        });
+        return Array.from(byType.values()).sort(function (x, y) {
+            return Number(x.type) - Number(y.type) || (x.type < y.type ? -1 : 1);
+        });
+    }
+
+    function healthCard(title) {
+        const card = element("div", "radio-health-card");
+        card.appendChild(element("h3", "radio-health-card-title", title));
+        return card;
+    }
+
+    function healthLines(card, lines) {
+        const list = element("ul", "radio-health-lines");
+        lines.forEach(function (line) {
+            list.appendChild(element("li", line.tone ? `is-${line.tone}` : "", line.text));
+        });
+        card.appendChild(list);
+    }
+
+    function listenerState(listener) {
+        if (!listener || typeof listener !== "object") return "never";
+        return listener.reporting ? "reporting" : "silent";
+    }
+
+    function renderListenerTile(listener, state) {
+        if (state === "never") {
+            return statTile("No heartbeat received yet", "Listener", true, "unknown");
+        }
+        if (state === "reporting") {
+            const age = formatSecondsAgo(listener.age_seconds);
+            return statTile(age ? `Reporting, ${age}` : "Reporting", "Listener", true, "ok");
+        }
+        const since = listener.last_heartbeat_at ? formatTime(listener.last_heartbeat_at) : "";
+        const ago = formatSecondsAgo(listener.age_seconds);
+        const value = since ? `Not reporting since ${since}` : "Not reporting";
+        return statTile(ago && since ? `${value} (${ago})` : value, "Listener", true, "bad");
+    }
+
+    function renderWarning(undecoded) {
+        const box = element("div", "radio-health-warning");
+        box.dataset.health = "undecoded";
+        box.appendChild(icon("bi-exclamation-triangle-fill"));
+        const body = element("div", "radio-health-warning-body");
+        undecoded.forEach(function (entry) {
+            const noun = entry.packets === 1 ? "packet" : "packets";
+            const block = element("p", "radio-health-warning-line");
+            block.appendChild(element("strong", "",
+                `Undecoded audio: payload type ${entry.type}, ${formatCount(entry.packets)} ${noun}.`));
+            block.appendChild(document.createTextNode(
+                " These transmissions are not being transcribed."));
+            body.appendChild(block);
+            body.appendChild(element("p", "radio-health-warning-where",
+                `Seen on: ${entry.where.join(", ")}`));
+        });
+        box.appendChild(body);
+        return box;
+    }
+
+    function renderDetail(listener, state) {
+        const reporting = state === "reporting";
+        const rows = Array.isArray(listener.listeners)
+            ? listener.listeners.filter(function (row) {
+                return row && typeof row === "object";
+            })
+            : [];
+        const detail = element("div", "radio-health-detail");
+
+        const channels = healthCard(reporting ? "Capture, per channel" : "Capture, as last reported");
+        channels.dataset.health = "channels";
+        healthLines(channels, rows.length
+            ? rows.map(function (row) {
+                return { text: channelLine(row, reporting) };
+            })
+            : [{ text: "No channels reported." }]);
+        const uptime = wholeNumber(listener.capture_uptime_seconds);
+        channels.appendChild(element("p", "radio-health-uptime",
+            `Capture uptime: ${uptime === null ? "unknown" : formatSpan(uptime)}`));
+        detail.appendChild(channels);
+
+        const queues = healthCard("Queues");
+        queues.dataset.health = "queues";
+        const transcriber = listener.transcriber || {};
+        const uploader = listener.uploader || {};
+        const lines = [{
+            text: `Transcriber: ${formatCount(transcriber.pending)} pending, ` +
+                `${formatCount(transcriber.failed)} failed`,
+            tone: wholeNumber(transcriber.failed) ? "warn" : "",
+        }];
+        const queued = wholeNumber(uploader.queued);
+        const oldest = wholeNumber(uploader.oldest_queued_age_seconds);
+        lines.push({
+            text: `Uploader: ${formatCount(uploader.queued)} queued` +
+                (oldest !== null && queued ? `, oldest ${formatSpan(oldest)}` : ""),
+            tone: oldest !== null && oldest > 600 ? "warn" : "",
+        });
+        const rejected = wholeNumber(uploader.rejected_total);
+        if (rejected) {
+            lines.push({ text: `Uploader: ${formatCount(rejected)} rejected by the server`, tone: "warn" });
+        }
+        healthLines(queues, lines);
+        detail.appendChild(queues);
+
+        return detail;
+    }
+
+    // The panel re-renders every poll, so it is not a live region. Only a
+    // change of state is announced.
+    function announceHealth(state, undecoded) {
+        if (!healthAnnounce) return;
+        const key = state + (undecoded.length ? "+undecoded" : "");
+        if (healthAnnounce.dataset.state === key) return;
+        const first = healthAnnounce.dataset.state === undefined;
+        healthAnnounce.dataset.state = key;
+        // A healthy first load is not news.
+        if (first && key === "reporting") return;
+        const parts = [{
+            reporting: "Listener is reporting.",
+            silent: "Listener is not reporting.",
+            never: "No listener heartbeat has been received yet.",
+        }[state]];
+        if (undecoded.length) parts.push("Warning: undecoded audio is not being transcribed.");
+        healthAnnounce.textContent = parts.join(" ");
+    }
+
     function renderStats(stats) {
         statsBox.textContent = "";
+        statsBox.classList.remove("is-stale");
+        const listener = stats.listener && typeof stats.listener === "object" ? stats.listener : null;
+        const state = listenerState(listener);
+        const rows = listener && Array.isArray(listener.listeners) ? listener.listeners : [];
+        const undecoded = undecodedAudio(rows.filter(function (row) {
+            return row && typeof row === "object";
+        }));
+
+        const tiles = element("div", "radio-health-tiles");
+        tiles.dataset.health = "tiles";
+        tiles.appendChild(renderListenerTile(listener, state));
         const channels = Array.isArray(stats.channels) ? stats.channels : [];
         if (!channels.length) {
-            statsBox.appendChild(statTile("0", "segments, last 24 h", false));
+            tiles.appendChild(statTile("0", "segments, last 24 h", false));
         }
         const counts = new Map();
         let total = 0;
         channels.forEach(function (entry) {
             const name = String(entry.channel);
             const count = Number(entry.count) || 0;
-            statsBox.appendChild(statTile(String(count), `${name}, last 24 h`, false));
+            tiles.appendChild(statTile(String(count), `${name}, last 24 h`, false));
             ensureChannelTab(name);
             counts.set(name, count);
             total += count;
         });
         const last = stats.last_received_at;
-        statsBox.appendChild(statTile(
+        tiles.appendChild(statTile(
             last ? `${formatTime(last)} (${formatAge(last)})` : "Nothing received yet",
             "Last segment received",
             true));
+        statsBox.appendChild(tiles);
+
+        if (undecoded.length) statsBox.appendChild(renderWarning(undecoded));
+        if (state !== "never") statsBox.appendChild(renderDetail(listener, state));
+        announceHealth(state, undecoded);
+
         tabs.forEach(function (tab) {
             if (tab.kind !== "feed") return;
             if (tab.key === "") {
@@ -1081,16 +1303,33 @@
         });
     }
 
+    let statsBusy = false;
+
     async function loadStats() {
-        const result = await apiCall("GET", "/api/radio/stats", undefined,
-            "Statistics could not be loaded");
+        if (statsBusy) return;
+        statsBusy = true;
+        let result;
+        try {
+            result = await apiCall("GET", "/api/radio/stats", undefined,
+                "Statistics could not be loaded");
+        } finally {
+            statsBusy = false;
+        }
         if (result.ended) return;
         if (result.error) {
             showError(statsError, result.error);
+            // What is on screen is old: say so rather than leave a green tile up.
+            statsBox.classList.add("is-stale");
             return;
         }
         hideError(statsError);
         renderStats(result.payload || {});
+    }
+
+    // Poll only while the page is visible; coming back refreshes at once.
+    function pollStats() {
+        if (document.visibilityState !== "visible") return;
+        loadStats();
     }
 
     function stopPolling() {
@@ -1323,6 +1562,7 @@
     });
     document.addEventListener("visibilitychange", function () {
         if (document.visibilityState !== "visible") return;
+        loadStats();
         const tab = tabs.get(activeKey);
         if (tab && tab.kind === "feed" && tab.loaded &&
             Date.now() - tab.updatedAt > FEED_REFRESH_MS) {
@@ -1733,6 +1973,130 @@
         });
     }
 
+    // ---- Hint words
+
+    function normalizeHint(raw) {
+        if (!raw || typeof raw !== "object") return null;
+        const id = raw.hint_id !== undefined ? raw.hint_id : raw.id;
+        if (id === undefined || id === null || typeof raw.phrase !== "string") return null;
+        return {
+            id: id,
+            phrase: raw.phrase,
+            createdBy: typeof raw.created_by === "string" ? raw.created_by : "",
+            createdAt: typeof raw.created_at === "string" ? raw.created_at : "",
+        };
+    }
+
+    function setupHintsTab(tab) {
+        const list = byId("radio-hint-list");
+        const empty = byId("radio-hint-empty");
+        const loading = byId("radio-hint-loading");
+        const error = byId("radio-hint-error");
+        const addForm = byId("radio-hint-form");
+        const phraseInput = byId("radio-hint-phrase");
+        const formError = byId("radio-hint-form-error");
+        const total = byId("radio-hint-total");
+        const addButton = byId("radio-hint-add");
+        if (!list || !empty || !loading || !error || !addForm || !phraseInput || !formError ||
+            !addButton) {
+            return;
+        }
+
+        function updateSummaryText() {
+            const n = list.children.length;
+            empty.hidden = n > 0;
+            if (total) total.textContent = n ? `${n} hint word${n === 1 ? "" : "s"}` : "";
+        }
+
+        function renderHint(hint) {
+            const row = element("li", "radio-admin-row");
+            row.dataset.hintId = String(hint.id);
+            const main = element("div", "radio-admin-main");
+            main.appendChild(element("strong", "radio-admin-phrase", hint.phrase));
+            const when = hint.createdAt ? formatTime(hint.createdAt) : "";
+            const who = hint.createdBy ? `Added by ${hint.createdBy}` : "Added";
+            main.appendChild(element("span", "radio-admin-meta", when ? `${who}, ${when}` : who));
+            const del = makeDeleteControl(`hint word ${hint.phrase}`, async function () {
+                const result = await apiCall(
+                    "DELETE", `/api/radio/hints/${encodeURIComponent(hint.id)}`,
+                    undefined, "The hint word could not be deleted");
+                if (result.ended) return false;
+                if (result.error) {
+                    showError(rowError(row), result.error);
+                    return false;
+                }
+                row.remove();
+                updateSummaryText();
+                return true;
+            });
+            const controls = element("div", "radio-admin-controls");
+            controls.appendChild(del);
+            row.appendChild(main);
+            row.appendChild(controls);
+            return row;
+        }
+
+        async function load() {
+            if (tab.busy) return;
+            tab.busy = true;
+            loading.hidden = false;
+            const result = await apiCall("GET", "/api/radio/hints", undefined,
+                "Hint words could not be loaded");
+            tab.busy = false;
+            loading.hidden = true;
+            if (result.ended) return;
+            if (result.error) {
+                showError(error, result.error);
+                return;
+            }
+            hideError(error);
+            list.textContent = "";
+            firstArray(result.payload, ["hints", "items"])
+                .map(normalizeHint)
+                .filter(Boolean)
+                .forEach(function (hint) {
+                    list.appendChild(renderHint(hint));
+                });
+            updateSummaryText();
+            tab.loaded = true;
+            tab.updatedAt = Date.now();
+            if (tab.key === activeKey) showUpdated(tab);
+        }
+        tab.load = load;
+
+        addForm.addEventListener("submit", async function (event) {
+            event.preventDefault();
+            hideError(formError);
+            const text = phraseInput.value.trim();
+            if (text.length < MIN_HINT || text.length > MAX_HINT) {
+                showError(formError,
+                    `Enter a name or phrase of ${MIN_HINT} to ${MAX_HINT} characters.`);
+                phraseInput.focus();
+                return;
+            }
+            if (CONTROL_CHARS.test(text) || /[\r\n]/.test(text)) {
+                showError(formError, "Use plain text on one line.");
+                phraseInput.focus();
+                return;
+            }
+            addButton.disabled = true;
+            const result = await apiCall(
+                "POST", "/api/radio/hints", { phrase: text },
+                "The hint word could not be added");
+            addButton.disabled = false;
+            if (result.ended) return;
+            if (result.error) {
+                // A duplicate arrives as HTTP 409 with the server's reason.
+                showError(formError, result.error);
+                phraseInput.focus();
+                return;
+            }
+            phraseInput.value = "";
+            await load();
+            phraseInput.focus();
+        });
+    }
+
     // ------------------------------------------------------------------- init
 
     Array.from(tablist.querySelectorAll('[role="tab"]')).forEach(registerTab);
@@ -1741,10 +2105,11 @@
         if (!tab) return;
         if (tab.name === "watch") setupWatchTab(tab);
         else if (tab.name === "fixes") setupFixesTab(tab);
+        else if (tab.name === "hints") setupHintsTab(tab);
     });
     activateTab("", false);
     loadStats();
-    statsTimer = window.setInterval(loadStats, STATS_REFRESH_MS);
+    statsTimer = window.setInterval(pollStats, STATS_REFRESH_MS);
     feedTimer = window.setInterval(autoRefresh, FEED_REFRESH_MS);
     if (window.LCDashSession) {
         window.LCDashSession.onEnd(stopPolling);

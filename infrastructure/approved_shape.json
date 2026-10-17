@@ -51,6 +51,7 @@
   "webhook_count": 0,
   "signed_machine_ingest_endpoint_count": 1,
   "signed_machine_ingest_path": "/api/radio/ingest",
+  "signed_machine_heartbeat_path": "/api/radio/heartbeat",
   "operational_output_count": 0,
   "managed_providers": [
     "bedrock",

@@ -202,8 +202,14 @@ class FakeStore:
         self.replacements: list[dict] = []
         self.terms: list[dict] = []
         self.alerts: list[dict] = []
+        self.hints: list[dict] = []
+        # v3: the one-row listener status, ``(payload, received_at)`` or None.
+        self.listener: tuple | None = None
+        self.listener_writes = 0
+        self.fail_listener_write = False
+        self.fail_hint_read = False
         self.audit: list[dict] = []
-        self._ids = {"replacement": 0, "term": 0, "alert": 0}
+        self._ids = {"replacement": 0, "term": 0, "alert": 0, "hint": 0}
         self.schema_calls = 0
         self.purge_calls = 0
         self.purge_error: Exception | None = None
@@ -223,12 +229,12 @@ class FakeStore:
     def snapshot(self):
         return copy.deepcopy((
             self.segments, self.corrections, self.replacements, self.terms,
-            self.alerts, dict(self._ids),
+            self.alerts, dict(self._ids), self.hints,
         ))
 
     def restore(self, snapshot) -> None:
         (self.segments, self.corrections, self.replacements, self.terms,
-         self.alerts, self._ids) = copy.deepcopy(snapshot)
+         self.alerts, self._ids, self.hints) = copy.deepcopy(snapshot)
 
 
 class FakeRepository:
@@ -511,6 +517,50 @@ class FakeRepository:
                 alert["dismissed_at"] = now
                 return "dismissed", alert["segment_id"]
         return None
+
+    # ------------------------------------------------- hints (v3)
+
+    @staticmethod
+    def _hint_row(hint):
+        return (hint["id"], hint["phrase"], hint["created_by"], hint["created_at"])
+
+    def list_hints(self):
+        if self.store.fail_hint_read:
+            raise RadioDatabaseError("hints unavailable")
+        return [self._hint_row(h) for h in self.store.hints]
+
+    def count_hints(self):
+        return len(self.store.hints)
+
+    def insert_hint(self, phrase, actor):
+        if any(h["phrase"].lower() == phrase.lower() for h in self.store.hints):
+            return None
+        self._begin()
+        hint = {
+            "id": self.store.next_id("hint"), "phrase": phrase,
+            "created_by": actor, "created_at": FIXED_NOW,
+        }
+        self.store.hints.append(hint)
+        return self._hint_row(hint)
+
+    def delete_hint(self, hint_id):
+        for hint in self.store.hints:
+            if hint["id"] == hint_id:
+                self._begin()
+                self.store.hints.remove(hint)
+                return self._hint_row(hint)
+        return None
+
+    # ------------------------------------------- listener status (v3)
+
+    def upsert_listener_status(self, payload_json, received_at):
+        if self.store.fail_listener_write:
+            raise RadioDatabaseError("listener status write failed")
+        self.store.listener = (json.loads(payload_json), received_at)
+        self.store.listener_writes += 1
+
+    def get_listener_status(self):
+        return self.store.listener
 
 
 def build_service(store=None, s3=None, clock=None):
@@ -830,9 +880,10 @@ class RepositorySqlTests(unittest.TestCase):
             for line in sql.splitlines():
                 if line.startswith(statement):
                     self.assertIn("IF NOT EXISTS", line, line)
-        # The one constraint change (widening the audit event list for v2) is
-        # the only DROP allowed, and only for that named constraint. Nothing
-        # may drop a table, schema, column or index, or truncate anything.
+        # The one constraint change (widening the audit event list, for v2 and
+        # again for v3) is the only DROP allowed, and only for that named
+        # constraint, in one guarded block. Nothing may drop a table, schema,
+        # column or index, or truncate anything.
         upper = sql.upper()
         self.assertEqual(upper.count("DROP "), 1)
         self.assertIn("DROP CONSTRAINT RADIO_AUDIT_EVENT_TYPE_CHECK", upper)
@@ -845,6 +896,7 @@ class RepositorySqlTests(unittest.TestCase):
             "radio.segment.correct", "radio.segment.correct_revert",
             "radio.fix.add", "radio.fix.remove", "radio.watch.add",
             "radio.watch.change", "radio.watch.remove", "radio.alert.dismiss",
+            "radio.hint.add", "radio.hint.remove",
         ):
             self.assertIn(event, sql)
 
@@ -1105,7 +1157,8 @@ class ServiceTests(unittest.TestCase):
         service, _, _ = build_service()
         self.assertEqual(
             service.stats(),
-            {"window_hours": 24, "channels": [], "total": 0, "last_received_at": None},
+            {"window_hours": 24, "channels": [], "total": 0,
+             "last_received_at": None, "listener": None},
         )
         ingest_record(service)
         stats = service.stats()
@@ -1169,6 +1222,9 @@ ADMIN_ROUTES = (
     ("POST", "/api/radio/watch-terms", {"phrase": "structure fire"}, "add term"),
     ("PATCH", "/api/radio/watch-terms/1", {"enabled": False}, "change term"),
     ("DELETE", "/api/radio/watch-terms/1", None, "remove term"),
+    ("GET", "/api/radio/hints", None, "list hints"),
+    ("POST", "/api/radio/hints", {"phrase": "Zanesfield"}, "add hint"),
+    ("DELETE", "/api/radio/hints/1", None, "remove hint"),
 )
 
 # Deliberately malformed input for each route: a forbidden caller must see the

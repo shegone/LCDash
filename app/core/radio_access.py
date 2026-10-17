@@ -11,11 +11,13 @@ radio paths live here, in one reviewed place, and each tier asks this module.
 
 Deliberately NOT here:
 
-* ``/api/radio/ingest``: machine-signed and identity-blind. No tier ever
-  needs to admit a person to it, so it is simply not listed.
-* ``/api/radio/replacements`` and ``/api/radio/watch-terms``: admin-only
-  management routes. Tiers that deny by default keep them denied (the route
-  itself also answers every non-admin with the uniform 403).
+* ``/api/radio/ingest`` and ``/api/radio/heartbeat``: machine-signed and
+  identity-blind. No tier ever needs to admit a person to them, so they are
+  simply not listed.
+* ``/api/radio/replacements``, ``/api/radio/watch-terms`` and
+  ``/api/radio/hints``: admin-only management routes. Tiers that deny by
+  default keep them denied (the route itself also answers every non-admin
+  with the uniform 403).
 * the ``avatar`` role: its allowlist is untouched, so it stays denied.
 
 The patterns are anchored full matches, so nothing outside the listed shapes

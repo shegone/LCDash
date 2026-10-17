@@ -69,6 +69,7 @@
       "/aws/rds/instance/lcdash-p1-logan-use1-db/postgresql",
       "lcdash-p1-logan-use1-alerts",
       "lcdash-p1-logan-use1-alb-identity-rejections",
+      "lcdash-p1-logan-use1-radio-listener-silent",
       "lcdash-pilot-viewer",
       "lcdash-pilot-reviewer"
     ],
@@ -110,7 +111,7 @@
     "lcdash-p1-logan-use1-foundation": {
       "AWS::Budgets::Budget": 2,
       "AWS::CloudTrail::Trail": 1,
-      "AWS::CloudWatch::Alarm": 1,
+      "AWS::CloudWatch::Alarm": 2,
       "AWS::Cognito::UserPool": 1,
       "AWS::Cognito::UserPoolClient": 1,
       "AWS::Cognito::UserPoolDomain": 1,
@@ -138,7 +139,7 @@
       "AWS::IAM::Role": 6,
       "AWS::Lambda::Function": 1,
       "AWS::Logs::LogGroup": 3,
-      "AWS::Logs::MetricFilter": 1,
+      "AWS::Logs::MetricFilter": 2,
       "AWS::RDS::DBInstance": 1,
       "AWS::RDS::DBSubnetGroup": 1,
       "AWS::S3::Bucket": 2,
@@ -182,7 +183,7 @@
   ],
   "listener_rule_exception": {
     "granted": "2026-08-14",
-    "reason": "ListenerRule left prohibited_resource_types when AWS became the authoritative platform. The all-paths-authenticate rule broke first login: background requests (service worker, manifest, favicon) each restarted the ALB auth flow and clobbered the AWSALBAuthNonce the real login depended on, so every session's first Cognito callback got a 401. Rule 1 (priority 5) forwards only the static secret-free paths in lcdash_pilot/config.py ALB_UNAUTHENTICATED_PATHS without authentication. Since 2026-10-16 exactly TWO rules are permitted: rule 1, and rule 2 (priority 6), the signed machine-ingest POST path in lcdash_pilot/config.py ALB_MACHINE_INGEST_PATH (see additional_grants); test_cdk_template.py pins the count, both rules' exact conditions, and that no other path or method skips authentication.",
+    "reason": "ListenerRule left prohibited_resource_types when AWS became the authoritative platform. The all-paths-authenticate rule broke first login: background requests (service worker, manifest, favicon) each restarted the ALB auth flow and clobbered the AWSALBAuthNonce the real login depended on, so every session's first Cognito callback got a 401. Rule 1 (priority 5) forwards only the static secret-free paths in lcdash_pilot/config.py ALB_UNAUTHENTICATED_PATHS without authentication. Since 2026-10-16 exactly TWO rules are permitted: rule 1, and rule 2 (priority 6), the signed machine-ingest POST path in lcdash_pilot/config.py ALB_MACHINE_INGEST_PATH (see additional_grants); Since 2026-10-17 rule 2 matches the two exact paths in lcdash_pilot/config.py ALB_MACHINE_PATHS (ingest and heartbeat), still POST only; the rule count stays two. test_cdk_template.py pins the count, both rules' exact conditions, and that no other path or method skips authentication.",
     "approved_by": "Ted Sparks",
     "additional_grants": [
       {
@@ -192,19 +193,37 @@
         "rule": "SignedMachineIngest, priority 6",
         "scope": "path exactly /api/radio/ingest AND method POST; forward to the web target group only; no Cognito action, no wildcard, no other path or method",
         "reason": "The Mindshare radio listener on .227 posts signed audio and transcript segments (docs/MINDSHARE_RADIO_INGEST.md) and cannot complete a browser Cognito sign-in. The application authenticates the request itself: Ed25519 signature over the segment id and the audio and metadata hashes, a 300-second timestamp window, and HTTP 503 with nothing accepted when LCDASH_RADIO_INGEST_PUBLIC_KEY is empty. The endpoint is inbound and inquiry-only: it stores a WAV under radio/audio/ (15-day lifecycle) and a transcript row, and never writes to CAD, radio, paging, or any operational output. This is an inbound signed data push, not a CentralSquare or vendor webhook and not an operational output."
+      },
+      {
+        "granted": "2026-10-17",
+        "approved_by": "Ted Sparks",
+        "approval": "chat approval 2026-10-17",
+        "rule": "SignedMachineIngest, priority 6 (same rule, second path)",
+        "scope": "the same signed machine rule now also covers path exactly /api/radio/heartbeat AND method POST; the rule's path patterns are exactly /api/radio/ingest and /api/radio/heartbeat; forward to the web target group only; no Cognito action, no wildcard, no other path or method; rule count stays two",
+        "reason": "The Mindshare radio listener on .227 posts a periodic signed heartbeat so the silent-listener alarm (see sns_alerts_exception) can tell a quiet radio channel from a listener that is down. The application authenticates the heartbeat itself exactly as it does ingest (Ed25519 signature, 300-second timestamp window, HTTP 503 when no public key is configured). The endpoint is inbound and inquiry-only: it records that the listener is alive and never writes to CAD, radio, paging, or any operational output."
       }
     ]
   },
   "sns_alerts_exception": {
     "granted": "2026-09-14",
     "reason": "SNS::Topic left prohibited_resource_types for exactly one operator-alert topic (lcdash-p1-logan-use1-alerts). From 2026-09-11 15:10 to 2026-09-14 01:37 every request failed ALB identity verification (PyJWT 2.14.0 rejected the load balancer's padded JWT segments) and all 39 pilot users sat in the restricted fallback; the failure was logged on every request and nobody was told. The topic carries platform-health alarms only, never operational content; its only subscription is the email protocol to the BudgetSubscriberEmail operator address the stack already holds; test_cdk_template.py pins one topic, one email subscription, and the alarm that feeds it. Paging, station alerts, EMS delivery, public warning, and every other operational output remain prohibited.",
-    "approved_by": "Ted Sparks"
+    "approved_by": "Ted Sparks",
+    "additional_grants": [
+      {
+        "granted": "2026-10-17",
+        "approved_by": "Ted Sparks",
+        "approval": "chat approval 2026-10-17",
+        "scope": "a second alarm on the same lcdash-p1-logan-use1-alerts topic and the same single email subscription; no new topic, no new subscription, no other protocol; the topic count stays one",
+        "alarm": "lcdash-p1-logan-use1-radio-listener-silent",
+        "reason": "Mindshare radio listener silence: a metric filter on the web log group matching \"radio-heartbeat ok\" feeds LCDash/Radio HeartbeatCount; the alarm fires when the Sum is below 1 in each of two consecutive 5-minute periods (missing data counts as breaching) and emails the operator, and also emails when it clears. It carries platform-health information only, never operational content. Adds one AWS::Logs::MetricFilter and one AWS::CloudWatch::Alarm to the foundation stack; test_cdk_template.py pins the filter pattern and metric, the alarm settings, and the SNS action."
+      }
+    ]
   },
   "prohibited_scope": [
     "resources outside 862772137583/us-east-1",
     "any stack other than the two listed application stacks",
     "live CAD endpoints or credentials",
-    "webhooks, subscriptions, acknowledgements, paging, station alerts, EMS delivery, public warning, or operational outputs (the single signed inbound radio-ingest POST in listener_rule_exception.additional_grants is an inbound data push, not a webhook subscription or an operational output, and is the only machine endpoint permitted)",
+    "webhooks, subscriptions, acknowledgements, paging, station alerts, EMS delivery, public warning, or operational outputs (the signed inbound radio-ingest and radio-heartbeat POSTs in listener_rule_exception.additional_grants are inbound data pushes, not webhook subscriptions or operational outputs, and are the only machine endpoints permitted)",
     "identity pools, guest access, browser AWS credentials, social login, or real users",
     "Route 53 zones or records",
     "NAT gateways, autoscaling, replicas, backups, or recovery resources",

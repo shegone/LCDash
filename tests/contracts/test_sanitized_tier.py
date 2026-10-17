@@ -335,6 +335,9 @@ RADIO_ALLOWED_PATHS = (
 # routes, and any extra segment or suffix.
 RADIO_STILL_DENIED_PATHS = (
     "/api/radio/ingest",
+    "/api/radio/heartbeat",
+    "/api/radio/hints",
+    "/api/radio/hints/1",
     "/api/radio/replacements",
     "/api/radio/replacements/1",
     "/api/radio/watch-terms",
@@ -374,7 +377,11 @@ RADIO_MANAGE_REQUESTS = (
     ("POST", "/api/radio/watch-terms"),
     ("PATCH", "/api/radio/watch-terms/1"),
     ("DELETE", "/api/radio/watch-terms/1"),
+    ("GET", "/api/radio/hints"),
+    ("POST", "/api/radio/hints"),
+    ("DELETE", "/api/radio/hints/1"),
     ("POST", "/api/radio/ingest"),
+    ("POST", "/api/radio/heartbeat"),
 )
 
 

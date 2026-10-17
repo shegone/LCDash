@@ -221,7 +221,7 @@ class DispatcherRadioAccessTests(_DispatcherTierTestCase):
         install_radio_service(self)
         self._sign_in_as(DISPATCHER)
         for method, path in RADIO_MANAGE_REQUESTS:
-            if path.endswith("/ingest"):
+            if path.endswith(("/ingest", "/heartbeat")):
                 continue  # machine-signed; not a human route
             with self.subTest(method=method, path=path):
                 response = self.client.request(method, path)

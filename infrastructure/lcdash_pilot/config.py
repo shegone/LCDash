@@ -54,6 +54,17 @@ ALB_UNAUTHENTICATED_PATHS = (
 # phase1_deployment_allowlist.json).
 ALB_MACHINE_INGEST_PATH = "/api/radio/ingest"
 
+# The listener also posts a signed heartbeat on this second exact path so the
+# silent-listener alarm can tell "no radio traffic" from "listener down". Same
+# rule, same POST-only constraint, same application-side signature check.
+# Approved by Ted Sparks 2026-10-17 (see listener_rule_exception in
+# phase1_deployment_allowlist.json).
+ALB_MACHINE_HEARTBEAT_PATH = "/api/radio/heartbeat"
+
+# Every path the signed machine rule (priority 6) matches. Exact paths only,
+# never a wildcard; test_cdk_template.py pins this tuple.
+ALB_MACHINE_PATHS = (ALB_MACHINE_INGEST_PATH, ALB_MACHINE_HEARTBEAT_PATH)
+
 # Raw 32-byte Ed25519 PUBLIC key, base64. Not a secret (the private half lives
 # only on .227, /opt/mindshare-radio-capture/keys). The golden-vector key from
 # the ingest contract is a published test key and must never be configured here.

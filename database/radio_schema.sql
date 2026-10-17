@@ -1,5 +1,6 @@
 -- Mindshare Radio Intelligence: transcripts and audit (docs/MINDSHARE_RADIO_INGEST.md,
--- v2 additions in docs/MINDSHARE_RADIO_CORRECTIONS.md).
+-- v2 additions in docs/MINDSHARE_RADIO_CORRECTIONS.md, v3 listener health and
+-- hint words in docs/MINDSHARE_RADIO_HEALTH.md).
 -- Idempotent. Applied lazily by app/services/radio_service.py, once per process.
 -- Transcripts are machine generated and unverified. Rows in segments are
 -- purged 30 days after received_at unless a human correction extended
@@ -56,7 +57,7 @@ CREATE TABLE IF NOT EXISTS lcdash_radio.audit_events (
             'radio.segment.correct', 'radio.segment.correct_revert',
             'radio.fix.add', 'radio.fix.remove',
             'radio.watch.add', 'radio.watch.change', 'radio.watch.remove',
-            'radio.alert.dismiss'
+            'radio.alert.dismiss', 'radio.hint.add', 'radio.hint.remove'
         ))
 );
 
@@ -131,15 +132,36 @@ CREATE INDEX IF NOT EXISTS radio_alerts_open_idx
     ON lcdash_radio.alerts (created_at DESC)
     WHERE dismissed_at IS NULL;
 
--- Databases created before v2 carry the two-event audit constraint; widen it
--- once. This is the only constraint change and it runs only when needed.
+-- v3: the listener's last heartbeat. One row (id = 1), upserted on every
+-- heartbeat. No transcript text and no source addresses are ever stored here.
+CREATE TABLE IF NOT EXISTS lcdash_radio.listener_status (
+    id SMALLINT PRIMARY KEY CHECK (id = 1),
+    payload JSONB NOT NULL,
+    received_at TIMESTAMPTZ NOT NULL
+);
+
+-- v3: admin-managed hint words for the transcriber's glossary.
+CREATE TABLE IF NOT EXISTS lcdash_radio.hints (
+    hint_id BIGSERIAL PRIMARY KEY,
+    phrase TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS radio_hints_phrase_idx
+    ON lcdash_radio.hints (lower(phrase));
+
+-- Databases created before v2 carry the two-event audit constraint, and v2
+-- databases lack the two v3 hint events; widen it once to the full list. This
+-- is the only constraint change and it runs only when needed (the guard looks
+-- for the newest event, so a current constraint is left alone).
 DO $$
 BEGIN
     IF EXISTS (
         SELECT 1 FROM pg_constraint
         WHERE conname = 'radio_audit_event_type_check'
           AND conrelid = 'lcdash_radio.audit_events'::regclass
-          AND position('radio.alert.dismiss' IN pg_get_constraintdef(oid)) = 0
+          AND position('radio.hint.remove' IN pg_get_constraintdef(oid)) = 0
     ) THEN
         ALTER TABLE lcdash_radio.audit_events
             DROP CONSTRAINT radio_audit_event_type_check;
@@ -150,7 +172,7 @@ BEGIN
                 'radio.segment.correct', 'radio.segment.correct_revert',
                 'radio.fix.add', 'radio.fix.remove',
                 'radio.watch.add', 'radio.watch.change', 'radio.watch.remove',
-                'radio.alert.dismiss'
+                'radio.alert.dismiss', 'radio.hint.add', 'radio.hint.remove'
             ));
     END IF;
 END

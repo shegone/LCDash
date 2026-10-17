@@ -17,7 +17,10 @@ RADIO_JS = ROOT / "static" / "js" / "lcdash-admin-radio.js"
 ALERTS_JS = ROOT / "static" / "js" / "lcdash-radio-alerts.js"
 RADIO_CSS = ROOT / "static" / "css" / "lcdash-admin-radio.css"
 ALERTS_CSS = ROOT / "static" / "css" / "lcdash-radio-alerts.css"
-CACHE_BUST = "20261017-radio3"
+CACHE_BUST = "20261017-radio4"
+# The dashboard alerts panel (dashboard.html and its script and style) did not
+# change in v3, so it keeps its own cache-bust string.
+ALERTS_CACHE_BUST = "20261017-radio3"
 
 
 def read(path: Path) -> str:
@@ -128,8 +131,12 @@ class RadioTemplateTests(unittest.TestCase):
             'id="radio-panel-fixes"',
             'id="radio-watch-form"',
             'id="radio-fix-form"',
+            'id="radio-tab-hints"',
+            'id="radio-panel-hints"',
+            'id="radio-hint-form"',
             "Alert keywords",
             "Transcript fixes",
+            "Hint words",
         ):
             self.assertIn(marker, blocks, marker)
             self.assertNotIn(marker, outside, f"{marker} must be admin-only")
@@ -184,6 +191,128 @@ class RadioTemplateTests(unittest.TestCase):
         self.assertEqual(self.template.count('role="tab"'), 4)
 
 
+class ListenerHealthPanelTests(unittest.TestCase):
+    """Radio v3: the health panel and the administrator hint-words tab."""
+
+    def setUp(self):
+        self.template = read(ROOT / "templates" / "mindshare_radio.html")
+        self.script = read(RADIO_JS)
+        self.css = read(RADIO_CSS)
+
+    def test_health_panel_hooks_exist_and_the_old_strip_is_gone(self):
+        for needle in (
+            'id="radio-health"',
+            'id="radio-stats"',
+            'id="radio-stats-error"',
+            'id="radio-health-announce"',
+            "Listener health",
+        ):
+            self.assertIn(needle, self.template, needle)
+        self.assertNotIn("Last 24 hours", self.template)
+        # Re-rendered every poll, so it must not be a live region itself.
+        self.assertRegex(self.template, r'id="radio-stats"[^>]*aria-live="off"')
+
+    def test_health_panel_reads_the_stats_listener_object(self):
+        for needle in (
+            "/api/radio/stats",
+            "stats.listener",
+            "listener.reporting",
+            "listener.age_seconds",
+            "listener.last_heartbeat_at",
+            "listener.capture_uptime_seconds",
+            "listener.listeners",
+            "packets_interval",
+            "interval_seconds",
+            "other_payload_types",
+            "transcriber",
+            "uploader",
+            "oldest_queued_age_seconds",
+            "radio-health-warning",
+            "radio-health-detail",
+            "radio-health-tiles",
+        ):
+            self.assertIn(needle, self.script, needle)
+
+    def test_listener_tile_wording_for_the_three_states(self):
+        for needle in (
+            "`Reporting, ${age}`",
+            "Not reporting since",
+            "No heartbeat received yet",
+        ):
+            self.assertIn(needle, self.script, needle)
+
+    def test_channel_lines_use_honest_quiet_wording(self):
+        self.assertIn("in the last minute", self.script)
+        self.assertIn('packet${perMinute === 1 ? "" : "s"}', self.script)
+        self.assertIn("no traffic (quiet is normal)", self.script)
+        # Per-minute rate comes from the interval counters.
+        self.assertIn("(packets * 60) / seconds", self.script)
+
+    def test_undecoded_payload_types_raise_a_visible_warning(self):
+        self.assertIn("Undecoded audio: payload type", self.script)
+        self.assertIn("These transmissions are not being transcribed.", self.script)
+        self.assertIn("bi-exclamation-triangle-fill", self.script)
+        self.assertIn(".radio-health-warning", self.css)
+
+    def test_health_panel_never_renders_hosts_or_addresses(self):
+        # Only whitelisted listener fields are read: no host, ip, address or
+        # source fields appear in the health code at all.
+        start = self.script.index("function renderListenerTile")
+        end = self.script.index("function stopPolling")
+        health = self.script[start:end].lower()
+        for banned in ("hostname", "host_name", ".host", "source_ip", "ip_address",
+                       "remote_addr", ".address", "sources_seen"):
+            self.assertNotIn(banned, health, banned)
+
+    def test_stats_poll_every_15_seconds_only_while_visible(self):
+        self.assertIn("STATS_REFRESH_MS = 15000", self.script)
+        self.assertIn("window.setInterval(pollStats, STATS_REFRESH_MS)", self.script)
+        pool = self.script[self.script.index("function pollStats"):]
+        self.assertIn('document.visibilityState !== "visible"', pool[:200])
+        self.assertIn("LCDashSession.onEnd(stopPolling)", self.script)
+        self.assertIn("LCDashSession.check(response)", self.script)
+        self.assertIn("is-stale", self.script)
+
+    def test_hint_tab_is_admin_only_and_not_a_literal_tab_role(self):
+        outside = self.template
+        for body in if_admin_blocks(self.template):
+            outside = outside.replace(body, "")
+        for marker in ('radio-tab-hints', 'radio-panel-hints', 'radio-hint-', "Hint words",
+                       'data-admin-tab="hints"'):
+            self.assertNotIn(marker, outside, f"{marker} must be admin-only")
+        self.assertIn('data-admin-tab="hints"', self.template)
+        self.assertIn('data-panel="radio-panel-hints"', self.template)
+        # The script, not the template, gives admin tabs their role.
+        self.assertEqual(self.template.count('role="tab"'), 4)
+        self.assertIn('button.setAttribute("role", "tab")', self.script)
+        self.assertIn('tab.name === "hints"', self.script)
+
+    def test_hint_note_matches_the_spec(self):
+        text = re.sub(r"\s+", " ", self.template)
+        self.assertIn(
+            "Hint words help the transcriber hear local names. They reach the listener "
+            "within about a minute and apply to new transcriptions only. Watch phrases "
+            "and the right-hand side of fixes are included automatically.",
+            text,
+        )
+
+    def test_hint_tab_uses_the_hint_api_with_a_two_step_delete(self):
+        for needle in (
+            "/api/radio/hints",
+            '"POST", "/api/radio/hints", { phrase: text }',
+            '"DELETE", `/api/radio/hints/${encodeURIComponent(hint.id)}`',
+            "MAX_HINT = 60",
+            "MIN_HINT = 2",
+            "hint.createdBy",
+            "makeDeleteControl(`hint word",
+            "The hint word could not be added",
+        ):
+            self.assertIn(needle, self.script, needle)
+        self.assertIn('minlength="2" maxlength="60"', self.template)
+        # A 409 shows the server's reason through the shared inline error path.
+        self.assertIn("httpSuffix(response.status, detail)", self.script)
+
+
 class DashboardAlertsPanelTests(unittest.TestCase):
     def setUp(self):
         self.template = read(ROOT / "templates" / "dashboard.html")
@@ -194,8 +323,8 @@ class DashboardAlertsPanelTests(unittest.TestCase):
         self.assertIn("Radio keyword alerts", self.template)
         self.assertIn("No radio keyword alerts", self.template)
         self.assertIn("Machine-generated. Unverified. Advisory only.", self.template)
-        self.assertIn(f"/static/js/lcdash-radio-alerts.js?v={CACHE_BUST}", self.template)
-        self.assertIn(f"/static/css/lcdash-radio-alerts.css?v={CACHE_BUST}", self.template)
+        self.assertIn(f"/static/js/lcdash-radio-alerts.js?v={ALERTS_CACHE_BUST}", self.template)
+        self.assertIn(f"/static/css/lcdash-radio-alerts.css?v={ALERTS_CACHE_BUST}", self.template)
 
     def test_panel_is_not_role_gated_in_the_template(self):
         panel = self.template[self.template.index('id="radio-alerts-panel"'):]

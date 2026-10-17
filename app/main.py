@@ -1438,10 +1438,14 @@ def admin_knowledge_sync_api(request: Request):
 # ---------------------------------------------------------------------------
 # Mindshare Radio Intelligence (docs/MINDSHARE_RADIO_INGEST.md)
 #
-# One machine route plus the human routes. The ingest route is NOT behind
-# Cognito (an ALB listener rule lets exactly POST /api/radio/ingest through),
-# so this app is its only authenticator: an Ed25519 signature checked against
-# the public key in settings. It never looks at identity headers.
+# Two machine routes (segment ingest and, in v3, the listener heartbeat,
+# docs/MINDSHARE_RADIO_HEALTH.md) plus the human routes. The ingest route is
+# NOT behind Cognito (an ALB listener rule lets exactly POST /api/radio/ingest
+# through), so this app is its only authenticator: an Ed25519 signature
+# checked against the public key in settings. It never looks at identity
+# headers. The heartbeat is authenticated the same way (same key, a different
+# signed-message prefix); whether the ALB lets /api/radio/heartbeat through is
+# an infrastructure matter, and a request that reaches it unsigned gets a 401.
 #
 # Every other radio route answers a uniform 403 to anyone not allowed: the
 # human roles (user, supervisor, dispatcher, fire_officer, admin) for the
@@ -1495,31 +1499,46 @@ async def _read_radio_part(part, limit: int, label: str) -> bytes:
     return data
 
 
+def _radio_machine_public_key(label: str):
+    """The configured ingest public key, or 503 (unconfigured or unusable).
+
+    Shared by both machine routes (segment ingest and heartbeat): one key, one
+    configuration, one failure mode. ``label`` only shapes the 503 detail.
+    """
+    public_key_b64 = settings.radio_ingest_public_key
+    if not public_key_b64:
+        raise HTTPException(status_code=503, detail=f"Radio {label} is not configured.")
+    try:
+        return radio_service.load_public_key(public_key_b64)
+    except RadioServiceError as exc:
+        logger.error("Radio ingest public key is configured but unusable.")
+        raise HTTPException(
+            status_code=503, detail=f"Radio {label} is not configured."
+        ) from exc
+
+
+def _radio_declared_length_check(request: Request, limit: int) -> None:
+    """400 for a malformed Content-Length, 413 when it already exceeds ``limit``."""
+    content_length = request.headers.get("content-length")
+    if not content_length:
+        return
+    try:
+        declared = int(content_length)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400, detail="Invalid Content-Length header."
+        ) from exc
+    if declared > limit:
+        raise HTTPException(status_code=413, detail="Request is too large.")
+
+
 @app.post("/api/radio/ingest")
 async def receive_radio_segment(request: Request):
     # Deliberately NOT disabled in synthetic-disconnected mode: the pilot is
     # synthetic-disconnected from CAD, and this feed is not CAD.
-    public_key_b64 = settings.radio_ingest_public_key
-    if not public_key_b64:
-        raise HTTPException(status_code=503, detail="Radio ingest is not configured.")
-    try:
-        public_key = radio_service.load_public_key(public_key_b64)
-    except RadioServiceError as exc:
-        logger.error("Radio ingest public key is configured but unusable.")
-        raise HTTPException(
-            status_code=503, detail="Radio ingest is not configured."
-        ) from exc
+    public_key = _radio_machine_public_key("ingest")
 
-    content_length = request.headers.get("content-length")
-    if content_length:
-        try:
-            declared = int(content_length)
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=400, detail="Invalid Content-Length header."
-            ) from exc
-        if declared > radio_service.MAX_REQUEST_BYTES:
-            raise HTTPException(status_code=413, detail="Request is too large.")
+    _radio_declared_length_check(request, radio_service.MAX_REQUEST_BYTES)
 
     try:
         timestamp = radio_service.parse_timestamp(
@@ -1610,6 +1629,54 @@ async def receive_radio_segment(request: Request):
         status_code=201 if status == "created" else 200,
         headers={"Cache-Control": "no-store"},
     )
+
+
+@app.post("/api/radio/heartbeat")
+async def receive_radio_heartbeat(request: Request):
+    """The listener's signed, once-a-minute health report (docs/MINDSHARE_RADIO_HEALTH.md).
+
+    Machine-signed like ingest and identity-blind in the same way: only the
+    Ed25519 signature authenticates it, identity headers are never read, and a
+    signed-in person's session is no substitute. The signature is checked over
+    the raw body BEFORE the JSON is parsed. Errors never echo request content.
+    The reply carries the transcriber glossary (version only when unchanged).
+    """
+
+    public_key = _radio_machine_public_key("heartbeat")
+    _radio_declared_length_check(request, radio_service.MAX_HEARTBEAT_BYTES)
+
+    try:
+        timestamp = radio_service.parse_timestamp(
+            request.headers.get("x-radio-timestamp"), now=time.time()
+        )
+    except RadioIngestError as exc:
+        raise _radio_ingest_refusal(exc) from exc
+    signature_b64 = request.headers.get("x-radio-signature")
+    if not signature_b64:
+        raise _radio_ingest_refusal(RadioIngestError(401, "Signature verification failed."))
+
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > radio_service.MAX_HEARTBEAT_BYTES:
+            raise HTTPException(status_code=413, detail="Request is too large.")
+    raw = bytes(body)
+
+    try:
+        radio_service.verify_heartbeat_signature(
+            public_key, timestamp=timestamp, signature_b64=signature_b64, body=raw
+        )
+        heartbeat = radio_service.validate_heartbeat(raw)
+    except RadioIngestError as exc:
+        raise _radio_ingest_refusal(exc) from exc
+
+    try:
+        reply = await asyncio.to_thread(_radio_service().record_heartbeat, heartbeat)
+    except RadioServiceError as exc:
+        raise HTTPException(
+            status_code=503, detail="Radio heartbeat is unavailable."
+        ) from exc
+    return JSONResponse(reply, headers={"Cache-Control": "no-store"})
 
 
 _RADIO_HUMAN_ROLES = frozenset({
@@ -1895,6 +1962,36 @@ async def radio_watch_term_remove_api(term_id: str, request: Request):
         await _radio_call(
             _radio_service().remove_watch_term, term_id,
             actor=_radio_actor(identity),
+        )
+    )
+
+
+# Transcriber hint words (docs/MINDSHARE_RADIO_HEALTH.md): admin only, audited.
+@app.get("/api/radio/hints")
+async def radio_hints_api(request: Request):
+    _require_pilot_admin(request)
+    return _radio_json(await _radio_call(_radio_service().list_hints))
+
+
+@app.post("/api/radio/hints")
+async def radio_hint_add_api(request: Request):
+    identity = _require_pilot_admin(request)
+    body = await _read_radio_json(request)
+    return _radio_json(
+        await _radio_call(
+            _radio_service().add_hint, body, actor=_radio_actor(identity)
+        ),
+        status_code=201,
+    )
+
+
+@app.delete("/api/radio/hints/{hint_id}")
+async def radio_hint_remove_api(hint_id: str, request: Request):
+    identity = _require_pilot_admin(request)
+    _radio_write_guard(request)
+    return _radio_json(
+        await _radio_call(
+            _radio_service().remove_hint, hint_id, actor=_radio_actor(identity),
         )
     )
 

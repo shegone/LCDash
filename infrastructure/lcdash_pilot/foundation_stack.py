@@ -28,7 +28,7 @@ from constructs import Construct
 
 from .config import (
     ALB_SESSION_COOKIE_NAME,
-    ALB_MACHINE_INGEST_PATH,
+    ALB_MACHINE_PATHS,
     ALB_UNAUTHENTICATED_PATHS,
     APPROVED_REGION,
     NAME_PREFIX,
@@ -181,7 +181,8 @@ class Phase1FoundationStack(cdk.Stack):
             retention=logs.RetentionDays.ONE_WEEK,
             removal_policy=cdk.RemovalPolicy.DESTROY,
         )
-        self._add_identity_rejection_alarm(log_group, parameters)
+        alerts_topic = self._add_identity_rejection_alarm(log_group, parameters)
+        self._add_radio_listener_silent_alarm(log_group, alerts_topic)
 
         task_role = iam.Role(
             self,
@@ -734,19 +735,21 @@ class Phase1FoundationStack(cdk.Stack):
         )
         # Second and last deliberate exception (approved 2026-10-16): the
         # Mindshare radio listener on .227 posts signed audio segments to
-        # ALB_MACHINE_INGEST_PATH. It cannot complete a browser sign-in, so the
-        # ALB forwards this one exact path, POST only, without the Cognito
-        # action; the application authenticates it itself with an Ed25519
-        # signature and a 300-second timestamp window, and answers 503 when no
-        # public key is configured. No wildcard, no other method, no other
-        # path (test_cdk_template.py pins all three).
+        # the first of ALB_MACHINE_PATHS (ingest); since 2026-10-17 the same
+        # rule also covers its signed heartbeat path. It cannot complete a
+        # browser sign-in, so the ALB forwards these two exact paths, POST
+        # only, without the Cognito action; the application authenticates
+        # each request itself with an Ed25519 signature and a 300-second
+        # timestamp window, and answers 503 when no public key is configured.
+        # No wildcard, no other method, no other path (test_cdk_template.py
+        # pins all three).
         elbv2.ApplicationListenerRule(
             self,
             "SignedMachineIngest",
             listener=https_listener,
             priority=6,
             conditions=[
-                elbv2.ListenerCondition.path_patterns([ALB_MACHINE_INGEST_PATH]),
+                elbv2.ListenerCondition.path_patterns(list(ALB_MACHINE_PATHS)),
                 elbv2.ListenerCondition.http_request_methods(["POST"]),
             ],
             action=elbv2.ListenerAction.forward([target_group]),
@@ -1594,7 +1597,7 @@ class Phase1FoundationStack(cdk.Stack):
 
     def _add_identity_rejection_alarm(
         self, log_group: logs.LogGroup, parameters: dict[str, cdk.CfnParameter]
-    ) -> None:
+    ) -> sns.Topic:
         """Email the operator when ALB identity verification starts failing.
 
         Every failed verification writes one warning and drops the caller into
@@ -1648,6 +1651,44 @@ class Phase1FoundationStack(cdk.Stack):
             evaluation_periods=1,
             comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
             treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+        )
+        alarm.add_alarm_action(cloudwatch_actions.SnsAction(topic))
+        alarm.add_ok_action(cloudwatch_actions.SnsAction(topic))
+        return topic
+
+    def _add_radio_listener_silent_alarm(
+        self, log_group: logs.LogGroup, topic: sns.Topic
+    ) -> None:
+        """Email the operator when the Mindshare radio listener goes quiet.
+
+        The listener on .227 posts a signed heartbeat that the application
+        logs as "radio-heartbeat ok" on success. One metric point per good
+        heartbeat; no default value, so a silent listener produces missing
+        data rather than zeros, and missing data counts as BREACHING. Fewer
+        than one heartbeat in each of two consecutive 5-minute periods means
+        the listener has not reported for 10 minutes. Same topic as the
+        identity alarm (sns_alerts_exception in the allowlist covers both).
+        """
+
+        heartbeats = logs.MetricFilter(
+            self,
+            "RadioHeartbeatCount",
+            log_group=log_group,
+            filter_pattern=logs.FilterPattern.literal('"radio-heartbeat ok"'),
+            metric_namespace="LCDash/Radio",
+            metric_name="HeartbeatCount",
+            metric_value="1",
+        )
+        alarm = cloudwatch.Alarm(
+            self,
+            "RadioListenerSilentAlarm",
+            alarm_name=f"{NAME_PREFIX}-radio-listener-silent",
+            alarm_description="Radio listener has not reported for 10 minutes",
+            metric=heartbeats.metric(statistic="Sum", period=cdk.Duration.minutes(5)),
+            threshold=1,
+            evaluation_periods=2,
+            comparison_operator=cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,
+            treat_missing_data=cloudwatch.TreatMissingData.BREACHING,
         )
         alarm.add_alarm_action(cloudwatch_actions.SnsAction(topic))
         alarm.add_ok_action(cloudwatch_actions.SnsAction(topic))

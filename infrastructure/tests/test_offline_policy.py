@@ -68,6 +68,9 @@ class OfflinePolicyTests(unittest.TestCase):
             # POST (not a webhook subscription, not an operational output).
             "signed_machine_ingest_endpoint_count": 1,
             "signed_machine_ingest_path": "/api/radio/ingest",
+            # 2026-10-17: the same signed machine rule also covers the
+            # listener's signed heartbeat POST.
+            "signed_machine_heartbeat_path": "/api/radio/heartbeat",
             "operational_output_count": 0,
         }
         for key, value in expected.items():

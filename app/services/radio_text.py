@@ -23,6 +23,7 @@ Safety properties, each pinned by tests:
 
 from __future__ import annotations
 
+import hashlib
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -39,6 +40,16 @@ MAX_TERM_CHANNELS = 16
 
 MIN_CORRECTION_CHARS = 1
 MAX_CORRECTION_CHARS = 20000
+
+# Transcriber hint words (docs/MINDSHARE_RADIO_HEALTH.md, v3).
+MIN_HINT_CHARS = 2
+MAX_HINT_CHARS = 60
+MAX_HINTS = 200
+MAX_GLOSSARY_CHARS = 600
+GLOSSARY_PROMPT_PREFIX = (
+    "Public safety radio traffic. Names and terms that may be spoken: "
+)
+EMPTY_GLOSSARY_VERSION = "empty"
 
 # Bidirectional override/isolate characters can make text read differently from
 # how it is stored, so they are refused in anything a person types.
@@ -118,6 +129,58 @@ def clean_channels(value: object) -> list[str]:
         if item not in channels:
             channels.append(item)
     return channels
+
+
+# ----------------------------------------------------------------- glossary
+
+
+def build_glossary(
+    hints: Iterable[object],
+    watch_phrases: Iterable[object],
+    replacement_texts: Iterable[object],
+) -> dict[str, str]:
+    """The vocabulary the local transcriber is told about.
+
+    Order is priority: admin hint words first, then enabled watch phrases, then
+    the ``replace_text`` of the fixes. Duplicates (case-insensitive, whitespace
+    collapsed) keep their first spelling and position. Items are joined with
+    ``", "`` and the list stops at the first item that would take the string
+    past ``MAX_GLOSSARY_CHARS``: it never exceeds that length and a later,
+    shorter item never jumps the queue.
+
+    ``version`` is the first 12 hex characters of sha256(hotwords), or
+    ``"empty"`` (with empty strings) when there is nothing to say. Pure and
+    deterministic, so a listener can compare versions to skip a download.
+    """
+    seen: set[str] = set()
+    chosen: list[str] = []
+    length = 0
+    full = False
+    for source in (hints, watch_phrases, replacement_texts):
+        if full:
+            break
+        for raw in source:
+            item = " ".join(str(raw if raw is not None else "").split())
+            if not item:
+                continue
+            key = item.casefold()
+            if key in seen:
+                continue
+            needed = len(item) if not chosen else length + 2 + len(item)
+            if needed > MAX_GLOSSARY_CHARS:
+                full = True
+                break
+            seen.add(key)
+            chosen.append(item)
+            length = needed
+    if not chosen:
+        return {"version": EMPTY_GLOSSARY_VERSION, "hotwords": "", "prompt": ""}
+    hotwords = ", ".join(chosen)
+    return {
+        "version": hashlib.sha256(hotwords.encode("utf-8")).hexdigest()[:12],
+        "hotwords": hotwords,
+        "prompt": f"{GLOSSARY_PROMPT_PREFIX}{hotwords}.",
+    }
 
 
 # ----------------------------------------------------------------- literals

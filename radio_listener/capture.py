@@ -26,6 +26,15 @@ SAMPLE_RATE = 8000
 PT_PCMU = 0
 STOP = False
 
+# Health counters (see docs/MINDSHARE_RADIO_HEALTH.md). Counting only: nothing
+# here touches the audio path.
+STATS_WRITE_SECONDS = 30
+STATS_SUMMARY_SECONDS = 300
+MAX_PAYLOAD_TYPE_KEYS = 16
+MAX_SOURCES_TRACKED = 1024
+STATS_DIR_NAME = "status"
+STATS_FILE_NAME = "capture_stats.json"
+
 
 def pcmu_to_pcm(payload: bytes) -> bytes:
     """Decode G.711 mu-law payload bytes to signed little-endian PCM16."""
@@ -150,6 +159,156 @@ def open_listener(group: str, port: int, interface: str):
         raise
 
 
+def utc_now() -> dt.datetime:
+    return dt.datetime.now(dt.timezone.utc)
+
+
+def _iso_from_epoch(value):
+    if value is None:
+        return None
+    return dt.datetime.fromtimestamp(value, dt.timezone.utc).isoformat()
+
+
+class ListenerStats:
+    """Cheap per-listener counters: integer adds and one set insert, no I/O.
+
+    Pure (no sockets, no clock of its own), so tests can drive it directly.
+    """
+
+    def __init__(self, channel, direction):
+        self.channel, self.direction = channel, direction
+        self.packets_total = 0
+        self.packets_interval = 0
+        self.pcmu_packets_total = 0
+        self.other_payload_types = {}
+        self.bytes_interval = 0
+        self.sources = set()
+        self.segments_closed_total = 0
+        self.last_packet_wall = None
+
+    def packet(self, size, source_ip, wall_time):
+        self.packets_total += 1
+        self.packets_interval += 1
+        self.bytes_interval += size
+        self.last_packet_wall = wall_time
+        if source_ip not in self.sources and len(self.sources) < MAX_SOURCES_TRACKED:
+            self.sources.add(source_ip)
+
+    def pcmu(self):
+        self.pcmu_packets_total += 1
+
+    def other_payload(self, payload_type):
+        key = str(payload_type)
+        if key in self.other_payload_types:
+            self.other_payload_types[key] += 1
+        elif len(self.other_payload_types) < MAX_PAYLOAD_TYPE_KEYS:
+            self.other_payload_types[key] = 1
+
+    def segment_closed(self):
+        self.segments_closed_total += 1
+
+    def snapshot(self, reset_interval=True):
+        row = {
+            "channel": self.channel,
+            "direction": self.direction,
+            "packets_total": self.packets_total,
+            "packets_interval": self.packets_interval,
+            "pcmu_packets_total": self.pcmu_packets_total,
+            "other_payload_types": dict(self.other_payload_types),
+            "bytes_interval": self.bytes_interval,
+            "sources_seen": len(self.sources),
+            "segments_closed_total": self.segments_closed_total,
+            "last_packet_at": _iso_from_epoch(self.last_packet_wall),
+        }
+        if reset_interval:
+            self.packets_interval = 0
+            self.bytes_interval = 0
+        return row
+
+
+class CaptureStats:
+    """Schedules the 30 s stats file and the 5 minute summary lines.
+
+    `tick()` is called from the receive loop; it only compares two numbers
+    unless a write or summary is due. All clocks are passed in.
+    """
+
+    def __init__(self, listeners, mono_now, wall_now, write_seconds=STATS_WRITE_SECONDS,
+                 summary_seconds=STATS_SUMMARY_SECONDS):
+        self.listeners = list(listeners)
+        self.write_seconds = write_seconds
+        self.summary_seconds = summary_seconds
+        self.started_wall = wall_now
+        self.started_mono = mono_now
+        self._interval_started = mono_now
+        self._next_write = mono_now  # first file appears immediately
+        self._next_summary = mono_now + summary_seconds
+        self._last_stats_at = None
+        self._summary_previous = {}
+
+    def snapshot(self, mono_now, wall_now):
+        """Build the `capture` object and reset the interval counters."""
+        # stats_at never goes backwards, even if the wall clock is stepped.
+        stats_at = wall_now
+        if self._last_stats_at is not None and stats_at < self._last_stats_at:
+            stats_at = self._last_stats_at
+        self._last_stats_at = stats_at
+        payload = {
+            "stats_at": stats_at.isoformat(),
+            "started_at": self.started_wall.isoformat(),
+            "uptime_seconds": max(0, int(mono_now - self.started_mono)),
+            "interval_seconds": max(0, int(round(mono_now - self._interval_started))),
+            "listeners": [listener.snapshot() for listener in self.listeners],
+        }
+        self._interval_started = mono_now
+        return payload
+
+    def summary_lines(self):
+        """One counts-only line per listener; packets_since_last is since the last summary."""
+        lines = []
+        for listener in self.listeners:
+            key = (listener.channel, listener.direction)
+            previous = self._summary_previous.get(key, 0)
+            self._summary_previous[key] = listener.packets_total
+            others = ",".join(
+                f"{pt}:{count}" for pt, count in sorted(listener.other_payload_types.items())
+            ) or "none"
+            lines.append(
+                f"stats channel={listener.channel} direction={listener.direction} "
+                f"packets_since_last={listener.packets_total - previous} "
+                f"packets_total={listener.packets_total} "
+                f"pcmu_total={listener.pcmu_packets_total} other_payload_types={others} "
+                f"sources={len(listener.sources)} segments_closed={listener.segments_closed_total}"
+            )
+        return lines
+
+    def tick(self, mono_now, wall_clock=utc_now):
+        """Return (payload_to_write_or_None, summary_lines)."""
+        payload = None
+        lines = []
+        if mono_now >= self._next_write:
+            payload = self.snapshot(mono_now, wall_clock())
+            self._next_write = mono_now + self.write_seconds
+        if mono_now >= self._next_summary:
+            lines = self.summary_lines()
+            self._next_summary = mono_now + self.summary_seconds
+        return payload, lines
+
+
+def write_stats_file(path: Path, payload: dict) -> None:
+    """Atomic 0600 write (temp file in the same directory, then rename)."""
+    temporary = path.with_name(path.name + ".tmp")
+    fd = os.open(str(temporary), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+    temporary.chmod(0o600)
+    os.replace(temporary, path)
+
+
 class Stream:
     def __init__(self, name, direction, group, port, interface, audio_dir,
                  pending_dir, silence_seconds, max_segment_seconds):
@@ -176,6 +335,7 @@ class Stream:
         self.segment_sources = collections.Counter()
         self.segment_packets = 0
         self.segments_written = 0
+        self.stats = ListenerStats(name, direction)
 
     def start_segment(self):
         now = dt.datetime.now(dt.timezone.utc)
@@ -226,10 +386,12 @@ class Stream:
         self.last_packet_at = None
         self.last_rtp_timestamp = None
         self.segments_written += 1
+        self.stats.segment_closed()
 
     def accept(self, packet, source):
         self.count += 1
         self.sources[source[0]] += 1
+        self.stats.packet(len(packet), source[0], time.time())
         parsed = parse_rtp(packet)
         if parsed is None:
             self.bad_rtp += 1
@@ -237,6 +399,7 @@ class Stream:
         payload_type, timestamp, payload = parsed
         if payload_type != PT_PCMU:
             self.other_payloads[str(payload_type)] += 1
+            self.stats.other_payload(payload_type)
             return
         if not payload:
             return
@@ -258,6 +421,7 @@ class Stream:
         self.last_rtp_timestamp = (timestamp + len(payload)) & 0xFFFFFFFF
         self.last_packet_at = now
         self.pcmu_count += 1
+        self.stats.pcmu()
         self.segment_packets += 1
         self.segment_sources[source[0]] += 1
 
@@ -318,6 +482,7 @@ def main():
             output_dir / "queue" / "processing",
             output_dir / "queue" / "failed",
             output_dir / "transcripts",
+            output_dir / STATS_DIR_NAME,
         ):
             private_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
             private_dir.chmod(0o700)
@@ -344,6 +509,8 @@ def main():
     signal.signal(signal.SIGINT, stop_handler)
     signal.signal(signal.SIGTERM, stop_handler)
     started = time.monotonic()
+    stats_path = output_dir / STATS_DIR_NAME / STATS_FILE_NAME
+    capture_stats = CaptureStats([stream.stats for stream in streams], started, utc_now())
     print(f"Capture ready: {len(streams)} listeners on {interface}; duration={duration}s", flush=True)
     try:
         while not STOP and (duration == 0 or time.monotonic() - started < duration):
@@ -356,6 +523,15 @@ def main():
             idle_check = time.monotonic()
             for stream in streams:
                 stream.finish_if_idle(idle_check)
+            # Health reporting must never be able to stop audio capture.
+            try:
+                stats_payload, summary_lines = capture_stats.tick(idle_check)
+                if stats_payload is not None:
+                    write_stats_file(stats_path, stats_payload)
+                for line in summary_lines:
+                    print(line, flush=True)
+            except Exception as exc:
+                print(f"Capture stats skipped: {type(exc).__name__}", file=sys.stderr, flush=True)
     finally:
         selector.close()
         for stream in streams:

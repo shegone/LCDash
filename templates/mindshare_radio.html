@@ -4,7 +4,7 @@
 
 {% block content %}
 <link rel="stylesheet" href="/static/css/lcdash-admin.css?v=20260809-admin-knowledge">
-<link rel="stylesheet" href="/static/css/lcdash-admin-radio.css?v=20261017-radio3">
+<link rel="stylesheet" href="/static/css/lcdash-admin-radio.css?v=20261017-radio4">
 
 <div class="command-page">
 <div class="command-safety-banner radio-banner mb-4" role="note">
@@ -27,20 +27,21 @@
     </div>
 </section>
 
-<section class="admin-panel glass mt-4" aria-labelledby="radio-stats-title">
+<section id="radio-health" class="admin-panel glass mt-4" aria-labelledby="radio-stats-title">
     <div class="admin-panel-header">
         <div>
             <div class="admin-eyebrow">LISTENER HEALTH</div>
-            <h2 id="radio-stats-title">Last 24 hours</h2>
-            <p>A quiet channel is normal. A listener that stopped sending is not: check the last segment received.</p>
+            <h2 id="radio-stats-title">Listener health</h2>
+            <p>A quiet channel is normal. A listener that stops reporting is not, and neither is audio the listener cannot decode.</p>
         </div>
     </div>
-    <div id="radio-stats" class="radio-stats" aria-live="polite">
+    <div id="radio-stats" class="radio-stats" aria-live="off">
         <div class="admin-progress">
             <div class="admin-progress-spinner" aria-hidden="true"></div>
-            <div><strong>Loading statistics&hellip;</strong></div>
+            <div><strong>Loading listener health&hellip;</strong></div>
         </div>
     </div>
+    <p id="radio-health-announce" class="radio-sr-only" role="status" aria-live="polite"></p>
     <div id="radio-stats-error" class="admin-error" hidden></div>
 </section>
 
@@ -100,6 +101,10 @@
             <button type="button" id="radio-tab-fixes" class="radio-tab" data-admin-tab="fixes"
                     data-panel="radio-panel-fixes">
                 <span class="radio-tab-label">Transcript fixes</span>
+            </button>
+            <button type="button" id="radio-tab-hints" class="radio-tab" data-admin-tab="hints"
+                    data-panel="radio-panel-hints">
+                <span class="radio-tab-label">Hint words</span>
             </button>
             {% endif %}
         </div>
@@ -200,10 +205,45 @@
                 </p>
             </form>
         </div>
+
+        <div id="radio-panel-hints" class="radio-panel radio-admin-panel" hidden>
+            <p class="radio-admin-intro">
+                Hint words help the transcriber hear local names. They reach the listener within
+                about a minute and apply to new transcriptions only. Watch phrases and the
+                right-hand side of fixes are included automatically.
+            </p>
+            <p id="radio-hint-total" class="radio-admin-note" aria-live="polite"></p>
+            <div id="radio-hint-loading" class="admin-progress" hidden>
+                <div class="admin-progress-spinner" aria-hidden="true"></div>
+                <div><strong>Loading hint words&hellip;</strong></div>
+            </div>
+            <div id="radio-hint-error" class="admin-error" role="alert" hidden></div>
+            <p id="radio-hint-empty" class="admin-empty" hidden>No hint words yet. Add one below.</p>
+            <ul id="radio-hint-list" class="radio-admin-list" aria-label="Hint words"></ul>
+
+            <form id="radio-hint-form" class="radio-admin-form" novalidate>
+                <h3>Add a hint word</h3>
+                <div class="radio-admin-fields">
+                    <label class="radio-field">
+                        <span>Name or phrase (2 to 60 characters)</span>
+                        <input id="radio-hint-phrase" type="text" minlength="2" maxlength="60"
+                               autocomplete="off" placeholder="for example: Bellefontaine">
+                    </label>
+                </div>
+                <div id="radio-hint-form-error" class="radio-inline-error" role="alert" hidden></div>
+                <button id="radio-hint-add" class="radio-admin-add" type="submit">
+                    <i class="bi bi-plus-lg" aria-hidden="true"></i> Add hint word
+                </button>
+                <p class="radio-admin-note">
+                    A hint only changes how the transcriber spells what it hears. It never
+                    changes a saved transcript or a human correction.
+                </p>
+            </form>
+        </div>
         {% endif %}
     </div>
 </section>
 
-<script src="/static/js/lcdash-admin-radio.js?v=20261017-radio3"></script>
+<script src="/static/js/lcdash-admin-radio.js?v=20261017-radio4"></script>
 </div>
 {% endblock %}

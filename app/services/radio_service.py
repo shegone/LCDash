@@ -22,6 +22,12 @@ operational output, and transcripts are machine generated and unverified.
 
 Nothing in AWS holds a secret for this path: the app is configured only with
 the base64 raw public key (``settings.radio_ingest_public_key``).
+
+v3 (docs/MINDSHARE_RADIO_HEALTH.md) adds the signed listener heartbeat (same
+key, a different signed-message prefix), the one-row ``listener_status`` it
+upserts, the ``listener`` block of ``stats()``, and the admin-managed hint
+words that, with the watch phrases and fixes, form the glossary returned in
+the heartbeat reply.
 """
 
 from __future__ import annotations
@@ -34,6 +40,7 @@ import logging
 import math
 import re
 import struct
+import sys
 import threading
 import time
 from contextlib import AbstractContextManager
@@ -51,6 +58,46 @@ from app.services import radio_text
 from app.services.radio_text import FixRule, FixSet, TextRuleError
 
 logger = logging.getLogger(__name__)
+
+# The one log line the silent-listener alarm counts. The application does not
+# configure the root logger (uvicorn only configures its own), so an INFO
+# record from ``logger`` above would be dropped before it reached the web log
+# group. This dedicated logger writes the bare message to stdout, where the
+# container log driver picks it up, and does not propagate (no duplicates if a
+# root handler is ever added). Idempotent across reloads.
+HEARTBEAT_LOGGER_NAME = "lcdash.radio.heartbeat"
+HEARTBEAT_LOG_PREFIX = "radio-heartbeat ok"
+
+
+class _StdoutHandler(logging.StreamHandler):
+    """A stream handler that always writes to the *current* ``sys.stdout``."""
+
+    def __init__(self) -> None:
+        super().__init__(sys.stdout)
+
+    @property
+    def stream(self):  # type: ignore[override]
+        return sys.stdout
+
+    @stream.setter
+    def stream(self, _value) -> None:
+        pass
+
+
+def _heartbeat_logger() -> logging.Logger:
+    """The heartbeat logger, with its stdout handler attached exactly once."""
+    heartbeat_log = logging.getLogger(HEARTBEAT_LOGGER_NAME)
+    if not any(isinstance(item, _StdoutHandler) for item in heartbeat_log.handlers):
+        heartbeat_log.setLevel(logging.INFO)
+        heartbeat_log.propagate = False
+        handler = _StdoutHandler()
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        heartbeat_log.addHandler(handler)
+    return heartbeat_log
+
+
+_heartbeat_logger()  # configured at import so the first heartbeat is never lost
+
 
 SCHEMA_PATH = Path(__file__).resolve().parents[2] / "database" / "radio_schema.sql"
 
@@ -88,6 +135,18 @@ SNIPPET_CHARS = 300
 PURGE_INTERVAL_SECONDS = 3600
 STATS_WINDOW_HOURS = 24
 
+# v3: listener heartbeat (docs/MINDSHARE_RADIO_HEALTH.md).
+HEARTBEAT_SIGNATURE_DOMAIN = "lcdash-radio-heartbeat-v1"
+MAX_HEARTBEAT_BYTES = 16 * 1024
+MAX_HEARTBEAT_LISTENERS = 64
+MAX_OTHER_PAYLOAD_TYPES = 16
+MAX_GLOSSARY_VERSION_CHARS = 32
+MAX_HEARTBEAT_COUNTER = 10**15
+MAX_RTP_PAYLOAD_TYPE = 127
+# The listener counts as reporting while its last heartbeat is this recent
+# (three missed 60-second beats).
+LISTENER_REPORTING_SECONDS = 180
+
 DEFAULT_LIST_LIMIT = 50
 MAX_LIST_LIMIT = 200
 MAX_QUERY_CHARS = 200
@@ -102,6 +161,8 @@ EVENT_WATCH_ADD = "radio.watch.add"
 EVENT_WATCH_CHANGE = "radio.watch.change"
 EVENT_WATCH_REMOVE = "radio.watch.remove"
 EVENT_ALERT_DISMISS = "radio.alert.dismiss"
+EVENT_HINT_ADD = "radio.hint.add"
+EVENT_HINT_REMOVE = "radio.hint.remove"
 
 _METADATA_FIELDS = frozenset({
     "schema_version", "segment_id", "channel", "direction", "started_at",
@@ -194,6 +255,27 @@ def parse_timestamp(header_value: str | None, *, now: float) -> int:
     return timestamp
 
 
+def verify_message_signature(
+    public_key: Ed25519PublicKey, signature_b64: str | None, message: bytes
+) -> None:
+    """Raise 401 unless the base64 Ed25519 signature covers exactly ``message``.
+
+    The one check behind both machine routes (segment ingest and heartbeat):
+    each builds its own signed message, with its own domain prefix, and hands
+    it here.
+    """
+    try:
+        signature = base64.b64decode(str(signature_b64 or "").strip(), validate=True)
+    except (binascii.Error, ValueError):
+        raise _unauthorized() from None
+    if len(signature) != 64:
+        raise _unauthorized()
+    try:
+        public_key.verify(signature, message)
+    except InvalidSignature:
+        raise _unauthorized() from None
+
+
 def verify_signature(
     public_key: Ed25519PublicKey,
     *,
@@ -204,17 +286,38 @@ def verify_signature(
     metadata: bytes,
 ) -> None:
     """Raise 401 unless the Ed25519 signature covers exactly these bytes."""
-    try:
-        signature = base64.b64decode(str(signature_b64 or "").strip(), validate=True)
-    except (binascii.Error, ValueError):
-        raise _unauthorized() from None
-    if len(signature) != 64:
-        raise _unauthorized()
-    message = build_signed_message(timestamp, segment_id, audio, metadata)
-    try:
-        public_key.verify(signature, message)
-    except InvalidSignature:
-        raise _unauthorized() from None
+    verify_message_signature(
+        public_key,
+        signature_b64,
+        build_signed_message(timestamp, segment_id, audio, metadata),
+    )
+
+
+def build_heartbeat_signed_message(timestamp: int, body: bytes) -> bytes:
+    """The exact bytes the listener signs for a heartbeat: three lines.
+
+    ``lcdash-radio-heartbeat-v1``, the timestamp as decimal text, and the
+    lowercase sha256 hex of the raw request body, joined by single ``\\n`` with
+    no trailing newline.
+    """
+    return "\n".join((
+        HEARTBEAT_SIGNATURE_DOMAIN,
+        str(int(timestamp)),
+        hashlib.sha256(body).hexdigest(),
+    )).encode("utf-8")
+
+
+def verify_heartbeat_signature(
+    public_key: Ed25519PublicKey,
+    *,
+    timestamp: int,
+    signature_b64: str | None,
+    body: bytes,
+) -> None:
+    """Raise 401 unless the signature covers exactly this heartbeat body."""
+    verify_message_signature(
+        public_key, signature_b64, build_heartbeat_signed_message(timestamp, body)
+    )
 
 
 # ------------------------------------------------------------ metadata check
@@ -226,7 +329,7 @@ def _bad_metadata(field: str | None = None) -> RadioIngestError:
     return RadioIngestError(400, "Metadata is invalid.")
 
 
-def _loads_object(metadata: bytes) -> dict:
+def _loads_object(metadata: bytes, *, bad: Callable[..., Exception] = _bad_metadata) -> dict:
     def _reject_constant(_name: str):
         raise ValueError("non-finite number")
 
@@ -235,9 +338,9 @@ def _loads_object(metadata: bytes) -> dict:
             metadata.decode("utf-8"), parse_constant=_reject_constant
         )
     except (UnicodeDecodeError, ValueError, RecursionError):
-        raise _bad_metadata() from None
+        raise bad() from None
     if not isinstance(parsed, dict):
-        raise _bad_metadata()
+        raise bad()
     return parsed
 
 
@@ -249,11 +352,16 @@ def extract_segment_id(metadata: bytes) -> str:
     return segment_id
 
 
-def _require_int(value: Any, field: str, *, minimum: int | None = None) -> int:
+def _require_int(
+    value: Any, field: str, *, minimum: int | None = None,
+    maximum: int | None = None, bad: Callable[..., Exception] = _bad_metadata,
+) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
-        raise _bad_metadata(field)
+        raise bad(field)
     if minimum is not None and value < minimum:
-        raise _bad_metadata(field)
+        raise bad(field)
+    if maximum is not None and value > maximum:
+        raise bad(field)
     return value
 
 
@@ -266,22 +374,29 @@ def _require_number(value: Any, field: str) -> float:
     return number
 
 
-def _require_text(value: Any, field: str, *, max_chars: int) -> str:
+def _require_text(
+    value: Any, field: str, *, max_chars: int, bad: Callable[..., Exception] = _bad_metadata
+) -> str:
     if not isinstance(value, str) or len(value) > max_chars:
-        raise _bad_metadata(field)
+        raise bad(field)
     return value
 
 
-def _require_datetime(value: Any, field: str) -> datetime:
-    if not isinstance(value, str):
-        raise _bad_metadata(field)
+def _require_datetime(
+    value: Any, field: str, *, bad: Callable[..., Exception] = _bad_metadata
+) -> datetime:
+    if not isinstance(value, str) or len(value) > 64:
+        raise bad(field)
     try:
         parsed = datetime.fromisoformat(value)
     except ValueError:
-        raise _bad_metadata(field) from None
+        raise bad(field) from None
     if parsed.tzinfo is None or parsed.utcoffset() is None:
-        raise _bad_metadata(field)
-    return parsed.astimezone(timezone.utc)
+        raise bad(field)
+    try:
+        return parsed.astimezone(timezone.utc)
+    except (OverflowError, ValueError):
+        raise bad(field) from None
 
 
 @dataclass(frozen=True)
@@ -396,6 +511,154 @@ def validate_metadata(metadata: bytes) -> RadioSegmentRecord:
         asr_segments=tuple(asr_segments),
         low_confidence=compute_low_confidence(asr_segments),
     )
+
+
+# ------------------------------------------------------- heartbeat (v3) check
+
+_HEARTBEAT_FIELDS = frozenset({
+    "schema_version", "sent_at", "capture", "transcriber", "uploader",
+    "glossary_version",
+})
+_HEARTBEAT_REQUIRED = _HEARTBEAT_FIELDS - {"glossary_version"}
+_CAPTURE_FIELDS = frozenset({
+    "stats_at", "started_at", "uptime_seconds", "interval_seconds", "listeners",
+})
+_LISTENER_FIELDS = frozenset({
+    "channel", "direction", "packets_total", "packets_interval",
+    "pcmu_packets_total", "other_payload_types", "bytes_interval",
+    "sources_seen", "segments_closed_total", "last_packet_at",
+})
+_TRANSCRIBER_FIELDS = frozenset({"pending", "failed"})
+_UPLOADER_FIELDS = frozenset({
+    "queued", "oldest_queued_age_seconds", "rejected_total", "last_success_at",
+})
+_PAYLOAD_TYPE_KEY = re.compile(r"^(?:0|[1-9][0-9]{0,2})$")
+
+
+def _bad_heartbeat(field: str | None = None) -> RadioIngestError:
+    # ``field`` is always a server-chosen constant, never sender text.
+    if field:
+        return RadioIngestError(400, f"Heartbeat field '{field}' is invalid.")
+    return RadioIngestError(400, "Heartbeat is invalid.")
+
+
+def _hb_object(value: Any, allowed: frozenset[str], field: str) -> dict:
+    """A nested heartbeat object with exactly the known keys (all required)."""
+    if not isinstance(value, dict) or set(value) != allowed:
+        raise _bad_heartbeat(field)
+    return value
+
+
+def _hb_count(value: Any, field: str) -> int:
+    return _require_int(
+        value, field, minimum=0, maximum=MAX_HEARTBEAT_COUNTER, bad=_bad_heartbeat
+    )
+
+
+def _hb_optional_count(value: Any, field: str) -> int | None:
+    return None if value is None else _hb_count(value, field)
+
+
+def _hb_optional_time(value: Any, field: str) -> str | None:
+    if value is None:
+        return None
+    return _require_datetime(value, field, bad=_bad_heartbeat).isoformat()
+
+
+def validate_heartbeat(body: bytes) -> dict:
+    """Strictly validate a signature-verified heartbeat (schema_version 1).
+
+    Returns the normalized document that is stored and later reported: counts
+    are plain non-negative ints, times are UTC ISO strings. Unknown keys at any
+    level are refused (names are never echoed), so the schema cannot drift
+    silently and nothing but the documented counters can be stored.
+    """
+    document = _loads_object(body, bad=_bad_heartbeat)
+    if set(document) - _HEARTBEAT_FIELDS:
+        raise RadioIngestError(400, "Heartbeat contains unknown fields.")
+    missing = _HEARTBEAT_REQUIRED - set(document)
+    if missing:
+        raise _bad_heartbeat(sorted(missing)[0])
+
+    if _require_int(document["schema_version"], "schema_version", bad=_bad_heartbeat) != 1:
+        raise _bad_heartbeat("schema_version")
+    sent_at = _require_datetime(document["sent_at"], "sent_at", bad=_bad_heartbeat)
+
+    capture = _hb_object(document["capture"], _CAPTURE_FIELDS, "capture")
+    raw_listeners = capture["listeners"]
+    if not isinstance(raw_listeners, list) or len(raw_listeners) > MAX_HEARTBEAT_LISTENERS:
+        raise _bad_heartbeat("capture.listeners")
+    listeners: list[dict] = []
+    for item in raw_listeners:
+        row = _hb_object(item, _LISTENER_FIELDS, "capture.listeners")
+        channel = row["channel"]
+        if not isinstance(channel, str) or not CHANNEL_PATTERN.fullmatch(channel):
+            raise _bad_heartbeat("capture.listeners")
+        if row["direction"] not in DIRECTIONS:
+            raise _bad_heartbeat("capture.listeners")
+        raw_other = row["other_payload_types"]
+        if not isinstance(raw_other, dict) or len(raw_other) > MAX_OTHER_PAYLOAD_TYPES:
+            raise _bad_heartbeat("capture.listeners")
+        other: dict[str, int] = {}
+        for key, value in raw_other.items():
+            if (
+                not isinstance(key, str)
+                or not _PAYLOAD_TYPE_KEY.fullmatch(key)
+                or int(key) > MAX_RTP_PAYLOAD_TYPE
+            ):
+                raise _bad_heartbeat("capture.listeners")
+            other[key] = _hb_count(value, "capture.listeners")
+        listeners.append({
+            "channel": channel,
+            "direction": row["direction"],
+            "packets_total": _hb_count(row["packets_total"], "capture.listeners"),
+            "packets_interval": _hb_count(row["packets_interval"], "capture.listeners"),
+            "pcmu_packets_total": _hb_count(row["pcmu_packets_total"], "capture.listeners"),
+            "other_payload_types": other,
+            "bytes_interval": _hb_count(row["bytes_interval"], "capture.listeners"),
+            "sources_seen": _hb_count(row["sources_seen"], "capture.listeners"),
+            "segments_closed_total": _hb_count(
+                row["segments_closed_total"], "capture.listeners"
+            ),
+            "last_packet_at": _hb_optional_time(row["last_packet_at"], "capture.listeners"),
+        })
+
+    transcriber = _hb_object(document["transcriber"], _TRANSCRIBER_FIELDS, "transcriber")
+    uploader = _hb_object(document["uploader"], _UPLOADER_FIELDS, "uploader")
+
+    glossary_version = document.get("glossary_version")
+    if glossary_version is not None:
+        glossary_version = _require_text(
+            glossary_version, "glossary_version",
+            max_chars=MAX_GLOSSARY_VERSION_CHARS, bad=_bad_heartbeat,
+        )
+
+    return {
+        "schema_version": 1,
+        "sent_at": sent_at.isoformat(),
+        "capture": {
+            "stats_at": _hb_optional_time(capture["stats_at"], "capture.stats_at"),
+            "started_at": _hb_optional_time(capture["started_at"], "capture.started_at"),
+            "uptime_seconds": _hb_count(capture["uptime_seconds"], "capture.uptime_seconds"),
+            "interval_seconds": _hb_count(
+                capture["interval_seconds"], "capture.interval_seconds"
+            ),
+            "listeners": listeners,
+        },
+        "transcriber": {
+            "pending": _hb_count(transcriber["pending"], "transcriber"),
+            "failed": _hb_count(transcriber["failed"], "transcriber"),
+        },
+        "uploader": {
+            "queued": _hb_count(uploader["queued"], "uploader"),
+            "oldest_queued_age_seconds": _hb_optional_count(
+                uploader["oldest_queued_age_seconds"], "uploader"
+            ),
+            "rejected_total": _hb_count(uploader["rejected_total"], "uploader"),
+            "last_success_at": _hb_optional_time(uploader["last_success_at"], "uploader"),
+        },
+        "glossary_version": glossary_version,
+    }
 
 
 # ----------------------------------------------------------------- WAV check
@@ -869,6 +1132,61 @@ class RadioRepository(AbstractContextManager):
         ).fetchone()
         return ("already", existing[0]) if existing is not None else None
 
+    # --------------------------------------------- hint words and glossary (v3)
+
+    _HINT_COLUMNS = "hint_id, phrase, created_by, created_at"
+
+    def list_hints(self) -> list[tuple]:
+        return self._execute(
+            f"SELECT {self._HINT_COLUMNS} FROM lcdash_radio.hints ORDER BY hint_id"
+        ).fetchall()
+
+    def count_hints(self) -> int:
+        return int(self._execute(
+            "SELECT COUNT(*) FROM lcdash_radio.hints"
+        ).fetchone()[0])
+
+    def insert_hint(self, phrase: str, actor: str) -> tuple | None:
+        """None when the phrase already exists (case-insensitive)."""
+        return self._execute(
+            "INSERT INTO lcdash_radio.hints (phrase, created_by) "
+            "VALUES (%s, %s) ON CONFLICT ((lower(phrase))) DO NOTHING "
+            f"RETURNING {self._HINT_COLUMNS}",
+            (phrase, actor[:320]),
+        ).fetchone()
+
+    def delete_hint(self, hint_id: int) -> tuple | None:
+        return self._execute(
+            "DELETE FROM lcdash_radio.hints WHERE hint_id = %s "
+            f"RETURNING {self._HINT_COLUMNS}",
+            (hint_id,),
+        ).fetchone()
+
+    # ------------------------------------------------- listener status (v3)
+
+    def upsert_listener_status(self, payload_json: str, received_at: datetime) -> None:
+        """Replace the one-row listener status. Commits (heartbeats are not audited)."""
+        self._execute(
+            "INSERT INTO lcdash_radio.listener_status (id, payload, received_at) "
+            "VALUES (1, %s::JSONB, %s) "
+            "ON CONFLICT (id) DO UPDATE SET "
+            "payload = EXCLUDED.payload, received_at = EXCLUDED.received_at",
+            (payload_json, received_at),
+        )
+        self._commit()
+
+    def get_listener_status(self) -> tuple[dict, datetime] | None:
+        """``(payload, received_at)`` of the last heartbeat, or None if never."""
+        row = self._execute(
+            "SELECT payload, received_at FROM lcdash_radio.listener_status WHERE id = 1"
+        ).fetchone()
+        if row is None:
+            return None
+        payload = row[0]
+        if isinstance(payload, (str, bytes)):
+            payload = json.loads(payload)
+        return payload, row[1]
+
     def record_audit(
         self, event_type: str, actor: str, segment_id: str | None, detail: dict
     ) -> None:
@@ -1268,6 +1586,7 @@ class RadioService:
         try:
             counts = repository.channel_counts(STATS_WINDOW_HOURS)
             newest = repository.newest_received_at()
+            listener_row = repository.get_listener_status()
         finally:
             repository.__exit__(None, None, None)
         channels = [{"channel": name, "count": int(count)} for name, count in counts]
@@ -1276,7 +1595,164 @@ class RadioService:
             "channels": channels,
             "total": sum(item["count"] for item in channels),
             "last_received_at": newest.isoformat() if newest else None,
+            "listener": self._listener_summary(listener_row),
         }
+
+    def _listener_summary(self, row: tuple[dict, datetime] | None) -> dict | None:
+        """The page's view of the last heartbeat; None when none ever arrived.
+
+        ``reporting`` is true while the heartbeat is at most
+        ``LISTENER_REPORTING_SECONDS`` old. Only counters and times: no
+        hostnames, no addresses, no text (none are ever stored).
+        """
+        if row is None:
+            return None
+        payload, received_at = row
+        payload = payload if isinstance(payload, dict) else {}
+        capture = payload.get("capture") if isinstance(payload.get("capture"), dict) else {}
+        interval_seconds = capture.get("interval_seconds")
+        listeners = [
+            {
+                "channel": item.get("channel"),
+                "direction": item.get("direction"),
+                "packets_interval": item.get("packets_interval"),
+                "interval_seconds": interval_seconds,
+                "other_payload_types": item.get("other_payload_types") or {},
+                "last_packet_at": item.get("last_packet_at"),
+            }
+            for item in (capture.get("listeners") or [])
+            if isinstance(item, dict)
+        ]
+        age = max(0, int((self._utcnow() - received_at).total_seconds()))
+        return {
+            "reporting": age <= LISTENER_REPORTING_SECONDS,
+            "last_heartbeat_at": received_at.isoformat(),
+            "age_seconds": age,
+            "capture_uptime_seconds": capture.get("uptime_seconds"),
+            "capture_stats_at": capture.get("stats_at"),
+            "listeners": listeners,
+            "transcriber": payload.get("transcriber") or {},
+            "uploader": payload.get("uploader") or {},
+        }
+
+    # -------------------------------------------------------------- heartbeat
+
+    def _build_glossary(self, repository) -> dict:
+        """Hints, then enabled watch phrases, then the fixes' replacement text."""
+        hints = [row[1] for row in repository.list_hints()]
+        watch = [row[1] for row in repository.list_enabled_watch_terms()]
+        replacements = [row[2] for row in repository.list_replacements()]
+        return radio_text.build_glossary(hints, watch, replacements)
+
+    def record_heartbeat(self, heartbeat: dict) -> dict:
+        """Store a validated, signature-verified heartbeat; return the reply body.
+
+        Builds the glossary first and stores second, inside one repository
+        session, so a success means both worked. Any failure is a
+        ``RadioServiceError`` (HTTP 503) and nothing is stored or logged as ok;
+        the listener simply tries again in a minute. A heartbeat never reads or
+        writes ``segments`` and is not audited (60-second noise).
+        """
+        try:
+            repository = self._open()
+            try:
+                glossary = self._build_glossary(repository)
+                received_at = self._utcnow()
+                repository.upsert_listener_status(
+                    json.dumps(heartbeat, ensure_ascii=False), received_at
+                )
+            finally:
+                repository.__exit__(None, None, None)
+        except RadioServiceError:
+            raise
+        except Exception as error:  # noqa: BLE001 - a heartbeat must never crash the app
+            logger.warning("radio-heartbeat failed: %s", type(error).__name__)
+            raise RadioDatabaseError("The heartbeat could not be stored.") from error
+
+        listeners = heartbeat["capture"]["listeners"]
+        _heartbeat_logger().info(
+            "%s listeners=%d packets_interval=%d undecoded=%d",
+            HEARTBEAT_LOG_PREFIX,
+            len(listeners),
+            sum(item["packets_interval"] for item in listeners),
+            sum(sum(item["other_payload_types"].values()) for item in listeners),
+        )
+        if heartbeat.get("glossary_version") == glossary["version"]:
+            reply_glossary = {"version": glossary["version"]}
+        else:
+            reply_glossary = glossary
+        return {
+            "status": "ok",
+            "server_time": received_at.isoformat(),
+            "glossary": reply_glossary,
+        }
+
+    # ------------------------------------------------------------- hint words
+
+    @staticmethod
+    def _hint_item(row: tuple) -> dict:
+        return {
+            "hint_id": row[0],
+            "phrase": row[1],
+            "created_by": row[2],
+            "created_at": _iso(row[3]),
+        }
+
+    def list_hints(self) -> dict:
+        repository = self._open()
+        try:
+            rows = repository.list_hints()
+        finally:
+            repository.__exit__(None, None, None)
+        return {
+            "hints": [self._hint_item(row) for row in rows],
+            "max_hints": radio_text.MAX_HINTS,
+        }
+
+    def add_hint(self, payload: object, *, actor: str) -> dict:
+        body = _require_object(payload, frozenset({"phrase"}))
+        try:
+            phrase = radio_text.clean_single_line(
+                body.get("phrase"), label="phrase",
+                minimum=radio_text.MIN_HINT_CHARS,
+                maximum=radio_text.MAX_HINT_CHARS,
+            )
+        except TextRuleError as error:
+            raise _rule_error(error) from None
+
+        repository = self._open()
+        try:
+            if repository.count_hints() >= radio_text.MAX_HINTS:
+                raise RadioConflictError(
+                    f"At most {radio_text.MAX_HINTS} hint words are allowed."
+                )
+            row = repository.insert_hint(phrase, actor)
+            if row is None:
+                raise RadioConflictError("That hint word already exists.")
+            self._audit(
+                repository, EVENT_HINT_ADD, actor, None,
+                {"hint_id": row[0], "phrase": phrase},
+                log_extra=f"hint={row[0]}",
+            )
+        finally:
+            repository.__exit__(None, None, None)
+        return self._hint_item(row)
+
+    def remove_hint(self, hint_id: object, *, actor: str) -> dict:
+        number = _parse_id(hint_id)
+        repository = self._open()
+        try:
+            row = repository.delete_hint(number)
+            if row is None:
+                raise RadioNotFoundError("Hint word not found.")
+            self._audit(
+                repository, EVENT_HINT_REMOVE, actor, None,
+                {"hint_id": number, "phrase": row[1]},
+                log_extra=f"hint={number}",
+            )
+        finally:
+            repository.__exit__(None, None, None)
+        return {"hint_id": number, "removed": True}
 
     # ------------------------------------------------------------ corrections
 

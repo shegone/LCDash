@@ -1226,7 +1226,9 @@ class RadioAccessHelperTests(unittest.TestCase):
             "/api/radio/alerts/12/dismiss",
         )
         no = (
-            "", "/", "/api/radio/ingest", "/api/radio/replacements",
+            "", "/", "/api/radio/ingest", "/api/radio/heartbeat",
+            "/api/radio/heartbeat/", "/api/radio/hints", "/api/radio/hints/1",
+            "/api/radio/replacements",
             "/api/radio/replacements/1", "/api/radio/watch-terms",
             "/api/radio/watch-terms/1", "/api/radio", "/api/radio/segments/abc",
             "/api/radio/segments/abc/audio/x", "/api/radio/segments//audio",
