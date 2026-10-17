@@ -4,7 +4,7 @@
 
 {% block content %}
 <link rel="stylesheet" href="/static/css/lcdash-admin.css?v=20260809-admin-knowledge">
-<link rel="stylesheet" href="/static/css/lcdash-admin-radio.css?v=20261016-radio">
+<link rel="stylesheet" href="/static/css/lcdash-admin-radio.css?v=20261017-radio2">
 
 <div class="command-page">
 <div class="command-safety-banner radio-banner mb-4" role="note">
@@ -49,20 +49,11 @@
         <div>
             <div class="admin-eyebrow">SEGMENTS</div>
             <h2 id="radio-segments-title">Transcripts</h2>
-            <p>Newest first. Opening this list and playing audio are both recorded in the audit log. Audio is kept 15 days, transcripts 30.</p>
+            <p>Newest first, one feed per channel. Opening a feed and playing audio are both recorded in the audit log. Audio is kept 15 days, transcripts 30.</p>
         </div>
     </div>
 
     <form id="radio-filter-form" class="radio-filters" role="search" aria-label="Filter radio segments">
-        <label>
-            <span>Channel</span>
-            <select id="radio-filter-channel">
-                <option value="">All channels</option>
-                <option value="law">law</option>
-                <option value="ems">ems</option>
-                <option value="fire">fire</option>
-            </select>
-        </label>
         <label>
             <span>Direction</span>
             <select id="radio-filter-direction">
@@ -80,45 +71,38 @@
         </button>
     </form>
 
-    <div id="radio-loading" class="admin-progress" aria-live="polite">
-        <div class="admin-progress-spinner" aria-hidden="true"></div>
-        <div><strong>Loading segments&hellip;</strong></div>
+    <div class="radio-tabbar">
+        <div id="radio-tablist" class="radio-tabs" role="tablist" aria-label="Radio channels">
+            <button type="button" role="tab" id="radio-tab-all" class="radio-tab"
+                    data-channel="" aria-selected="true" aria-controls="radio-panel-all" tabindex="0">
+                <span class="radio-tab-label">All channels</span><span class="radio-tab-count" aria-hidden="true"></span>
+            </button>
+            <button type="button" role="tab" id="radio-tab-law" class="radio-tab"
+                    data-channel="law" aria-selected="false" aria-controls="radio-panel-law" tabindex="-1">
+                <span class="radio-tab-label">Law</span><span class="radio-tab-count" aria-hidden="true"></span>
+            </button>
+            <button type="button" role="tab" id="radio-tab-ems" class="radio-tab"
+                    data-channel="ems" aria-selected="false" aria-controls="radio-panel-ems" tabindex="-1">
+                <span class="radio-tab-label">EMS</span><span class="radio-tab-count" aria-hidden="true"></span>
+            </button>
+            <button type="button" role="tab" id="radio-tab-fire" class="radio-tab"
+                    data-channel="fire" aria-selected="false" aria-controls="radio-panel-fire" tabindex="-1">
+                <span class="radio-tab-label">Fire</span><span class="radio-tab-count" aria-hidden="true"></span>
+            </button>
+        </div>
+        <div class="radio-refresh">
+            <span id="radio-updated" class="radio-updated" aria-live="off">Not updated yet</span>
+            <button id="radio-refresh-button" type="button" class="radio-refresh-button">
+                <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Refresh
+            </button>
+        </div>
     </div>
 
-    <div id="radio-error" class="admin-error" role="alert" hidden></div>
+    <p id="radio-play-status" class="radio-play-status" role="status" aria-live="polite"></p>
 
-    <p id="radio-empty" class="admin-empty" hidden>
-        No segments match. Segments appear here after the listener finishes
-        transcribing them.
-    </p>
-
-    <div id="radio-table-wrap" class="radio-table-wrap" hidden>
-        <table class="radio-table">
-            <caption class="visually-hidden">
-                Radio segments with time, channel, direction, duration, transcript, and audio
-            </caption>
-            <thead>
-                <tr>
-                    <th scope="col">Time</th>
-                    <th scope="col">Channel</th>
-                    <th scope="col">Dir</th>
-                    <th scope="col">Length</th>
-                    <th scope="col">Transcript</th>
-                    <th scope="col">Audio</th>
-                </tr>
-            </thead>
-            <tbody id="radio-tbody"></tbody>
-        </table>
-    </div>
-
-    <div class="radio-more">
-        <button id="radio-load-older" type="button" hidden>
-            <i class="bi bi-arrow-down-circle" aria-hidden="true"></i> Load older
-        </button>
-        <p id="radio-more-status" class="radio-more-status" aria-live="polite"></p>
-    </div>
+    <div id="radio-panels" class="radio-panels"></div>
 </section>
 
-<script src="/static/js/lcdash-admin-radio.js?v=20261016-radio"></script>
+<script src="/static/js/lcdash-admin-radio.js?v=20261017-radio2"></script>
 </div>
 {% endblock %}

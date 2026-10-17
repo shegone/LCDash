@@ -919,6 +919,9 @@ class AdminOnlyTests(_RouteCase):
         page = self.client.get("/mindshare/radio")
         self.assertEqual(page.status_code, 200)
         self.assertIn("Machine-generated transcripts. Unverified.", page.text)
+        # The page references its own script and stylesheet (cache-busted).
+        self.assertIn("/static/js/lcdash-admin-radio.js?v=20261017-radio2", page.text)
+        self.assertIn("/static/css/lcdash-admin-radio.css?v=20261017-radio2", page.text)
         reports = self.client.get("/reports")
         self.assertIn('href="/mindshare/radio"', reports.text)
         self.sign_in_as(_identity("s@911logan.com", "lcdash-pilot-supervisor"))
@@ -1264,8 +1267,45 @@ class SettingsAndAssetsTests(unittest.TestCase):
         script = (Path(__file__).resolve().parents[2]
                   / "static" / "js" / "lcdash-admin-radio.js").read_text(encoding="utf-8")
         self.assertNotIn("innerHTML", script)
+        self.assertNotIn("outerHTML", script)
         self.assertNotIn("insertAdjacentHTML", script)
+        self.assertNotIn("document.write", script)
         self.assertIn('preload = "none"', script)
+        # Server text is only ever assigned through textContent.
+        self.assertIn("textContent", script)
+
+    def test_page_template_has_channel_tabs_and_card_feed(self):
+        # The transcripts are a tabbed feed of cards (an <ol> built by the
+        # script), not a wide table: a table clipped the transcript and play
+        # columns off-screen at phone width.
+        template = (Path(__file__).resolve().parents[2]
+                    / "templates" / "mindshare_radio.html").read_text(encoding="utf-8")
+        self.assertIn('role="tablist"', template)
+        self.assertEqual(template.count('role="tab"'), 4)
+        for channel, label in (("", "All channels"), ("law", "Law"),
+                               ("ems", "EMS"), ("fire", "Fire")):
+            self.assertIn(f'data-channel="{channel}"', template)
+            self.assertIn(f'<span class="radio-tab-label">{label}</span>', template)
+        self.assertIn('id="radio-tab-all"', template)
+        self.assertIn('aria-selected="true"', template)
+        self.assertIn('id="radio-panels"', template)
+        self.assertNotIn("<table", template)
+        self.assertNotIn("<audio", template)
+        self.assertIn("Machine-generated transcripts. Unverified.", template)
+        script = (Path(__file__).resolve().parents[2]
+                  / "static" / "js" / "lcdash-admin-radio.js").read_text(encoding="utf-8")
+        for needle in ('"tabpanel"', '"ol"', "ArrowRight", "ArrowLeft", "new Audio()",
+                       "/api/radio/segments/", "(no speech recognized)", "Audio expired",
+                       "Low confidence", "LCDashSession"):
+            self.assertIn(needle, script)
+        # No native <audio controls> element and no modal dialogs (comments
+        # that merely mention them are not code).
+        code = "\n".join(
+            line for line in script.splitlines() if not line.strip().startswith("//")
+        )
+        self.assertNotIn('createElement("audio")', code)
+        self.assertNotIn("alert(", code)
+        self.assertNotIn("confirm(", code)
 
 
 if __name__ == "__main__":
