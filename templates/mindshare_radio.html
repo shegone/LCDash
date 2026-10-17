@@ -1,61 +1,124 @@
 {% extends "layouts/base.html" %}
 
-{% block title %}Mindshare Radio Intelligence | LCDash{% endblock %}
+{% block title %}Radio Intelligence | LCDash{% endblock %}
 
 {% block content %}
-<link rel="stylesheet" href="/static/css/lcdash-mindshare.css?v=20260726">
+<link rel="stylesheet" href="/static/css/lcdash-admin.css?v=20260809-admin-knowledge">
+<link rel="stylesheet" href="/static/css/lcdash-admin-radio.css?v=20261016-radio">
 
-<div class="command-safety-banner mb-4" role="note">
-    Roadmap only. No radio capture, transmission, recording, transcription, alerting, paging, or tone control is active.
+<div class="command-page">
+<div class="command-safety-banner radio-banner mb-4" role="note">
+    Machine-generated transcripts. Unverified. Do not act on them operationally.
 </div>
 
-<section class="mindshare-hero glass">
+<section class="radio-hero glass">
     <div>
-        <div class="mindshare-eyebrow">FUTURE LISTEN-ONLY SERVICE</div>
+        <div class="admin-eyebrow">MINDSHARE / LISTEN-ONLY</div>
         <h1>Radio Intelligence</h1>
         <p>
-            Multicast monitoring, speech-to-text, talkgroup activity, and
-            searchable radio transcripts will live here after the dedicated
-            radio-network interface and GPU node are installed.
+            Transcripts and audio of completed radio segments, captured by a
+            listen-only service and stored for review. Administrators only
+            while testing.
         </p>
     </div>
-    <div class="mindshare-badge">
-        <i class="bi bi-plug"></i> Not connected
+    <div class="admin-safety">
+        <i class="bi bi-shield-lock-fill" aria-hidden="true"></i>
+        <div><strong>Inquiry only</strong><span>Never transmits or changes any radio, CAD, or alert system</span></div>
     </div>
 </section>
 
-<div class="mindshare-roadmap">
-    <div class="glass">
-        <span>01</span>
-        <i class="bi bi-ethernet"></i>
-        <h3>Network capture</h3>
-        <p>Connect a dedicated NIC to the isolated Mindshare multicast network.</p>
+<section class="admin-panel glass mt-4" aria-labelledby="radio-stats-title">
+    <div class="admin-panel-header">
+        <div>
+            <div class="admin-eyebrow">LISTENER HEALTH</div>
+            <h2 id="radio-stats-title">Last 24 hours</h2>
+            <p>A quiet channel is normal. A listener that stopped sending is not: check the last segment received.</p>
+        </div>
     </div>
-    <div class="glass">
-        <span>02</span>
-        <i class="bi bi-soundwave"></i>
-        <h3>Audio validation</h3>
-        <p>Identify channel addresses, ports, codecs, packet loss, and talkgroup mapping.</p>
+    <div id="radio-stats" class="radio-stats" aria-live="polite">
+        <div class="admin-progress">
+            <div class="admin-progress-spinner" aria-hidden="true"></div>
+            <div><strong>Loading statistics&hellip;</strong></div>
+        </div>
     </div>
-    <div class="glass">
-        <span>03</span>
-        <i class="bi bi-mic-fill"></i>
-        <h3>Local transcription</h3>
-        <p>Use the planned RTX 3080 compute node for high-quality local speech recognition.</p>
-    </div>
-    <div class="glass">
-        <span>04</span>
-        <i class="bi bi-shield-check"></i>
-        <h3>Controlled access</h3>
-        <p>Apply separate permissions, retention rules, auditing, and supervisor-only search.</p>
-    </div>
-</div>
+    <div id="radio-stats-error" class="admin-error" hidden></div>
+</section>
 
-<div class="glass p-4 mt-4">
-    <h3 class="text-warning">No radio traffic is being captured</h3>
-    <p class="text-secondary mb-0">
-        This page is deliberately inactive. It does not connect to, transmit on,
-        record, or alter the Mindshare radio system.
+<section class="admin-panel glass mt-4" aria-labelledby="radio-segments-title">
+    <div class="admin-panel-header">
+        <div>
+            <div class="admin-eyebrow">SEGMENTS</div>
+            <h2 id="radio-segments-title">Transcripts</h2>
+            <p>Newest first. Opening this list and playing audio are both recorded in the audit log. Audio is kept 15 days, transcripts 30.</p>
+        </div>
+    </div>
+
+    <form id="radio-filter-form" class="radio-filters" role="search" aria-label="Filter radio segments">
+        <label>
+            <span>Channel</span>
+            <select id="radio-filter-channel">
+                <option value="">All channels</option>
+                <option value="law">law</option>
+                <option value="ems">ems</option>
+                <option value="fire">fire</option>
+            </select>
+        </label>
+        <label>
+            <span>Direction</span>
+            <select id="radio-filter-direction">
+                <option value="">Both</option>
+                <option value="rx">rx (received)</option>
+                <option value="tx">tx (transmitted)</option>
+            </select>
+        </label>
+        <label class="radio-filter-text">
+            <span>Transcript contains</span>
+            <input id="radio-filter-q" type="search" maxlength="200" autocomplete="off" placeholder="Search transcript text">
+        </label>
+        <button id="radio-filter-apply" type="submit">
+            <i class="bi bi-search" aria-hidden="true"></i> Apply
+        </button>
+    </form>
+
+    <div id="radio-loading" class="admin-progress" aria-live="polite">
+        <div class="admin-progress-spinner" aria-hidden="true"></div>
+        <div><strong>Loading segments&hellip;</strong></div>
+    </div>
+
+    <div id="radio-error" class="admin-error" role="alert" hidden></div>
+
+    <p id="radio-empty" class="admin-empty" hidden>
+        No segments match. Segments appear here after the listener finishes
+        transcribing them.
     </p>
+
+    <div id="radio-table-wrap" class="radio-table-wrap" hidden>
+        <table class="radio-table">
+            <caption class="visually-hidden">
+                Radio segments with time, channel, direction, duration, transcript, and audio
+            </caption>
+            <thead>
+                <tr>
+                    <th scope="col">Time</th>
+                    <th scope="col">Channel</th>
+                    <th scope="col">Dir</th>
+                    <th scope="col">Length</th>
+                    <th scope="col">Transcript</th>
+                    <th scope="col">Audio</th>
+                </tr>
+            </thead>
+            <tbody id="radio-tbody"></tbody>
+        </table>
+    </div>
+
+    <div class="radio-more">
+        <button id="radio-load-older" type="button" hidden>
+            <i class="bi bi-arrow-down-circle" aria-hidden="true"></i> Load older
+        </button>
+        <p id="radio-more-status" class="radio-more-status" aria-live="polite"></p>
+    </div>
+</section>
+
+<script src="/static/js/lcdash-admin-radio.js?v=20261016-radio"></script>
 </div>
 {% endblock %}

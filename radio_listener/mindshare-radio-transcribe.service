@@ -1,0 +1,27 @@
+[Unit]
+Description=Mindshare local radio transcription worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=administrator
+Group=administrator
+WorkingDirectory=/opt/mindshare-radio-capture
+Environment=PYTHONUNBUFFERED=1
+Environment=HF_HOME=/var/lib/mindshare-radio-capture/models
+Environment=HF_HUB_CACHE=/var/lib/mindshare-radio-capture/models
+Environment=HF_HUB_OFFLINE=1
+Environment=LD_LIBRARY_PATH=/opt/mindshare-radio-capture/.venv/lib/python3.12/site-packages/nvidia/cublas/lib:/opt/mindshare-radio-capture/.venv/lib/python3.12/site-packages/nvidia/cudnn/lib
+ExecStart=/opt/mindshare-radio-capture/.venv/bin/python /opt/mindshare-radio-capture/transcribe.py
+Restart=on-failure
+RestartSec=10
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/mindshare-radio-capture
+RestrictAddressFamilies=AF_UNIX AF_INET
+
+[Install]
+WantedBy=multi-user.target

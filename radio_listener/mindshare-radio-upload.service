@@ -1,0 +1,23 @@
+[Unit]
+Description=Mindshare radio segment uploader (signed, to LCDash)
+After=network-online.target mindshare-radio-transcribe.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=administrator
+Group=administrator
+WorkingDirectory=/opt/mindshare-radio-capture
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/mindshare-radio-capture/.venv/bin/python uploader.py --config config.json --upload-config upload_config.json
+Restart=on-failure
+RestartSec=10
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/mindshare-radio-capture
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

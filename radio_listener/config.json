@@ -1,0 +1,41 @@
+{
+  "capture_interface": "10.5.2.12",
+  "duration_seconds": 0,
+  "output_directory": "/var/lib/mindshare-radio-capture/data",
+  "max_channels": 24,
+  "segment_silence_seconds": 1.5,
+  "max_segment_seconds": 120,
+  "transcription": {
+    "model": "large-v3",
+    "device": "cuda",
+    "compute_type": "int8_float16",
+    "language": "en",
+    "beam_size": 5
+  },
+  "channels": [
+    {
+      "name": "law",
+      "group": "235.98.99.32",
+      "ports": {
+        "tx": 10032,
+        "rx": 12032
+      }
+    },
+    {
+      "name": "ems",
+      "group": "235.98.99.33",
+      "ports": {
+        "tx": 10033,
+        "rx": 12033
+      }
+    },
+    {
+      "name": "fire",
+      "group": "235.98.99.34",
+      "ports": {
+        "tx": 10034,
+        "rx": 12034
+      }
+    }
+  ]
+}

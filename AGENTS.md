@@ -59,7 +59,12 @@ and `docs/SERVER_DEPLOYMENT.md` describe the retired on-premises platform.
 
 - Address: `14.1.1.227`; hostname: `lcdash-server` (historical name).
 - Runs the Hermes containers (Ollama brain, ComfyUI media) and n8n for
-  Hermes. That is its only role.
+  Hermes, plus the Mindshare radio listener (decided 2026-10-16, see
+  `docs/MINDSHARE_RADIO_INGEST.md` and `radio_listener/`): three systemd
+  services under `/opt/mindshare-radio-capture` (listen-only multicast
+  capture, local faster-whisper transcription, and a signed uploader to the
+  AWS pilot). Its Ed25519 private key lives only there; AWS holds the public
+  key. Those are its only roles.
 - The stopped LCDash containers, images, and volumes on it are retained only
   until the owner retires them deliberately; they hold CAD-derived data and
   must not be started, deleted, or copied without explicit approval.

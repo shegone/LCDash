@@ -8,6 +8,8 @@ import re
 from queue import Queue
 from threading import Thread
 import secrets
+import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Annotated, Literal
@@ -15,6 +17,8 @@ from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, Response, UploadFile
 from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import UploadFile as StarletteUploadFile
+from starlette.formparsers import MultiPartException, MultiPartParser
 from pydantic import BaseModel, Field
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
@@ -32,6 +36,14 @@ from app.services.pilot_access_service import PilotAccessError, PilotAccessServi
 from app.services.knowledge_upload_service import (
     KnowledgeUploadError,
     KnowledgeUploadService,
+)
+from app.services import radio_service
+from app.services.radio_service import (
+    RadioIngestError,
+    RadioNotFoundError,
+    RadioQueryError,
+    RadioService,
+    RadioServiceError,
 )
 from app.core.county_branding import branding_for_tenant_context
 from app.core.tenancy import TenantContext
@@ -1420,6 +1432,239 @@ def admin_knowledge_sync_api(request: Request):
         detail = str(exc)
         status = 409 if "already running" in detail else 400
         raise HTTPException(status_code=status, detail=detail) from exc
+
+
+# ---------------------------------------------------------------------------
+# Mindshare Radio Intelligence (docs/MINDSHARE_RADIO_INGEST.md)
+#
+# One machine route and four admin routes. The ingest route is NOT behind
+# Cognito (an ALB listener rule lets exactly POST /api/radio/ingest through),
+# so this app is its only authenticator: an Ed25519 signature checked against
+# the public key in settings. It never looks at identity headers. Every other
+# radio route is admin-only and answers non-admins with the uniform 403.
+# Inquiry-only: nothing here writes to CAD, radio, paging, or any alert.
+# ---------------------------------------------------------------------------
+
+_radio_service_instance: RadioService | None = None
+_radio_service_lock = threading.Lock()
+
+
+def _radio_service() -> RadioService:
+    """The process-wide radio service (schema-once and purge throttle live in it)."""
+    global _radio_service_instance
+    with _radio_service_lock:
+        if _radio_service_instance is None:
+            _radio_service_instance = RadioService(
+                bucket=settings.radio_bucket,
+                audio_prefix=settings.radio_audio_prefix,
+            )
+        return _radio_service_instance
+
+
+class _RadioBodyTooLarge(Exception):
+    pass
+
+
+def _radio_ingest_refusal(error: RadioIngestError) -> HTTPException:
+    headers = (
+        {"WWW-Authenticate": 'Signature realm="LCDash Radio Ingest"'}
+        if error.status_code == 401
+        else None
+    )
+    return HTTPException(
+        status_code=error.status_code, detail=error.detail, headers=headers
+    )
+
+
+async def _read_radio_part(part, limit: int, label: str) -> bytes:
+    if isinstance(part, StarletteUploadFile):
+        data = await part.read()
+    else:
+        data = str(part).encode("utf-8")
+    if len(data) > limit:
+        raise HTTPException(status_code=413, detail=f"{label} part is too large.")
+    return data
+
+
+@app.post("/api/radio/ingest")
+async def receive_radio_segment(request: Request):
+    # Deliberately NOT disabled in synthetic-disconnected mode: the pilot is
+    # synthetic-disconnected from CAD, and this feed is not CAD.
+    public_key_b64 = settings.radio_ingest_public_key
+    if not public_key_b64:
+        raise HTTPException(status_code=503, detail="Radio ingest is not configured.")
+    try:
+        public_key = radio_service.load_public_key(public_key_b64)
+    except RadioServiceError as exc:
+        logger.error("Radio ingest public key is configured but unusable.")
+        raise HTTPException(
+            status_code=503, detail="Radio ingest is not configured."
+        ) from exc
+
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            declared = int(content_length)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400, detail="Invalid Content-Length header."
+            ) from exc
+        if declared > radio_service.MAX_REQUEST_BYTES:
+            raise HTTPException(status_code=413, detail="Request is too large.")
+
+    try:
+        timestamp = radio_service.parse_timestamp(
+            request.headers.get("x-radio-timestamp"), now=time.time()
+        )
+    except RadioIngestError as exc:
+        raise _radio_ingest_refusal(exc) from exc
+    signature_b64 = request.headers.get("x-radio-signature")
+    if not signature_b64:
+        raise _radio_ingest_refusal(RadioIngestError(401, "Signature verification failed."))
+
+    content_type = str(request.headers.get("content-type") or "").lower()
+    if not content_type.startswith("multipart/form-data"):
+        raise HTTPException(status_code=400, detail="Request must be multipart/form-data.")
+
+    async def capped_stream():
+        total = 0
+        async for chunk in request.stream():
+            total += len(chunk)
+            if total > radio_service.MAX_REQUEST_BYTES:
+                raise _RadioBodyTooLarge()
+            yield chunk
+
+    parser = MultiPartParser(
+        request.headers,
+        capped_stream(),
+        max_files=2,
+        max_fields=2,
+        max_part_size=radio_service.MAX_METADATA_BYTES,
+    )
+    try:
+        form = await parser.parse()
+    except _RadioBodyTooLarge as exc:
+        raise HTTPException(status_code=413, detail="Request is too large.") from exc
+    except MultiPartException as exc:
+        too_large = "exceeded maximum size" in str(exc.message)
+        raise HTTPException(
+            status_code=413 if too_large else 400,
+            detail="Part is too large." if too_large else "Malformed multipart body.",
+        ) from exc
+
+    try:
+        names = sorted(name for name, _value in form.multi_items())
+        if names != ["audio", "metadata"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Request must contain exactly the metadata and audio parts.",
+            )
+        metadata = await _read_radio_part(
+            form["metadata"], radio_service.MAX_METADATA_BYTES, "Metadata"
+        )
+        if not isinstance(form["audio"], StarletteUploadFile):
+            raise HTTPException(
+                status_code=400, detail="The audio part must be sent as a file."
+            )
+        audio = await _read_radio_part(
+            form["audio"], radio_service.MAX_AUDIO_BYTES, "Audio"
+        )
+    finally:
+        await form.close()
+
+    # Signature first: nothing past segment_id is trusted or parsed until the
+    # bytes are proven to come from the listener.
+    try:
+        segment_id = radio_service.extract_segment_id(metadata)
+        radio_service.verify_signature(
+            public_key,
+            timestamp=timestamp,
+            signature_b64=signature_b64,
+            segment_id=segment_id,
+            audio=audio,
+            metadata=metadata,
+        )
+        record = radio_service.validate_metadata(metadata)
+        radio_service.validate_wav(audio)
+    except RadioIngestError as exc:
+        raise _radio_ingest_refusal(exc) from exc
+
+    try:
+        status = await asyncio.to_thread(_radio_service().ingest, record, audio)
+    except RadioServiceError as exc:
+        raise HTTPException(
+            status_code=503, detail="Radio storage is unavailable."
+        ) from exc
+
+    return JSONResponse(
+        {"status": status, "segment_id": record.segment_id},
+        status_code=201 if status == "created" else 200,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/radio/segments")
+def radio_segments_api(
+    request: Request,
+    channel: str = "",
+    direction: str = "",
+    q: str = "",
+    before: str = "",
+    limit: str = "",
+):
+    # Every query parameter is a plain string on purpose: typed parameters
+    # would be validated (422) before the admin gate, letting a non-admin
+    # tell routes apart. The service validates them after the gate.
+    _require_pilot_admin(request)
+    actor = _authenticated_user_email(request)
+    try:
+        payload = _radio_service().list_segments(
+            actor=actor, channel=channel, direction=direction, q=q,
+            before=before, limit=limit,
+        )
+    except RadioQueryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RadioServiceError as exc:
+        raise HTTPException(
+            status_code=503, detail="Radio transcripts are unavailable."
+        ) from exc
+    return JSONResponse(payload, headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/api/radio/segments/{segment_id}/audio")
+def radio_segment_audio_api(segment_id: str, request: Request):
+    _require_pilot_admin(request)
+    actor = _authenticated_user_email(request)
+    try:
+        audio = _radio_service().fetch_audio(segment_id, actor=actor)
+    except RadioNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RadioServiceError as exc:
+        # Includes a failed audit write: no audit record, no audio.
+        raise HTTPException(
+            status_code=503, detail="Radio audio is unavailable."
+        ) from exc
+    return Response(
+        content=audio,
+        media_type="audio/wav",
+        headers={
+            "Content-Length": str(len(audio)),
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@app.get("/api/radio/stats")
+def radio_stats_api(request: Request):
+    _require_pilot_admin(request)
+    try:
+        payload = _radio_service().stats()
+    except RadioServiceError as exc:
+        raise HTTPException(
+            status_code=503, detail="Radio statistics are unavailable."
+        ) from exc
+    return JSONResponse(payload, headers={"Cache-Control": "private, no-store"})
 
 
 def _alb_user_tenant_context(request: Request | None) -> TenantContext | None:
@@ -2929,6 +3174,7 @@ def mindshare_coverage_page(request: Request):
 
 @app.get("/mindshare/radio")
 def mindshare_radio_page(request: Request):
+    _require_pilot_admin(request)
     return templates.TemplateResponse(
         request=request,
         name="mindshare_radio.html",

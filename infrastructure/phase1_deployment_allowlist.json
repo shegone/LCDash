@@ -130,7 +130,7 @@
       "AWS::ECS::Service": 1,
       "AWS::ECS::TaskDefinition": 2,
       "AWS::ElasticLoadBalancingV2::Listener": 2,
-      "AWS::ElasticLoadBalancingV2::ListenerRule": 1,
+      "AWS::ElasticLoadBalancingV2::ListenerRule": 2,
       "AWS::ElasticLoadBalancingV2::LoadBalancer": 1,
       "AWS::ElasticLoadBalancingV2::TargetGroup": 1,
       "AWS::Events::Rule": 1,
@@ -182,8 +182,18 @@
   ],
   "listener_rule_exception": {
     "granted": "2026-08-14",
-    "reason": "ListenerRule left prohibited_resource_types when AWS became the authoritative platform. The all-paths-authenticate rule broke first login: background requests (service worker, manifest, favicon) each restarted the ALB auth flow and clobbered the AWSALBAuthNonce the real login depended on, so every session's first Cognito callback got a 401. Exactly one rule is permitted, forwarding only the static secret-free paths in lcdash_pilot/config.py ALB_UNAUTHENTICATED_PATHS without authentication; test_cdk_template.py pins the count and the paths.",
-    "approved_by": "Ted Sparks"
+    "reason": "ListenerRule left prohibited_resource_types when AWS became the authoritative platform. The all-paths-authenticate rule broke first login: background requests (service worker, manifest, favicon) each restarted the ALB auth flow and clobbered the AWSALBAuthNonce the real login depended on, so every session's first Cognito callback got a 401. Rule 1 (priority 5) forwards only the static secret-free paths in lcdash_pilot/config.py ALB_UNAUTHENTICATED_PATHS without authentication. Since 2026-10-16 exactly TWO rules are permitted: rule 1, and rule 2 (priority 6), the signed machine-ingest POST path in lcdash_pilot/config.py ALB_MACHINE_INGEST_PATH (see additional_grants); test_cdk_template.py pins the count, both rules' exact conditions, and that no other path or method skips authentication.",
+    "approved_by": "Ted Sparks",
+    "additional_grants": [
+      {
+        "granted": "2026-10-16",
+        "approved_by": "Ted Sparks",
+        "approval": "chat approval 2026-10-16",
+        "rule": "SignedMachineIngest, priority 6",
+        "scope": "path exactly /api/radio/ingest AND method POST; forward to the web target group only; no Cognito action, no wildcard, no other path or method",
+        "reason": "The Mindshare radio listener on .227 posts signed audio and transcript segments (docs/MINDSHARE_RADIO_INGEST.md) and cannot complete a browser Cognito sign-in. The application authenticates the request itself: Ed25519 signature over the segment id and the audio and metadata hashes, a 300-second timestamp window, and HTTP 503 with nothing accepted when LCDASH_RADIO_INGEST_PUBLIC_KEY is empty. The endpoint is inbound and inquiry-only: it stores a WAV under radio/audio/ (15-day lifecycle) and a transcript row, and never writes to CAD, radio, paging, or any operational output. This is an inbound signed data push, not a CentralSquare or vendor webhook and not an operational output."
+      }
+    ]
   },
   "sns_alerts_exception": {
     "granted": "2026-09-14",
@@ -194,7 +204,7 @@
     "resources outside 862772137583/us-east-1",
     "any stack other than the two listed application stacks",
     "live CAD endpoints or credentials",
-    "webhooks, subscriptions, acknowledgements, paging, station alerts, EMS delivery, public warning, or operational outputs",
+    "webhooks, subscriptions, acknowledgements, paging, station alerts, EMS delivery, public warning, or operational outputs (the single signed inbound radio-ingest POST in listener_rule_exception.additional_grants is an inbound data push, not a webhook subscription or an operational output, and is the only machine endpoint permitted)",
     "identity pools, guest access, browser AWS credentials, social login, or real users",
     "Route 53 zones or records",
     "NAT gateways, autoscaling, replicas, backups, or recovery resources",

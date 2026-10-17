@@ -686,39 +686,55 @@ class CdkTemplateTests(unittest.TestCase):
         )
 
     def test_only_the_approved_asset_paths_skip_authentication(self):
-        """Exactly one listener rule exists, and it bypasses Cognito only for
-        the static, secret-free paths in ALB_UNAUTHENTICATED_PATHS.
+        """Exactly two listener rules exist, and only they bypass Cognito.
 
-        Those background requests (service worker, manifest, favicon) fire
-        while the user is still on the login page; when they authenticated,
-        each one restarted the ALB auth flow and clobbered the AWSALBAuthNonce
-        cookie, so the first Cognito callback of every session got a 401. The
-        bypass is the fix -- and this test is the guardrail that replaced the
-        old "zero listener rules" assertion: broadening the list, adding a
-        second rule, or attaching an authenticate action here must fail synth
-        tests before it reaches a change set.
+        Rule 1 (priority 5) forwards the static, secret-free paths in
+        ALB_UNAUTHENTICATED_PATHS. Those background requests (service worker,
+        manifest, favicon) fire while the user is still on the login page; when
+        they authenticated, each one restarted the ALB auth flow and clobbered
+        the AWSALBAuthNonce cookie, so the first Cognito callback of every
+        session got a 401.
+
+        Rule 2 (priority 6, added 2026-10-16) forwards POST
+        ALB_MACHINE_INGEST_PATH for the signed Mindshare radio listener; the
+        application verifies an Ed25519 signature itself.
+
+        This test is the guardrail: broadening either list, adding a third
+        rule, widening the ingest rule to another method or a wildcard, or
+        attaching an authenticate action to either rule must fail synth tests
+        before it reaches a change set.
         """
-        from lcdash_pilot.config import ALB_UNAUTHENTICATED_PATHS
+        from lcdash_pilot.config import (
+            ALB_MACHINE_INGEST_PATH,
+            ALB_UNAUTHENTICATED_PATHS,
+        )
 
         self.template.resource_count_is(
             "AWS::ElasticLoadBalancingV2::ListenerRule",
-            1,
+            2,
         )
-        rule = next(
-            resource["Properties"]
-            for resource in self.template.to_json()["Resources"].values()
-            if resource["Type"] == "AWS::ElasticLoadBalancingV2::ListenerRule"
+        rules = sorted(
+            (
+                resource["Properties"]
+                for resource in self.template.to_json()["Resources"].values()
+                if resource["Type"] == "AWS::ElasticLoadBalancingV2::ListenerRule"
+            ),
+            key=lambda properties: properties["Priority"],
         )
+        self.assertEqual([rule["Priority"] for rule in rules], [5, 6])
+        asset_rule, ingest_rule = rules
+
+        # Rule 1: unchanged.
         self.assertEqual(
-            [action["Type"] for action in rule["Actions"]],
+            [action["Type"] for action in asset_rule["Actions"]],
             ["forward"],
             "The asset bypass must forward only -- never authenticate, "
             "redirect, or fixed-response",
         )
-        self.assertEqual(len(rule["Conditions"]), 1)
-        self.assertEqual(rule["Conditions"][0]["Field"], "path-pattern")
+        self.assertEqual(len(asset_rule["Conditions"]), 1)
+        self.assertEqual(asset_rule["Conditions"][0]["Field"], "path-pattern")
         self.assertEqual(
-            sorted(rule["Conditions"][0]["PathPatternConfig"]["Values"]),
+            sorted(asset_rule["Conditions"][0]["PathPatternConfig"]["Values"]),
             sorted(ALB_UNAUTHENTICATED_PATHS),
             "The bypassed paths must match ALB_UNAUTHENTICATED_PATHS exactly",
         )
@@ -728,6 +744,191 @@ class CdkTemplateTests(unittest.TestCase):
                 path,
                 "Bypassed paths must be exact files, never wildcards",
             )
+
+        # Rule 2: exactly one more, POST-only, one exact path, forward-only.
+        self.assertEqual(ALB_MACHINE_INGEST_PATH, "/api/radio/ingest")
+        self.assertNotIn("*", ALB_MACHINE_INGEST_PATH)
+        self.assertNotIn("?", ALB_MACHINE_INGEST_PATH)
+        self.assertEqual(
+            [action["Type"] for action in ingest_rule["Actions"]],
+            ["forward"],
+            "The machine-ingest rule must forward only -- never authenticate, "
+            "redirect, or fixed-response",
+        )
+        self.assertEqual(
+            asset_rule["Actions"][0]["TargetGroupArn"],
+            ingest_rule["Actions"][0]["TargetGroupArn"],
+            "Both bypass rules must forward to the same web target group",
+        )
+        conditions = {
+            condition["Field"]: condition for condition in ingest_rule["Conditions"]
+        }
+        self.assertEqual(
+            set(conditions),
+            {"path-pattern", "http-request-method"},
+            "The ingest rule must be constrained by path AND method only",
+        )
+        self.assertEqual(len(ingest_rule["Conditions"]), 2)
+        self.assertEqual(
+            conditions["path-pattern"]["PathPatternConfig"]["Values"],
+            [ALB_MACHINE_INGEST_PATH],
+        )
+        self.assertEqual(
+            conditions["http-request-method"]["HttpRequestMethodConfig"]["Values"],
+            ["POST"],
+        )
+
+        # Nothing else skips authentication: every bypassed pattern across
+        # both rules is accounted for, and the listener default action stays
+        # Cognito authenticate-then-forward.
+        bypassed = {
+            value
+            for rule in rules
+            for condition in rule["Conditions"]
+            if condition["Field"] == "path-pattern"
+            for value in condition["PathPatternConfig"]["Values"]
+        }
+        self.assertEqual(
+            bypassed,
+            set(ALB_UNAUTHENTICATED_PATHS) | {ALB_MACHINE_INGEST_PATH},
+        )
+        https = next(
+            resource["Properties"]
+            for resource in self.template.to_json()["Resources"].values()
+            if resource["Type"] == "AWS::ElasticLoadBalancingV2::Listener"
+            and resource["Properties"]["Port"] == 443
+        )
+        self.assertEqual(
+            [action["Type"] for action in https["DefaultActions"]],
+            ["authenticate-cognito", "forward"],
+        )
+
+    def test_content_bucket_expires_radio_audio_after_fifteen_days(self):
+        """Radio audio is kept 15 days (decision of 2026-10-16), on a prefix
+        of the existing content bucket. No new bucket, key, or encryption
+        change; the pre-existing report rule must be untouched."""
+        resources = self.template.to_json()["Resources"]
+        content = next(
+            resource["Properties"]
+            for resource in resources.values()
+            if resource["Type"] == "AWS::S3::Bucket"
+            and "-content" in str(resource["Properties"].get("BucketName"))
+        )
+        rules = {
+            rule["Id"]: rule for rule in content["LifecycleConfiguration"]["Rules"]
+        }
+        self.assertEqual(
+            set(rules), {"ExpireShortLivedReports", "RadioAudioExpiry15Days"}
+        )
+        radio = rules["RadioAudioExpiry15Days"]
+        self.assertEqual(radio["Prefix"], "radio/audio/")
+        self.assertEqual(radio["ExpirationInDays"], 15)
+        self.assertEqual(radio["Status"], "Enabled")
+        reports = rules["ExpireShortLivedReports"]
+        self.assertEqual(reports["Prefix"], "logan-synthetic/reports/")
+        self.assertEqual(reports["ExpirationInDays"], 7)
+        # Still S3-managed encryption, no KMS, and still exactly two buckets.
+        sse = content["BucketEncryption"]["ServerSideEncryptionConfiguration"]
+        self.assertEqual(
+            [
+                item["ServerSideEncryptionByDefault"]["SSEAlgorithm"]
+                for item in sse
+            ],
+            ["AES256"],
+        )
+        self.template.resource_count_is("AWS::S3::Bucket", 2)
+        self.template.resource_count_is("AWS::KMS::Key", 0)
+
+    def test_task_role_may_only_get_and_put_radio_audio_objects(self):
+        resources = self.template.to_json()["Resources"]
+        radio_statements = []
+        for resource in resources.values():
+            if resource["Type"] != "AWS::IAM::Policy":
+                continue
+            roles = [role.get("Ref", "") for role in resource["Properties"]["Roles"]]
+            if not any(role.startswith("ApplicationTaskRole") for role in roles):
+                continue
+            for statement in resource["Properties"]["PolicyDocument"]["Statement"]:
+                serialized = str(statement["Resource"])
+                if "radio/audio/" in serialized:
+                    radio_statements.append(statement)
+        self.assertEqual(len(radio_statements), 1)
+        statement = radio_statements[0]
+        self.assertEqual(statement["Effect"], "Allow")
+        self.assertEqual(
+            sorted(statement["Action"]), ["s3:GetObject", "s3:PutObject"]
+        )
+        self.assertNotIn("Condition", statement)
+        # Exactly one resource: <content bucket arn>/radio/audio/*.
+        resource_value = statement["Resource"]
+        self.assertIsInstance(resource_value, dict)
+        join_parts = resource_value["Fn::Join"][1]
+        self.assertEqual(join_parts[-1], "/radio/audio/*")
+        self.assertIn("ContentBucket", str(join_parts[0]))
+        # The only other radio-scoped statement is ListBucket, pinned to the
+        # radio prefix (so an expired object reads as NoSuchKey, not
+        # AccessDenied). No grant reaches the prefix with Delete, and
+        # nothing bucket-wide was added.
+        list_statements = []
+        for resource in resources.values():
+            if resource["Type"] != "AWS::IAM::Policy":
+                continue
+            for item in resource["Properties"]["PolicyDocument"]["Statement"]:
+                if "radio" in str(item.get("Condition", "")):
+                    list_statements.append(item)
+                actions = item["Action"]
+                actions = [actions] if isinstance(actions, str) else actions
+                if "radio/audio/" in str(item.get("Resource", "")):
+                    self.assertNotIn("s3:DeleteObject", actions)
+        self.assertEqual(len(list_statements), 1)
+        listing = list_statements[0]
+        self.assertEqual(listing["Effect"], "Allow")
+        self.assertEqual(listing["Action"], "s3:ListBucket")
+        self.assertEqual(
+            listing["Condition"], {"StringLike": {"s3:prefix": ["radio/audio/*"]}}
+        )
+        self.assertIn("ContentBucket", str(listing["Resource"]))
+
+    def test_radio_ingest_environment_is_plain_and_secret_free(self):
+        from lcdash_pilot.config import RADIO_INGEST_PUBLIC_KEY
+
+        template = self.template.to_json()
+        task = next(
+            resource
+            for resource in template["Resources"].values()
+            if resource["Type"] == "AWS::ECS::TaskDefinition"
+            and any(
+                container["Name"] == "Web"
+                for container in resource["Properties"]["ContainerDefinitions"]
+            )
+        )
+        web = next(
+            container
+            for container in task["Properties"]["ContainerDefinitions"]
+            if container["Name"] == "Web"
+        )
+        environment = {item["Name"]: item["Value"] for item in web["Environment"]}
+        self.assertEqual(
+            environment["LCDASH_RADIO_INGEST_PUBLIC_KEY"], RADIO_INGEST_PUBLIC_KEY
+        )
+        # Raw 32-byte Ed25519 public key, base64 (not a secret).
+        import base64
+
+        self.assertEqual(len(base64.b64decode(RADIO_INGEST_PUBLIC_KEY)), 32)
+        self.assertEqual(environment["LCDASH_RADIO_AUDIO_PREFIX"], "radio/audio/")
+        # The bucket is a reference to this stack's own content bucket.
+        bucket_logical_id = next(
+            name
+            for name, resource in template["Resources"].items()
+            if resource["Type"] == "AWS::S3::Bucket"
+            and "-content" in str(resource["Properties"].get("BucketName"))
+        )
+        self.assertEqual(
+            environment["LCDASH_RADIO_BUCKET"], {"Ref": bucket_logical_id}
+        )
+        # Nothing radio-related arrives through the Secrets channel.
+        secret_names = {item["Name"] for item in web.get("Secrets", [])}
+        self.assertFalse([name for name in secret_names if "RADIO" in name])
 
     def test_tenant_binding_is_fixed_in_task_not_a_parameter(self):
         template = self.template.to_json()

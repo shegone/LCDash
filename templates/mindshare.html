@@ -20,7 +20,7 @@
         <div class="mindshare-eyebrow">LOGAN COUNTY RADIO TECHNOLOGY</div>
         <h1>Mindshare Operations</h1>
         <p>
-            Technical knowledge and future radio intelligence are intentionally
+            Technical knowledge and radio intelligence are intentionally
             separated so each can receive its own users and permissions.
         </p>
     </div>
@@ -54,16 +54,30 @@
         <span>View library <i class="bi bi-arrow-right"></i></span>
     </a>
 
-    <a class="mindshare-module glass is-planned" href="/mindshare/radio">
+    {% if pilot_identity_badge(request).role == "admin" %}
+    <a class="mindshare-module glass" href="/mindshare/radio">
         <div class="mindshare-module-icon"><i class="bi bi-soundwave"></i></div>
-        <div class="mindshare-module-state">FUTURE MODULE</div>
+        <div class="mindshare-module-state">ADMIN TESTING</div>
         <h2>Radio Intelligence</h2>
         <p>
-            A separate listen-only multicast audio, transcription, and radio
-            activity area. It remains inactive until the radio NIC is connected.
+            A separate listen-only area for machine-generated radio
+            transcripts and audio. It never transmits and is kept apart from
+            the technical assistant.
         </p>
-        <span>View roadmap <i class="bi bi-arrow-right"></i></span>
+        <span>Open transcripts <i class="bi bi-arrow-right"></i></span>
     </a>
+    {% else %}
+    <div class="mindshare-module glass is-planned" aria-disabled="true">
+        <div class="mindshare-module-icon"><i class="bi bi-soundwave"></i></div>
+        <div class="mindshare-module-state">ADMIN ONLY</div>
+        <h2>Radio Intelligence</h2>
+        <p>
+            A separate listen-only area for machine-generated radio
+            transcripts and audio. Available to administrators while it is
+            being tested.
+        </p>
+    </div>
+    {% endif %}
 
     <a class="mindshare-module glass" href="/mindshare/reliability">
         <div class="mindshare-module-icon"><i class="bi bi-shield-check"></i></div>

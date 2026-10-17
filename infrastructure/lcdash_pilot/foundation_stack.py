@@ -28,12 +28,16 @@ from constructs import Construct
 
 from .config import (
     ALB_SESSION_COOKIE_NAME,
+    ALB_MACHINE_INGEST_PATH,
     ALB_UNAUTHENTICATED_PATHS,
     APPROVED_REGION,
     NAME_PREFIX,
     PILOT_DOMAIN_NAME,
     PILOT_MAIL_DOMAIN,
     PILOT_MAIL_FROM_ADDRESS,
+    RADIO_AUDIO_PREFIX,
+    RADIO_AUDIO_RETENTION_DAYS,
+    RADIO_INGEST_PUBLIC_KEY,
 )
 
 
@@ -130,7 +134,16 @@ class Phase1FoundationStack(cdk.Stack):
                     id="ExpireShortLivedReports",
                     prefix="logan-synthetic/reports/",
                     expiration=cdk.Duration.days(7),
-                )
+                ),
+                # Mindshare radio audio (docs/MINDSHARE_RADIO_INGEST.md): kept
+                # 15 days by decision of 2026-10-16, then gone. Also removes any
+                # orphan object left by a crash between the S3 put and the row
+                # insert.
+                s3.LifecycleRule(
+                    id="RadioAudioExpiry15Days",
+                    prefix=RADIO_AUDIO_PREFIX,
+                    expiration=cdk.Duration.days(RADIO_AUDIO_RETENTION_DAYS),
+                ),
             ],
             removal_policy=cdk.RemovalPolicy.DESTROY,
             auto_delete_objects=True,
@@ -261,6 +274,11 @@ class Phase1FoundationStack(cdk.Stack):
                 # tool-calling onto a weaker model.
                 "LCDASH_CLOUD_AI_TOOL_CALLING_ENABLED": "true",
                 "LCDASH_CLOUD_AI_TOOL_MODEL_ID": "us.amazon.nova-pro-v1:0",
+                # Mindshare Radio Intelligence ingest. The public key is not a
+                # secret; the app answers 503 on the ingest route if it is empty.
+                "LCDASH_RADIO_INGEST_PUBLIC_KEY": RADIO_INGEST_PUBLIC_KEY,
+                "LCDASH_RADIO_BUCKET": content_bucket.bucket_name,
+                "LCDASH_RADIO_AUDIO_PREFIX": RADIO_AUDIO_PREFIX,
                 "EMS_DELAY_ALERT_ENABLED": "false",
                 "EMS_DELAY_ALERT_MODE": "disabled",
                 "NGA911_PROVIDER_MODE": "mock",
@@ -680,7 +698,8 @@ class Phase1FoundationStack(cdk.Stack):
         # authenticates. The allowlist now permits ListenerRule for exactly
         # this purpose; test_cdk_template.py pins the rule count to one and
         # the path list to the constant, so any quiet broadening fails synth
-        # tests before it reaches a change set.
+        # tests before it reaches a change set. (Since 2026-10-16 there are
+        # two rules; this first one is unchanged and the second is below.)
         #
         # AWS's suggested unauthenticated LOGOUT landing page remains
         # rejected: sign-out still lands on the application root, where the
@@ -701,6 +720,25 @@ class Phase1FoundationStack(cdk.Stack):
                 elbv2.ListenerCondition.path_patterns(
                     list(ALB_UNAUTHENTICATED_PATHS)
                 )
+            ],
+            action=elbv2.ListenerAction.forward([target_group]),
+        )
+        # Second and last deliberate exception (approved 2026-10-16): the
+        # Mindshare radio listener on .227 posts signed audio segments to
+        # ALB_MACHINE_INGEST_PATH. It cannot complete a browser sign-in, so the
+        # ALB forwards this one exact path, POST only, without the Cognito
+        # action; the application authenticates it itself with an Ed25519
+        # signature and a 300-second timestamp window, and answers 503 when no
+        # public key is configured. No wildcard, no other method, no other
+        # path (test_cdk_template.py pins all three).
+        elbv2.ApplicationListenerRule(
+            self,
+            "SignedMachineIngest",
+            listener=https_listener,
+            priority=6,
+            conditions=[
+                elbv2.ListenerCondition.path_patterns([ALB_MACHINE_INGEST_PATH]),
+                elbv2.ListenerCondition.http_request_methods(["POST"]),
             ],
             action=elbv2.ListenerAction.forward([target_group]),
         )
@@ -747,6 +785,7 @@ class Phase1FoundationStack(cdk.Stack):
         )
 
         self._grant_content_access(task_role, content_bucket)
+        self._grant_radio_audio_access(task_role, content_bucket)
         self._grant_document_library_read(task_role)
         self._grant_pilot_access_administration(task_role, user_pool)
         self._grant_knowledge_uploads(
@@ -1264,6 +1303,28 @@ class Phase1FoundationStack(cdk.Stack):
             iam.PolicyStatement(
                 actions=["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
                 resources=[bucket.arn_for_objects("logan-synthetic/reports/*")],
+            )
+        )
+
+    def _grant_radio_audio_access(self, role: iam.Role, bucket: s3.Bucket) -> None:
+        """Radio ingest stores a WAV and the admin player streams it back.
+
+        Put and Get on the radio audio prefix only, plus ListBucket limited to
+        that prefix: without it S3 answers AccessDenied instead of NoSuchKey
+        for an expired object, and the player could not say "audio expired".
+        Deliberately absent: Delete (the 15-day lifecycle rule owns removal).
+        """
+        role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["s3:ListBucket"],
+                resources=[bucket.bucket_arn],
+                conditions={"StringLike": {"s3:prefix": [f"{RADIO_AUDIO_PREFIX}*"]}},
+            )
+        )
+        role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["s3:GetObject", "s3:PutObject"],
+                resources=[bucket.arn_for_objects(f"{RADIO_AUDIO_PREFIX}*")],
             )
         )
 

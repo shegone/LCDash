@@ -45,6 +45,25 @@ ALB_UNAUTHENTICATED_PATHS = (
     "/favicon.ico",
 )
 
+# The one machine-to-machine path the HTTPS listener serves WITHOUT Cognito, and
+# only for POST. The Mindshare radio listener on .227 cannot sign in through a
+# browser flow, so it posts each segment here signed with an Ed25519 key; the
+# application verifies that signature itself and answers 503 when no public key
+# is configured (docs/MINDSHARE_RADIO_INGEST.md). Exact path, never a wildcard.
+# Approved by Ted Sparks 2026-10-16 (see listener_rule_exception in
+# phase1_deployment_allowlist.json).
+ALB_MACHINE_INGEST_PATH = "/api/radio/ingest"
+
+# Raw 32-byte Ed25519 PUBLIC key, base64. Not a secret (the private half lives
+# only on .227, /opt/mindshare-radio-capture/keys). The golden-vector key from
+# the ingest contract is a published test key and must never be configured here.
+RADIO_INGEST_PUBLIC_KEY = "sZTJKqLKu34SpH5JMwyvydrw6wXlq1zc9fp66aTgJfk="
+
+# Where the radio audio lands in the content bucket; a 15-day lifecycle rule
+# expires this prefix and the task role may touch only this prefix.
+RADIO_AUDIO_PREFIX = "radio/audio/"
+RADIO_AUDIO_RETENTION_DAYS = 15
+
 # Hostname serving Cognito managed login. Kept on our own domain rather than the
 # Cognito prefix domain for two reasons: a county-owned hostname is what users
 # should be asked to trust with a password, and WebAuthn passkeys bind to a

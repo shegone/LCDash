@@ -64,6 +64,10 @@ class OfflinePolicyTests(unittest.TestCase):
             "cad_secret_count": 0,
             "collector_count": 0,
             "webhook_count": 0,
+            # 2026-10-16: one inbound, signature-authenticated radio ingest
+            # POST (not a webhook subscription, not an operational output).
+            "signed_machine_ingest_endpoint_count": 1,
+            "signed_machine_ingest_path": "/api/radio/ingest",
             "operational_output_count": 0,
         }
         for key, value in expected.items():

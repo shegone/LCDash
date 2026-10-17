@@ -212,6 +212,19 @@ class Settings:
         "LCDASH_KNOWLEDGE_UPLOAD_JACK_PREFIX",
         "tenants/logan-synthetic/document-library/jack-uploads/mindshare/current/",
     ).strip()
+    # Mindshare Radio Intelligence ingest (docs/MINDSHARE_RADIO_INGEST.md).
+    # The public key is NOT a secret: it is the base64 raw 32-byte Ed25519
+    # public key whose private half lives only on the listener host. Blank
+    # means the ingest route answers 503 and accepts nothing. The audio
+    # prefix is covered by a 15-day S3 lifecycle rule in the content bucket.
+    radio_ingest_public_key: str = _env("LCDASH_RADIO_INGEST_PUBLIC_KEY").strip()
+    radio_bucket: str = _env(
+        "LCDASH_RADIO_BUCKET",
+        "lcdash-p1-logan-use1-862772137583-content",
+    ).strip()
+    radio_audio_prefix: str = _env(
+        "LCDASH_RADIO_AUDIO_PREFIX", "radio/audio/"
+    ).strip()
     cloud_ai_polly_voice: str = _env(
         "LCDASH_CLOUD_AI_POLLY_VOICE", "Ruth"
     ).strip()

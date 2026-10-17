@@ -1,0 +1,13 @@
+{
+  "endpoint": "https://aws.logan911.com/api/radio/ingest",
+  "private_key": "/opt/mindshare-radio-capture/keys/ingest_ed25519.pem",
+  "poll_seconds": 5,
+  "max_bytes": 4194304,
+  "local_retention_days": {
+    "audio": 15,
+    "transcripts": 30
+  },
+  "skip_segment_prefixes": [
+    "pipeline_check_"
+  ]
+}
