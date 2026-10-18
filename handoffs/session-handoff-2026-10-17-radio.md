@@ -114,3 +114,45 @@ Applications and services were left running.
   the new UI.
 - Next ideas: Whisper hint words/glossary pushed to `.227`; training from the
   corrections history; periodic capture stats logging; silent-listener alarm.
+
+## Update 2026-10-17 (evening): v3 health + admin delete/reset live
+
+- Release `98e803c` (web revision 112, image `release-98e803c9d96a`, digest
+  `sha256:f51687f86ff17738b4033c2256c2d421e05e762d8bbfcabcc2fe54efc37c177f`,
+  change set `radio-v3-admin-98e803c-20261017` executed by Ted's exact-name
+  approval). Same nine accepted ECR CVEs. Includes:
+  - Listener health: signed `POST /api/radio/heartbeat` (same ALB machine rule,
+    now two paths, POST only), `lcdash_radio.listener_status`, Listener health
+    panel on the radio page, `hints` table and admin Hint words tab.
+  - Silent-listener alarm `lcdash-p1-logan-use1-radio-listener-silent`
+    (heartbeat log line `radio-heartbeat ok`, Sum < 1 for 2 x 5 min, missing
+    data = breaching, SNS alerts topic + OK action). It was created in ALARM
+    (no data yet) and should move to OK once two full periods contain
+    heartbeats; Ted may get one ALARM and one OK email. VERIFY it reads OK.
+  - Admin users page: Reset password (Cognito emailed code, or invitation
+    re-sent for a never-signed-in user; the app never sees a password) and
+    Delete (typed email, refuses self and the last enabled admin). Task role
+    gained `cognito-idp:AdminDeleteUser` and `AdminResetUserPassword` on this
+    pool only; `AdminSetUserPassword` still withheld. Delete/reset are logged
+    as `pilot-access delete_user|reset_password target=... acting_subject=...`
+    (CloudWatch web log = audit trail). Not exercised against real Cognito;
+    Ted should test reset on a throwaway user first.
+- `.227` (installed 20:53 local): new `capture.py`, `transcribe.py`,
+  `uploader.py`, `config.json` from `c9cb9f2`; old files backed up to
+  `/opt/mindshare-radio-capture/backup-pre-v3/`. All three services restarted
+  and active; heartbeats arrive every 60 s (HTTP 200); stats file at
+  `/var/lib/mindshare-radio-capture/data/status/capture_stats.json`.
+- Hint words are OFF at the listener (`glossary_mode: off`). A/B on 120 real
+  segments: hotwords and prompt gave no clear gain and added invented place
+  names; the prompt method echoed itself. Re-test before enabling.
+- NEW FINDING: every active stream also carries RTP payload type 103 packets
+  (about 7-15% of packets next to PCMU; Fire TX showed 9 PT103-only packets and
+  no PCMU). They are counted but not decoded. Likely PTT/signaling, not voice,
+  but UNCONFIRMED. Next action: sample a few PT103 packets (tcpdump on the
+  radio NIC, header + first bytes only) to identify them before deciding they
+  can be ignored. The Listener health panel now shows the undecoded count.
+- Baseline hallucination: ~18% of plain transcripts of clips under ~2 s are
+  boilerplate ("Thanks for watching!", "Bye."). Suggested: flag short or
+  high no_speech_prob clips as "Possible noise" in the UI (do not delete text).
+- Open: hint-cap race (admin 201st hint under 16 concurrent adds; harmless),
+  corrected-audio lifecycle vs `retain_until` edge, no Range support on audio.
