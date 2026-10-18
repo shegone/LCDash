@@ -1,10 +1,21 @@
 """Cognito-backed pilot access management for the in-app admin review page.
 
-This service is the runtime counterpart to scripts/sync_cognito_users.py and
-inherits its safety philosophy: accounts are disabled and retained, never
-deleted, so the audit trail of who could sign in during the pilot survives the
-pilot. There is deliberately no delete method on this class -- if one seems
-missing, that is the point.
+This service is the runtime counterpart to scripts/sync_cognito_users.py. The
+sync script still disables and retains accounts. This service originally did
+the same and deliberately had no delete method; by owner decision on
+2026-10-17 (Ted Sparks, pilot owner) admins may now DELETE users and RESET
+passwords from the admin users page. Disable remains the way to keep the record
+while blocking sign-in.
+
+Guardrails that survive that decision:
+
+* delete requires the operator to retype the target's email, refuses the acting
+  admin's own account, and refuses to remove the last enabled admin;
+* reset refuses the acting admin's own account and disabled accounts;
+* the app NEVER sees, sets, generates, returns, or logs a password. Cognito
+  emails the temporary password or verification code straight to the user;
+* each delete and reset writes one info log line naming the target and the
+  acting admin. Those lines are the audit trail, so they carry nothing else.
 """
 
 from __future__ import annotations
@@ -33,6 +44,10 @@ class PilotAccessError(ValueError):
     """A refused access change, with a message safe to show the operator."""
 
 
+class PilotAccessNotFoundError(PilotAccessError):
+    """The target account does not exist (routes map this to HTTP 404)."""
+
+
 def _aws_error_code(error: Exception) -> str:
     """Read the Cognito error code off a client exception, if it has one.
 
@@ -49,7 +64,10 @@ def _aws_error_code(error: Exception) -> str:
 
 
 class PilotAccessService:
-    """List, invite, re-role, disable, and enable the pilot's Cognito users.
+    """List, invite, re-role, disable, enable, reset, and delete the pilot's users.
+
+    Delete and password reset exist by owner decision 2026-10-17; see the
+    module docstring for the guardrails that came with them.
 
     All authorization happens before this class: only an authenticated pilot
     admin reaches the endpoints that call it (permission
@@ -267,7 +285,134 @@ class PilotAccessService:
         self.client.admin_enable_user(UserPoolId=self._user_pool_id, Username=email)
         logger.info("pilot-access enable_user target=%s", email)
 
+    def reset_password(self, email: str, *, acting_subject: str) -> dict:
+        """Start a password reset for ``email``; the app never touches the password.
+
+        A user who never signed in (FORCE_CHANGE_PASSWORD) has no password to
+        reset, so the invitation is re-sent and Cognito emails a NEW temporary
+        password. Anyone else gets AdminResetUserPassword: Cognito emails a
+        verification code and the user sets a new password at next sign-in.
+        Either way the secret travels Cognito -> user's inbox, never through
+        this service, its return value, or its logs.
+        """
+        email = self._validated_email(email)
+        if self._same_account(acting_subject, email):
+            raise PilotAccessError(
+                'You cannot reset your own password here; use "Forgot password" '
+                "on the sign-in page."
+            )
+        user = self._existing_user(email)
+        if not user.get("Enabled", False):
+            raise PilotAccessError("Enable the account first, then reset the password.")
+
+        if str(user.get("UserStatus", "")) == "FORCE_CHANGE_PASSWORD":
+            method = "invitation_resent"
+            try:
+                self.resend_invite(email)
+            except PilotAccessError:
+                raise
+            except Exception as error:
+                self._raise_cognito_failure(error, email, "resend the invitation")
+        else:
+            method = "reset_code_sent"
+            try:
+                self.client.admin_reset_user_password(
+                    UserPoolId=self._user_pool_id, Username=email
+                )
+            except Exception as error:
+                self._raise_cognito_failure(error, email, "reset the password")
+        logger.info(
+            "pilot-access reset_password target=%s method=%s acting_subject=%s",
+            email, method, acting_subject,
+        )
+        return {"email": email, "method": method}
+
+    def delete_user(self, email: str, confirm_email: str, *, acting_subject: str) -> None:
+        """Permanently delete ``email``'s account (owner decision 2026-10-17).
+
+        Guardrails: the operator must retype the email, may not delete their
+        own account, and may not remove the last enabled admin. A repeat on an
+        already-deleted user is a not-found error, never a crash.
+        """
+        email = self._validated_email(email)
+        if str(confirm_email or "").strip().lower() != email.lower():
+            raise PilotAccessError("Type the user's email address to confirm.")
+        if self._same_account(acting_subject, email):
+            raise PilotAccessError(
+                "You cannot delete your own account; have another admin do it."
+            )
+        self._existing_user(email)
+        groups = self._groups_of(email)
+        admin_group = _ROLE_GROUP_MAP[PilotRole.ADMIN.value]
+        if admin_group in groups and not self._other_enabled_admin_exists(excluding=email):
+            raise PilotAccessError(
+                "This change would leave the pilot with no admin. Promote "
+                "another admin first."
+            )
+        role = next(
+            (
+                COGNITO_GROUP_ROLE_MAP[group].value
+                for group in groups
+                if group in COGNITO_GROUP_ROLE_MAP
+            ),
+            "",
+        )
+        try:
+            self.client.admin_delete_user(UserPoolId=self._user_pool_id, Username=email)
+        except Exception as error:
+            if _aws_error_code(error) == "UserNotFoundException":
+                raise PilotAccessNotFoundError(f"No account exists for {email}.") from error
+            self._raise_cognito_failure(error, email, "delete the account")
+        logger.info(
+            "pilot-access delete_user target=%s role=%s acting_subject=%s",
+            email, role, acting_subject,
+        )
+
     # ----------------------------------------------------------------- guards
+
+    @staticmethod
+    def _same_account(acting_subject: str, email: str) -> bool:
+        return str(acting_subject or "").strip().lower() == email.lower()
+
+    def _existing_user(self, email: str) -> dict:
+        """Cognito's record for ``email``, or a not-found error the operator can read."""
+        try:
+            return self.client.admin_get_user(UserPoolId=self._user_pool_id, Username=email)
+        except Exception as error:
+            if _aws_error_code(error) == "UserNotFoundException":
+                raise PilotAccessNotFoundError(f"No account exists for {email}.") from error
+            raise
+
+    @staticmethod
+    def _raise_cognito_failure(error: Exception, email: str, action: str) -> None:
+        """Raise a short, safe PilotAccessError for a Cognito error (call inside ``except``).
+
+        Only the error CODE ever reaches the operator, never AWS's free text.
+        An exception with no Cognito code (a network fault, a bug) is re-raised
+        unchanged so it fails loudly instead of being disguised.
+        """
+        code = _aws_error_code(error)
+        if code == "UserNotFoundException":
+            raise PilotAccessNotFoundError(f"No account exists for {email}.") from error
+        if code == "InvalidParameterException":
+            raise PilotAccessError(
+                f"Cognito cannot {action} for {email}: the account has no "
+                "verified email address or phone to send to."
+            ) from error
+        if code in ("LimitExceededException", "TooManyRequestsException"):
+            raise PilotAccessError(
+                f"Cognito is limiting requests for {email} right now. Wait a "
+                "few minutes and try again."
+            ) from error
+        if code in ("NotAuthorizedException", "UnsupportedUserStateException"):
+            raise PilotAccessError(
+                f"Cognito refused to {action} for {email} in its current state."
+            ) from error
+        if code:
+            raise PilotAccessError(
+                f"Cognito could not {action} for {email} ({code})."
+            ) from error
+        raise error
 
     def _other_enabled_admin_exists(self, *, excluding: str) -> bool:
         """True when some enabled admin other than ``excluding`` exists.

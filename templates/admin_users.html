@@ -3,7 +3,7 @@
 {% block title %}User Administration | LCDash{% endblock %}
 
 {% block content %}
-<link rel="stylesheet" href="/static/css/lcdash-admin.css?v=20260809-admin-users">
+<link rel="stylesheet" href="/static/css/lcdash-admin.css?v=20261017-admin-delete-reset2">
 
 <div class="command-page">
 <section class="admin-users-hero glass">
@@ -12,12 +12,12 @@
         <h1>User Administration</h1>
         <p>
             Manage who can sign in to the LCDash cloud pilot: send Cognito invites,
-            set roles, and enable or disable accounts.
+            set roles, enable or disable accounts, reset passwords, and delete accounts.
         </p>
     </div>
     <div class="admin-safety">
         <i class="bi bi-shield-lock-fill" aria-hidden="true"></i>
-        <div><strong>Disable, never delete</strong><span>Accounts are retained for audit</span></div>
+        <div><strong>Delete is permanent</strong><span>Disable keeps the record and blocks sign-in</span></div>
     </div>
 </section>
 
@@ -106,6 +106,7 @@
     </div>
 </section>
 
-<script src="/static/js/lcdash-admin-users.js?v=20261003-fire-officer-role"></script>
+<script src="/static/js/lcdash-admin-users.js?v=20261017-admin-delete-reset2"
+        data-current-user-email="{{ current_user_email }}"></script>
 </div>
 {% endblock %}

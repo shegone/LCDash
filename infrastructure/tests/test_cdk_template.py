@@ -933,6 +933,77 @@ class CdkTemplateTests(unittest.TestCase):
         self.template.resource_count_is("AWS::S3::Bucket", 2)
         self.template.resource_count_is("AWS::KMS::Key", 0)
 
+    def test_task_role_cognito_grant_is_the_exact_admin_page_set_on_this_pool_only(self):
+        """The admin users page's Cognito verbs, pinned exactly.
+
+        Owner decision 2026-10-17 (Ted Sparks) added AdminDeleteUser and
+        AdminResetUserPassword. AdminSetUserPassword must stay absent (the app
+        never knows or sets a password), as must every pool-level mutation and
+        every other Admin* verb the page does not use.
+        """
+        resources = self.template.to_json()["Resources"]
+        pool_ids = [
+            logical_id
+            for logical_id, resource in resources.items()
+            if resource["Type"] == "AWS::Cognito::UserPool"
+        ]
+        self.assertEqual(len(pool_ids), 1)
+        cognito_statements = []
+        for resource in resources.values():
+            if resource["Type"] != "AWS::IAM::Policy":
+                continue
+            roles = [role.get("Ref", "") for role in resource["Properties"]["Roles"]]
+            for statement in resource["Properties"]["PolicyDocument"]["Statement"]:
+                actions = statement["Action"]
+                actions = [actions] if isinstance(actions, str) else actions
+                if any(action.startswith("cognito-idp:") for action in actions):
+                    # Only the application task role may hold Cognito verbs.
+                    self.assertTrue(
+                        all(role.startswith("ApplicationTaskRole") for role in roles),
+                        f"Cognito verbs attached to a non-application role: {roles}",
+                    )
+                    cognito_statements.append(statement)
+        self.assertEqual(len(cognito_statements), 1)
+        statement = cognito_statements[0]
+        self.assertEqual(statement["Effect"], "Allow")
+        self.assertNotIn("Condition", statement)
+        self.assertEqual(
+            sorted(statement["Action"]),
+            sorted(
+                [
+                    "cognito-idp:ListUsers",
+                    "cognito-idp:ListUsersInGroup",
+                    "cognito-idp:AdminListGroupsForUser",
+                    "cognito-idp:AdminGetUser",
+                    "cognito-idp:AdminCreateUser",
+                    "cognito-idp:AdminAddUserToGroup",
+                    "cognito-idp:AdminRemoveUserFromGroup",
+                    "cognito-idp:AdminDisableUser",
+                    "cognito-idp:AdminEnableUser",
+                    "cognito-idp:AdminDeleteUser",
+                    "cognito-idp:AdminResetUserPassword",
+                ]
+            ),
+        )
+        for forbidden in (
+            "cognito-idp:AdminSetUserPassword",
+            "cognito-idp:AdminUpdateUserAttributes",
+            "cognito-idp:AdminSetUserMFAPreference",
+            "cognito-idp:AdminInitiateAuth",
+            "cognito-idp:AdminUserGlobalSignOut",
+            "cognito-idp:UpdateUserPool",
+            "cognito-idp:UpdateUserPoolClient",
+            "cognito-idp:DeleteUserPool",
+            "cognito-idp:*",
+        ):
+            self.assertNotIn(forbidden, statement["Action"])
+        # No wildcard verbs of any kind.
+        self.assertFalse(any("*" in action for action in statement["Action"]))
+        # The resource is exactly this stack's user pool ARN: no list, no "*".
+        self.assertEqual(
+            statement["Resource"], {"Fn::GetAtt": [pool_ids[0], "Arn"]}
+        )
+
     def test_task_role_may_only_get_and_put_radio_audio_and_corrected_objects(self):
         resources = self.template.to_json()["Resources"]
         radio_statements = []

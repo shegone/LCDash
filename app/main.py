@@ -32,7 +32,11 @@ from app.core.cloud_pilot_roles import (
     PilotRole,
     resolve_pilot_role,
 )
-from app.services.pilot_access_service import PilotAccessError, PilotAccessService
+from app.services.pilot_access_service import (
+    PilotAccessError,
+    PilotAccessNotFoundError,
+    PilotAccessService,
+)
 from app.services.knowledge_upload_service import (
     KnowledgeUploadError,
     KnowledgeUploadService,
@@ -1268,13 +1272,20 @@ class AdminUserActionRequest(BaseModel):
     email: str = Field(min_length=3, max_length=320)
 
 
+class AdminDeleteUserRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    confirm_email: str = Field(max_length=320)
+
+
 @app.get("/admin/users")
 def admin_users_page(request: Request):
-    _require_pilot_admin(request)
+    identity = _require_pilot_admin(request)
     return templates.TemplateResponse(
         request=request,
         name="admin_users.html",
-        context={"version": "0.1.0"},
+        # The signed-in admin's own email lets the page hide Reset/Delete on
+        # their own row; the service refuses those actions server-side too.
+        context={"version": "0.1.0", "current_user_email": identity.email or ""},
         headers={"Cache-Control": "no-store"},
     )
 
@@ -1342,6 +1353,58 @@ def admin_users_resend_invite_api(payload: AdminUserActionRequest, request: Requ
     _require_pilot_admin(request)
     try:
         _pilot_access_service().resend_invite(payload.email)
+    except PilotAccessError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True}
+
+
+async def _admin_body(request: Request, model):
+    """Authorize FIRST, then parse the body.
+
+    Declaring the body as a route parameter would let FastAPI answer a garbage
+    body with 422 before the admin gate ran, telling a non-admin that the
+    route exists. Here every non-admin gets the uniform 403 whatever they
+    send; only a verified admin ever sees a validation error.
+    """
+    identity = await run_in_threadpool(_require_pilot_admin, request)
+    try:
+        payload = model.model_validate_json(await request.body())
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422, detail="Request body is missing a valid email address."
+        ) from exc
+    return identity, payload
+
+
+@app.post("/api/admin/users/reset-password")
+async def admin_users_reset_password_api(request: Request):
+    # The response carries only the email and which Cognito method ran; the
+    # app never sees the password or the code Cognito emails to the user.
+    identity, payload = await _admin_body(request, AdminUserActionRequest)
+    try:
+        return await run_in_threadpool(
+            lambda: _pilot_access_service().reset_password(
+                payload.email, acting_subject=identity.email or identity.subject,
+            )
+        )
+    except PilotAccessNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PilotAccessError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/admin/users/delete")
+async def admin_users_delete_api(request: Request):
+    identity, payload = await _admin_body(request, AdminDeleteUserRequest)
+    try:
+        await run_in_threadpool(
+            lambda: _pilot_access_service().delete_user(
+                payload.email, payload.confirm_email,
+                acting_subject=identity.email or identity.subject,
+            )
+        )
+    except PilotAccessNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except PilotAccessError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"ok": True}

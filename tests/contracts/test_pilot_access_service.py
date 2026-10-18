@@ -3,16 +3,23 @@
 The dangerous states these tests exist to prevent are all one click wide:
 an admin demoting or disabling the last enabled admin (nobody left in-app to
 manage access), an admin demoting themselves (locked out one action later),
-and a resurrected delete path (accounts must be disabled and retained for
-audit, per scripts/sync_cognito_users.py).
+and an unguarded delete or password reset. Delete and reset exist by owner
+decision 2026-10-17 (they reverse the original "disable, never delete" rule),
+so these tests pin the guardrails that came with them -- including that the
+app never sees, returns, or logs a password.
 """
 
 from __future__ import annotations
 
+import logging
 import unittest
 from datetime import datetime, timezone
 
-from app.services.pilot_access_service import PilotAccessError, PilotAccessService
+from app.services.pilot_access_service import (
+    PilotAccessError,
+    PilotAccessNotFoundError,
+    PilotAccessService,
+)
 
 
 class _StubClientError(Exception):
@@ -42,6 +49,7 @@ class _FakeCognitoClient:
         # groups: group name -> set of emails
         self.groups = {name: set(members) for name, members in (groups or {}).items()}
         self.page_size = page_size
+        self.raise_on_reset: str | None = None
         self.calls: list[tuple] = []
 
     def _user_payload(self, email, attributes_key="Attributes"):
@@ -84,6 +92,8 @@ class _FakeCognitoClient:
 
     def admin_get_user(self, *, UserPoolId, Username):
         self.calls.append(("admin_get_user", Username))
+        if Username not in self.users:
+            raise _StubClientError("UserNotFoundException")
         return self._user_payload(Username, attributes_key="UserAttributes")
 
     def admin_create_user(self, *, UserPoolId, Username, **kwargs):
@@ -112,6 +122,20 @@ class _FakeCognitoClient:
     def admin_enable_user(self, *, UserPoolId, Username):
         self.calls.append(("admin_enable_user", Username))
         self.users[Username]["enabled"] = True
+
+    def admin_reset_user_password(self, *, UserPoolId, Username, **kwargs):
+        self.calls.append(("admin_reset_user_password", Username, kwargs))
+        if self.raise_on_reset is not None:
+            raise _StubClientError(self.raise_on_reset)
+        return {}
+
+    def admin_delete_user(self, *, UserPoolId, Username):
+        self.calls.append(("admin_delete_user", Username))
+        if Username not in self.users:
+            raise _StubClientError("UserNotFoundException")
+        del self.users[Username]
+        for members in self.groups.values():
+            members.discard(Username)
 
 
 def _service(fake) -> PilotAccessService:
@@ -293,14 +317,240 @@ class PilotAccessServiceTests(unittest.TestCase):
                 "new@example.test", "viewer", acting_subject="admin@example.test"
             )
 
-    def test_no_delete_api_exists(self):
-        """Deletion is deliberately absent: disabled accounts are the audit
-        trail of who could sign in during the pilot, matching the reconciler
-        in scripts/sync_cognito_users.py. A delete method appearing here is a
-        policy regression, not a feature."""
-        service = _service(_cohort())
-        self.assertFalse(hasattr(service, "delete_user"))
-        self.assertFalse(hasattr(service, "remove_user"))
+    # ------------------------------------------------------- reset password
+
+    def test_reset_sends_cognito_code_to_a_signed_in_user(self):
+        fake = _cohort()
+        result = _service(fake).reset_password(
+            "super@example.test", acting_subject="admin@example.test"
+        )
+        self.assertEqual(result, {"email": "super@example.test", "method": "reset_code_sent"})
+        reset = next(c for c in fake.calls if c[0] == "admin_reset_user_password")
+        self.assertEqual(reset[1], "super@example.test")
+        self.assertEqual(reset[2], {})  # no password-bearing argument of any kind
+        self.assertFalse(any(c[0] == "admin_set_user_password" for c in fake.calls))
+
+    def test_reset_for_never_signed_in_user_resends_the_invitation(self):
+        fake = _cohort()
+        result = _service(fake).reset_password(
+            "new@example.test", acting_subject="admin@example.test"
+        )
+        self.assertEqual(result, {"email": "new@example.test", "method": "invitation_resent"})
+        resend = next(c for c in fake.calls if c[0] == "admin_create_user")
+        self.assertEqual(resend[2]["MessageAction"], "RESEND")
+        self.assertFalse(any(c[0] == "admin_reset_user_password" for c in fake.calls))
+
+    def test_reset_refuses_own_account_even_with_different_case(self):
+        fake = _cohort()
+        for actor in ("admin@example.test", "Admin@Example.test"):
+            with self.subTest(actor=actor):
+                with self.assertRaisesRegex(PilotAccessError, "Forgot password"):
+                    _service(fake).reset_password("admin@example.test", acting_subject=actor)
+        self.assertFalse(any(c[0] == "admin_reset_user_password" for c in fake.calls))
+
+    def test_reset_refuses_disabled_account(self):
+        fake = _cohort()
+        fake.users["super@example.test"]["enabled"] = False
+        with self.assertRaisesRegex(PilotAccessError, "Enable the account first"):
+            _service(fake).reset_password(
+                "super@example.test", acting_subject="admin@example.test"
+            )
+        self.assertFalse(any(c[0] == "admin_reset_user_password" for c in fake.calls))
+
+    def test_reset_of_nonexistent_user_is_not_found(self):
+        with self.assertRaises(PilotAccessNotFoundError):
+            _service(_cohort()).reset_password(
+                "ghost@example.test", acting_subject="admin@example.test"
+            )
+
+    def test_reset_rejects_junk_email(self):
+        with self.assertRaises(PilotAccessError):
+            _service(_cohort()).reset_password("nope", acting_subject="admin@example.test")
+
+    def test_reset_maps_cognito_errors_to_safe_messages(self):
+        cases = {
+            "InvalidParameterException": "no verified email",
+            "LimitExceededException": "Wait a few minutes",
+            "TooManyRequestsException": "Wait a few minutes",
+            "NotAuthorizedException": "refused",
+            "UnsupportedUserStateException": "refused",
+            "UserNotFoundException": "No account exists",
+            "SomethingElseException": "SomethingElseException",
+        }
+        for code, expected in cases.items():
+            with self.subTest(code=code):
+                fake = _cohort()
+                fake.raise_on_reset = code
+                with self.assertRaisesRegex(PilotAccessError, expected) as caught:
+                    _service(fake).reset_password(
+                        "super@example.test", acting_subject="admin@example.test"
+                    )
+                # Only a short safe reason: no raw AWS text, no request ids.
+                self.assertLess(len(str(caught.exception)), 200)
+
+    def test_reset_without_a_cognito_code_is_not_disguised(self):
+        fake = _cohort()
+
+        def boom(**kwargs):
+            raise RuntimeError("network down")
+
+        fake.admin_reset_user_password = boom
+        with self.assertRaises(RuntimeError):
+            _service(fake).reset_password(
+                "super@example.test", acting_subject="admin@example.test"
+            )
+
+    def test_reset_logs_one_audit_line_with_actor_and_method(self):
+        with self.assertLogs("app.services.pilot_access_service", level="INFO") as logs:
+            _service(_cohort()).reset_password(
+                "super@example.test", acting_subject="admin@example.test"
+            )
+        self.assertEqual(
+            logs.output,
+            [
+                "INFO:app.services.pilot_access_service:pilot-access reset_password "
+                "target=super@example.test method=reset_code_sent "
+                "acting_subject=admin@example.test"
+            ],
+        )
+
+    def test_reset_invitation_path_logs_the_resend_and_the_reset_only(self):
+        with self.assertLogs("app.services.pilot_access_service", level="INFO") as logs:
+            result = _service(_cohort()).reset_password(
+                "new@example.test", acting_subject="admin@example.test"
+            )
+        text = "\n".join(logs.output).lower()
+        self.assertIn("method=invitation_resent", text)
+        for forbidden in ("password=", "temporarypassword", "code="):
+            self.assertNotIn(forbidden, text)
+        self.assertEqual(set(result), {"email", "method"})
+
+    # ----------------------------------------------------------- delete user
+
+    def test_delete_removes_the_account(self):
+        fake = _cohort()
+        _service(fake).delete_user(
+            "super@example.test", "super@example.test", acting_subject="admin@example.test"
+        )
+        self.assertIn(("admin_delete_user", "super@example.test"), fake.calls)
+        self.assertNotIn("super@example.test", fake.users)
+
+    def test_delete_confirmation_is_case_insensitive_but_must_match(self):
+        fake = _cohort()
+        for wrong in ("", "   ", "other@example.test", "super@example"):
+            with self.subTest(confirm=wrong):
+                with self.assertRaisesRegex(PilotAccessError, "Type the user's email"):
+                    _service(fake).delete_user(
+                        "super@example.test", wrong, acting_subject="admin@example.test"
+                    )
+        self.assertFalse(any(c[0] == "admin_delete_user" for c in fake.calls))
+        _service(fake).delete_user(
+            "super@example.test", " SUPER@Example.test ", acting_subject="admin@example.test"
+        )
+        self.assertNotIn("super@example.test", fake.users)
+
+    def test_delete_refuses_own_account(self):
+        fake = _cohort()
+        with self.assertRaisesRegex(PilotAccessError, "your own account"):
+            _service(fake).delete_user(
+                "admin@example.test", "admin@example.test",
+                acting_subject="Admin@example.test",
+            )
+        self.assertIn("admin@example.test", fake.users)
+
+    def test_delete_refuses_the_last_enabled_admin(self):
+        fake = _cohort()
+        with self.assertRaisesRegex(PilotAccessError, "no admin"):
+            _service(fake).delete_user(
+                "admin@example.test", "admin@example.test",
+                acting_subject="super@example.test",
+            )
+        self.assertIn("admin@example.test", fake.users)
+
+        # A disabled second admin is not cover.
+        fake.users["second@example.test"] = {"status": "CONFIRMED", "enabled": False}
+        fake.groups["lcdash-pilot-admin"].add("second@example.test")
+        with self.assertRaisesRegex(PilotAccessError, "no admin"):
+            _service(fake).delete_user(
+                "admin@example.test", "admin@example.test",
+                acting_subject="super@example.test",
+            )
+
+        # An enabled second admin is.
+        fake.users["second@example.test"]["enabled"] = True
+        _service(fake).delete_user(
+            "admin@example.test", "admin@example.test",
+            acting_subject="second@example.test",
+        )
+        self.assertNotIn("admin@example.test", fake.users)
+
+    def test_delete_of_missing_user_is_not_found_and_repeat_is_safe(self):
+        fake = _cohort()
+        service = _service(fake)
+        service.delete_user(
+            "super@example.test", "super@example.test", acting_subject="admin@example.test"
+        )
+        with self.assertRaises(PilotAccessNotFoundError):
+            service.delete_user(
+                "super@example.test", "super@example.test",
+                acting_subject="admin@example.test",
+            )
+
+    def test_delete_race_where_user_vanishes_between_lookup_and_delete(self):
+        fake = _cohort()
+
+        def vanish(**kwargs):
+            raise _StubClientError("UserNotFoundException")
+
+        fake.admin_delete_user = vanish
+        with self.assertRaises(PilotAccessNotFoundError):
+            _service(fake).delete_user(
+                "super@example.test", "super@example.test",
+                acting_subject="admin@example.test",
+            )
+
+    def test_delete_logs_one_audit_line_with_role_and_actor(self):
+        with self.assertLogs("app.services.pilot_access_service", level="INFO") as logs:
+            _service(_cohort()).delete_user(
+                "super@example.test", "super@example.test",
+                acting_subject="admin@example.test",
+            )
+        self.assertEqual(
+            logs.output,
+            [
+                "INFO:app.services.pilot_access_service:pilot-access delete_user "
+                "target=super@example.test role=supervisor "
+                "acting_subject=admin@example.test"
+            ],
+        )
+
+    def test_refused_delete_and_reset_write_no_audit_line(self):
+        logger = logging.getLogger("app.services.pilot_access_service")
+        with self.assertLogs(logger, level="INFO") as logs:
+            logger.info("sentinel")  # assertLogs needs one record to exist
+            for call in (
+                lambda: _service(_cohort()).delete_user(
+                    "super@example.test", "wrong", acting_subject="admin@example.test"),
+                lambda: _service(_cohort()).reset_password(
+                    "admin@example.test", acting_subject="admin@example.test"),
+            ):
+                with self.assertRaises(PilotAccessError):
+                    call()
+        self.assertEqual(len(logs.output), 1)
+
+    def test_no_call_ever_carries_a_password_argument(self):
+        fake = _cohort()
+        service = _service(fake)
+        service.reset_password("super@example.test", acting_subject="admin@example.test")
+        service.reset_password("new@example.test", acting_subject="admin@example.test")
+        service.delete_user(
+            "super@example.test", "super@example.test", acting_subject="admin@example.test"
+        )
+        for call in fake.calls:
+            blob = repr(call).lower().replace("admin_reset_user_password", "")
+            self.assertNotIn("password", blob)
+        self.assertFalse(any(c[0] == "admin_set_user_password" for c in fake.calls))
+        self.assertFalse(hasattr(service, "set_password"))
 
 
 if __name__ == "__main__":

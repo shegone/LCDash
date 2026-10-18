@@ -1353,10 +1353,18 @@ class Phase1FoundationStack(cdk.Stack):
         The task role had NO Cognito permissions before this (the app only
         verified tokens, which needs none). This grant is the admin page's
         capability set and nothing more: list/inspect users, create an
-        invited user, move group membership, disable and enable. Deliberately
-        absent: AdminDeleteUser (accounts are disabled and retained for
-        audit, matching scripts/sync_cognito_users.py), AdminSetUserPassword
-        (the app must never know or set a password), and every pool-level
+        invited user, move group membership, disable and enable, delete, and
+        reset a password.
+
+        AdminDeleteUser is granted by owner decision (Ted Sparks, chat
+        2026-10-17). The app's delete route refuses to delete the caller,
+        refuses to delete the last enabled admin, and requires the operator to
+        type the user's email before it proceeds.
+
+        AdminResetUserPassword is granted because Cognito itself emails the
+        user a code to choose a new password; the app never learns or sets a
+        password. AdminSetUserPassword therefore remains deliberately absent
+        (the app must never know or set a password), as does every pool-level
         mutation (UpdateUserPool and friends change authentication policy and
         belong to the deploy pipeline, not to a page).
         """
@@ -1372,6 +1380,8 @@ class Phase1FoundationStack(cdk.Stack):
                     "cognito-idp:AdminRemoveUserFromGroup",
                     "cognito-idp:AdminDisableUser",
                     "cognito-idp:AdminEnableUser",
+                    "cognito-idp:AdminDeleteUser",
+                    "cognito-idp:AdminResetUserPassword",
                 ],
                 resources=[user_pool.user_pool_arn],
             )

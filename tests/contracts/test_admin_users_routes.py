@@ -10,6 +10,7 @@ test_pilot_access_service.py; what is proved here is the plumbing and the gate.
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
@@ -17,7 +18,13 @@ from fastapi.testclient import TestClient
 from app.config.settings import settings
 from app.core.alb_identity import AlbIdentity
 from app.main import app
-from app.services.pilot_access_service import PilotAccessError
+from app.services.pilot_access_service import (
+    PilotAccessError,
+    PilotAccessNotFoundError,
+    PilotAccessService,
+)
+
+_STATIC = Path(__file__).resolve().parents[2] / "static"
 
 
 def _identity(email: str, group: str) -> AlbIdentity:
@@ -62,6 +69,12 @@ class AdminUsersRouteTests(unittest.TestCase):
             ("POST", "/api/admin/users/disable", {"email": "a@b.test"}),
             ("POST", "/api/admin/users/enable", {"email": "a@b.test"}),
             ("POST", "/api/admin/users/resend-invite", {"email": "a@b.test"}),
+            ("POST", "/api/admin/users/reset-password", {"email": "a@b.test"}),
+            (
+                "POST",
+                "/api/admin/users/delete",
+                {"email": "a@b.test", "confirm_email": "a@b.test"},
+            ),
         )
         for identity in (
             _identity("s@911logan.com", "lcdash-pilot-supervisor"),
@@ -87,6 +100,182 @@ class AdminUsersRouteTests(unittest.TestCase):
                     )
         self.service.list_users.assert_not_called()
         self.service.invite_user.assert_not_called()
+
+    def test_delete_and_reset_deny_every_non_admin_role_before_validation(self):
+        """The 403 must win over body validation: a non-admin sending garbage,
+        an empty body, or a valid body learns nothing about the route."""
+        self._with_service()
+        bodies = (
+            {"json": {"email": "a@b.test", "confirm_email": "a@b.test"}},
+            {"json": {}},
+            {"json": {"email": 5}},
+            {"content": b"this is not json", "headers": {"Content-Type": "application/json"}},
+            {"content": b""},
+        )
+        identities = [
+            _identity("x@911logan.com", f"lcdash-pilot-{group}")
+            for group in ("user", "supervisor", "dispatcher", "fire-officer", "avatar")
+        ] + [None]
+        for identity in identities:
+            self._sign_in_as(identity)
+            for path in ("/api/admin/users/reset-password", "/api/admin/users/delete"):
+                for body in bodies:
+                    with self.subTest(identity=identity and identity.groups, path=path, body=body):
+                        response = self.client.post(path, **body)
+                        self.assertEqual(response.status_code, 403)
+        self.service.reset_password.assert_not_called()
+        self.service.delete_user.assert_not_called()
+
+    def test_admin_with_a_garbage_body_gets_a_readable_validation_error(self):
+        self._with_service()
+        self._sign_in_as(_identity("tedsparks@911logan.com", "lcdash-pilot-admin"))
+        for path, body in (
+            ("/api/admin/users/reset-password", {"json": {}}),
+            ("/api/admin/users/delete", {"json": {"email": "a@b.test"}}),
+            ("/api/admin/users/delete", {"content": b"not json"}),
+        ):
+            with self.subTest(path=path, body=body):
+                response = self.client.post(path, **body)
+                self.assertEqual(response.status_code, 422)
+                self.assertIsInstance(response.json()["detail"], str)
+        self.service.reset_password.assert_not_called()
+        self.service.delete_user.assert_not_called()
+
+    def test_reset_password_route_carries_the_acting_admin_and_returns_method(self):
+        self._with_service()
+        self._sign_in_as(_identity("tedsparks@911logan.com", "lcdash-pilot-admin"))
+        self.service.reset_password.return_value = {
+            "email": "x@911logan.com", "method": "reset_code_sent",
+        }
+        response = self.client.post(
+            "/api/admin/users/reset-password", json={"email": "x@911logan.com"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(), {"email": "x@911logan.com", "method": "reset_code_sent"}
+        )
+        self.service.reset_password.assert_called_once_with(
+            "x@911logan.com", acting_subject="tedsparks@911logan.com"
+        )
+
+    def test_delete_route_carries_the_acting_admin_and_confirmation(self):
+        self._with_service()
+        self._sign_in_as(_identity("tedsparks@911logan.com", "lcdash-pilot-admin"))
+        response = self.client.post(
+            "/api/admin/users/delete",
+            json={"email": "x@911logan.com", "confirm_email": "x@911logan.com"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"ok": True})
+        self.service.delete_user.assert_called_once_with(
+            "x@911logan.com", "x@911logan.com", acting_subject="tedsparks@911logan.com"
+        )
+
+    def test_delete_and_reset_refusals_map_to_400_and_missing_users_to_404(self):
+        self._with_service()
+        self._sign_in_as(_identity("tedsparks@911logan.com", "lcdash-pilot-admin"))
+        for method, path, body in (
+            ("delete_user", "/api/admin/users/delete",
+             {"email": "x@911logan.com", "confirm_email": "x@911logan.com"}),
+            ("reset_password", "/api/admin/users/reset-password", {"email": "x@911logan.com"}),
+        ):
+            with self.subTest(path=path):
+                getattr(self.service, method).side_effect = PilotAccessError(
+                    "This change would leave the pilot with no admin."
+                )
+                response = self.client.post(path, json=body)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("no admin", response.json()["detail"])
+
+                getattr(self.service, method).side_effect = PilotAccessNotFoundError(
+                    "No account exists for x@911logan.com."
+                )
+                response = self.client.post(path, json=body)
+                self.assertEqual(response.status_code, 404)
+                self.assertIn("No account exists", response.json()["detail"])
+
+    def test_real_service_behind_the_routes_never_handles_a_password(self):
+        """End to end through the real service with a recording Cognito
+        double: nothing sent to Cognito, returned, or logged mentions a
+        password value, and the guardrails hold through the HTTP layer."""
+        cognito = MagicMock()
+        cognito.admin_get_user.return_value = {
+            "Username": "x@911logan.com",
+            "UserStatus": "CONFIRMED",
+            "Enabled": True,
+            "UserAttributes": [{"Name": "email", "Value": "x@911logan.com"}],
+        }
+        cognito.admin_list_groups_for_user.return_value = {
+            "Groups": [{"GroupName": "lcdash-pilot-supervisor"}]
+        }
+        service = PilotAccessService("us-east-1_Example1", client=cognito)
+        patcher = patch("app.main._pilot_access_service", return_value=service)
+        self.addCleanup(patcher.stop)
+        patcher.start()
+        self._sign_in_as(_identity("tedsparks@911logan.com", "lcdash-pilot-admin"))
+
+        with self.assertLogs("app.services.pilot_access_service", level="INFO") as logs:
+            reset = self.client.post(
+                "/api/admin/users/reset-password", json={"email": "x@911logan.com"}
+            )
+            deleted = self.client.post(
+                "/api/admin/users/delete",
+                json={"email": "x@911logan.com", "confirm_email": "X@911logan.com"},
+            )
+        self.assertEqual(reset.json(), {"email": "x@911logan.com", "method": "reset_code_sent"})
+        self.assertEqual(deleted.json(), {"ok": True})
+        cognito.admin_reset_user_password.assert_called_once_with(
+            UserPoolId="us-east-1_Example1", Username="x@911logan.com"
+        )
+        cognito.admin_delete_user.assert_called_once_with(
+            UserPoolId="us-east-1_Example1", Username="x@911logan.com"
+        )
+        cognito.admin_set_user_password.assert_not_called()
+        self.assertEqual(len(logs.output), 2)
+        for line in logs.output:
+            self.assertIn("acting_subject=tedsparks@911logan.com", line)
+            self.assertNotIn("password=", line.lower())
+
+        # Own account is refused through the same stack.
+        own = self.client.post(
+            "/api/admin/users/delete",
+            json={"email": "tedsparks@911logan.com", "confirm_email": "tedsparks@911logan.com"},
+        )
+        self.assertEqual(own.status_code, 400)
+        self.assertIn("own account", own.json()["detail"])
+
+    def test_page_exposes_delete_and_reset_hooks_and_the_signed_in_email(self):
+        self._with_service()
+        self._sign_in_as(_identity("tedsparks@911logan.com", "lcdash-pilot-admin"))
+        page = self.client.get("/admin/users")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn('data-current-user-email="tedsparks@911logan.com"', page.text)
+        self.assertIn("20261017-admin-delete-reset", page.text)
+        self.assertNotIn("Disable, never delete", page.text)
+
+        script = (_STATIC / "js" / "lcdash-admin-users.js").read_text(encoding="utf-8")
+        for hook in (
+            "/api/admin/users/reset-password",
+            "/api/admin/users/delete",
+            "Reset password",
+            "Delete permanently",
+            "Type the user's email to confirm",
+            "This permanently removes the account and cannot be undone.",
+            "You will not see the password.",
+            "currentUserEmail",
+            "confirm_email",
+        ):
+            with self.subTest(hook=hook):
+                self.assertIn(hook, script)
+        # Server-supplied text is only ever written with textContent. Comments
+        # may mention the banned names; only executable lines are checked.
+        script = "\n".join(
+            line for line in script.splitlines() if not line.lstrip().startswith("//")
+        )
+        for banned in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write",
+                       "window.confirm", "alert("):
+            with self.subTest(banned=banned):
+                self.assertNotIn(banned, script)
 
     def test_admin_lists_users(self):
         self._with_service()

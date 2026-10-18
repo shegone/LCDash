@@ -3,10 +3,19 @@
 // The backend enforces admin-only access (403 otherwise); this script just
 // renders honestly whatever the API says. Every failure surfaces the HTTP
 // status and the server's `detail` string -- no generic alert() anywhere.
-// Disabling an account is a two-step inline confirmation because there is no
-// delete: disabled accounts are retained for audit.
+// Disable, Reset password, and Delete are each a two-step inline confirmation
+// (no window.confirm). Delete is permanent by owner decision 2026-10-17 and
+// needs the target's email retyped; Disable keeps the record. The page never
+// sees a password: Cognito emails the code or temporary password to the user.
+// All server-supplied text is written with textContent, never innerHTML.
 (function () {
     "use strict";
+
+    // Read synchronously while this script is executing; null afterwards.
+    const thisScript = document.currentScript;
+    const currentUserEmail = String(
+        (thisScript && thisScript.dataset.currentUserEmail) || ""
+    ).trim().toLowerCase();
 
     // "avatar" is the conversation-only tier from the avatar plan: the
     // account can talk with MAE at /mae/avatar and reach nothing else.
@@ -261,6 +270,158 @@
                 await loadUsers(false);
             });
             actionsWrap.appendChild(enable);
+        }
+
+        // Reset and Delete are never offered on the signed-in admin's own row
+        // (the server refuses both as well). Reset needs an enabled account.
+        const isOwnRow = currentUserEmail !== "" &&
+            String(user.email).trim().toLowerCase() === currentUserEmail;
+        // If the page could not tell us who is signed in, offer neither action
+        // (fail closed; the server refuses a self-delete or self-reset anyway).
+        if (currentUserEmail !== "" && !isOwnRow) {
+            let openPanel = null;
+            let opener = null;
+            const closePanel = function () {
+                if (openPanel) {
+                    openPanel.remove();
+                    openPanel = null;
+                }
+                if (opener && document.body.contains(opener)) {
+                    opener.focus();
+                }
+            };
+            const newPanel = function (extraClass) {
+                if (openPanel) {
+                    openPanel.remove();
+                    openPanel = null;
+                }
+                const panel = document.createElement("div");
+                panel.className = `admin-row-panel ${extraClass}`;
+                panel.addEventListener("keydown", function (event) {
+                    if (event.key === "Escape") {
+                        event.preventDefault();
+                        closePanel();
+                    }
+                });
+                actionsWrap.appendChild(panel);
+                openPanel = panel;
+                return panel;
+            };
+            const panelButtons = function (panel) {
+                const buttons = document.createElement("div");
+                buttons.className = "admin-row-panel-buttons";
+                panel.appendChild(buttons);
+                return buttons;
+            };
+
+            if (user.enabled) {
+                const reset = actionButton("Reset password");
+                reset.setAttribute("aria-label", `Reset password for ${user.email}`);
+                reset.addEventListener("click", function () {
+                    setRowNote(row, "", "");
+                    opener = reset;
+                    const panel = newPanel("is-reset");
+                    const message = document.createElement("p");
+                    message.textContent =
+                        `Cognito will email ${user.email} a code (or a new temporary ` +
+                        "password if they never signed in). You will not see the password.";
+                    panel.appendChild(message);
+                    const buttons = panelButtons(panel);
+                    const confirm = actionButton("Confirm reset");
+                    const cancel = actionButton("Cancel");
+                    cancel.addEventListener("click", closePanel);
+                    confirm.addEventListener("click", async function () {
+                        setRowBusy(row, true);
+                        const result = await postJson("/api/admin/users/reset-password", {
+                            email: user.email,
+                        });
+                        setRowBusy(row, false);
+                        if (!result.ok) {
+                            setRowNote(row, "error",
+                                `Reset failed${httpSuffix(result.status, result.detail)}`);
+                            return;
+                        }
+                        closePanel();
+                        const method = result.payload && result.payload.method;
+                        setRowNote(row, "success", method === "invitation_resent"
+                            ? `${user.email} never signed in, so a new temporary password was emailed with a fresh invitation.`
+                            : `A password reset code was emailed to ${user.email}. They set a new password at next sign-in.`);
+                    });
+                    buttons.appendChild(confirm);
+                    buttons.appendChild(cancel);
+                });
+                actionsWrap.appendChild(reset);
+            }
+
+            const del = actionButton("Delete", "is-danger");
+            del.setAttribute("aria-label", `Delete account ${user.email}`);
+            del.addEventListener("click", function () {
+                setRowNote(row, "", "");
+                opener = del;
+                const panel = newPanel("is-delete");
+                // Name the account being deleted: on a phone the email column
+                // scrolls out of view while this panel is open.
+                const target = document.createElement("p");
+                target.className = "admin-row-panel-target";
+                target.textContent = `Account to delete: ${user.email}`;
+                panel.appendChild(target);
+                const label = document.createElement("label");
+                label.textContent = "Type the user's email to confirm";
+                const input = document.createElement("input");
+                input.type = "text";
+                input.autocomplete = "off";
+                input.spellcheck = false;
+                input.setAttribute("aria-label", `Type ${user.email} to confirm deletion`);
+                label.appendChild(document.createElement("br"));
+                label.appendChild(input);
+                panel.appendChild(label);
+                const warning = document.createElement("p");
+                warning.textContent =
+                    "This permanently removes the account and cannot be undone. " +
+                    "To keep the record but block sign-in, use Disable instead.";
+                panel.appendChild(warning);
+                const buttons = panelButtons(panel);
+                const confirm = actionButton("Delete permanently", "is-destructive");
+                const cancel = actionButton("Cancel");
+                const matches = function () {
+                    return input.value.trim().toLowerCase() ===
+                        String(user.email).trim().toLowerCase();
+                };
+                const syncConfirm = function () {
+                    confirm.disabled = !matches();
+                };
+                syncConfirm();
+                input.addEventListener("input", syncConfirm);
+                cancel.addEventListener("click", closePanel);
+                confirm.addEventListener("click", async function () {
+                    if (!matches()) return;
+                    setRowBusy(row, true);
+                    const result = await postJson("/api/admin/users/delete", {
+                        email: user.email,
+                        confirm_email: input.value.trim(),
+                    });
+                    if (!result.ok) {
+                        setRowBusy(row, false);
+                        syncConfirm();
+                        setRowNote(row, "error",
+                            `Delete failed${httpSuffix(result.status, result.detail)}`);
+                        return;
+                    }
+                    row.remove();
+                    if (!tbody.children.length) {
+                        tableWrap.hidden = true;
+                        emptyBox.hidden = false;
+                    } else {
+                        // Keep keyboard users in the table instead of dropping to <body>.
+                        const next = tbody.querySelector("button");
+                        if (next) next.focus();
+                    }
+                });
+                buttons.appendChild(confirm);
+                buttons.appendChild(cancel);
+                input.focus();
+            });
+            actionsWrap.appendChild(del);
         }
 
         actionsCell.appendChild(actionsWrap);
