@@ -215,6 +215,31 @@ html,
 .radio-filter-text { flex: 1 1 240px; }
 .radio-filter-text input { width: 100%; }
 
+.radio-filters label.radio-filter-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+    cursor: pointer;
+}
+
+.radio-filters label.radio-filter-check span {
+    display: inline;
+    margin: 0;
+    color: #cfeaf8;
+    font-size: .85rem;
+    font-weight: 800;
+    text-transform: none;
+}
+
+.radio-filters .radio-filter-check input {
+    min-width: 0;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    accent-color: #4cc9ff;
+}
+
 .radio-filters button,
 .radio-more button {
     display: inline-flex;
@@ -235,6 +260,7 @@ html,
 
 .radio-filters select:focus-visible,
 .radio-filters input:focus-visible,
+.radio-filters .radio-filter-check input:focus-visible,
 .radio-filters button:focus-visible,
 .radio-more button:focus-visible,
 .radio-tab:focus-visible,
@@ -489,6 +515,26 @@ html,
     font-weight: 850;
     white-space: nowrap;
 }
+
+/* Possible noise: invented boilerplate. Dimmed, still fully readable. */
+
+.radio-badge.is-noise {
+    border-color: rgba(158, 192, 218, .5);
+    color: #b9cde0;
+    background: rgba(158, 192, 218, .12);
+}
+
+.radio-item.is-noise .radio-item-text { opacity: .72; }
+
+.radio-panels.hide-noise .radio-item.is-noise { display: none; }
+
+.radio-noise-count {
+    margin: 6px 0 0;
+    color: #9ec0da;
+    font-size: .82rem;
+}
+
+.radio-noise-count[hidden] { display: none; }
 
 .radio-more {
     display: flex;

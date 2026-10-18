@@ -1362,6 +1362,17 @@ class RadioService:
     def _match_new_segment(self, repository, record: RadioSegmentRecord) -> None:
         try:
             text = self._fixes(repository).apply(record.transcript)
+            if radio_text.is_possible_noise(
+                text, record.duration_seconds, record.low_confidence, False
+            ):
+                # Boilerplate the transcriber invents from background noise
+                # must not raise a keyword alert. The segment is stored and
+                # shown as usual; a later human correction is still checked.
+                logger.info(
+                    "radio-alerts skipped possible noise segment=%s",
+                    record.segment_id,
+                )
+                return
             self._evaluate_alerts(
                 repository, segment_id=record.segment_id,
                 channel=record.channel, text=text,
@@ -1471,6 +1482,10 @@ class RadioService:
             "language": language,
             "model": model,
             "low_confidence": bool(low_confidence),
+            # Display only: the text itself is never altered or removed.
+            "possible_noise": radio_text.is_possible_noise(
+                text, float(duration), bool(low_confidence), corrected
+            ),
             "audio_available": self._audio_available(
                 audio_key, received_at, retain_until
             ),

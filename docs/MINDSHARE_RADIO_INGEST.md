@@ -138,3 +138,9 @@ segment_id, detail)`, allowed `event_type` values `radio.segments.list` and
 Live streaming, non-admin roles, search across audio, anything operational.
 Fire has produced no traffic yet; payload types other than PCMU are counted
 on `.227` but not decoded.
+
+## Addendum 2026-10-18: possible-noise flag and payload type 103
+
+- Segment items carry `possible_noise` (display-only; computed from the shown text after fixes and corrections): boilerplate the transcriber invents from background noise ("Thanks for watching", "Bye", "Beep", "Subtitles by..."), or a clip under 1.5 s with 3 or fewer low-confidence words. A corrected segment is never noise. Possible-noise segments do not raise keyword alerts. The page can hide them (client-side checkbox).
+- RTP payload type 103 on the radio streams is signaling, not voice (passive 180 s sample, 2026-10-17: voice is 160-byte PCMU only; type 103 packets are 8-27 bytes, a 3-packet keepalive burst every 60 s on idle streams and short bursts around each transmission). The Listener health warning ignores type 103 and still flags any other undecoded type. The 103 payloads probably carry PTT/talker information; decoding them needs the Mindshare protocol documentation.
+

@@ -47,6 +47,8 @@
         "Audio could not be played. It may have expired, or your session ended.";
     const KEEP_NOTE = "Corrected audio and text are kept for 1 year.";
     const NO_SPEECH = "(no speech recognized)";
+    const NOISE_TITLE = "Very short or boilerplate text that the transcriber often " +
+        "invents from background noise. Listen to confirm.";
 
     const statsBox = document.getElementById("radio-stats");
     const statsError = document.getElementById("radio-stats-error");
@@ -60,6 +62,8 @@
     const updatedText = document.getElementById("radio-updated");
     const refreshButton = document.getElementById("radio-refresh-button");
     const playStatus = document.getElementById("radio-play-status");
+    const hideNoiseBox = document.getElementById("radio-hide-noise");
+    const noiseCount = document.getElementById("radio-noise-count");
     if (!statsBox || !statsError || !form || !directionSelect || !textInput ||
         !applyButton || !tablist || !panelsBox || !updatedText || !refreshButton ||
         !playStatus) {
@@ -425,7 +429,60 @@
     function segmentSig(segment) {
         return [displayText(segment), segment.corrected_at || "", segment.corrected ? 1 : 0,
                 segment.audio_available ? 1 : 0, segment.low_confidence ? 1 : 0,
+                segment.possible_noise ? 1 : 0,
                 segment.retained_until || ""].join("|");
+    }
+
+    // ------------------------------------------------------- possible noise
+    //
+    // The server flags transcripts that are probably invented from background
+    // noise (`possible_noise`). The flag is display only: flagged cards get a
+    // badge and dimmed text, and "Hide possible noise" hides them client-side
+    // in every tab. Nothing is deleted. The choice is remembered for the
+    // browser session; storage can be blocked, so every access is guarded.
+
+    const HIDE_NOISE_KEY = "lcdash.radio.hideNoise";
+
+    function readHideNoise() {
+        try {
+            return window.sessionStorage.getItem(HIDE_NOISE_KEY) === "1";
+        } catch (error) {
+            return false;
+        }
+    }
+
+    function saveHideNoise(value) {
+        try {
+            window.sessionStorage.setItem(HIDE_NOISE_KEY, value ? "1" : "0");
+        } catch (error) {
+            // Not remembered; the checkbox still works for this page view.
+        }
+    }
+
+    // "N hidden as possible noise" for the tab being shown, only while hiding.
+    function updateNoiseCount() {
+        if (!noiseCount) return;
+        const tab = tabs.get(activeKey);
+        let hidden = 0;
+        if (tab && tab.kind === "feed" && hideNoiseBox && hideNoiseBox.checked) {
+            hidden = tab.list.querySelectorAll(".radio-item.is-noise").length;
+        }
+        noiseCount.hidden = hidden === 0;
+        noiseCount.textContent = hidden ? `${hidden} hidden as possible noise` : "";
+    }
+
+    function applyHideNoise() {
+        panelsBox.classList.toggle("hide-noise", Boolean(hideNoiseBox && hideNoiseBox.checked));
+        updateNoiseCount();
+    }
+
+    if (hideNoiseBox) {
+        hideNoiseBox.checked = readHideNoise();
+        applyHideNoise();
+        hideNoiseBox.addEventListener("change", function () {
+            saveHideNoise(hideNoiseBox.checked);
+            applyHideNoise();
+        });
     }
 
     function setItemError(item, text) {
@@ -563,6 +620,14 @@
             badge.title = "The transcriber was unsure about part of this segment.";
             meta.appendChild(badge);
         }
+        // Display only; the server never sets this on a corrected segment.
+        const noise = !corrected && Boolean(segment.possible_noise);
+        item.classList.toggle("is-noise", noise);
+        if (noise) {
+            const badge = element("span", "radio-badge is-noise", "Possible noise");
+            badge.title = NOISE_TITLE;
+            meta.appendChild(badge);
+        }
         item.appendChild(meta);
 
         const body = element("div", "radio-item-body");
@@ -645,6 +710,7 @@
         if (wasAbove) {
             scroller.scrollTop += item.getBoundingClientRect().height - oldHeight;
         }
+        updateNoiseCount();
     }
 
     function applySegmentEverywhere(segment, exceptItem) {
@@ -1010,6 +1076,7 @@
         });
         // The filters only apply to the transcript feeds.
         form.hidden = tab.kind !== "feed";
+        updateNoiseCount();
         if (focus) tab.button.focus();
         showUpdated(tab);
         if (tab.kind === "admin") {
@@ -1113,6 +1180,14 @@
         return `${name}: ${formatCount(perMinute)} packet${perMinute === 1 ? "" : "s"} in the last minute`;
     }
 
+    // Payload types known to be signaling, not voice. Type 103 was identified
+    // on 2026-10-17 by a passive 180 s sample of the radio streams: every voice
+    // packet is 160-byte PCMU, while type 103 packets are 8-27 bytes, arrive as
+    // a 3-packet burst every 60 s on idle streams (keepalive) and around each
+    // transmission (PTT / talker information). It carries no speech, so it must
+    // not raise the "undecoded audio" warning. Any OTHER type still does.
+    const KNOWN_SIGNALING_PAYLOAD_TYPES = new Set(["103"]);
+
     // Undecoded payload types across all listener rows:
     // [{type, packets, where: [names]}], sorted by payload type.
     function undecodedAudio(rows) {
@@ -1121,6 +1196,7 @@
             const other = row.other_payload_types;
             if (!other || typeof other !== "object") return;
             Object.keys(other).forEach(function (type) {
+                if (KNOWN_SIGNALING_PAYLOAD_TYPES.has(String(type))) return;
                 const packets = wholeNumber(other[type]);
                 if (!packets) return;
                 const label = String(type).slice(0, 8);
@@ -1373,6 +1449,7 @@
         tab.status.textContent = shown
             ? `${shown} segment${shown === 1 ? "" : "s"} shown${tab.nextBefore ? "" : " (end of list)"}.`
             : "";
+        if (tab.key === activeKey) updateNoiseCount();
     }
 
     function addItem(tab, segment, fresh) {

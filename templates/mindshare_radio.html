@@ -4,7 +4,7 @@
 
 {% block content %}
 <link rel="stylesheet" href="/static/css/lcdash-admin.css?v=20260809-admin-knowledge">
-<link rel="stylesheet" href="/static/css/lcdash-admin-radio.css?v=20261017-radio4">
+<link rel="stylesheet" href="/static/css/lcdash-admin-radio.css?v=20261018-radio6">
 
 <div class="command-page">
 <div class="command-safety-banner radio-banner mb-4" role="note">
@@ -67,6 +67,10 @@
             <span>Transcript contains</span>
             <input id="radio-filter-q" type="search" maxlength="200" autocomplete="off" placeholder="Search transcript text">
         </label>
+        <label class="radio-filter-check" for="radio-hide-noise">
+            <input id="radio-hide-noise" type="checkbox">
+            <span>Hide possible noise</span>
+        </label>
         <button id="radio-filter-apply" type="submit">
             <i class="bi bi-search" aria-hidden="true"></i> Apply
         </button>
@@ -117,6 +121,7 @@
     </div>
 
     <p id="radio-play-status" class="radio-play-status" role="status" aria-live="polite"></p>
+    <p id="radio-noise-count" class="radio-noise-count" aria-live="polite" hidden></p>
 
     <div id="radio-panels" class="radio-panels">
         {% if is_admin %}
@@ -248,6 +253,6 @@
     </div>
 </section>
 
-<script src="/static/js/lcdash-admin-radio.js?v=20261017-radio4"></script>
+<script src="/static/js/lcdash-admin-radio.js?v=20261018-radio6"></script>
 </div>
 {% endblock %}

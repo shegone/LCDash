@@ -17,7 +17,7 @@ RADIO_JS = ROOT / "static" / "js" / "lcdash-admin-radio.js"
 ALERTS_JS = ROOT / "static" / "js" / "lcdash-radio-alerts.js"
 RADIO_CSS = ROOT / "static" / "css" / "lcdash-admin-radio.css"
 ALERTS_CSS = ROOT / "static" / "css" / "lcdash-radio-alerts.css"
-CACHE_BUST = "20261017-radio4"
+CACHE_BUST = "20261018-radio6"
 # The dashboard alerts panel (dashboard.html and its script and style) did not
 # change in v3, so it keeps its own cache-bust string.
 ALERTS_CACHE_BUST = "20261017-radio3"
@@ -113,6 +113,76 @@ class CorrectionWiringTests(unittest.TestCase):
         self.assertIn("audio.available !== Boolean(segment.audio_available)", self.script)
         self.assertIn("new Audio()", self.script)
         self.assertIn('preload = "none"', self.script)
+
+
+class PossibleNoiseUiTests(unittest.TestCase):
+    """The display-only "Possible noise" badge and the hide toggle."""
+
+    def setUp(self):
+        self.template = read(ROOT / "templates" / "mindshare_radio.html")
+        self.script = read(RADIO_JS)
+        self.css = read(RADIO_CSS)
+
+    def test_template_has_the_unchecked_filter_checkbox_and_count_line(self):
+        self.assertIn('id="radio-hide-noise"', self.template)
+        self.assertIn("Hide possible noise", self.template)
+        self.assertIn('id="radio-noise-count"', self.template)
+        checkbox = re.search(r'<input id="radio-hide-noise"[^>]*>', self.template)
+        self.assertIsNotNone(checkbox)
+        self.assertNotIn("checked", checkbox.group(0))
+        # In the filter row, not outside it.
+        form = re.search(
+            r'<form id="radio-filter-form".*?</form>', self.template, re.S
+        ).group(0)
+        self.assertIn('id="radio-hide-noise"', form)
+
+    def test_badge_text_title_and_flag_field(self):
+        self.assertIn('"Possible noise"', self.script)
+        self.assertIn(
+            "Very short or boilerplate text that the transcriber often invents "
+            "from background noise. Listen to confirm.",
+            re.sub(r'"\s*\+\s*"', "", self.script),
+        )
+        self.assertIn("segment.possible_noise", self.script)
+        self.assertIn('"is-noise"', self.script)
+
+    def test_low_confidence_and_noise_badges_are_independent(self):
+        # The noise badge is its own branch, not part of the else-if chain.
+        self.assertIn("} else if (segment.low_confidence) {", self.script)
+        self.assertIn("!corrected && Boolean(segment.possible_noise)", self.script)
+
+    def test_hide_toggle_is_client_side_and_remembered_safely(self):
+        self.assertIn("sessionStorage", self.script)
+        self.assertIn("HIDE_NOISE_KEY", self.script)
+        for name in ("readHideNoise", "saveHideNoise"):
+            body = re.search(
+                r"function %s\(.*?\n    }\n" % name, self.script, re.S
+            )
+            self.assertIsNotNone(body, name)
+            self.assertIn("try {", body.group(0), name)
+            self.assertIn("catch (error)", body.group(0), name)
+        self.assertIn("hide-noise", self.script)
+        self.assertIn("hidden as possible noise", self.script)
+        self.assertIn("updateNoiseCount", self.script)
+
+    def test_hiding_is_a_class_on_the_shared_panels_box(self):
+        # One class on #radio-panels covers every tab, including cards loaded
+        # or refreshed later; nothing is removed from the DOM.
+        self.assertIn(".radio-panels.hide-noise .radio-item.is-noise", self.css)
+        self.assertIn("display: none", self.css)
+        self.assertIn(".radio-item.is-noise .radio-item-text", self.css)
+        self.assertIn(".radio-badge.is-noise", self.css)
+
+    def test_noise_text_goes_in_through_textcontent_only(self):
+        self.assertNotIn("innerHTML", self.script)
+        self.assertIn('element("span", "radio-badge is-noise", "Possible noise")',
+                      self.script)
+
+    def test_the_changed_assets_use_the_new_cache_bust(self):
+        self.assertEqual(CACHE_BUST, "20261018-radio6")
+        self.assertIn(f"lcdash-admin-radio.js?v={CACHE_BUST}", self.template)
+        self.assertIn(f"lcdash-admin-radio.css?v={CACHE_BUST}", self.template)
+        self.assertNotIn("20261017-radio4", self.template)
 
 
 class RadioTemplateTests(unittest.TestCase):
