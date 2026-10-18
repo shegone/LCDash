@@ -320,6 +320,16 @@ class PilotAccessService:
                     UserPoolId=self._user_pool_id, Username=email
                 )
             except Exception as error:
+                if _aws_error_code(error) in ("NotAuthorizedException", "UnsupportedUserStateException"):
+                    # This pool has no self-service account recovery (email is
+                    # the MFA channel, and Cognito will not also use it for
+                    # recovery), and AdminResetUserPassword requires it. Say so
+                    # instead of the generic "current state" text.
+                    raise PilotAccessError(
+                        f"Password reset by emailed code is not available for {email} "
+                        "on this user pool. To give them a new password: delete the "
+                        "account, then invite the same email address again."
+                    ) from error
                 self._raise_cognito_failure(error, email, "reset the password")
         logger.info(
             "pilot-access reset_password target=%s method=%s acting_subject=%s",

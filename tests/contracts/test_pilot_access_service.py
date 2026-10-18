@@ -372,8 +372,8 @@ class PilotAccessServiceTests(unittest.TestCase):
             "InvalidParameterException": "no verified email",
             "LimitExceededException": "Wait a few minutes",
             "TooManyRequestsException": "Wait a few minutes",
-            "NotAuthorizedException": "refused",
-            "UnsupportedUserStateException": "refused",
+            "NotAuthorizedException": "not available",
+            "UnsupportedUserStateException": "not available",
             "UserNotFoundException": "No account exists",
             "SomethingElseException": "SomethingElseException",
         }
