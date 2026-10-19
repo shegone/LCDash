@@ -1,6 +1,7 @@
 -- Mindshare Radio Intelligence: transcripts and audit (docs/MINDSHARE_RADIO_INGEST.md,
 -- v2 additions in docs/MINDSHARE_RADIO_CORRECTIONS.md, v3 listener health and
--- hint words in docs/MINDSHARE_RADIO_HEALTH.md).
+-- hint words in docs/MINDSHARE_RADIO_HEALTH.md, v4 radio IDs and unit names in
+-- docs/MINDSHARE_RADIO_UNITS.md).
 -- Idempotent. Applied lazily by app/services/radio_service.py, once per process.
 -- Transcripts are machine generated and unverified. Rows in segments are
 -- purged 30 days after received_at unless a human correction extended
@@ -57,7 +58,8 @@ CREATE TABLE IF NOT EXISTS lcdash_radio.audit_events (
             'radio.segment.correct', 'radio.segment.correct_revert',
             'radio.fix.add', 'radio.fix.remove',
             'radio.watch.add', 'radio.watch.change', 'radio.watch.remove',
-            'radio.alert.dismiss', 'radio.hint.add', 'radio.hint.remove'
+            'radio.alert.dismiss', 'radio.hint.add', 'radio.hint.remove',
+            'radio.unit.set', 'radio.unit.remove'
         ))
 );
 
@@ -151,8 +153,29 @@ CREATE TABLE IF NOT EXISTS lcdash_radio.hints (
 CREATE UNIQUE INDEX IF NOT EXISTS radio_hints_phrase_idx
     ON lcdash_radio.hints (lower(phrase));
 
+-- v4: who is talking. The listener reads the radio ID, talkgroup and console
+-- label from the RTP payload-type-103 signalling and sends them in the optional
+-- metadata `signal` object. Rows stored before v4 keep NULL (not captured).
+ALTER TABLE lcdash_radio.segments ADD COLUMN IF NOT EXISTS radio_id TEXT;
+ALTER TABLE lcdash_radio.segments ADD COLUMN IF NOT EXISTS talkgroup TEXT;
+ALTER TABLE lcdash_radio.segments ADD COLUMN IF NOT EXISTS console_label TEXT;
+
+CREATE INDEX IF NOT EXISTS radio_segments_radio_id_idx
+    ON lcdash_radio.segments (radio_id, started_at DESC)
+    WHERE radio_id IS NOT NULL;
+
+-- v4: admin-managed unit names ("98426 = Medic 4"), shown on every transcript
+-- card. The name only labels a radio ID; segments keep the ID if it is removed.
+CREATE TABLE IF NOT EXISTS lcdash_radio.units (
+    radio_id TEXT PRIMARY KEY CHECK (radio_id ~ '^[0-9]{1,10}$'),
+    name TEXT NOT NULL CHECK (char_length(name) BETWEEN 1 AND 60),
+    updated_by TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Databases created before v2 carry the two-event audit constraint, and v2
--- databases lack the two v3 hint events; widen it once to the full list. This
+-- databases lack the two v3 hint events, and v3 databases lack the two v4 unit
+-- events; widen it once to the full list. This
 -- is the only constraint change and it runs only when needed (the guard looks
 -- for the newest event, so a current constraint is left alone).
 DO $$
@@ -161,7 +184,7 @@ BEGIN
         SELECT 1 FROM pg_constraint
         WHERE conname = 'radio_audit_event_type_check'
           AND conrelid = 'lcdash_radio.audit_events'::regclass
-          AND position('radio.hint.remove' IN pg_get_constraintdef(oid)) = 0
+          AND position('radio.unit.remove' IN pg_get_constraintdef(oid)) = 0
     ) THEN
         ALTER TABLE lcdash_radio.audit_events
             DROP CONSTRAINT radio_audit_event_type_check;
@@ -172,7 +195,8 @@ BEGIN
                 'radio.segment.correct', 'radio.segment.correct_revert',
                 'radio.fix.add', 'radio.fix.remove',
                 'radio.watch.add', 'radio.watch.change', 'radio.watch.remove',
-                'radio.alert.dismiss', 'radio.hint.add', 'radio.hint.remove'
+                'radio.alert.dismiss', 'radio.hint.add', 'radio.hint.remove',
+                'radio.unit.set', 'radio.unit.remove'
             ));
     END IF;
 END

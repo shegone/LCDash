@@ -504,6 +504,93 @@ html,
 
 .radio-chip-all { --chip: #9ec0da; --chip-bg: rgba(158, 192, 218, .1); }
 
+/* Who is talking: a button chip (click filters to that radio ID), a small
+   talkgroup tag, and a console label for the dispatch side. */
+
+.radio-who {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    min-height: 28px;
+    padding: 2px 11px;
+    border: 1px solid rgba(158, 192, 218, .55);
+    border-radius: 999px;
+    color: #dff8ff;
+    background: rgba(158, 192, 218, .1);
+    font-size: .8rem;
+    font-weight: 850;
+    text-align: left;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+}
+
+.radio-who.is-named {
+    border-color: rgba(105, 255, 185, .6);
+    color: #b5ffe0;
+    background: rgba(105, 255, 185, .1);
+}
+
+.radio-who:hover { border-color: #4cc9ff; background: rgba(76, 201, 255, .16); }
+
+.radio-who:focus-visible,
+.radio-id-filter-clear:focus-visible {
+    outline: 3px solid rgba(85, 212, 255, .62);
+    outline-offset: 2px;
+}
+
+.radio-tg {
+    padding: 1px 8px;
+    border: 1px solid rgba(255, 214, 107, .45);
+    border-radius: 6px;
+    color: #ffe3a0;
+    font-size: .74rem;
+    font-weight: 850;
+    letter-spacing: .4px;
+}
+
+.radio-console {
+    padding: 2px 11px;
+    border: 1px dashed rgba(158, 192, 218, .6);
+    border-radius: 999px;
+    color: #cfeaf8;
+    font-size: .8rem;
+    font-weight: 800;
+    overflow-wrap: anywhere;
+}
+
+/* "Showing radio ID 98426 (Medic 4) - clear" */
+
+.radio-id-filter {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 16px;
+    padding: 9px 14px;
+    border: 1px solid rgba(76, 201, 255, .5);
+    border-radius: 10px;
+    color: #dff8ff;
+    background: rgba(76, 201, 255, .1);
+    font-size: .9rem;
+    font-weight: 800;
+    overflow-wrap: anywhere;
+}
+
+.radio-id-filter[hidden] { display: none; }
+
+.radio-id-filter-text { flex: 1 1 160px; min-width: 0; }
+
+.radio-id-filter-clear {
+    min-height: 32px;
+    padding: 2px 12px;
+    border: 1px solid rgba(76, 201, 255, .6);
+    border-radius: 8px;
+    color: #031018;
+    background: #4cc9ff;
+    font-weight: 900;
+    cursor: pointer;
+}
+
 .radio-badge {
     display: inline-block;
     padding: 1px 9px;
@@ -871,6 +958,35 @@ html,
 
 .radio-admin-meta { color: #91afc9; font-size: .84rem; overflow-wrap: anywhere; }
 
+/* Units tab: one row per radio ID with an inline name field */
+
+.radio-unit-filter { margin-top: 10px; }
+
+.radio-unit-status { min-height: 1.2em; margin-top: 6px; }
+
+.radio-unit-id { color: #fff; font-size: 1.05rem; letter-spacing: .3px; }
+
+.radio-unit-edit { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+.radio-unit-name-label { display: block; }
+
+.radio-unit-name {
+    width: 240px;
+    max-width: 100%;
+    padding: 8px 11px;
+    border: 1px solid rgba(76, 201, 255, .3);
+    border-radius: 10px;
+    color: #dff8ff;
+    background: rgba(5, 16, 30, .7);
+}
+
+.radio-unit-name:focus-visible {
+    outline: 3px solid rgba(85, 212, 255, .62);
+    outline-offset: 2px;
+}
+
+.radio-unit-list.is-only-unnamed .radio-unit-row.is-named { display: none; }
+
 @media (max-width: 720px) {
     .radio-hero { flex-direction: column; align-items: flex-start; }
     .radio-refresh { width: 100%; justify-content: space-between; }
@@ -893,6 +1009,10 @@ html,
     .radio-editor-actions .radio-cancel { flex: 1 1 120px; justify-content: center; }
     .radio-admin-row { padding: 11px 12px; }
     .radio-admin-controls { width: 100%; justify-content: space-between; }
+    .radio-unit-edit { width: 100%; }
+    .radio-unit-name-label { flex: 1 1 160px; }
+    .radio-unit-name { width: 100%; }
+    .radio-id-filter { padding: 9px 12px; }
     .radio-admin-add { width: 100%; justify-content: center; }
     .radio-stat { min-width: 0; flex: 1 1 calc(33% - 8px); }
     .radio-stat.is-wide { flex-basis: 100%; }

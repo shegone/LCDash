@@ -14,8 +14,9 @@ Deliberately NOT here:
 * ``/api/radio/ingest`` and ``/api/radio/heartbeat``: machine-signed and
   identity-blind. No tier ever needs to admit a person to them, so they are
   simply not listed.
-* ``/api/radio/replacements``, ``/api/radio/watch-terms`` and
-  ``/api/radio/hints``: admin-only management routes. Tiers that deny by
+* ``/api/radio/replacements``, ``/api/radio/watch-terms``,
+  ``/api/radio/hints`` and ``/api/radio/units`` (unit names): admin-only
+  management routes. Tiers that deny by
   default keep them denied (the route itself also answers every non-admin
   with the uniform 403).
 * the ``avatar`` role: its allowlist is untouched, so it stays denied.

@@ -17,7 +17,7 @@ RADIO_JS = ROOT / "static" / "js" / "lcdash-admin-radio.js"
 ALERTS_JS = ROOT / "static" / "js" / "lcdash-radio-alerts.js"
 RADIO_CSS = ROOT / "static" / "css" / "lcdash-admin-radio.css"
 ALERTS_CSS = ROOT / "static" / "css" / "lcdash-radio-alerts.css"
-CACHE_BUST = "20261018-radio6"
+CACHE_BUST = "20261018-radio7"
 # The dashboard alerts panel (dashboard.html and its script and style) did not
 # change in v3, so it keeps its own cache-bust string.
 ALERTS_CACHE_BUST = "20261017-radio3"
@@ -179,10 +179,11 @@ class PossibleNoiseUiTests(unittest.TestCase):
                       self.script)
 
     def test_the_changed_assets_use_the_new_cache_bust(self):
-        self.assertEqual(CACHE_BUST, "20261018-radio6")
+        self.assertEqual(CACHE_BUST, "20261018-radio7")
         self.assertIn(f"lcdash-admin-radio.js?v={CACHE_BUST}", self.template)
         self.assertIn(f"lcdash-admin-radio.css?v={CACHE_BUST}", self.template)
         self.assertNotIn("20261017-radio4", self.template)
+        self.assertNotIn("20261018-radio6", self.template)
 
 
 class RadioTemplateTests(unittest.TestCase):
@@ -386,6 +387,146 @@ class ListenerHealthPanelTests(unittest.TestCase):
         self.assertIn('minlength="2" maxlength="60"', self.template)
         # A 409 shows the server's reason through the shared inline error path.
         self.assertIn("httpSuffix(response.status, detail)", self.script)
+
+
+class RadioIdAndUnitsUiTests(unittest.TestCase):
+    """Radio v4: who is talking (chips, radio ID filter) and the admin Units tab."""
+
+    def setUp(self):
+        self.template = read(ROOT / "templates" / "mindshare_radio.html")
+        self.script = read(RADIO_JS)
+        self.css = read(RADIO_CSS)
+        self.admin_only = "\n".join(if_admin_blocks(self.template))
+        self.outside = self.template
+        for body in if_admin_blocks(self.template):
+            self.outside = self.outside.replace(body, "")
+
+    def test_units_tab_exists_only_inside_is_admin_blocks(self):
+        for marker in (
+            'id="radio-tab-units"',
+            'data-admin-tab="units"',
+            'data-panel="radio-panel-units"',
+            'id="radio-panel-units"',
+            'id="radio-unit-list"',
+            'id="radio-unit-form"',
+            'id="radio-unit-unnamed"',
+            'id="radio-unit-new-id"',
+            'id="radio-unit-new-name"',
+            "Show only unnamed",
+            "Add by ID",
+        ):
+            self.assertIn(marker, self.admin_only, marker)
+            self.assertNotIn(marker, self.outside, f"{marker} must be admin-only")
+        self.assertNotIn("radio-unit-", self.outside)
+        text = re.sub(r"\s+", " ", self.admin_only)
+        self.assertIn("Names appear on every transcript card for everyone.", text)
+        # The script, not the template, gives the admin tab its role.
+        self.assertEqual(self.template.count('role="tab"'), 4)
+        self.assertIn('tab.name === "units"', self.script)
+        self.assertIn("setupUnitsTab(tab)", self.script)
+
+    def test_hint_panel_closes_before_the_units_panel_opens(self):
+        hints = self.template.index('id="radio-panel-hints"')
+        units = self.template.index('id="radio-panel-units"')
+        between = self.template[hints:units]
+        # The hint panel's own <div> is the one still open at the end.
+        self.assertEqual(len(re.findall(r"<div\b", between)),
+                         len(re.findall(r"</div>", between)))
+
+    def test_units_form_limits_match_the_spec(self):
+        self.assertRegex(self.template, r'id="radio-unit-new-id"[^>]*maxlength="10"')
+        self.assertRegex(self.template, r'id="radio-unit-new-name"[^>]*maxlength="60"')
+        self.assertIn("MAX_UNIT_NAME = 60", self.script)
+        self.assertIn("RADIO_ID_PATTERN = /^[0-9]{1,10}$/", self.script)
+        self.assertIn("TALKGROUP_PATTERN = /^G[0-9]{1,6}$/", self.script)
+
+    def test_units_tab_uses_the_units_api_with_a_two_step_clear(self):
+        for needle in (
+            '"GET", "/api/radio/units"',
+            '"PUT", `/api/radio/units/${encodeURIComponent(unit.id)}`',
+            '"PUT", `/api/radio/units/${encodeURIComponent(id)}`',
+            '"DELETE", `/api/radio/units/${encodeURIComponent(unit.id)}`',
+            "{ name: name }",
+            "Clear this name?",
+            "Yes, clear",
+            "makeDeleteControl(`name of radio ID",
+            "The unit name could not be saved",
+            "The unit name could not be cleared",
+            "Units could not be loaded",
+            "segments_30d",
+            "last_seen_at",
+            "max_units",
+            "is-only-unnamed",
+        ):
+            self.assertIn(needle, self.script, needle)
+        # Failures (400, 409, 503) show the server's reason through the shared path.
+        self.assertIn("httpSuffix(response.status, detail)", self.script)
+        # The delete control keeps its wording for every other tab.
+        self.assertIn('ask: "Delete this?"', self.script)
+
+    def test_feed_filter_and_chip_hooks(self):
+        for needle in (
+            'params.set("radio_id", radioFilter.id)',
+            "function setRadioFilter(id, name)",
+            "Showing radio ID ${radioFilter.id}",
+            "Clear the radio ID filter",
+            "`Console: ${label}`",
+            "`ID ${id}`",
+            "segment.unit_name",
+            "segment.talkgroup",
+            "segment.console_label",
+            "segment.radio_id",
+            'element("button", `radio-who',
+            "unitsDirty",
+        ):
+            self.assertIn(needle, self.script, needle)
+        # An empty chip is never drawn: every piece is checked first.
+        self.assertIn('RADIO_ID_PATTERN.test(id) ? id : ""', self.script)
+        self.assertIn("TALKGROUP_PATTERN.test(group)", self.script)
+        self.assertIn("CONSOLE_LABEL_PATTERN.test(label)", self.script)
+        # A rename changes the chip, so these are part of the card signature.
+        self.assertIn('segment.radio_id || ""', self.script)
+        self.assertIn('segment.unit_name || ""', self.script)
+
+    def test_filter_bar_is_in_the_page_for_everyone(self):
+        self.assertIn('id="radio-id-filter"', self.outside)
+        opening = re.search(r'<div id="radio-id-filter"[^>]*>', self.template).group(0)
+        self.assertIn('class="radio-id-filter"', opening)
+        self.assertIn('role="status"', opening)
+        self.assertRegex(opening, r"\shidden")
+
+    def test_search_box_says_it_finds_ids_and_unit_names(self):
+        box = re.search(r'<input id="radio-filter-q"[^>]*>', self.template).group(0)
+        self.assertIn("radio ID", box)
+        self.assertIn("unit name", box)
+        self.assertNotIn("Transcript contains", self.template)
+
+    def test_names_and_ids_only_ever_go_in_through_textcontent(self):
+        for banned in ("innerHTML", "outerHTML", "insertAdjacentHTML"):
+            self.assertNotIn(banned, self.script)
+        code = code_only(self.script)
+        self.assertNotIn("innerText", code)
+        self.assertNotIn(".href =", code)
+        self.assertNotIn('setAttribute("on', code)
+
+    def test_styles_for_chips_filter_bar_and_units_rows_exist(self):
+        for selector in (
+            ".radio-who",
+            ".radio-who.is-named",
+            ".radio-tg",
+            ".radio-console",
+            ".radio-id-filter",
+            ".radio-id-filter-clear",
+            ".radio-unit-row",
+            ".radio-unit-name",
+            ".radio-unit-list.is-only-unnamed .radio-unit-row.is-named",
+        ):
+            self.assertIn(selector, self.css, selector)
+
+    def test_other_admin_tabs_are_still_wired(self):
+        for name in ("watch", "fixes", "hints"):
+            self.assertIn(f'tab.name === "{name}"', self.script)
+            self.assertIn(f'data-admin-tab="{name}"', self.template)
 
 
 class DashboardAlertsPanelTests(unittest.TestCase):

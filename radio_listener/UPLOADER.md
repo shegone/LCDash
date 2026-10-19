@@ -14,6 +14,12 @@ touches CAD. Standard library only; signing uses the system `openssl` (3.x).
 - Sends only the contract's whitelisted metadata fields plus the WAV, signed
   with the Ed25519 private key. `audio_file`, `source_packet_counts`,
   `multicast_group`, `port` and `language_probability` are never sent.
+- Includes the optional `signal` object (who is talking, from the capture's
+  RTP payload type 103 parsing; see `docs/MINDSHARE_RADIO_UNITS.md`) only with
+  the keys `radio_id`, `talkgroup` and `console_label`, each re-validated
+  against the contract's pattern. Invalid keys are dropped, and the whole
+  object is omitted when nothing valid is left. Raw signalling bytes are never
+  sent.
 - `201` or `200` writes `<segment_id>.done`. `400` or `413` writes
   `<segment_id>.rejected` (status and a short detail) and is not retried.
   `401`, `5xx` and network errors are retried with backoff (5 s doubling to

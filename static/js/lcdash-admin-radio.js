@@ -28,6 +28,13 @@
 // when a person presses Play on a card, so nothing is fetched (or audited)
 // until then, and starting another card stops the current one.
 //
+// Who is talking: each card carries a chip with the radio ID and, when an
+// administrator has named it, the unit name ("Medic 4 · 98426"); a console
+// stream shows "Console: Position2". The chip is a button that filters every
+// tab to that radio ID (server side, `radio_id`), with a bar to clear it.
+// Administrators get a "Units" tab to name radio IDs; names show on every
+// card for everyone.
+//
 // Auto-refresh: while the page is visible and nothing is playing, the active
 // feed tab fetches its newest page every 30 s and prepends segments not yet
 // shown. It never clears the list, moves the scroll position, touches
@@ -37,6 +44,10 @@
 
     const STATS_REFRESH_MS = 15000;
     const MAX_HINT = 60;
+    const MAX_UNIT_NAME = 60;
+    const RADIO_ID_PATTERN = /^[0-9]{1,10}$/;
+    const TALKGROUP_PATTERN = /^G[0-9]{1,6}$/;
+    const CONSOLE_LABEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9 _.-]{0,31}$/;
     const MIN_HINT = 2;
     const FEED_REFRESH_MS = 30000;
     const PAGE_SIZE = 50;
@@ -64,6 +75,7 @@
     const playStatus = document.getElementById("radio-play-status");
     const hideNoiseBox = document.getElementById("radio-hide-noise");
     const noiseCount = document.getElementById("radio-noise-count");
+    const idFilterBar = document.getElementById("radio-id-filter");
     if (!statsBox || !statsError || !form || !directionSelect || !textInput ||
         !applyButton || !tablist || !panelsBox || !updatedText || !refreshButton ||
         !playStatus) {
@@ -75,6 +87,10 @@
     let activeKey = "";
     let statsTimer = null;
     let feedTimer = null;
+    // The radio ID every feed is filtered to: {id, name} or null.
+    let radioFilter = null;
+    // Set when a unit name changed, so feeds reload the next time one is opened.
+    let unitsDirty = false;
 
     // Per-card state, kept off the DOM so the DOM stays plain.
     const itemState = new WeakMap();
@@ -430,7 +446,9 @@
         return [displayText(segment), segment.corrected_at || "", segment.corrected ? 1 : 0,
                 segment.audio_available ? 1 : 0, segment.low_confidence ? 1 : 0,
                 segment.possible_noise ? 1 : 0,
-                segment.retained_until || ""].join("|");
+                segment.retained_until || "",
+                segment.radio_id || "", segment.unit_name || "",
+                segment.talkgroup || "", segment.console_label || ""].join("|");
     }
 
     // ------------------------------------------------------- possible noise
@@ -573,6 +591,124 @@
         if (focusName) focusTool(item, focusName);
     }
 
+    // ------------------------------------------------------- who is talking
+    //
+    // radio_id / talkgroup / console_label / unit_name come from the server
+    // (null for segments captured before this was recorded). Each is checked
+    // against its pattern before it is shown, and an empty chip is never drawn.
+
+    function segmentRadioId(segment) {
+        const raw = segment.radio_id;
+        if (raw === null || raw === undefined) return "";
+        const id = String(raw);
+        return RADIO_ID_PATTERN.test(id) ? id : "";
+    }
+
+    function segmentUnitName(segment) {
+        const raw = segment.unit_name;
+        if (typeof raw !== "string") return "";
+        return raw.trim().slice(0, MAX_UNIT_NAME);
+    }
+
+    function whoLabel(id, name) {
+        return name ? `${name} · ${id}` : `ID ${id}`;
+    }
+
+    function appendWho(meta, segment) {
+        const id = segmentRadioId(segment);
+        if (id) {
+            const name = segmentUnitName(segment);
+            const chip = element("button", `radio-who${name ? " is-named" : ""}`, whoLabel(id, name));
+            chip.type = "button";
+            chip.dataset.radioId = id;
+            const describe = name ? `radio ID ${id} (${name})` : `radio ID ${id}`;
+            chip.title = `Show only ${describe}`;
+            chip.setAttribute("aria-label", `Show only ${describe}`);
+            chip.addEventListener("click", function () {
+                setRadioFilter(id, name);
+            });
+            meta.appendChild(chip);
+        }
+        const group = typeof segment.talkgroup === "string" ? segment.talkgroup : "";
+        if (TALKGROUP_PATTERN.test(group)) {
+            const tag = element("span", "radio-tg", group);
+            tag.title = "Talkgroup";
+            meta.appendChild(tag);
+        }
+        const label = typeof segment.console_label === "string" ? segment.console_label.trim() : "";
+        if (label && CONSOLE_LABEL_PATTERN.test(label)) {
+            const consoleTag = element("span", "radio-console", `Console: ${label}`);
+            consoleTag.title = "Dispatch console position";
+            meta.appendChild(consoleTag);
+        }
+    }
+
+    // ----------------------------------------------------- radio ID filter
+
+    function syncFilterBar() {
+        if (!idFilterBar) return;
+        const tab = tabs.get(activeKey);
+        idFilterBar.hidden = !(radioFilter && tab && tab.kind === "feed");
+    }
+
+    function renderFilterBar() {
+        if (!idFilterBar) return;
+        idFilterBar.textContent = "";
+        if (radioFilter) {
+            const name = radioFilter.name ? ` (${radioFilter.name})` : "";
+            idFilterBar.appendChild(icon("bi-funnel-fill"));
+            idFilterBar.appendChild(element("span", "radio-id-filter-text",
+                `Showing radio ID ${radioFilter.id}${name} - `));
+            const clear = element("button", "radio-id-filter-clear", "clear");
+            clear.type = "button";
+            clear.setAttribute("aria-label", "Clear the radio ID filter");
+            clear.addEventListener("click", function () {
+                setRadioFilter(null, "");
+                textInput.focus({ preventScroll: true });
+            });
+            idFilterBar.appendChild(clear);
+        }
+        syncFilterBar();
+    }
+
+    // The unit name may be added or changed after the filter was set.
+    function noteFilterName(segment) {
+        if (!radioFilter || segmentRadioId(segment) !== radioFilter.id) return;
+        const name = segmentUnitName(segment);
+        if (name === radioFilter.name) return;
+        radioFilter.name = name;
+        renderFilterBar();
+    }
+
+    // Reloading would throw away an unsaved correction, so refuse instead.
+    function feedsBlockedByEdit() {
+        if (!hasEditingCard()) return false;
+        const active = tabs.get(activeKey);
+        if (active && active.kind === "feed") {
+            showError(active.error, "Save or cancel the open edit before changing the filter.");
+        }
+        return true;
+    }
+
+    function reloadFeeds() {
+        const active = tabs.get(activeKey);
+        tabs.forEach(function (tab) {
+            if (tab.kind === "feed" && tab.key !== activeKey) clearTab(tab);
+        });
+        if (active && active.kind === "feed") loadFirst(active);
+    }
+
+    function setRadioFilter(id, name) {
+        if (feedsBlockedByEdit()) return;
+        radioFilter = id ? { id: id, name: name || "" } : null;
+        renderFilterBar();
+        reloadFeeds();
+        if (radioFilter && idFilterBar) {
+            const clear = idFilterBar.querySelector("button");
+            if (clear) clear.focus({ preventScroll: true });
+        }
+    }
+
     // Build (or rebuild in place) everything on a card except the audio area,
     // which is reused so a correction never interrupts playback.
     function fillItem(item, segment) {
@@ -606,6 +742,8 @@
         const dir = element("span", "radio-dir", direction);
         dir.title = direction === "TX" ? "Transmitted" : "Received";
         meta.appendChild(dir);
+        appendWho(meta, segment);
+        noteFilterName(segment);
         const length = formatDuration(segment.duration_seconds);
         if (length) meta.appendChild(element("span", "radio-length", length));
         if (corrected) {
@@ -1076,12 +1214,20 @@
         });
         // The filters only apply to the transcript feeds.
         form.hidden = tab.kind !== "feed";
+        syncFilterBar();
         updateNoiseCount();
         if (focus) tab.button.focus();
         showUpdated(tab);
         if (tab.kind === "admin") {
             tab.load();
             return;
+        }
+        if (unitsDirty && !hasEditingCard()) {
+            // A unit name changed: cards shown earlier still carry the old name.
+            unitsDirty = false;
+            tabs.forEach(function (other) {
+                if (other.kind === "feed") clearTab(other);
+            });
         }
         if (!tab.loaded) {
             loadFirst(tab);
@@ -1428,6 +1574,7 @@
         if (directionSelect.value) params.set("direction", directionSelect.value);
         const q = textInput.value.trim();
         if (q) params.set("q", q);
+        if (radioFilter) params.set("radio_id", radioFilter.id);
         if (before) params.set("before", before);
         params.set("limit", String(PAGE_SIZE));
         return params.toString();
@@ -1609,18 +1756,8 @@
     }
 
     function applyFilters() {
-        const active = tabs.get(activeKey);
-        if (hasEditingCard()) {
-            // Reloading would throw away an unsaved correction.
-            if (active && active.kind === "feed") {
-                showError(active.error, "Save or cancel the open edit before changing the filter.");
-            }
-            return;
-        }
-        tabs.forEach(function (tab) {
-            if (tab.kind === "feed" && tab.key !== activeKey) clearTab(tab);
-        });
-        if (active && active.kind === "feed") loadFirst(active);
+        if (feedsBlockedByEdit()) return;
+        reloadFeeds();
     }
 
     form.addEventListener("submit", function (event) {
@@ -1652,14 +1789,18 @@
     // Two-step delete: a plain Delete button turns into "Delete? Yes / Cancel".
     // `run` resolves true when the row is gone, false when it failed (it shows
     // its own error), so the control can return to its idle state.
-    function makeDeleteControl(label, run) {
+    // `options` may reword it ("Clear" instead of "Delete").
+    function makeDeleteControl(label, run, options) {
+        const words = Object.assign({
+            idle: "Delete", ask: "Delete this?", yes: "Yes, delete", icon: "bi-trash3",
+        }, options || {});
         const wrap = element("span", "radio-delete");
         wrap.dataset.state = "idle";
         function idle(focusIt) {
             wrap.textContent = "";
             wrap.dataset.state = "idle";
-            const button = iconButton("radio-tool is-danger", "bi-trash3", "Delete");
-            button.setAttribute("aria-label", `Delete ${label}`);
+            const button = iconButton("radio-tool is-danger", words.icon, words.idle);
+            button.setAttribute("aria-label", `${words.idle} ${label}`);
             button.addEventListener("click", askConfirm);
             wrap.appendChild(button);
             if (focusIt) button.focus({ preventScroll: true });
@@ -1668,9 +1809,9 @@
             wrap.textContent = "";
             wrap.dataset.state = "confirm";
             wrap.setAttribute("role", "group");
-            wrap.appendChild(element("span", "radio-confirm-text", "Delete this?"));
-            const yes = iconButton("radio-tool is-danger", "bi-trash3", "Yes, delete");
-            yes.setAttribute("aria-label", `Yes, delete ${label}`);
+            wrap.appendChild(element("span", "radio-confirm-text", words.ask));
+            const yes = iconButton("radio-tool is-danger", words.icon, words.yes);
+            yes.setAttribute("aria-label", `${words.yes} ${label}`);
             const no = iconButton("radio-tool", "bi-x-lg", "Cancel");
             yes.addEventListener("click", async function () {
                 yes.disabled = true;
@@ -2174,6 +2315,253 @@
         });
     }
 
+    // ---- Units (radio ID -> unit name)
+
+    function normalizeUnit(raw) {
+        if (!raw || typeof raw !== "object") return null;
+        if (raw.radio_id === undefined || raw.radio_id === null) return null;
+        const id = String(raw.radio_id);
+        if (!RADIO_ID_PATTERN.test(id)) return null;
+        return {
+            id: id,
+            name: typeof raw.name === "string" ? raw.name.trim().slice(0, MAX_UNIT_NAME) : "",
+            segments: wholeNumber(raw.segments_30d) || 0,
+            lastSeen: typeof raw.last_seen_at === "string" ? raw.last_seen_at : "",
+        };
+    }
+
+    // Names are plain text on one line, 1 to 60 characters. Returns a problem or "".
+    function unitNameProblem(name) {
+        if (name.length < 1 || name.length > MAX_UNIT_NAME) {
+            return `Enter a unit name of 1 to ${MAX_UNIT_NAME} characters.`;
+        }
+        if (CONTROL_CHARS.test(name) || /[\r\n\t]/.test(name)) {
+            return "Use plain text on one line.";
+        }
+        return "";
+    }
+
+    function setupUnitsTab(tab) {
+        const list = byId("radio-unit-list");
+        const empty = byId("radio-unit-empty");
+        const loading = byId("radio-unit-loading");
+        const error = byId("radio-unit-error");
+        const addForm = byId("radio-unit-form");
+        const idInput = byId("radio-unit-new-id");
+        const nameInput = byId("radio-unit-new-name");
+        const formError = byId("radio-unit-form-error");
+        const total = byId("radio-unit-total");
+        const status = byId("radio-unit-status");
+        const addButton = byId("radio-unit-add");
+        const onlyUnnamed = byId("radio-unit-unnamed");
+        if (!list || !empty || !loading || !error || !addForm || !idInput || !nameInput ||
+            !formError || !addButton || !onlyUnnamed) {
+            return;
+        }
+        let maxUnits = 2000;
+
+        function say(text) {
+            if (status) status.textContent = text;
+        }
+
+        function updateSummaryText() {
+            const rows = list.children.length;
+            const named = list.querySelectorAll(".radio-unit-row.is-named").length;
+            list.classList.toggle("is-only-unnamed", onlyUnnamed.checked);
+            const visible = onlyUnnamed.checked ? rows - named : rows;
+            empty.hidden = visible > 0;
+            empty.textContent = rows === 0
+                ? "No radio IDs seen yet. Add one below."
+                : "Every radio ID listed has a name.";
+            if (total) {
+                total.textContent = rows
+                    ? `${rows} radio ID${rows === 1 ? "" : "s"}, ${named} named ` +
+                      `(up to ${maxUnits.toLocaleString("en-US")} names)`
+                    : "";
+            }
+        }
+
+        function focusRow(id) {
+            const input = list.querySelector(`[data-radio-id="${id}"] .radio-unit-name`);
+            if (input) input.focus({ preventScroll: true });
+        }
+
+        function replaceRow(row, unit) {
+            if (!unit.name && unit.segments === 0) {
+                // Named only and never heard: nothing is left to show.
+                row.remove();
+                updateSummaryText();
+                idInput.focus({ preventScroll: true });
+                return;
+            }
+            row.replaceWith(renderUnit(unit));
+            updateSummaryText();
+            focusRow(unit.id);
+        }
+
+        function renderUnit(unit) {
+            const row = element("li",
+                `radio-admin-row radio-unit-row${unit.name ? " is-named" : ""}`);
+            row.dataset.radioId = unit.id;
+
+            const main = element("div", "radio-admin-main");
+            main.appendChild(element("strong", "radio-unit-id", unit.id));
+            main.appendChild(element("span", "radio-admin-meta",
+                `${unit.segments.toLocaleString("en-US")} segment${unit.segments === 1 ? "" : "s"} in 30 days`));
+            const heard = unit.lastSeen ? formatTime(unit.lastSeen) : "";
+            main.appendChild(element("span", "radio-admin-meta",
+                heard ? `Last heard ${heard}` : "Not heard in 30 days"));
+
+            const edit = element("form", "radio-unit-edit");
+            edit.noValidate = true;
+            const label = element("label", "radio-unit-name-label");
+            label.appendChild(element("span", "radio-sr-only", `Unit name for radio ID ${unit.id}`));
+            const input = element("input", "radio-unit-name");
+            input.type = "text";
+            input.maxLength = MAX_UNIT_NAME;
+            input.value = unit.name;
+            input.placeholder = "Unit name";
+            input.autocomplete = "off";
+            label.appendChild(input);
+            const save = iconButton("radio-tool radio-unit-save", "bi-check-lg", "Save");
+            save.type = "submit";
+            save.setAttribute("aria-label", `Save name for radio ID ${unit.id}`);
+            edit.appendChild(label);
+            edit.appendChild(save);
+
+            edit.addEventListener("submit", async function (event) {
+                event.preventDefault();
+                hideError(rowError(row));
+                const name = input.value.trim();
+                const problem = unitNameProblem(name);
+                if (problem) {
+                    showError(rowError(row), problem);
+                    input.focus({ preventScroll: true });
+                    return;
+                }
+                if (name === unit.name) {
+                    say(`No change to radio ID ${unit.id}.`);
+                    return;
+                }
+                save.disabled = true;
+                input.readOnly = true;
+                const result = await apiCall(
+                    "PUT", `/api/radio/units/${encodeURIComponent(unit.id)}`,
+                    { name: name }, "The unit name could not be saved");
+                save.disabled = false;
+                input.readOnly = false;
+                if (result.ended) return;
+                if (result.error) {
+                    showError(rowError(row), result.error);
+                    input.focus({ preventScroll: true });
+                    return;
+                }
+                const reply = result.payload && typeof result.payload === "object"
+                    ? normalizeUnit(result.payload.unit || result.payload) : null;
+                unitsDirty = true;
+                replaceRow(row, {
+                    id: unit.id,
+                    name: reply && reply.name ? reply.name : name,
+                    segments: reply ? reply.segments : unit.segments,
+                    lastSeen: reply ? reply.lastSeen : unit.lastSeen,
+                });
+                say(`Saved the name for radio ID ${unit.id}.`);
+            });
+
+            const controls = element("div", "radio-admin-controls");
+            controls.appendChild(edit);
+            if (unit.name) {
+                controls.appendChild(makeDeleteControl(`name of radio ID ${unit.id}`, async function () {
+                    const result = await apiCall(
+                        "DELETE", `/api/radio/units/${encodeURIComponent(unit.id)}`,
+                        undefined, "The unit name could not be cleared");
+                    if (result.ended) return false;
+                    if (result.error) {
+                        showError(rowError(row), result.error);
+                        return false;
+                    }
+                    unitsDirty = true;
+                    replaceRow(row, {
+                        id: unit.id, name: "", segments: unit.segments, lastSeen: unit.lastSeen,
+                    });
+                    say(`Cleared the name of radio ID ${unit.id}. Its segments keep the ID.`);
+                    return true;
+                }, { idle: "Clear", ask: "Clear this name?", yes: "Yes, clear", icon: "bi-eraser" }));
+            }
+            row.appendChild(main);
+            row.appendChild(controls);
+            return row;
+        }
+
+        async function load() {
+            if (tab.busy) return;
+            tab.busy = true;
+            loading.hidden = false;
+            const result = await apiCall("GET", "/api/radio/units", undefined,
+                "Units could not be loaded");
+            tab.busy = false;
+            loading.hidden = true;
+            if (result.ended) return;
+            if (result.error) {
+                showError(error, result.error);
+                return;
+            }
+            hideError(error);
+            const max = result.payload ? wholeNumber(result.payload.max_units) : null;
+            if (max) maxUnits = max;
+            list.textContent = "";
+            firstArray(result.payload, ["units", "items"])
+                .map(normalizeUnit)
+                .filter(Boolean)
+                .forEach(function (unit) {
+                    list.appendChild(renderUnit(unit));
+                });
+            updateSummaryText();
+            tab.loaded = true;
+            tab.updatedAt = Date.now();
+            if (tab.key === activeKey) showUpdated(tab);
+        }
+        tab.load = load;
+
+        onlyUnnamed.addEventListener("change", updateSummaryText);
+
+        addForm.addEventListener("submit", async function (event) {
+            event.preventDefault();
+            hideError(formError);
+            const id = idInput.value.trim();
+            const name = nameInput.value.trim();
+            if (!RADIO_ID_PATTERN.test(id)) {
+                showError(formError, "Enter a radio ID of 1 to 10 digits.");
+                idInput.focus();
+                return;
+            }
+            const problem = unitNameProblem(name);
+            if (problem) {
+                showError(formError, problem);
+                nameInput.focus();
+                return;
+            }
+            addButton.disabled = true;
+            const result = await apiCall(
+                "PUT", `/api/radio/units/${encodeURIComponent(id)}`, { name: name },
+                "The unit name could not be saved");
+            addButton.disabled = false;
+            if (result.ended) return;
+            if (result.error) {
+                // 400 (bad value), 409 (table full) and 503 (not recorded) arrive
+                // with the server's reason through the shared inline error path.
+                showError(formError, result.error);
+                return;
+            }
+            idInput.value = "";
+            nameInput.value = "";
+            unitsDirty = true;
+            say(`Saved the name for radio ID ${id}.`);
+            await load();
+            idInput.focus();
+        });
+    }
+
     // ------------------------------------------------------------------- init
 
     Array.from(tablist.querySelectorAll('[role="tab"]')).forEach(registerTab);
@@ -2183,6 +2571,7 @@
         if (tab.name === "watch") setupWatchTab(tab);
         else if (tab.name === "fixes") setupFixesTab(tab);
         else if (tab.name === "hints") setupHintsTab(tab);
+        else if (tab.name === "units") setupUnitsTab(tab);
     });
     activateTab("", false);
     loadStats();

@@ -1857,6 +1857,7 @@ def radio_segments_api(
     q: str = "",
     before: str = "",
     limit: str = "",
+    radio_id: str = "",
 ):
     # Every query parameter is a plain string on purpose: typed parameters
     # would be validated (422) before the access gate, letting a forbidden
@@ -1866,7 +1867,7 @@ def radio_segments_api(
     try:
         payload = _radio_service().list_segments(
             actor=actor, channel=channel, direction=direction, q=q,
-            before=before, limit=limit,
+            before=before, limit=limit, radio_id=radio_id,
         )
     except RadioQueryError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -2055,6 +2056,37 @@ async def radio_hint_remove_api(hint_id: str, request: Request):
     return _radio_json(
         await _radio_call(
             _radio_service().remove_hint, hint_id, actor=_radio_actor(identity),
+        )
+    )
+
+
+# Unit names (docs/MINDSHARE_RADIO_UNITS.md): admin only, audited. The names
+# themselves appear on every transcript card for every human role; managing
+# them does not, so these routes stay out of app/core/radio_access.py and the
+# restricted tiers keep them closed.
+@app.get("/api/radio/units")
+async def radio_units_api(request: Request):
+    _require_pilot_admin(request)
+    return _radio_json(await _radio_call(_radio_service().list_units))
+
+
+@app.put("/api/radio/units/{radio_id}")
+async def radio_unit_set_api(radio_id: str, request: Request):
+    identity = _require_pilot_admin(request)
+    body = await _read_radio_json(request)
+    item, created = await _radio_call(
+        _radio_service().set_unit, radio_id, body, actor=_radio_actor(identity)
+    )
+    return _radio_json(item, status_code=201 if created else 200)
+
+
+@app.delete("/api/radio/units/{radio_id}")
+async def radio_unit_remove_api(radio_id: str, request: Request):
+    identity = _require_pilot_admin(request)
+    _radio_write_guard(request)
+    return _radio_json(
+        await _radio_call(
+            _radio_service().remove_unit, radio_id, actor=_radio_actor(identity),
         )
     )
 

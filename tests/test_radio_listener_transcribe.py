@@ -402,3 +402,46 @@ def test_main_default_mode_is_hotwords_and_a_clean_job_has_no_hint_suspect(tmp_p
     result = json.loads((root / "transcripts" / f"{segment_id}.json").read_text(encoding="utf-8"))
     assert result["glossary_version"] is None and "hint_suspect" not in result
     assert seen["model"].calls[0][1] == {**BASE_KWARGS, "beam_size": 5}
+
+
+def run_main_with_job(tmp_path, monkeypatch, job_extra):
+    root = tmp_path / "data"
+    (root / "audio" / "law").mkdir(parents=True)
+    pending = root / "queue" / "pending"
+    pending.mkdir(parents=True)
+    wav_path = root / "audio" / "law" / "law_rx_20261018T120000_000000Z_cd34ef56.wav"
+    with wave.open(str(wav_path), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(8000)
+        handle.writeframes(b"\x00\x00" * 8000)
+    segment_id = wav_path.stem
+    job = {"segment_id": segment_id, "audio_file": str(wav_path), **job_extra}
+    (pending / f"{segment_id}.json").write_text(json.dumps(job), encoding="utf-8")
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps({"output_directory": str(root), "transcription": {"device": "cpu"}}),
+                      encoding="utf-8")
+
+    class StopAfterFirst(FakeModel):
+        def __init__(self, *args, **kwargs):
+            super().__init__(on_call=lambda: setattr(transcribe, "STOP", True))
+
+    fake_module = types.ModuleType("faster_whisper")
+    fake_module.WhisperModel = StopAfterFirst
+    monkeypatch.setitem(sys.modules, "faster_whisper", fake_module)
+    monkeypatch.setattr(transcribe, "CONFIG", config)
+    monkeypatch.setattr(transcribe, "STOP", False)
+    transcribe.main()
+    return json.loads((root / "transcripts" / f"{segment_id}.json").read_text(encoding="utf-8"))
+
+
+def test_main_keeps_the_capture_signal_in_the_transcript_json(tmp_path, monkeypatch):
+    signal = {"radio_id": "98426", "talkgroup": "G4407"}
+    result = run_main_with_job(tmp_path, monkeypatch, {"signal": signal})
+    assert result["signal"] == signal
+    assert result["transcript"]  # the transcript itself is still produced
+
+
+def test_main_adds_no_signal_key_when_the_job_has_none(tmp_path, monkeypatch):
+    result = run_main_with_job(tmp_path, monkeypatch, {})
+    assert "signal" not in result

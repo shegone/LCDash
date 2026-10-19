@@ -332,3 +332,275 @@ def test_main_writes_the_stats_file_and_a_summary_still_prints(tmp_path, monkeyp
         assert stats_file.parent.stat().st_mode & 0o777 == 0o700
     for sock in sockets:
         sock.close()
+
+
+# ------------------------------------------------------------------ PT103 who-is-talking signalling
+
+SIGNAL_VECTORS = [
+    ("010010030508160039383432363a47343430373a3337313a303a3a303a30",
+     {"radio_id": "98426", "talkgroup": "G4407"}),
+    ("01001003050813003434303539333a47343430353a3a3a3a303a30",
+     {"radio_id": "440593", "talkgroup": "G4405"}),
+    ("0100100305080d0039383432363a3a3a3a3a303a30", {"radio_id": "98426"}),
+    ("01001003050808003a3a3a3a3a303a30", None),
+    ("0100101305081600506f736974696f6e323a3a3a3a506f736974696f6e32",
+     {"console_label": "Position2"}),
+    ("01001013050812006d6178706c75733a3a3a3a6d6178706c7573", {"console_label": "maxplus"}),
+    ("1400000000000000", None),
+    ("0300000000000000", None),
+    ("0300000000000001", None),
+]
+
+
+def signal_payload(text: str, header=b"\x01\x00\x10\x03\x05\x08") -> bytes:
+    raw = text.encode("ascii")
+    return header + bytes([len(raw), 0]) + raw
+
+
+@pytest.mark.parametrize("hex_payload,expected", SIGNAL_VECTORS)
+def test_every_spec_vector_parses(hex_payload, expected):
+    assert capture.parse_signal_packet(bytes.fromhex(hex_payload)) == expected
+
+
+def test_signal_vectors_match_the_helper_builder():
+    assert signal_payload("98426:G4407:371:0::0:0") == bytes.fromhex(SIGNAL_VECTORS[0][0])
+
+
+@pytest.mark.parametrize("payload", [
+    b"", b"\x01", b"\x01\x00\x10\x03\x05\x08", b"\x01\x00\x10\x03\x05\x08\x00\x00",
+    None, "98426:G4407", 12345, [1, 2, 3], object(),
+])
+def test_unusable_inputs_return_none_and_never_raise(payload):
+    assert capture.parse_signal_packet(payload) is None
+
+
+def test_bad_length_byte_or_first_byte_is_ignored():
+    good = bytes.fromhex(SIGNAL_VECTORS[0][0])
+    assert capture.parse_signal_packet(good) is not None
+    assert capture.parse_signal_packet(good + b"x") is None           # longer than LL says
+    assert capture.parse_signal_packet(good[:-1]) is None             # shorter than LL says
+    assert capture.parse_signal_packet(good[:6] + bytes([good[6] - 1]) + good[7:]) is None
+    assert capture.parse_signal_packet(good[:6] + bytes([good[6] + 1]) + good[7:]) is None
+    assert capture.parse_signal_packet(b"\x02" + good[1:]) is None    # wrong first byte
+    assert capture.parse_signal_packet(b"\x00" + good[1:]) is None
+
+
+def test_non_ascii_and_control_characters_are_rejected():
+    header = b"\x01\x00\x10\x03\x05\x08"
+    for raw in (b"98426:G44\xc3\xa907", b"98426\x00:G4407", b"98426\n:G4407", b"\xff\xfe:::",
+                "Posïtion:::".encode("utf-8"), b"98426:G4407\x7f", b"98426\r\n"):
+        assert capture.parse_signal_packet(header + bytes([len(raw), 0]) + raw) is None
+
+
+def test_fields_that_do_not_match_the_patterns_are_not_stored():
+    cases = [
+        ("12345678901:G1", {"talkgroup": "G1"}),                # 11 digits: not an id, and all digits so not a label
+        ("98426:g4407", {"radio_id": "98426"}),                 # talkgroup needs a capital G
+        ("98426:G1234567", {"radio_id": "98426"}),              # 7 digits
+        ("98426:G:", {"radio_id": "98426"}),
+        ("98426 :G4407", {"console_label": "98426 ", "talkgroup": "G4407"}),  # not all digits: the label rule applies
+        (" Position2::::", None),                               # a label may not start with a space
+        ("Position-2_a.b c::::", {"console_label": "Position-2_a.b c"}),
+        ("A" * 33 + "::::", None),                             # 33 characters is over the label limit
+        ("A" * 32 + "::::", {"console_label": "A" * 32}),
+        ("Pos;ition::::", None),
+        ("12345:::::", {"radio_id": "12345"}),
+        ("0000000001:G1", {"radio_id": "0000000001", "talkgroup": "G1"}),
+    ]
+    for text, expected in cases:
+        assert capture.parse_signal_packet(signal_payload(text)) == expected, text
+
+
+def test_unknown_fields_are_ignored_and_a_label_is_not_taken_beside_a_radio_id():
+    found = capture.parse_signal_packet(signal_payload("98426:G4407:Position2:x::y:z"))
+    assert found == {"radio_id": "98426", "talkgroup": "G4407"}
+
+
+class Clock:
+    def __init__(self, now=1000.0):
+        self.now = now
+
+    def monotonic(self):
+        return self.now
+
+    def time(self):
+        return 1760000000.0 + self.now
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    fake = Clock()
+    monkeypatch.setattr(capture, "time", fake)
+    return fake
+
+
+def signal_rtp(text: str, sequence=1):
+    return rtp(103, 0, signal_payload(text), sequence)
+
+
+def written_metadata(stream):
+    return [json.loads(path.read_text(encoding="utf-8"))
+            for path in sorted(Path(stream.pending_dir).glob("*.json"))]
+
+
+def test_segment_without_any_signal_has_no_signal_key(stream_factory, clock):
+    stream = stream_factory()
+    stream.accept(rtp(0, 0), ("10.0.0.1", 1))
+    stream.accept(rtp(103, 0, b"\x14\x00\x00\x00\x00\x00\x00\x00"), ("10.0.0.1", 1))
+    stream.accept(signal_rtp(":::::0:0"), ("10.0.0.1", 1))
+    stream.finish_segment()
+    (metadata,) = written_metadata(stream)
+    assert "signal" not in metadata
+
+
+def test_progressive_messages_end_in_the_complete_signal(stream_factory, clock):
+    stream = stream_factory()
+    source = ("10.0.0.1", 1)
+    progressive = [":::::0:0", "98426:::::0:0", "98426:G4407::::0:0", "98426:G4407:371:0::0:0"]
+    for index, text in enumerate(progressive):
+        stream.accept(signal_rtp(text, index), source)
+        clock.now += 0.1
+    stream.accept(rtp(0, 0), source)
+    for index in range(3):
+        clock.now += 0.1
+        stream.accept(signal_rtp("98426:G4407:371:0::0:0", 10 + index), source)
+    stream.finish_segment()
+    (metadata,) = written_metadata(stream)
+    assert metadata["signal"] == {"radio_id": "98426", "talkgroup": "G4407"}
+
+
+def test_progressive_messages_during_the_segment_also_fill_in(stream_factory, clock):
+    stream = stream_factory()
+    source = ("10.0.0.1", 1)
+    stream.accept(rtp(0, 0), source)
+    for index, text in enumerate([":::::0:0", "98426:::::0:0", "98426:G4407::::0:0"]):
+        clock.now += 0.1
+        stream.accept(signal_rtp(text, index), source)
+    stream.finish_segment()
+    (metadata,) = written_metadata(stream)
+    assert metadata["signal"] == {"radio_id": "98426", "talkgroup": "G4407"}
+
+
+def test_segment_takes_signal_seen_up_to_three_seconds_before_the_first_voice_packet(stream_factory, clock):
+    stream = stream_factory()
+    stream.accept(signal_rtp("98426:G4407:1:0::0:0"), ("10.0.0.1", 1))
+    clock.now += 3.0
+    stream.accept(rtp(0, 0), ("10.0.0.1", 1))
+    stream.finish_segment()
+    (metadata,) = written_metadata(stream)
+    assert metadata["signal"] == {"radio_id": "98426", "talkgroup": "G4407"}
+
+
+def test_signal_older_than_three_seconds_is_not_attached(stream_factory, clock):
+    stream = stream_factory()
+    stream.accept(signal_rtp("98426:G4407:1:0::0:0"), ("10.0.0.1", 1))
+    clock.now += 3.2
+    stream.accept(rtp(0, 0), ("10.0.0.1", 1))
+    stream.finish_segment()
+    (metadata,) = written_metadata(stream)
+    assert "signal" not in metadata
+
+
+def test_signal_is_not_reused_for_a_later_segment(stream_factory, clock):
+    stream = stream_factory()
+    stream.accept(signal_rtp("98426:G4407:1:0::0:0"), ("10.0.0.1", 1))
+    stream.accept(rtp(0, 0), ("10.0.0.1", 1))
+    stream.finish_segment()
+    clock.now += 0.5
+    stream.accept(rtp(0, 0), ("10.0.0.1", 1))   # a second segment with no signalling at all
+    stream.finish_segment()
+    assert sorted("signal" in item for item in written_metadata(stream)) == [False, True]
+
+
+def test_first_radio_id_wins_and_conflicts_are_counted_but_not_stored(stream_factory, clock):
+    stream = stream_factory()
+    source = ("10.0.0.1", 1)
+    stream.accept(signal_rtp("98426:::::0:0"), source)
+    stream.accept(rtp(0, 0), source)
+    stream.accept(signal_rtp("55555:G9999::::0:0"), source)          # a different radio mid-segment
+    stream.accept(signal_rtp("98426:G4407::::0:0"), source)          # the first radio fills in more
+    assert stream.signal_conflicts == 1
+    stream.finish_segment()
+    (metadata,) = written_metadata(stream)
+    assert metadata["signal"] == {"radio_id": "98426", "talkgroup": "G4407"}
+    assert "conflict" not in json.dumps(metadata)
+
+
+def test_a_new_radio_id_before_any_voice_replaces_the_stale_one(stream_factory, clock):
+    stream = stream_factory()
+    stream.accept(signal_rtp("11111:G1::::0:0"), ("10.0.0.1", 1))
+    clock.now += 0.5
+    stream.accept(signal_rtp("22222:::::0:0"), ("10.0.0.1", 1))
+    stream.accept(rtp(0, 0), ("10.0.0.1", 1))
+    stream.finish_segment()
+    (metadata,) = written_metadata(stream)
+    assert metadata["signal"] == {"radio_id": "22222"}
+
+
+def test_console_stream_records_only_the_label(stream_factory, clock):
+    stream = stream_factory()
+    stream.accept(signal_rtp("Position2::::Position2"), ("10.0.0.1", 1))
+    stream.accept(rtp(0, 0), ("10.0.0.1", 1))
+    stream.finish_segment()
+    (metadata,) = written_metadata(stream)
+    assert metadata["signal"] == {"console_label": "Position2"}
+
+
+def test_signal_arriving_just_after_silence_belongs_to_the_next_segment(stream_factory, clock):
+    stream = stream_factory(silence=1.5)
+    source = ("10.0.0.1", 1)
+    stream.accept(signal_rtp("11111:::::0:0"), source)
+    stream.accept(rtp(0, 0), source)
+    clock.now += 1.6                                              # silence elapsed, idle check not yet run
+    stream.accept(signal_rtp("22222:G2::::0:0"), source)
+    stream.finish_if_idle(clock.now)
+    clock.now += 0.2
+    stream.accept(rtp(0, 0), source)
+    stream.finish_segment()
+    signals = [item["signal"] for item in written_metadata(stream)]
+    assert {"radio_id": "11111"} in signals
+    assert {"radio_id": "22222", "talkgroup": "G2"} in signals
+    assert len(signals) == 2
+
+
+def test_signal_packets_never_change_the_audio_or_the_voice_counters(stream_factory, clock):
+    stream = stream_factory()
+    payloads = [bytes([value] * 160) for value in (0x7F, 0x55, 0xFF)]
+    source = ("10.0.0.1", 5000)
+    stream.accept(signal_rtp("98426:G4407:371:0::0:0"), source)
+    for index, payload in enumerate(payloads):
+        stream.accept(rtp(0, index * 160, payload, index), source)
+        stream.accept(signal_rtp("98426:G4407:371:0::0:0", 50 + index), source)
+    wav_path = stream.wav_path
+    stream.finish_segment()
+    assert read_wav(wav_path) == b"".join(capture.pcmu_to_pcm(payload) for payload in payloads)
+    row = stream.stats.snapshot()
+    assert row["pcmu_packets_total"] == 3 and row["other_payload_types"] == {"103": 4}
+    assert stream.summary()["other_payload_types"] == {"103": 4}
+    assert stream.summary()["packets_pcmu_pt0"] == 3
+    (metadata,) = written_metadata(stream)
+    assert metadata["pcmu_packet_count"] == 3
+
+
+def test_malformed_signal_traffic_never_raises_from_accept(stream_factory, clock, monkeypatch):
+    stream = stream_factory()
+    source = ("10.0.0.1", 1)
+    for garbage in (b"", b"\x01", b"\xff" * 40, b"\x01\x00\x10\x03\x05\x08\x30" + b"\xc3" * 48):
+        stream.accept(rtp(103, 0, garbage), source)
+
+    def broken(payload):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(capture, "parse_signal_packet", broken)
+    stream.accept(signal_rtp("98426:::::0:0"), source)                # a parser bug must not escape
+    stream.accept(rtp(0, 0), source)
+    stream.finish_segment()
+    (metadata,) = written_metadata(stream)
+    assert "signal" not in metadata
+
+
+def test_signal_state_stays_at_three_keys_at_most(stream_factory, clock):
+    stream = stream_factory()
+    for index in range(2000):
+        stream.accept(signal_rtp(f"{index}:G{index % 1000}::::0:0", index), ("10.0.0.1", 1))
+    assert len(stream._pre_signal) <= 3

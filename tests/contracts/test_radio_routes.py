@@ -193,7 +193,8 @@ class FakeStore:
     ``RadioRepository._SEGMENT_COLUMNS``): 0 id, 1 channel, 2 direction,
     3 started_at, 4 ended_at, 5 duration, 6 transcript, 7 language, 8 model,
     9 low_confidence, 10 audio_key, 11 received_at, 12 corrected_text,
-    13 corrected_by, 14 corrected_at, 15 retain_until.
+    13 corrected_by, 14 corrected_at, 15 retain_until, 16 radio_id,
+    17 talkgroup, 18 console_label.
     """
 
     def __init__(self) -> None:
@@ -203,12 +204,18 @@ class FakeStore:
         self.terms: list[dict] = []
         self.alerts: list[dict] = []
         self.hints: list[dict] = []
+        # v4: named units, ``radio_id -> {name, updated_by, updated_at}``.
+        self.units: dict[str, dict] = {}
+        self.unit_reads = 0
+        self.unit_activity_since: list = []
+        self.fail_unit_read = False
         # v3: the one-row listener status, ``(payload, received_at)`` or None.
         self.listener: tuple | None = None
         self.listener_writes = 0
         self.fail_listener_write = False
         self.fail_hint_read = False
         self.audit: list[dict] = []
+        self.list_calls: list[dict] = []
         self._ids = {"replacement": 0, "term": 0, "alert": 0, "hint": 0}
         self.schema_calls = 0
         self.purge_calls = 0
@@ -229,12 +236,12 @@ class FakeStore:
     def snapshot(self):
         return copy.deepcopy((
             self.segments, self.corrections, self.replacements, self.terms,
-            self.alerts, dict(self._ids), self.hints,
+            self.alerts, dict(self._ids), self.hints, self.units,
         ))
 
     def restore(self, snapshot) -> None:
         (self.segments, self.corrections, self.replacements, self.terms,
-         self.alerts, self._ids, self.hints) = copy.deepcopy(snapshot)
+         self.alerts, self._ids, self.hints, self.units) = copy.deepcopy(snapshot)
 
 
 class FakeRepository:
@@ -281,6 +288,7 @@ class FakeRepository:
             record.transcript, record.language, record.model,
             record.low_confidence, audio_key, self.store.received_at,
             None, None, None, None,
+            record.radio_id, record.talkgroup, record.console_label,
         )
         return True
 
@@ -304,24 +312,43 @@ class FakeRepository:
         ]
         return len(doomed)
 
-    def list_segments(self, *, channel, direction, like_pattern, cursor, limit):
+    @staticmethod
+    def _unescape_like(pattern):
+        plain, index = "", 0
+        while index < len(pattern):
+            if pattern[index] == "!" and index + 1 < len(pattern):
+                index += 1
+            plain += pattern[index]
+            index += 1
+        return plain
+
+    def list_segments(self, *, channel, direction, like_pattern, cursor, limit,
+                      radio_id=None, id_prefix=None, unit_radio_ids=None):
+        self.store.list_calls.append({
+            "channel": channel, "direction": direction,
+            "like_pattern": like_pattern, "radio_id": radio_id,
+            "id_prefix": id_prefix, "unit_radio_ids": unit_radio_ids,
+        })
         rows = list(self.store.segments.values())
         if channel:
             rows = [r for r in rows if r[1] == channel]
         if direction:
             rows = [r for r in rows if r[2] == direction]
+        if radio_id:
+            rows = [r for r in rows if r[16] == radio_id]
         if like_pattern:
-            needle = like_pattern[1:-1]
-            plain, index = "", 0
-            while index < len(needle):
-                if needle[index] == "!" and index + 1 < len(needle):
-                    index += 1
-                plain += needle[index]
-                index += 1
-            rows = [
-                r for r in rows
-                if plain.lower() in (r[12] if r[12] is not None else r[6]).lower()
-            ]
+            plain = self._unescape_like(like_pattern[1:-1])
+            prefix = self._unescape_like(id_prefix[:-1]) if id_prefix else None
+            ids = set(unit_radio_ids or ())
+
+            def matches(r):
+                if plain.lower() in (r[12] if r[12] is not None else r[6]).lower():
+                    return True
+                if prefix is not None and r[16] is not None and r[16].startswith(prefix):
+                    return True
+                return r[16] is not None and r[16] in ids
+
+            rows = [r for r in rows if matches(r)]
         rows.sort(key=lambda r: (r[3], r[0]), reverse=True)
         if cursor is not None:
             rows = [r for r in rows if (r[3], r[0]) < cursor]
@@ -367,7 +394,7 @@ class FakeRepository:
             "new_text": new_text, "actor": actor, "created_at": now,
         })
         updated = row[:10] + (new_audio_key or row[10], row[11],
-                              new_text, actor, now, retain_until)
+                              new_text, actor, now, retain_until) + row[16:]
         self.store.segments[segment_id] = updated
         return updated
 
@@ -382,7 +409,7 @@ class FakeRepository:
             "segment_id": segment_id, "previous_text": row[12],
             "new_text": None, "actor": actor, "created_at": now,
         })
-        updated = row[:12] + (None, None, None, row[15])
+        updated = row[:12] + (None, None, None, row[15]) + row[16:]
         self.store.segments[segment_id] = updated
         return updated, True
 
@@ -550,6 +577,66 @@ class FakeRepository:
                 self.store.hints.remove(hint)
                 return self._hint_row(hint)
         return None
+
+    # ------------------------------------------------- unit names (v4)
+
+    def list_units(self):
+        self.store.unit_reads += 1
+        if self.store.fail_unit_read:
+            raise RadioDatabaseError("units unavailable")
+        return [
+            (rid, u["name"], u["updated_by"], u["updated_at"])
+            for rid, u in sorted(self.store.units.items())
+        ]
+
+    def count_units(self):
+        return len(self.store.units)
+
+    def get_unit(self, radio_id):
+        unit = self.store.units.get(radio_id)
+        if unit is None:
+            return None
+        return (radio_id, unit["name"], unit["updated_by"], unit["updated_at"])
+
+    def upsert_unit(self, radio_id, name, actor, now):
+        self._begin()
+        self.store.units[radio_id] = {
+            "name": name, "updated_by": actor, "updated_at": now,
+        }
+        return (radio_id, name, actor, now)
+
+    def delete_unit(self, radio_id):
+        unit = self.store.units.get(radio_id)
+        if unit is None:
+            return None
+        self._begin()
+        del self.store.units[radio_id]
+        return (radio_id, unit["name"], unit["updated_by"], unit["updated_at"])
+
+    def _activity(self, since, ids=None):
+        self.store.unit_activity_since.append(since)
+        stats: dict[str, list] = {}
+        for row in self.store.segments.values():
+            if row[16] is None or (ids is not None and row[16] not in ids):
+                continue
+            entry = stats.setdefault(row[16], [0, None])
+            if row[3] >= since:
+                entry[0] += 1
+            if entry[1] is None or row[3] > entry[1]:
+                entry[1] = row[3]
+        return stats
+
+    def seen_radio_ids(self, since, limit):
+        stats = self._activity(since)
+        rows = [(rid, n, last) for rid, (n, last) in stats.items()]
+        rows.sort(key=lambda r: (-r[2].timestamp(), r[0]))
+        return rows[:limit]
+
+    def radio_id_activity(self, radio_ids, since):
+        if not radio_ids:
+            return []
+        stats = self._activity(since, set(radio_ids))
+        return [(rid, n, last) for rid, (n, last) in stats.items()]
 
     # ------------------------------------------- listener status (v3)
 
@@ -1225,6 +1312,9 @@ ADMIN_ROUTES = (
     ("GET", "/api/radio/hints", None, "list hints"),
     ("POST", "/api/radio/hints", {"phrase": "Zanesfield"}, "add hint"),
     ("DELETE", "/api/radio/hints/1", None, "remove hint"),
+    ("GET", "/api/radio/units", None, "list units"),
+    ("PUT", "/api/radio/units/98426", {"name": "Medic 4"}, "name unit"),
+    ("DELETE", "/api/radio/units/98426", None, "remove unit"),
 )
 
 # Deliberately malformed input for each route: a forbidden caller must see the
@@ -1391,13 +1481,13 @@ class AdminListAndErrorTests(_RouteCase):
         response = self.client.get(
             "/api/radio/segments",
             params={"channel": "law", "direction": "rx", "q": "plate",
-                    "before": "abc", "limit": "10"},
+                    "before": "abc", "limit": "10", "radio_id": "98426"},
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["cache-control"], "private, no-store")
         mock_service.list_segments.assert_called_once_with(
             actor=ADMIN_EMAIL, channel="law", direction="rx", q="plate",
-            before="abc", limit="10",
+            before="abc", limit="10", radio_id="98426",
         )
 
     def test_actor_comes_from_the_verified_identity_not_from_headers(self):

@@ -24,7 +24,17 @@ DEFAULT_CONFIG = Path(__file__).with_name("config.json")
 MAX_CHANNELS = 24
 SAMPLE_RATE = 8000
 PT_PCMU = 0
+PT_SIGNAL = 103
 STOP = False
+
+# Who-is-talking signalling carried in RTP payload type 103 (see
+# docs/MINDSHARE_RADIO_UNITS.md). An 8-byte header, then colon-separated ASCII.
+SIGNAL_HEADER_BYTES = 8
+SIGNAL_LOOKBACK_SECONDS = 3.0
+SIGNAL_RADIO_ID = re.compile(r"[0-9]{1,10}")
+SIGNAL_TALKGROUP = re.compile(r"G[0-9]{1,6}")
+SIGNAL_CONSOLE_LABEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9 _.-]{0,31}")
+SIGNAL_KEYS = ("radio_id", "talkgroup", "console_label")
 
 # Health counters (see docs/MINDSHARE_RADIO_HEALTH.md). Counting only: nothing
 # here touches the audio path.
@@ -72,6 +82,37 @@ def parse_rtp(packet: bytes):
             return None
         end -= padding
     return packet[1] & 0x7F, struct.unpack_from("!I", packet, 4)[0], packet[offset:end]
+
+
+def parse_signal_packet(payload):
+    """Parse one PT103 payload into {"radio_id", "talkgroup", "console_label"} keys, or None.
+
+    Strict and pure: anything that does not fit the documented shape returns
+    None. Only the fields that were found are present. Never raises.
+    """
+    try:
+        if not isinstance(payload, (bytes, bytearray, memoryview)):
+            return None
+        data = bytes(payload)
+        if len(data) <= SIGNAL_HEADER_BYTES or data[0] != 0x01:
+            return None
+        if len(data) != SIGNAL_HEADER_BYTES + data[6]:
+            return None
+        text_bytes = data[SIGNAL_HEADER_BYTES:]
+        if not all(0x20 <= value <= 0x7E for value in text_bytes):
+            return None
+        fields = text_bytes.decode("ascii").split(":")
+        found = {}
+        first = fields[0]
+        if SIGNAL_RADIO_ID.fullmatch(first):
+            found["radio_id"] = first
+        elif not first.isdigit() and SIGNAL_CONSOLE_LABEL.fullmatch(first):
+            found["console_label"] = first
+        if len(fields) > 1 and SIGNAL_TALKGROUP.fullmatch(fields[1]):
+            found["talkgroup"] = fields[1]
+        return found or None
+    except Exception:
+        return None
 
 
 def load_config(path: Path):
@@ -336,6 +377,12 @@ class Stream:
         self.segment_packets = 0
         self.segments_written = 0
         self.stats = ListenerStats(name, direction)
+        # Who-is-talking signalling. `_pre_signal` collects messages seen while no
+        # segment is open; `segment_signal` belongs to the open segment.
+        self._pre_signal = {}
+        self._pre_signal_at = None
+        self.segment_signal = {}
+        self.signal_conflicts = 0
 
     def start_segment(self):
         now = dt.datetime.now(dt.timezone.utc)
@@ -354,6 +401,52 @@ class Stream:
         self.segment_sources = collections.Counter()
         self.segment_packets = 0
         self.last_rtp_timestamp = None
+        self.segment_signal = {}
+        try:
+            # Signal seen up to SIGNAL_LOOKBACK_SECONDS before the first voice packet.
+            if (self._pre_signal_at is not None
+                    and self.segment_started - self._pre_signal_at <= SIGNAL_LOOKBACK_SECONDS):
+                self.segment_signal = dict(self._pre_signal)
+        except Exception:
+            self.segment_signal = {}
+        self._pre_signal = {}
+        self._pre_signal_at = None
+
+    def note_signal(self, payload, now):
+        """Fold one PT103 payload into the pending or open segment's signal.
+
+        Never raises into the receive loop and never touches audio state.
+        """
+        try:
+            found = parse_signal_packet(payload)
+            if not found:
+                return
+            live = self.wav is not None and not (
+                self.last_packet_at is not None
+                and now - self.last_packet_at >= self.silence_seconds
+            )
+            if live:
+                target = self.segment_signal
+                known_id = target.get("radio_id")
+                if known_id is not None and "radio_id" in found and found["radio_id"] != known_id:
+                    # The first radio_id wins; a message naming a different one is not mixed in.
+                    self.signal_conflicts += 1
+                    return
+            else:
+                # No segment is open (or it has gone silent): this belongs to the next one.
+                if (self._pre_signal_at is None
+                        or now - self._pre_signal_at > SIGNAL_LOOKBACK_SECONDS):
+                    self._pre_signal = {}
+                target = self._pre_signal
+                self._pre_signal_at = now
+                known_id = target.get("radio_id")
+                if known_id is not None and "radio_id" in found and found["radio_id"] != known_id:
+                    # A different transmitter keyed up before any voice: the newest one counts.
+                    self.signal_conflicts += 1
+                    target.clear()
+            target.update(found)
+        except Exception:
+            return
 
     def finish_segment(self):
         if self.wav is None:
@@ -375,6 +468,10 @@ class Stream:
             "pcmu_packet_count": self.segment_packets,
             "source_packet_counts": dict(self.segment_sources),
         }
+        if self.segment_signal:
+            metadata["signal"] = {
+                key: self.segment_signal[key] for key in SIGNAL_KEYS if key in self.segment_signal
+            }
         ready_path = self.pending_dir / f"{self.segment_id}.json"
         temporary_path = ready_path.with_suffix(".json.tmp")
         temporary_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
@@ -385,6 +482,7 @@ class Stream:
         self.segment_started_utc = None
         self.last_packet_at = None
         self.last_rtp_timestamp = None
+        self.segment_signal = {}
         self.segments_written += 1
         self.stats.segment_closed()
 
@@ -400,6 +498,8 @@ class Stream:
         if payload_type != PT_PCMU:
             self.other_payloads[str(payload_type)] += 1
             self.stats.other_payload(payload_type)
+            if payload_type == PT_SIGNAL:
+                self.note_signal(payload, time.monotonic())
             return
         if not payload:
             return

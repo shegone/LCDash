@@ -338,6 +338,8 @@ RADIO_STILL_DENIED_PATHS = (
     "/api/radio/heartbeat",
     "/api/radio/hints",
     "/api/radio/hints/1",
+    "/api/radio/units",
+    "/api/radio/units/98426",
     "/api/radio/replacements",
     "/api/radio/replacements/1",
     "/api/radio/watch-terms",
@@ -380,6 +382,9 @@ RADIO_MANAGE_REQUESTS = (
     ("GET", "/api/radio/hints"),
     ("POST", "/api/radio/hints"),
     ("DELETE", "/api/radio/hints/1"),
+    ("GET", "/api/radio/units"),
+    ("PUT", "/api/radio/units/98426"),
+    ("DELETE", "/api/radio/units/98426"),
     ("POST", "/api/radio/ingest"),
     ("POST", "/api/radio/heartbeat"),
 )

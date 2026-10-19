@@ -28,6 +28,11 @@ key, a different signed-message prefix), the one-row ``listener_status`` it
 upserts, the ``listener`` block of ``stats()``, and the admin-managed hint
 words that, with the watch phrases and fixes, form the glossary returned in
 the heartbeat reply.
+
+v4 (docs/MINDSHARE_RADIO_UNITS.md) adds who is talking: the optional ingest
+``signal`` object (radio ID, talkgroup, console label read from the radio
+signalling by the listener), the admin-managed ``units`` table that names a
+radio ID, the ``radio_id`` list filter, and the radio ID / unit name search.
 """
 
 from __future__ import annotations
@@ -163,12 +168,32 @@ EVENT_WATCH_REMOVE = "radio.watch.remove"
 EVENT_ALERT_DISMISS = "radio.alert.dismiss"
 EVENT_HINT_ADD = "radio.hint.add"
 EVENT_HINT_REMOVE = "radio.hint.remove"
+EVENT_UNIT_SET = "radio.unit.set"
+EVENT_UNIT_REMOVE = "radio.unit.remove"
+
+# v4: who is talking (docs/MINDSHARE_RADIO_UNITS.md).
+RADIO_ID_PATTERN = re.compile(r"[0-9]{1,10}")
+TALKGROUP_PATTERN = re.compile(r"G[0-9]{1,6}")
+CONSOLE_LABEL_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9 _.-]{0,31}")
+MAX_UNITS = 2000
+MIN_UNIT_NAME_CHARS = 1
+MAX_UNIT_NAME_CHARS = 60
+MAX_SEEN_UNITS = 500
+UNIT_ACTIVITY_DAYS = 30
+UNIT_CACHE_SECONDS = 60
 
 _METADATA_FIELDS = frozenset({
     "schema_version", "segment_id", "channel", "direction", "started_at",
     "ended_at", "codec", "payload_type", "sample_rate_hz", "pcmu_packet_count",
-    "transcript", "language", "model", "transcribed_at", "segments",
+    "transcript", "language", "model", "transcribed_at", "segments", "signal",
 })
+# ``signal`` is the one optional field (v4); every other field is required.
+_METADATA_REQUIRED = _METADATA_FIELDS - {"signal"}
+_SIGNAL_PATTERNS = {
+    "radio_id": RADIO_ID_PATTERN,
+    "talkgroup": TALKGROUP_PATTERN,
+    "console_label": CONSOLE_LABEL_PATTERN,
+}
 _ASR_SEGMENT_FIELDS = frozenset({
     "start", "end", "text", "avg_logprob", "no_speech_prob",
 })
@@ -419,6 +444,10 @@ class RadioSegmentRecord:
     transcribed_at: datetime
     asr_segments: tuple[dict, ...]
     low_confidence: bool
+    # v4: read from the radio signalling by the listener; None when not seen.
+    radio_id: str | None = None
+    talkgroup: str | None = None
+    console_label: str | None = None
 
 
 def compute_low_confidence(asr_segments) -> bool:
@@ -431,6 +460,25 @@ def compute_low_confidence(asr_segments) -> bool:
     return False
 
 
+def validate_signal(value: Any) -> dict[str, str]:
+    """The optional ``signal`` object: known keys only, each matching its pattern.
+
+    Unknown keys, a non-object, a non-string value or a value that does not fit
+    its pattern are all a 400 that names only the server-chosen field
+    ``signal`` (never the sender's key or value). ``fullmatch`` is used so a
+    trailing newline cannot slip past ``$``. An empty object means nothing was
+    found and is accepted.
+    """
+    if not isinstance(value, dict) or set(value) - set(_SIGNAL_PATTERNS):
+        raise _bad_metadata("signal")
+    clean: dict[str, str] = {}
+    for key, item in value.items():
+        if not isinstance(item, str) or not _SIGNAL_PATTERNS[key].fullmatch(item):
+            raise _bad_metadata("signal")
+        clean[key] = item
+    return clean
+
+
 def validate_metadata(metadata: bytes) -> RadioSegmentRecord:
     """Strictly validate the signed metadata document (schema_version 1)."""
     document = _loads_object(metadata)
@@ -438,7 +486,7 @@ def validate_metadata(metadata: bytes) -> RadioSegmentRecord:
         # Unknown fields are refused so the schema cannot drift silently.
         # Names are not echoed: they came from the sender.
         raise RadioIngestError(400, "Metadata contains unknown fields.")
-    missing = _METADATA_FIELDS - set(document)
+    missing = _METADATA_REQUIRED - set(document)
     if missing:
         raise _bad_metadata(sorted(missing)[0])
 
@@ -493,6 +541,8 @@ def validate_metadata(metadata: bytes) -> RadioSegmentRecord:
             "no_speech_prob": _require_number(item["no_speech_prob"], "segments"),
         })
 
+    signal = validate_signal(document["signal"]) if "signal" in document else {}
+
     return RadioSegmentRecord(
         segment_id=segment_id,
         channel=channel,
@@ -510,6 +560,9 @@ def validate_metadata(metadata: bytes) -> RadioSegmentRecord:
         transcribed_at=transcribed_at,
         asr_segments=tuple(asr_segments),
         low_confidence=compute_low_confidence(asr_segments),
+        radio_id=signal.get("radio_id"),
+        talkgroup=signal.get("talkgroup"),
+        console_label=signal.get("console_label"),
     )
 
 
@@ -819,11 +872,12 @@ class RadioRepository(AbstractContextManager):
                 segment_id, channel, direction, started_at, ended_at,
                 duration_seconds, codec, payload_type, sample_rate_hz,
                 pcmu_packet_count, transcript, language, model, transcribed_at,
-                asr_segments, low_confidence, audio_key
+                asr_segments, low_confidence, audio_key,
+                radio_id, talkgroup, console_label
             )
             VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s::JSONB, %s, %s
+                %s::JSONB, %s, %s, %s, %s, %s
             )
             ON CONFLICT (segment_id) DO NOTHING
             """,
@@ -835,6 +889,7 @@ class RadioRepository(AbstractContextManager):
                 record.model, record.transcribed_at,
                 json.dumps(list(record.asr_segments), ensure_ascii=False),
                 record.low_confidence, audio_key,
+                record.radio_id, record.talkgroup, record.console_label,
             ),
         )
         created = cursor.rowcount == 1
@@ -857,11 +912,13 @@ class RadioRepository(AbstractContextManager):
         return deleted
 
     # Column order is the row contract used by RadioService._item: indexes
-    # 0-11 are the v1 columns, 12-15 the v2 correction columns.
+    # 0-11 are the v1 columns, 12-15 the v2 correction columns, 16-18 the v4
+    # signal columns.
     _SEGMENT_COLUMNS = (
         "segment_id, channel, direction, started_at, ended_at, duration_seconds, "
         "transcript, language, model, low_confidence, audio_key, received_at, "
-        "corrected_text, corrected_by, corrected_at, retain_until"
+        "corrected_text, corrected_by, corrected_at, retain_until, "
+        "radio_id, talkgroup, console_label"
     )
 
     def list_segments(
@@ -872,11 +929,18 @@ class RadioRepository(AbstractContextManager):
         like_pattern: str | None,
         cursor: tuple[datetime, str] | None,
         limit: int,
+        radio_id: str | None = None,
+        id_prefix: str | None = None,
+        unit_radio_ids: list[str] | None = None,
     ) -> list[tuple]:
         """Newest first, keyset-paged on (started_at, segment_id).
 
         Every user-supplied value travels as a bound parameter; the only SQL
-        text assembled here is fixed fragments.
+        text assembled here is fixed fragments. ``radio_id`` is an exact
+        filter. The free-text search (``like_pattern``) matches the transcript
+        and, when given, a radio ID prefix (``id_prefix`` is an escaped LIKE
+        pattern) or any ID in ``unit_radio_ids`` (the IDs whose unit name
+        matched), all in one OR group.
         """
         clauses: list[str] = []
         params: list[Any] = []
@@ -886,10 +950,23 @@ class RadioRepository(AbstractContextManager):
         if direction:
             clauses.append("direction = %s")
             params.append(direction)
+        if radio_id:
+            clauses.append("radio_id = %s")
+            params.append(radio_id)
         if like_pattern:
             # Search what people read: the correction when there is one.
-            clauses.append("COALESCE(corrected_text, transcript) ILIKE %s ESCAPE '!'")
+            alternatives = ["COALESCE(corrected_text, transcript) ILIKE %s ESCAPE '!'"]
             params.append(like_pattern)
+            if id_prefix:
+                alternatives.append("radio_id LIKE %s ESCAPE '!'")
+                params.append(id_prefix)
+            if unit_radio_ids:
+                alternatives.append("radio_id = ANY(%s::TEXT[])")
+                params.append(list(unit_radio_ids))
+            clauses.append(
+                alternatives[0] if len(alternatives) == 1
+                else "(" + " OR ".join(alternatives) + ")"
+            )
         if cursor is not None:
             clauses.append("(started_at, segment_id) < (%s, %s)")
             params.extend(cursor)
@@ -1162,6 +1239,73 @@ class RadioRepository(AbstractContextManager):
             (hint_id,),
         ).fetchone()
 
+    # ------------------------------------------------ unit names (v4)
+
+    _UNIT_COLUMNS = "radio_id, name, updated_by, updated_at"
+
+    def list_units(self) -> list[tuple]:
+        """Every named unit as ``(radio_id, name, updated_by, updated_at)``."""
+        return self._execute(
+            f"SELECT {self._UNIT_COLUMNS} FROM lcdash_radio.units ORDER BY radio_id"
+        ).fetchall()
+
+    def count_units(self) -> int:
+        return int(self._execute(
+            "SELECT COUNT(*) FROM lcdash_radio.units"
+        ).fetchone()[0])
+
+    def get_unit(self, radio_id: str) -> tuple | None:
+        return self._execute(
+            f"SELECT {self._UNIT_COLUMNS} FROM lcdash_radio.units WHERE radio_id = %s",
+            (radio_id,),
+        ).fetchone()
+
+    def upsert_unit(
+        self, radio_id: str, name: str, actor: str, now: datetime
+    ) -> tuple:
+        """Create or rename a unit; returns the stored row. Does not commit."""
+        return self._execute(
+            "INSERT INTO lcdash_radio.units (radio_id, name, updated_by, updated_at) "
+            "VALUES (%s, %s, %s, %s) ON CONFLICT (radio_id) DO UPDATE SET "
+            "name = EXCLUDED.name, updated_by = EXCLUDED.updated_by, "
+            "updated_at = EXCLUDED.updated_at "
+            f"RETURNING {self._UNIT_COLUMNS}",
+            (radio_id, name, actor[:320], now),
+        ).fetchone()
+
+    def delete_unit(self, radio_id: str) -> tuple | None:
+        """Remove the name only; segments keep their radio ID. Does not commit."""
+        return self._execute(
+            "DELETE FROM lcdash_radio.units WHERE radio_id = %s "
+            f"RETURNING {self._UNIT_COLUMNS}",
+            (radio_id,),
+        ).fetchone()
+
+    def seen_radio_ids(self, since: datetime, limit: int) -> list[tuple]:
+        """Distinct radio IDs heard on segments, most recent first.
+
+        ``(radio_id, segments_since, last_seen_at)``; ``segments_since`` counts
+        only segments that started at or after ``since``.
+        """
+        return self._execute(
+            "SELECT radio_id, COUNT(*) FILTER (WHERE started_at >= %s), "
+            "MAX(started_at) FROM lcdash_radio.segments "
+            "WHERE radio_id IS NOT NULL GROUP BY radio_id "
+            "ORDER BY MAX(started_at) DESC, radio_id LIMIT %s",
+            (since, limit),
+        ).fetchall()
+
+    def radio_id_activity(self, radio_ids: list[str], since: datetime) -> list[tuple]:
+        """Same row shape as ``seen_radio_ids`` for the given IDs only."""
+        if not radio_ids:
+            return []
+        return self._execute(
+            "SELECT radio_id, COUNT(*) FILTER (WHERE started_at >= %s), "
+            "MAX(started_at) FROM lcdash_radio.segments "
+            "WHERE radio_id = ANY(%s::TEXT[]) GROUP BY radio_id",
+            (since, list(radio_ids)),
+        ).fetchall()
+
     # ------------------------------------------------- listener status (v3)
 
     def upsert_listener_status(self, payload_json: str, received_at: datetime) -> None:
@@ -1275,6 +1419,8 @@ class RadioService:
         self._last_purge: float | None = None
         self._fix_lock = threading.Lock()
         self._fix_cache: tuple[float, FixSet] | None = None
+        self._unit_lock = threading.Lock()
+        self._unit_cache: tuple[float, dict[str, str]] | None = None
 
     @property
     def s3(self):
@@ -1292,7 +1438,20 @@ class RadioService:
             if not self._schema_ready:
                 with self._schema_lock:
                     if not self._schema_ready:
-                        repository.initialize_schema()
+                        # A task starting during a rolling deploy can deadlock with
+                        # another task's open write (verified on real PostgreSQL);
+                        # the loser is rolled back, so applying again is safe.
+                        for attempt in range(3):
+                            try:
+                                repository.initialize_schema()
+                                break
+                            except RadioDatabaseError as exc:
+                                if attempt < 2 and isinstance(
+                                    exc.__cause__, psycopg.errors.DeadlockDetected
+                                ):
+                                    time.sleep(0.5 * (attempt + 1))
+                                    continue
+                                raise
                         self._schema_ready = True
         except BaseException:
             repository.__exit__(None, None, None)
@@ -1320,6 +1479,37 @@ class RadioService:
     def _drop_fix_cache(self) -> None:
         with self._fix_lock:
             self._fix_cache = None
+
+    # ------------------------------------------------------------- unit names
+
+    def _unit_names(self, repository) -> dict[str, str]:
+        """``{radio_id: name}``, cached in-process for 60 seconds.
+
+        Dropped whenever a name is set or removed through this process, so the
+        admin who saved a name sees it at once; another process catches up
+        within the cache window.
+        """
+        now = self._clock()
+        with self._unit_lock:
+            cached = self._unit_cache
+            if cached is not None and now - cached[0] < UNIT_CACHE_SECONDS:
+                return cached[1]
+        names = {row[0]: row[1] for row in repository.list_units()}
+        with self._unit_lock:
+            self._unit_cache = (now, names)
+        return names
+
+    def _safe_unit_names(self, repository) -> dict[str, str]:
+        """Names for display after a committed write: never fail the response."""
+        try:
+            return self._unit_names(repository)
+        except Exception as error:  # noqa: BLE001
+            logger.warning("radio unit names unavailable: %s", type(error).__name__)
+            return {}
+
+    def _drop_unit_cache(self) -> None:
+        with self._unit_lock:
+            self._unit_cache = None
 
     # ----------------------------------------------------------------- ingest
 
@@ -1457,10 +1647,13 @@ class RadioService:
             return retain_until is not None and retain_until > now
         return received_at > now - timedelta(days=AUDIO_RETENTION_DAYS)
 
-    def _item(self, row: tuple, fixes: FixSet) -> dict:
+    def _item(
+        self, row: tuple, fixes: FixSet, unit_names: dict[str, str] | None = None
+    ) -> dict:
         (segment_id, channel, direction, started_at, ended_at, duration, transcript,
          language, model, low_confidence, audio_key, received_at,
-         corrected_text, corrected_by, corrected_at, retain_until) = row
+         corrected_text, corrected_by, corrected_at, retain_until,
+         radio_id, talkgroup, console_label) = row
         corrected = corrected_text is not None
         # A human correction wins outright; fixes only ever touch machine text.
         text = corrected_text if corrected else fixes.apply(transcript)
@@ -1490,6 +1683,13 @@ class RadioService:
                 audio_key, received_at, retain_until
             ),
             "received_at": received_at.isoformat(),
+            # v4: who is talking. NULL for rows stored before v4 and when the
+            # listener saw no signalling. A possible-noise segment keeps its
+            # radio_id: the ID comes from the signalling, not the transcript.
+            "radio_id": radio_id,
+            "talkgroup": talkgroup,
+            "console_label": console_label,
+            "unit_name": (unit_names or {}).get(radio_id) if radio_id else None,
         }
 
     def list_segments(
@@ -1501,17 +1701,23 @@ class RadioService:
         q: str = "",
         before: str = "",
         limit: str | int = "",
+        radio_id: str = "",
     ) -> dict:
         channel = str(channel or "").strip()
         direction = str(direction or "").strip()
         q = str(q or "").strip()
         before = str(before or "").strip()
+        radio_id = str(radio_id or "").strip()
         if channel and not CHANNEL_PATTERN.fullmatch(channel):
             raise RadioQueryError("The 'channel' filter is invalid.")
         if direction and direction not in DIRECTIONS:
             raise RadioQueryError("The 'direction' filter is invalid.")
+        if radio_id and not RADIO_ID_PATTERN.fullmatch(radio_id):
+            raise RadioQueryError("The 'radio_id' filter is invalid.")
         if len(q) > MAX_QUERY_CHARS:
             raise RadioQueryError("The 'q' filter is too long.")
+        if any(ord(char) < 32 for char in q):
+            raise RadioQueryError("The 'q' filter contains invalid characters.")
         if str(limit).strip() == "":
             page_size = DEFAULT_LIST_LIMIT
         else:
@@ -1527,17 +1733,35 @@ class RadioService:
 
         repository = self._open()
         try:
+            unit_names = self._unit_names(repository)
+            id_prefix = None
+            unit_radio_ids: list[str] | None = None
+            if q:
+                # The search also finds a radio ID (by prefix) and a unit name
+                # (case-insensitive substring, resolved from the cached names
+                # to radio IDs; the database only ever sees bound values).
+                if RADIO_ID_PATTERN.fullmatch(q):
+                    id_prefix = f"{escape_like_pattern(q)}%"
+                needle = q.casefold()
+                matched = sorted(
+                    unit_id for unit_id, name in unit_names.items()
+                    if needle in name.casefold()
+                )
+                unit_radio_ids = matched or None
             rows = repository.list_segments(
                 channel=channel or None,
                 direction=direction or None,
                 like_pattern=f"%{escape_like_pattern(q)}%" if q else None,
                 cursor=cursor,
                 limit=page_size + 1,
+                radio_id=radio_id or None,
+                id_prefix=id_prefix,
+                unit_radio_ids=unit_radio_ids,
             )
             has_more = len(rows) > page_size
             rows = rows[:page_size]
             fixes = self._fixes(repository)
-            items = [self._item(row, fixes) for row in rows]
+            items = [self._item(row, fixes, unit_names) for row in rows]
             # Audited in the same connection AFTER the read and BEFORE the
             # result leaves this method: if the audit write fails, the caller
             # gets an error and no transcript.
@@ -1545,12 +1769,13 @@ class RadioService:
                 repository, EVENT_LIST, actor, None,
                 {
                     "channel": channel, "direction": direction,
-                    "q": q[:100], "paged": bool(before),
+                    "q": q[:100], "radio_id": radio_id, "paged": bool(before),
                     "limit": page_size, "returned": len(items),
                 },
                 log_extra=(
                     f"channel={channel or '*'} direction={direction or '*'} "
-                    f"has_q={bool(q)} paged={bool(before)} returned={len(items)}"
+                    f"radio_id={radio_id or '*'} has_q={bool(q)} "
+                    f"paged={bool(before)} returned={len(items)}"
                 ),
             )
         finally:
@@ -1769,6 +1994,111 @@ class RadioService:
             repository.__exit__(None, None, None)
         return {"hint_id": number, "removed": True}
 
+    # ------------------------------------------------------------- unit names
+
+    @staticmethod
+    def _unit_item(radio_id: str, name: str | None, activity: tuple | None) -> dict:
+        _id, segments, last_seen = activity if activity else (radio_id, 0, None)
+        return {
+            "radio_id": radio_id,
+            "name": name,
+            "segments_30d": int(segments or 0),
+            "last_seen_at": _iso(last_seen),
+        }
+
+    def list_units(self) -> dict:
+        """Named units merged with the radio IDs heard on recent segments.
+
+        Every named unit appears (an unheard one with zero segments); up to 500
+        heard IDs appear too, most recently heard first. Not audited per call,
+        like the other admin reads.
+        """
+        since = self._utcnow() - timedelta(days=UNIT_ACTIVITY_DAYS)
+        repository = self._open()
+        try:
+            names = {row[0]: row[1] for row in repository.list_units()}
+            seen = repository.seen_radio_ids(since, MAX_SEEN_UNITS)
+            seen_ids = {row[0] for row in seen}
+            extra = [unit_id for unit_id in names if unit_id not in seen_ids]
+            seen = list(seen) + list(repository.radio_id_activity(extra, since))
+        finally:
+            repository.__exit__(None, None, None)
+        activity = {row[0]: row for row in seen}
+
+        def recency(unit_id: str) -> tuple:
+            # Most recently heard first; never-heard (named only) units last.
+            last = activity[unit_id][2] if unit_id in activity else None
+            return (last is None, -last.timestamp() if last is not None else 0.0, unit_id)
+
+        ordered = sorted(set(names) | set(activity), key=recency)
+        return {
+            "units": [
+                self._unit_item(unit_id, names.get(unit_id), activity.get(unit_id))
+                for unit_id in ordered
+            ],
+            "max_units": MAX_UNITS,
+        }
+
+    def set_unit(self, radio_id: object, payload: object, *, actor: str) -> tuple[dict, bool]:
+        """Name (or rename) a radio ID. Returns ``(item, created)``."""
+        body = _require_object(payload, frozenset({"name"}))
+        clean_id = str(radio_id if radio_id is not None else "")
+        if not RADIO_ID_PATTERN.fullmatch(clean_id):
+            raise RadioQueryError("The radio ID must be 1 to 10 digits.")
+        try:
+            name = radio_text.clean_single_line(
+                body.get("name"), label="name",
+                minimum=MIN_UNIT_NAME_CHARS, maximum=MAX_UNIT_NAME_CHARS,
+            )
+        except TextRuleError as error:
+            raise _rule_error(error) from None
+
+        now = self._utcnow()
+        since = now - timedelta(days=UNIT_ACTIVITY_DAYS)
+        repository = self._open()
+        try:
+            existing = repository.get_unit(clean_id)
+            if existing is None and repository.count_units() >= MAX_UNITS:
+                raise RadioConflictError(f"At most {MAX_UNITS} units can be named.")
+            row = repository.upsert_unit(clean_id, name, actor, now)
+            activity = repository.radio_id_activity([clean_id], since)
+            self._audit(
+                repository, EVENT_UNIT_SET, actor, None,
+                {
+                    "radio_id": clean_id, "name": name,
+                    "previous_name": existing[1] if existing is not None else None,
+                    "created": existing is None,
+                },
+                log_extra=f"radio_id={clean_id} created={existing is None}",
+            )
+        finally:
+            repository.__exit__(None, None, None)
+        self._drop_unit_cache()
+        item = self._unit_item(clean_id, row[1], activity[0] if activity else None)
+        item["updated_by"] = row[2]
+        item["updated_at"] = _iso(row[3])
+        return item, existing is None
+
+    def remove_unit(self, radio_id: object, *, actor: str) -> dict:
+        """Remove a unit's name only; its segments keep the radio ID."""
+        clean_id = str(radio_id if radio_id is not None else "")
+        if not RADIO_ID_PATTERN.fullmatch(clean_id):
+            raise RadioNotFoundError("Unit not found.")
+        repository = self._open()
+        try:
+            row = repository.delete_unit(clean_id)
+            if row is None:
+                raise RadioNotFoundError("Unit not found.")
+            self._audit(
+                repository, EVENT_UNIT_REMOVE, actor, None,
+                {"radio_id": clean_id, "name": row[1]},
+                log_extra=f"radio_id={clean_id}",
+            )
+        finally:
+            repository.__exit__(None, None, None)
+        self._drop_unit_cache()
+        return {"radio_id": clean_id, "removed": True}
+
     # ------------------------------------------------------------ corrections
 
     def correct_segment(self, segment_id: str, text: object, *, actor: str) -> dict:
@@ -1815,7 +2145,10 @@ class RadioService:
             self._evaluate_alerts(
                 repository, segment_id=segment_id, channel=row[1], text=clean
             )
-            item = self._item(updated, self._safe_fixes(repository))
+            item = self._item(
+                updated, self._safe_fixes(repository),
+                self._safe_unit_names(repository),
+            )
         finally:
             repository.__exit__(None, None, None)
         return item
@@ -1836,7 +2169,10 @@ class RadioService:
                     {"channel": updated[1], "direction": updated[2]},
                     log_extra=f"channel={updated[1]}",
                 )
-            item = self._item(updated, self._safe_fixes(repository))
+            item = self._item(
+                updated, self._safe_fixes(repository),
+                self._safe_unit_names(repository),
+            )
         finally:
             repository.__exit__(None, None, None)
         return item

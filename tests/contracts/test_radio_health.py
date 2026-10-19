@@ -1273,6 +1273,17 @@ V2_DEFINITION = (
 )
 
 
+V3_DEFINITION = (
+    "CHECK ((event_type = ANY (ARRAY['radio.segments.list'::text, "
+    "'radio.segment.listen'::text, 'radio.segment.correct'::text, "
+    "'radio.segment.correct_revert'::text, 'radio.fix.add'::text, "
+    "'radio.fix.remove'::text, 'radio.watch.add'::text, "
+    "'radio.watch.change'::text, 'radio.watch.remove'::text, "
+    "'radio.alert.dismiss'::text, 'radio.hint.add'::text, "
+    "'radio.hint.remove'::text])))"
+)
+
+
 class SchemaV3Tests(unittest.TestCase):
     ALL_EVENTS = {
         radio_service.EVENT_LIST, radio_service.EVENT_LISTEN, radio_service.EVENT_CORRECT,
@@ -1280,7 +1291,8 @@ class SchemaV3Tests(unittest.TestCase):
         radio_service.EVENT_FIX_REMOVE, radio_service.EVENT_WATCH_ADD,
         radio_service.EVENT_WATCH_CHANGE, radio_service.EVENT_WATCH_REMOVE,
         radio_service.EVENT_ALERT_DISMISS, radio_service.EVENT_HINT_ADD,
-        radio_service.EVENT_HINT_REMOVE,
+        radio_service.EVENT_HINT_REMOVE, radio_service.EVENT_UNIT_SET,
+        radio_service.EVENT_UNIT_REMOVE,
     }
 
     def test_the_advisory_lock_is_still_the_first_statement(self):
@@ -1345,13 +1357,16 @@ class SchemaV3Tests(unittest.TestCase):
         self.assertEqual(block.count("ADD CONSTRAINT"), 1)
         self.assertIn("conname = 'radio_audit_event_type_check'", block)
         self.assertIn("conrelid = 'lcdash_radio.audit_events'::regclass", block)
-        self.assertIn("radio.hint.remove", block.split("THEN")[0])
+        # The guard looks for the newest event (v4 unit names).
+        self.assertIn("radio.unit.remove", block.split("THEN")[0])
 
     def test_upgrade_from_the_current_schema_widens_once_and_only_when_needed(self):
-        # v1 (two events) and the current v2 constraint both lack the hint
-        # events, so the guard fires and the block installs the full list.
+        # v1 (two events), v2 and the v3 constraint (hint events, no unit
+        # events) all lack the newest event, so the guard fires and the block
+        # installs the full list.
         self.assertTrue(_guard_would_widen(V1_DEFINITION))
         self.assertTrue(_guard_would_widen(V2_DEFINITION))
+        self.assertTrue(_guard_would_widen(V3_DEFINITION))
         # A database that already has the full list (fresh, or after one
         # upgrade) is left alone, so re-applying the file is a no-op.
         full = "CHECK ((event_type = ANY (ARRAY[" + ", ".join(
@@ -1364,7 +1379,16 @@ class SchemaV3Tests(unittest.TestCase):
         self.assertTrue(v2_events <= _inline_constraint_events())
         self.assertEqual(
             _inline_constraint_events() - v2_events,
-            {"radio.hint.add", "radio.hint.remove"},
+            {"radio.hint.add", "radio.hint.remove",
+             "radio.unit.set", "radio.unit.remove"},
+        )
+
+    def test_the_v3_events_are_still_accepted_after_the_upgrade(self):
+        v3_events = set(re.findall(r"'(radio\.[a-z_.]+)'", V3_DEFINITION))
+        self.assertTrue(v3_events <= _inline_constraint_events())
+        self.assertEqual(
+            _inline_constraint_events() - v3_events,
+            {"radio.unit.set", "radio.unit.remove"},
         )
 
     def test_the_service_applies_the_whole_file_once_per_process(self):

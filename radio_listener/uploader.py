@@ -92,7 +92,14 @@ SCALAR_FIELDS = (
     "transcribed_at",
 )
 SEGMENT_FIELDS = ("start", "end", "text", "avg_logprob", "no_speech_prob")
-METADATA_FIELDS = ("schema_version",) + SCALAR_FIELDS + ("segments",)
+# Optional who-is-talking object (docs/MINDSHARE_RADIO_UNITS.md). Only these
+# keys, each re-validated against the contract's pattern, may leave this host.
+SIGNAL_FIELD_PATTERNS = {
+    "radio_id": re.compile(r"[0-9]{1,10}"),
+    "talkgroup": re.compile(r"G[0-9]{1,6}"),
+    "console_label": re.compile(r"[A-Za-z0-9][A-Za-z0-9 _.-]{0,31}"),
+}
+METADATA_FIELDS = ("schema_version",) + SCALAR_FIELDS + ("segments", "signal")
 
 STOP = threading.Event()
 
@@ -241,6 +248,18 @@ def queue_summary(root: Path, prefixes, now: float) -> tuple[int, int | None]:
 # ---------------------------------------------------------------- metadata
 
 
+def sanitize_signal(value) -> dict | None:
+    """Keep only valid radio_id / talkgroup / console_label strings; None when nothing is left."""
+    if not isinstance(value, dict):
+        return None
+    clean = {}
+    for key, pattern in SIGNAL_FIELD_PATTERNS.items():
+        item = value.get(key)
+        if isinstance(item, str) and pattern.fullmatch(item):
+            clean[key] = item
+    return clean or None
+
+
 def build_metadata(transcript: dict) -> dict:
     """Whitelist the transcript JSON down to the contract's metadata fields."""
     if not isinstance(transcript, dict):
@@ -259,6 +278,9 @@ def build_metadata(transcript: dict) -> dict:
         for item in transcript["segments"]
         if isinstance(item, dict)
     ]
+    signal = sanitize_signal(transcript.get("signal"))
+    if signal:
+        metadata["signal"] = signal
     return metadata
 
 

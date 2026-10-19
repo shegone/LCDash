@@ -83,12 +83,15 @@ Golden vector (test both sides against it):
 | `model` | str | <= 64 chars |
 | `transcribed_at` | str | ISO 8601 with offset |
 | `segments` | list | <= 500 items of `{start, end, text, avg_logprob, no_speech_prob}` |
+| `signal` | object, OPTIONAL | who is talking, read by the listener from the RTP payload-type-103 signalling (v4, `MINDSHARE_RADIO_UNITS.md`). Keys only from `radio_id` (`^[0-9]{1,10}$`), `talkgroup` (`^G[0-9]{1,6}$`), `console_label` (`^[A-Za-z0-9][A-Za-z0-9 _.-]{0,31}$`); every key optional, every value a string matched in full. An unknown key, a non-object or a value that does not fit is a 400 (`Metadata field 'signal' is invalid.`). Absent, `{}` and old listeners are all fine; `schema_version` stays 1 |
 
 Deliberately NOT sent: `audio_file` (a path on `.227`), `source_packet_counts`
 and source IPs (operational), `multicast_group`, `port`, and
 `language_probability` (always 1 because language is forced to English).
 Unknown extra fields are rejected with 400 so the schema cannot drift
-silently.
+silently. The stored `signal` values appear on each list item as `radio_id`,
+`talkgroup` and `console_label` (null when absent), with `unit_name` resolved from
+the admin unit table; rows stored before v4 stay null.
 
 ### Responses
 
@@ -123,6 +126,10 @@ orphan object that the 15-day lifecycle removes.
   first, keyset pagination on `(started_at, segment_id)`, `limit` <= 200.
   Each item carries a `low_confidence` flag (true if any ASR segment has
   `avg_logprob < -1.0` or `no_speech_prob > 0.6`) and `audio_available`.
+  v4 adds an optional `radio_id` (exact digits) filter, and `q` also matches a
+  radio ID prefix and a unit name; unit management is `GET /api/radio/units`,
+  `PUT|DELETE /api/radio/units/{radio_id}` (admin only, see
+  `MINDSHARE_RADIO_UNITS.md`).
 - `GET /api/radio/segments/{segment_id}/audio`: proxies the WAV from S3 with
   `Cache-Control: private, no-store`, `X-Content-Type-Options: nosniff`.
   No presigned URLs. Records `radio.segment.listen`.

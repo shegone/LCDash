@@ -564,3 +564,80 @@ def test_signature_on_the_wire_verifies_against_signed_bytes(tmp_path):
     # Ed25519 is deterministic, so re-signing the received bytes must match the header.
     assert uploader.sign_message(key, message, work) == headers["x-radio-signature"]
     assert list((root / "uploaded").glob(".sign-*")) == []
+
+
+# ------------------------------------------------------------------ optional `signal` (who is talking)
+
+
+def test_signal_is_included_with_only_the_three_allowed_keys(tmp_path):
+    extra = {"signal": {"radio_id": "98426", "talkgroup": "G4407", "console_label": "Position2",
+                        "frequency": "851.0125", "caller_name": "synthetic", "signal_conflicts": 2}}
+    path = write_segment(make_root(tmp_path), "law_rx_20261016T120000Z_a1b2c3", extra=extra)
+    metadata = uploader.build_metadata(json.loads(path.read_text(encoding="utf-8")))
+    assert metadata["signal"] == {"radio_id": "98426", "talkgroup": "G4407", "console_label": "Position2"}
+    assert set(metadata) <= set(uploader.METADATA_FIELDS)
+    serialized = uploader.serialize_metadata(metadata).decode("utf-8")
+    for leaked in ("frequency", "851.0125", "caller_name", "signal_conflicts"):
+        assert leaked not in serialized
+    for name in FORBIDDEN_FIELDS:
+        assert name not in metadata
+
+
+def test_signal_with_only_a_radio_id_is_kept_as_is(tmp_path):
+    path = write_segment(make_root(tmp_path), "law_rx_20261016T120000Z_a1b2c3",
+                         extra={"signal": {"radio_id": "98426"}})
+    metadata = uploader.build_metadata(json.loads(path.read_text(encoding="utf-8")))
+    assert metadata["signal"] == {"radio_id": "98426"}
+
+
+def test_signal_absent_means_no_signal_key(tmp_path):
+    path = write_segment(make_root(tmp_path), "law_rx_20261016T120000Z_a1b2c3")
+    metadata = uploader.build_metadata(json.loads(path.read_text(encoding="utf-8")))
+    assert "signal" not in metadata
+
+
+@pytest.mark.parametrize("bad", [
+    {"radio_id": "9842x"}, {"radio_id": ""}, {"radio_id": "12345678901"}, {"radio_id": 98426},
+    {"radio_id": "98426\n"}, {"radio_id": " 98426"}, {"radio_id": "٩٨"},
+    {"talkgroup": "g4407"}, {"talkgroup": "G"}, {"talkgroup": "G1234567"}, {"talkgroup": "4407"},
+    {"console_label": ""}, {"console_label": " lead"}, {"console_label": "A" * 33},
+    {"console_label": "Pos;ition"}, {"console_label": "café"}, {"console_label": ["a"]},
+    {"console_label": None}, {"unknown": "x"}, {}, [], "98426", 5, None,
+])
+def test_invalid_signal_is_dropped_entirely(tmp_path, bad):
+    path = write_segment(make_root(tmp_path), "law_rx_20261016T120000Z_a1b2c3", extra={"signal": bad})
+    metadata = uploader.build_metadata(json.loads(path.read_text(encoding="utf-8")))
+    assert "signal" not in metadata
+
+
+def test_signal_keys_are_revalidated_one_by_one(tmp_path):
+    path = write_segment(make_root(tmp_path), "law_rx_20261016T120000Z_a1b2c3",
+                         extra={"signal": {"radio_id": "98426!", "talkgroup": "G4407",
+                                           "console_label": "bad;label"}})
+    metadata = uploader.build_metadata(json.loads(path.read_text(encoding="utf-8")))
+    assert metadata["signal"] == {"talkgroup": "G4407"}
+
+
+def test_signal_is_part_of_the_signed_deterministic_metadata_bytes(tmp_path):
+    path = write_segment(make_root(tmp_path), "law_rx_20261016T120000Z_a1b2c3",
+                         extra={"signal": {"talkgroup": "G4407", "radio_id": "98426"}})
+    metadata = uploader.build_metadata(json.loads(path.read_text(encoding="utf-8")))
+    body = uploader.serialize_metadata(metadata)
+    assert b'"signal":{"radio_id":"98426","talkgroup":"G4407"}' in body
+    assert body == uploader.serialize_metadata(json.loads(body.decode("utf-8")))
+
+
+def test_uploaded_request_carries_the_sanitized_signal(tmp_path, fake_sign):
+    root = make_root(tmp_path)
+    segment_id = "law_rx_20261016T120000Z_a1b2c3"
+    write_segment(root, segment_id, extra={"signal": {"radio_id": "98426", "talkgroup": "G4407", "rssi": "-70"}})
+    with FakeIngest([201]) as ingest:
+        outcome = uploader.process_segment(root, upload_settings(ingest.endpoint),
+                                           root / "transcripts" / f"{segment_id}.json")
+    assert outcome == "done"
+    request = ingest.requests[0]
+    parts = split_multipart(request["body"], request["headers"]["Content-Type"])
+    metadata = json.loads(parts["metadata"]["payload"])
+    assert metadata["signal"] == {"radio_id": "98426", "talkgroup": "G4407"}
+    assert parts["metadata"]["payload"] == uploader.serialize_metadata(metadata)
+    assert b"rssi" not in request["body"]

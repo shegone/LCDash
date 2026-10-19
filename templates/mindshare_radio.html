@@ -4,7 +4,7 @@
 
 {% block content %}
 <link rel="stylesheet" href="/static/css/lcdash-admin.css?v=20260809-admin-knowledge">
-<link rel="stylesheet" href="/static/css/lcdash-admin-radio.css?v=20261018-radio6">
+<link rel="stylesheet" href="/static/css/lcdash-admin-radio.css?v=20261018-radio7">
 
 <div class="command-page">
 <div class="command-safety-banner radio-banner mb-4" role="note">
@@ -64,8 +64,8 @@
             </select>
         </label>
         <label class="radio-filter-text">
-            <span>Transcript contains</span>
-            <input id="radio-filter-q" type="search" maxlength="200" autocomplete="off" placeholder="Search transcript text">
+            <span>Search</span>
+            <input id="radio-filter-q" type="search" maxlength="200" autocomplete="off" placeholder="Text, radio ID or unit name">
         </label>
         <label class="radio-filter-check" for="radio-hide-noise">
             <input id="radio-hide-noise" type="checkbox">
@@ -75,6 +75,8 @@
             <i class="bi bi-search" aria-hidden="true"></i> Apply
         </button>
     </form>
+
+    <div id="radio-id-filter" class="radio-id-filter" role="status" aria-live="polite" hidden></div>
 
     <div class="radio-tabbar">
         <div id="radio-tablist" class="radio-tabs" role="tablist" aria-label="Radio channels">
@@ -109,6 +111,10 @@
             <button type="button" id="radio-tab-hints" class="radio-tab" data-admin-tab="hints"
                     data-panel="radio-panel-hints">
                 <span class="radio-tab-label">Hint words</span>
+            </button>
+            <button type="button" id="radio-tab-units" class="radio-tab" data-admin-tab="units"
+                    data-panel="radio-panel-units">
+                <span class="radio-tab-label">Units</span>
             </button>
             {% endif %}
         </div>
@@ -249,10 +255,53 @@
                 </p>
             </form>
         </div>
+
+        <div id="radio-panel-units" class="radio-panel radio-admin-panel" hidden>
+            <p class="radio-admin-intro">
+                Radio IDs seen on the air, with an optional unit name for each, for example
+                "Medic 4". Names appear on every transcript card for everyone.
+            </p>
+            <p id="radio-unit-total" class="radio-admin-note" aria-live="polite"></p>
+            <label class="radio-check radio-unit-filter" for="radio-unit-unnamed">
+                <input id="radio-unit-unnamed" type="checkbox"> Show only unnamed
+            </label>
+            <p id="radio-unit-status" class="radio-admin-note radio-unit-status" role="status" aria-live="polite"></p>
+            <div id="radio-unit-loading" class="admin-progress" hidden>
+                <div class="admin-progress-spinner" aria-hidden="true"></div>
+                <div><strong>Loading units&hellip;</strong></div>
+            </div>
+            <div id="radio-unit-error" class="admin-error" role="alert" hidden></div>
+            <p id="radio-unit-empty" class="admin-empty" hidden>No radio IDs seen yet. Add one below.</p>
+            <ul id="radio-unit-list" class="radio-admin-list radio-unit-list" aria-label="Radio IDs and unit names"></ul>
+
+            <form id="radio-unit-form" class="radio-admin-form" novalidate>
+                <h3>Add by ID</h3>
+                <div class="radio-admin-fields">
+                    <label class="radio-field">
+                        <span>Radio ID (1 to 10 digits)</span>
+                        <input id="radio-unit-new-id" type="text" inputmode="numeric" maxlength="10"
+                               autocomplete="off" placeholder="for example: 98426">
+                    </label>
+                    <label class="radio-field">
+                        <span>Unit name (1 to 60 characters)</span>
+                        <input id="radio-unit-new-name" type="text" maxlength="60"
+                               autocomplete="off" placeholder="for example: Medic 4">
+                    </label>
+                </div>
+                <div id="radio-unit-form-error" class="radio-inline-error" role="alert" hidden></div>
+                <button id="radio-unit-add" class="radio-admin-add" type="submit">
+                    <i class="bi bi-plus-lg" aria-hidden="true"></i> Save name
+                </button>
+                <p class="radio-admin-note">
+                    A name is only a label for reading transcripts. It never changes a
+                    saved transcript, and clearing it keeps the radio ID on every segment.
+                </p>
+            </form>
+        </div>
         {% endif %}
     </div>
 </section>
 
-<script src="/static/js/lcdash-admin-radio.js?v=20261018-radio6"></script>
+<script src="/static/js/lcdash-admin-radio.js?v=20261018-radio7"></script>
 </div>
 {% endblock %}
