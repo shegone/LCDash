@@ -156,3 +156,34 @@ Applications and services were left running.
   high no_speech_prob clips as "Possible noise" in the UI (do not delete text).
 - Open: hint-cap race (admin 201st hint under 16 concurrent adds; harmless),
   corrected-audio lifecycle vs `retain_until` edge, no Range support on audio.
+
+## Update 2026-10-19: radio v4 (who is talking) live
+
+- Release `ea823a7` (web revision 113, image `release-ea823a783ba2`, digest
+  `sha256:b5b7e13dd06902691b8201adb5c5dcf4e332a442243b83108383ed1edbc36172`,
+  change set `radio-v4-ea823a7-20261019`, executed after Ted typed its name;
+  standard five-resource image bump; same nine accepted ECR CVEs).
+- Also shipped since the 10-17 notes: possible-noise flag (`f65b7f8`: boilerplate
+  and short low-confidence clips get a display-only badge, hide toggle, no
+  alerts; PT103 no longer reported as "undecoded audio"), clearer reset-password
+  error (`e58c461`).
+- PT103 decoded (docs/MINDSHARE_RADIO_UNITS.md): ASCII colon fields after an
+  8-byte header; TX streams carry `<radio_id>:G<talkgroup>:...`, RX streams a
+  console label (`Position2`, `maxplus`). Ted confirmed it is the radio ID.
+  Fields 3+ (e.g. `371`, trailing `0:0`) are not understood and not stored.
+- `.227` (installed 2026-10-19 00:24 UTC): new `capture.py`, `uploader.py`
+  (backup in `/opt/mindshare-radio-capture/backup-pre-v4/`); capture and upload
+  services restarted, transcribe untouched. First live segments carried
+  signal (EMS TX radio ID + talkgroup; EMS RX console label); 11 ingests 201,
+  no errors, alarm OK, 2,864 segments uploaded, none rejected.
+- App: segments carry `radio_id`, `talkgroup`, `console_label`, `unit_name`;
+  who-chip with click-to-filter; search by ID or unit name; admin Units tab
+  (`lcdash_radio.units`, events `radio.unit.set|remove`); visible to all human
+  roles. Older segments have no radio ID (not captured before).
+- Hardening from real-Postgres testing: control characters in `q` -> 400;
+  schema apply retried on deadlock. Known and accepted: unit/hint caps are soft
+  under concurrent admin writes; a writer can still lose a deadlock to a
+  starting task during a rolling deploy (fail-closed, retry).
+- Open: Ted to review the AGENTS.md / memory cleanup audit (stale on-prem
+  facts, `.227` radio role missing from AGENTS.md); unit names to be entered by
+  admins; Mindshare protocol docs would let us decode the remaining PT103 fields.
