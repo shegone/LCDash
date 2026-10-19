@@ -1,100 +1,75 @@
-# LCDash Local Agent Charter
+# LCDash Agent Charter
 
-These instructions apply to every AI coding agent working in this repository,
-including OpenHands and other offline assistants.
+These instructions apply to every AI coding agent working in this repository.
 
-## Platform state (decided 2026-09-14)
+## Platform state
 
 **The AWS pilot is the only LCDash.** It runs in account `862772137583`,
-`us-east-1`, at `https://aws.logan911.com`, from branch `main` of this
-repository. The on-premises LCDash platform that used to run on `.227` is
-retired: its Docker Compose stack has been stopped since 2026-09-09, its
-Cloudflare tunnel is down on purpose, and its n8n monitoring workflows are
-deactivated. Nothing in this repository deploys to `.227` any more.
-
-Documents that describe the on-premises platform are kept as history and are
-marked retired at the top. Do not "fix", patch, restart, or monitor anything
-LCDash-related on `.227`.
+`us-east-1`, at `https://aws.logan911.com`, from branch `main`. The
+on-premises platform on `.227` was retired and deleted on 2026-09-14
+(containers, images, volumes, secrets, recordings, Cloudflare tunnel, Access
+and DNS); a final database dump archive exists and must not be touched.
+Nothing here deploys to `.227`. On-premises documents are history, marked
+retired.
 
 ## Mission
 
 Continue the Logan County LCDash program safely and sequentially until the
-approved roadmap is complete. Build a polished, futuristic, dark, Logan
-County-branded operations platform while protecting emergency operations,
-sensitive CAD data, credentials, and production reliability.
+approved roadmap is complete: a polished, futuristic, dark, Logan County
+branded operations platform that protects emergency operations, sensitive CAD
+data, credentials and production reliability.
 
 The agent is a development assistant, not an emergency dispatcher. It must not
-make operational decisions or modify CAD, radio, call-routing, station-alert,
+make operational decisions or modify CAD, radio, call-routing, station-alert
 or public-warning records.
 
 ## Sources of truth
 
-Read these before planning work:
+Read what the task needs: `docs/PROJECT_ROADMAP.md`, the newest file in
+`handoffs/`, `AWS_WORKSPACE.md`, `infrastructure/README.md`, the module's docs
+(radio: `docs/MINDSHARE_RADIO_*.md`,
+`handoffs/session-handoff-2026-10-17-radio.md`), the matching `agent-skills/`
+skill, and Git state.
 
-1. `docs/PROJECT_ROADMAP.md`
-2. `docs/PROJECT_CATCHUP_2026-09-07.md` and the newest file in `handoffs/`
-3. `AWS_WORKSPACE.md` and `infrastructure/README.md`
-4. The documentation for the module being changed
-5. The relevant task skill in `agent-skills/`
-6. The latest Git history and current working-tree status
-7. Live read-only AWS state (ECS service, task definition, ALB target health,
-   the web log group) when the question is what is running
-
-Do not rely on an old chat summary when current code, tests, Git, or live
-read-only status contradicts it. `docs/CURRENT_PRODUCTION_STATE_2026-07-31.md`
-and `docs/SERVER_DEPLOYMENT.md` describe the retired on-premises platform.
+Current code, tests, Git and live read-only AWS state beat any old summary.
+Do not infer what is running from the development clone; read the ECS service,
+task definition and ECR tag.
 
 ## Machine roles
 
 ### AWS account `862772137583` - the LCDash platform
 
-- One Fargate web task behind one public HTTPS ALB with Cognito login, one
-  PostgreSQL RDS instance, Bedrock, Transcribe, Polly, and Amazon Location,
-  all defined in `infrastructure/` with the AWS CDK.
-- Releases follow the guarded path in "Production deployment rules" below.
+- Fargate web task behind an HTTPS ALB with Cognito login, PostgreSQL RDS,
+  Bedrock, Transcribe, Polly and Amazon Location, defined in
+  `infrastructure/` with the AWS CDK.
 - Identity Center profiles: `lcdash-phase1-deployment` runs releases and
   read-only status checks; `lcdash-sandbox-admin` is for IAM changes only.
+- Login: `aws sso login --sso-session lcdash --use-device-code --no-browser`;
+  in Git Bash set `MSYS_NO_PATHCONV=1`.
 
-### PC `.227` - the Hermes link's LLM host (not LCDash)
+### PC `.227` - Hermes and Mindshare radio listener host (not LCDash)
 
-- Address: `14.1.1.227`; hostname: `lcdash-server` (historical name).
-- Runs the Hermes containers (Ollama brain, ComfyUI media) and n8n for
-  Hermes, plus the Mindshare radio listener (decided 2026-10-16, see
-  `docs/MINDSHARE_RADIO_INGEST.md` and `radio_listener/`): three systemd
-  services under `/opt/mindshare-radio-capture` (listen-only multicast
-  capture, local faster-whisper transcription, and a signed uploader to the
-  AWS pilot). Its Ed25519 private key lives only there; AWS holds the public
-  key. Those are its only roles.
-- The stopped LCDash containers, images, and volumes on it are retained only
-  until the owner retires them deliberately; they hold CAD-derived data and
-  must not be started, deleted, or copied without explicit approval.
-- Must not run Unreal Engine, MetaHuman rendering, video generation, or other
-  sustained avatar-rendering workloads.
+- `14.1.1.227`, hostname `lcdash-server`. Runs the Hermes containers (Ollama
+  brain, ComfyUI), n8n for Hermes, and the Mindshare radio listener (decided
+  2026-10-16): three systemd services under `/opt/mindshare-radio-capture` for
+  listen-only multicast capture, local faster-whisper transcription and a
+  signed upload to the AWS pilot. Source: `radio_listener/`.
+- Must not run Unreal, MetaHuman, video generation or other sustained
+  avatar-rendering workloads.
 
 ### PC `.15` - avatar and video workstation
 
-- Address: `14.1.1.15`; Windows workstation with an RTX 3090 24 GB GPU.
-- Owns Unreal Engine, MetaHuman/Hadley, facial animation, lip synchronization,
-  video generation, Pixel Streaming, and the 512 x 1536 portrait LED display.
-- Preserve Windows and use NVIDIA Studio drivers.
-- Keep the static MAE portrait as the required fallback.
-- The agent running on `.15` must maintain `LATEST_PC15.md` in the shared
-  `MAE Progress Handoffs` folder.
-- The `.15` GPU may run local video or coding models when that does not contend
-  with an active Unreal, rendering, or Pixel Streaming workload. Do not attempt
-  distributed multi-GPU inference between `.227` and `.15` until a separate,
-  tested design is explicitly approved.
+- `14.1.1.15`; Windows, RTX 3090. Owns Unreal/MetaHuman, Pixel Streaming and
+  the 512 x 1536 portrait LED display. Preserve Windows; use NVIDIA Studio
+  drivers. Its agent maintains `LATEST_PC15.md` in the shared `MAE Progress
+  Handoffs` folder (see `docs/OFFLINE_AGENT_OPERATIONS.md`).
 
 ### Primary Windows development workstation
 
-- Repository path: `E:\Projects\LCDash-AWS`, branch `main`. This is the only
-  working copy for LCDash source changes, tests, commits, and releases.
-- `E:\Projects\LCDash` is the same repository checked out on the retired
-  `deployment/ubuntu-nvidia-227` branch. Leave it alone; do not commit or
-  deploy from it.
-- Every commit is pushed to both remotes: GitHub `shegone/LCDash` and the
-  NGA911 Bitbucket mirror `nga911rnd/dashboard`. `origin` carries both push
-  URLs, so one `git push origin main` does it.
+- `E:\Projects\LCDash-AWS` on `main` is the only working copy for changes,
+  tests, commits and releases; leave `E:\Projects\LCDash` alone.
+- One `git push origin main` reaches both remotes (GitHub `shegone/LCDash`,
+  Bitbucket `nga911rnd/dashboard`).
 
 ## Hard architecture boundaries
 
@@ -113,163 +88,54 @@ and `docs/SERVER_DEPLOYMENT.md` describe the retired on-premises platform.
 
 ## Work loop
 
-For each roadmap item:
+Per roadmap item: inspect current state; state the outcome and a short plan;
+change one bounded thing at a time; add or update tests; run focused, then full
+relevant tests; review the diff for secrets, sensitive CAD content, unsafe
+writes and scope creep; update docs; commit only a coherent, tested change;
+deploy only under the rules below.
 
-1. Inspect the current code, documentation, tests, Git state, and relevant
-   read-only system status.
-2. State the intended outcome and a short sequential plan.
-3. Work on one bounded feature or correction at a time.
-4. Preserve unrelated user changes and never discard a dirty working tree.
-5. Add or update tests for changed behavior.
-6. Run focused tests, then the full relevant suite.
-7. Review the diff for secrets, sensitive CAD content, unsafe writes, and
-   accidental scope expansion.
-8. Update the relevant documentation.
-9. Commit only a coherent, tested change with a plain commit message.
-10. Deploy only when the approval and production rules below are satisfied.
-11. Verify the deployed behavior without printing unnecessary operational
-    details.
-12. Update the durable handoff before stopping.
+## Execution protocol
 
-If a task fails repeatedly, stop changing things blindly. Record the exact
-failure, preserve the last known-good state, and request Codex review.
+- Before acting, report branch, HEAD and pre-existing changed files. Never overwrite, revert, discard, stage or combine
+  pre-existing changes unless the task owns them. Do not mix unrelated docs,
+  code, infrastructure, `.227` and `.15` work in one work package.
+- Verify claims against tool output and quote exact branch, file and test
+  names. A local remote-tracking ref is not proof of remote state.
+- After a failed command, inspect the result before retrying. After the same
+  failure twice, stop, preserve state and report the blocker. Never weaken
+  tests, safety checks, authentication, audit, privacy filtering or fallbacks
+  to get a pass.
+- Escalate to the owner when a task touches production deployment, rollback,
+  credentials, networking, authentication, authorization, backup policy or
+  public-safety outputs; when docs and code materially contradict; when you
+  cannot show a change keeps existing safety behavior; or when unsure whether
+  an action is read-only. Escalation is a successful safety outcome.
 
-## Mandatory local-agent execution protocol
+## Agents and models
 
-Apply this protocol before using tools or changing files. It is especially
-important for local models with limited context or unreliable long-horizon
-tool use.
+Workers and subagents run as cheaper Sonnet models, at most four at once, with
+non-overlapping edit scopes. This charter overrides any skill.
 
-### 1. Classify and bound the request
+## Approvals
 
-- First classify the request as `READ`, `PLAN`, `CHANGE`, `TEST`, `DEPLOY`, or
-  `OPERATE`.
-- Convert a broad request into ordered work packages. Each package must have
-  one outcome, an explicit file or subsystem scope, an acceptance check, and a
-  stopping point.
-- Do not execute an entire project roadmap in one response. Produce the
-  backlog, identify the critical path, and begin only the first safe package.
-- Never mix unrelated documentation, code, infrastructure, Hermes-host
-  (`.227`), and `.15` changes in one branch or work package.
+Autonomous: read files and non-secret docs; inspect Git; read live AWS state
+through the profile's read-only calls; work in a feature or assigned safe
+branch; edit source, tests and docs; run local tests and read-only
+diagnostics; draft plans and handoffs; commit a tested change if the operator
+has enabled local commits.
 
-### 2. Establish a checkpoint before work
+Explicit human approval is required for:
 
-Before taking action, report and retain:
-
-- current branch and HEAD;
-- clean or dirty working-tree state;
-- pre-existing changed files that must be preserved;
-- task classification and allowed actions;
-- exact files or subsystem in scope;
-- prohibited actions; and
-- acceptance evidence required to finish.
-
-If the tree is dirty, do not overwrite, revert, discard, stage, or combine the
-existing changes unless the task explicitly owns them.
-
-### 3. Use progressive discovery
-
-- Read `AGENTS.md`, then the smallest authoritative source set needed for the
-  current work package.
-- Search filenames before searching file contents.
-- Start with at most five targeted file reads or searches. After that, pause
-  and summarize what was learned, what remains unknown, and whether more
-  discovery is justified.
-- Do not repeatedly search synonyms after the relevant source files are known.
-- For a master roadmap, synthesize in sections. Do not attempt to read every
-  repository file before producing useful output.
-- Treat old notes, local remote-tracking refs, and roadmap status as possibly
-  stale. Use `VERIFY` when current evidence is unavailable.
-
-### 4. Manage context deliberately
-
-- Keep a short working ledger in the response: `Known`, `Assumptions`,
-  `Unknowns`, `Current package`, and `Next checkpoint`.
-- When the task is large, complete one phase and report before continuing.
-- If output or context is becoming long, stop tool use and produce a concise
-  checkpoint rather than starting another discovery loop.
-- Never restart the full investigation after a continuation. Reuse the
-  evidence already gathered and continue from the recorded checkpoint.
-
-### 5. Verify every material claim
-
-- Distinguish observed facts, repository documentation, inference, and
-  recommendations.
-- Do not call a benchmark `PASS` until every requested acceptance check is
-  shown.
-- Re-read the final changed text and inspect the final diff before reporting.
-- Verify that only intended files changed.
-- Quote exact branch, file, and test names from tool output. Do not silently
-  correct or abbreviate them in the report.
-- A local remote-tracking branch is not proof of current GitHub state unless a
-  safe fetch was explicitly allowed and completed.
-- Do not infer what is running from the development clone. Read the ECS
-  service, its task definition, and the ECR tag.
-
-### 6. Recover from errors conservatively
-
-- After the first failed edit or command, inspect the actual result before
-  retrying.
-- After a second failure of the same kind, stop that approach, preserve the
-  current state, and report the blocker.
-- Do not make repeated blind edits to repair formatting or syntax.
-- Never weaken tests, safety checks, authentication, audit, privacy filtering,
-  or fallbacks merely to obtain a passing result.
-
-### 7. Use a fixed completion report
-
-Every completed work package must report:
-
-1. outcome and `PASS`, `FAIL`, or `BLOCKED`;
-2. branch, HEAD, and working-tree state;
-3. files changed and a concise diff summary;
-4. commands or tests run and their exact results;
-5. safety, privacy, and boundary checks;
-6. assumptions or unverified facts;
-7. whether anything was committed, pushed, deployed, installed, or operated;
-8. exact next work package; and
-9. whether hosted Codex or user action is required.
-
-If the response stops before this report, the work package is not complete.
-
-### 8. Escalate at the correct boundary
-
-Escalate to hosted Codex before continuing when:
-
-- the same failure occurs twice;
-- the task touches production deployment, rollback, credentials, networking,
-  authentication, authorization, backup policy, or public-safety outputs;
-- documentation and code materially contradict each other;
-- the model cannot prove that its proposed change preserves existing safety
-  behavior;
-- the requested scope cannot fit into one bounded, reviewable work package; or
-- the model is unsure whether an action is read-only or state-changing.
-
-Escalation is a successful safety outcome, not a failed task.
-
-## Actions the local agent may perform autonomously
-
-- Read repository files and non-secret documentation.
-- Inspect Git status and history.
-- Read live AWS state through the read-only calls the deployment profile
-  permits.
-- Create a feature branch or work in an explicitly assigned safe branch.
-- Edit source, tests, and documentation within an isolated working copy.
-- Run local unit tests, linters, formatters, and read-only diagnostics.
-- Produce drafts, plans, diagrams, and handoff records.
-- Commit a coherent change after required tests pass, if the operator has
-  enabled local commits.
-
-## Actions requiring explicit human approval
-
-- Executing a CloudFormation change set, or any other change to a running
-  AWS service.
+- Executing a CloudFormation change set, or any other change to a running AWS
+  service.
 - Pushing to GitHub `main` (which also mirrors to Bitbucket).
 - Changing IAM policies, permission sets, or the permissions boundary;
   changing Cognito users, groups, or the app client.
 - Changing Cloudflare, DNS, certificate, or security settings anywhere.
 - Installing or removing software on `.227` or `.15`, or starting, stopping,
-  or removing any container there.
+  or removing any container there. The Mindshare radio services on `.227` are
+  authorised for this project; everything else on `.227` and `.15` still needs
+  approval.
 - Creating, rotating, reading, copying, or exposing credentials, tokens,
   passwords, keys, OAuth records, or the protected credential record.
 - Enabling live EMS delay delivery, station announcements, paging, CAD writes,
@@ -296,16 +162,21 @@ The pilot is released only through the guarded path; there is no second one.
    this commit, then start a build with `IMAGE_TAG=release-<first 12 hex of
    HEAD>` and wait for `SUCCEEDED`.
 4. Read the ECR scan for the new digest. The only accepted findings are the
-   documented util-linux baseline; anything else stops the release.
+   util-linux baseline and the zlib finding accepted 2026-10-17; anything else
+   stops the release.
 5. Create a **named** change set on the foundation stack with only
-   `PilotImageDigest` changing, review that its scope is the standard five
-   resources (two task definitions, the service, the collector's rule and
-   policy), then execute it.
+   `PilotImageDigest` changing (plus any reviewed infrastructure change),
+   review that its scope is the standard five resources (two task definitions,
+   the service, the collector's rule and policy) plus any such change, then
+   execute it only after the owner types the exact change-set name.
 6. Verify the ECS rollout completed, the ALB target is healthy, and a
    signed-in page shows the caller's name and role.
 7. Rollback is a change set with the previous digest. A replaced task
    definition revision is deregistered by CloudFormation and cannot be
    re-pointed to directly.
+
+Run CDK as `npx --yes aws-cdk@2.1145.0 ... --method=prepare-change-set
+--change-set-name <name>`.
 
 Dependencies are pinned: `requirements.txt` for direct packages and
 `constraints.txt` for the full set. A bump is a deliberate one-line change
@@ -335,67 +206,26 @@ rebuild.
 
 ## Avatar and video rules
 
-- Complete and test calm idle/talking switching locally on `.15` before adding
-  a network speaking-state interface.
-- Run `MAE_Talk_Generic` only while MAE is speaking, then return to calm idle.
-- Use the minimum authenticated state signal needed; do not send raw CAD data
-  to the renderer.
-- Verify the portrait framing at 512 x 1536 and 60 Hz.
-- Keep video/rendering artifacts off the ordinary Git repository unless they
-  are small, approved source assets. Store large Unreal and media assets in the
-  approved `.15` project storage and backup path.
+- The static MAE portrait is the required fallback; the avatar stays optional.
+- Run `MAE_Talk_Generic` only while MAE is speaking, then return to calm idle;
+  test this locally on `.15` before adding a network speaking-state interface.
+- Use the minimum authenticated state signal; send no raw CAD data to the
+  renderer.
+- Verify framing at 512 x 1536 and 60 Hz.
+- Keep large media assets off ordinary Git; use the approved `.15` storage.
 
-## Local model strategy
+## Completion and handoff
 
-- Use `qwen3-coder:30b` for bounded repository exploration, coding, tests,
-  code review, and implementation work. Use `qwen3.6:27b` for planning,
-  general operations, vision, desktop-control, and cross-domain work.
-- Start no more than four concurrent local sub-agents. Keep background work at
-  two workers or fewer. Each worker needs a separate, bounded outcome; never
-  give parallel workers overlapping file-edit scopes.
-- Select and read the matching `agent-skills/` instruction before taking a
-  task-specific action. The root charter always overrides a task skill.
-- Require at least a 22K context window for OpenHands; 32K is the normal target.
-- Do not assume a model is reliable because it produces fluent text. Judge it
-  by tool use, diffs, tests, and repeatable task benchmarks.
-- Escalate to hosted Codex when the local agent fails the same task twice,
-  cannot keep tests passing, proposes unsafe production changes, loses project
-  boundaries, or faces a security/architecture decision.
+An item is complete only when the behavior exists, safety and permission
+boundaries hold, focused and full tests pass, docs are current, Git is clear,
+and any approved deployment is verified healthy. The project is not complete
+merely because every bullet has code: production acceptance, security review,
+restore readiness, operator testing and fallbacks must also be satisfied.
 
-## Completion definition
-
-A roadmap item is complete only when:
-
-- the requested behavior exists;
-- safety and permission boundaries are preserved;
-- focused and relevant full tests pass;
-- documentation is current;
-- Git state is clear;
-- any approved deployment is healthy and verified; and
-- the handoff records what changed, what was tested, what remains, and the exact
-  next action.
-
-The whole project is not "complete" merely because every current roadmap bullet
-has code. Production acceptance, security review, restore readiness, operator
-testing, fallback behavior, and unresolved external dependencies must also be
-documented and satisfied.
-
-## Durable handoff
-
-At every meaningful stopping point, write a dated handoff in `handoffs/` (see
-the newest one there for the shape) and, for `.15` work, update the shared
-`LATEST_PC15.md` as described in `docs/OFFLINE_AGENT_OPERATIONS.md`. Include:
-
-- completed work;
-- files, settings, or systems changed;
-- tests and results;
-- commit and branch;
-- deployment and service state (ECS revision, image tag, digest);
-- open risks or blockers;
-- exact next action; and
-- whether applications and services were left running.
-
-Write a short `Codex catch-up` section so hosted Codex can resume quickly.
+At each meaningful stopping point write a dated handoff in `handoffs/`
+(follow the newest): work done, tests, commit and branch, ECS revision, image
+tag and digest, open risks, the exact next action, and whether services were
+left running.
 
 # AWS Guidance
 
