@@ -70,7 +70,7 @@ executed. See the update at the end for the revised channel map.
 
 ## State
 
-Branch `main`. Pilot web revision 114 until a change set is executed. `.227`
+Branch `main`. Pilot web revision 115 (digest `sha256:4c266188...`). `.227`
 runs the listener config as of the update below; all three services active.
 
 ## Update (later 2026-10-20): revised sheet, DMR and LMARS
@@ -96,11 +96,23 @@ config (commit `d0547b3`, installed on `.227` at 15:10 local) was partly wrong:
   `release-ea6ef8373308`, digest
   `sha256:4c266188ae14d6c132a97002bd874487b645028d7b9a5bfe100d76d9357f7422`,
   the same nine accepted ECR findings. Change set
-  `radio-dmr-lmars-ea6ef83-20261020` is staged (standard five resources, only
-  `PilotImageDigest` differs) and waits for Ted to type its exact name.
+  `radio-dmr-lmars-ea6ef83-20261020` (standard five resources, only
+  `PilotImageDigest` differs) was executed after Ted typed its exact name.
+  Verified: foundation `UPDATE_COMPLETE`; web task definition revision 115
+  running that digest, rollout COMPLETED 1/1, ALB target healthy; `/mindshare/radio`
+  redirects to Cognito, unsigned ingest answers 401; 71 signed ingests returned
+  201 in the first minutes, no errors in the web log. Not checked: the signed-in
+  page in a browser (no sign-in possible for an agent). Ted should open
+  `/mindshare/radio` and confirm the Law/EMS/Fire/Other tabs and chips.
   Rollback target: digest `sha256:1ebf4a96a1dcb3f2ddcb112ca0dcc527669bf205b6f84c9d2662409489d847dc`
   (revision 114).
 - `.227` runs the 21-channel config (installed 16:30 local, 42 listeners;
   earlier 16-channel config and the original are in
   `/opt/mindshare-radio-capture/backup-pre-vhf/`). LMARS multicast reaches
   `10.5.2.12` (signalling packets seen); no LMARS voice heard yet.
+
+Open at the end of the day: delete the stale change set
+`radio-vhf-d0547b3-20261020` (needs Ted's approval); decide whether to relabel
+the ~34 segments stored as `ems_north_vhf` / `fire_north_vhf` (DMR audio);
+confirm LMARS voice arrives on a real transmission; confirm whether operators
+say "IRP" or "SIRN".
