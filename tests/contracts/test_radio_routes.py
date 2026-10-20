@@ -323,14 +323,17 @@ class FakeRepository:
         return plain
 
     def list_segments(self, *, channel, direction, like_pattern, cursor, limit,
-                      radio_id=None, id_prefix=None, unit_radio_ids=None):
+                      radio_id=None, id_prefix=None, unit_radio_ids=None,
+                      channels=None):
         self.store.list_calls.append({
-            "channel": channel, "direction": direction,
+            "channel": channel, "channels": channels, "direction": direction,
             "like_pattern": like_pattern, "radio_id": radio_id,
             "id_prefix": id_prefix, "unit_radio_ids": unit_radio_ids,
         })
         rows = list(self.store.segments.values())
-        if channel:
+        if channels:
+            rows = [r for r in rows if r[1] in channels]
+        elif channel:
             rows = [r for r in rows if r[1] == channel]
         if direction:
             rows = [r for r in rows if r[2] == direction]
@@ -1146,6 +1149,20 @@ class ServiceTests(unittest.TestCase):
             return [i["segment_id"] for i in service.list_segments(actor="a@x", **filters)["segments"]]
 
         self.assertEqual(ids(channel="ems"), ["ems_rx_text_0001"])
+        # A group tab names several channels; each name is validated alone.
+        self.assertEqual(
+            sorted(ids(channel="law,ems_ward_vhf,ems")),
+            ["ems_rx_text_0001", "law_rx_text_0001"],
+        )
+        self.assertEqual(ids(channel="ems_ward_vhf,fire"), [])
+        # Repeats collapse, so a single repeated name stays a single filter.
+        self.assertEqual(ids(channel="ems,ems"), ["ems_rx_text_0001"])
+        for bad in ("law,", ",law", "law,,ems", "law,BAD", "law, ems"):
+            with self.assertRaises(RadioQueryError, msg=bad):
+                service.list_segments(actor="a@x", channel=bad)
+        with self.assertRaises(RadioQueryError):
+            service.list_segments(
+                actor="a@x", channel=",".join(f"c{n}" for n in range(25)))
         self.assertEqual(ids(direction="rx"), ["law_rx_text_0001"])
         self.assertEqual(ids(q="PLATE 100"), ["ems_rx_text_0001", "law_rx_text_0001"])
         # A literal percent matches only the transcript that contains one.

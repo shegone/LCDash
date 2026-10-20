@@ -37,6 +37,110 @@
         "tx": 10034,
         "rx": 12034
       }
+    },
+    {
+      "name": "ems_ward_vhf",
+      "group": "235.98.99.20",
+      "ports": {
+        "tx": 10020,
+        "rx": 12020
+      }
+    },
+    {
+      "name": "ems_south_vhf",
+      "group": "235.98.99.21",
+      "ports": {
+        "tx": 10021,
+        "rx": 12021
+      }
+    },
+    {
+      "name": "ems_park_vhf",
+      "group": "235.98.99.22",
+      "ports": {
+        "tx": 10022,
+        "rx": 12022
+      }
+    },
+    {
+      "name": "ems_north_vhf",
+      "group": "235.98.99.23",
+      "ports": {
+        "tx": 10023,
+        "rx": 12023
+      }
+    },
+    {
+      "name": "fire_ward_vhf",
+      "group": "235.98.99.24",
+      "ports": {
+        "tx": 10024,
+        "rx": 12024
+      }
+    },
+    {
+      "name": "fire_south_vhf",
+      "group": "235.98.99.25",
+      "ports": {
+        "tx": 10025,
+        "rx": 12025
+      }
+    },
+    {
+      "name": "fire_park_vhf",
+      "group": "235.98.99.26",
+      "ports": {
+        "tx": 10026,
+        "rx": 12026
+      }
+    },
+    {
+      "name": "fire_north_vhf",
+      "group": "235.98.99.27",
+      "ports": {
+        "tx": 10027,
+        "rx": 12027
+      }
+    },
+    {
+      "name": "fire_horsepen_vhf",
+      "group": "235.98.99.28",
+      "ports": {
+        "tx": 10028,
+        "rx": 12028
+      }
+    },
+    {
+      "name": "law_ward_vhf",
+      "group": "235.98.99.29",
+      "ports": {
+        "tx": 10029,
+        "rx": 12029
+      }
+    },
+    {
+      "name": "law_south_vhf",
+      "group": "235.98.99.30",
+      "ports": {
+        "tx": 10030,
+        "rx": 12030
+      }
+    },
+    {
+      "name": "law_park_vhf",
+      "group": "235.98.99.31",
+      "ports": {
+        "tx": 10031,
+        "rx": 12031
+      }
+    },
+    {
+      "name": "sirn_multi_vhf",
+      "group": "235.98.99.38",
+      "ports": {
+        "tx": 10038,
+        "rx": 12038
+      }
     }
   ]
 }

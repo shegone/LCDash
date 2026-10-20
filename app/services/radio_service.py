@@ -118,6 +118,8 @@ MAX_REQUEST_BYTES = MAX_AUDIO_BYTES + MAX_METADATA_BYTES + 16 * 1024
 SEGMENT_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{8,128}$")
 CHANNEL_PATTERN = re.compile(r"^[a-z0-9_]{1,32}$")
 DIRECTIONS = ("tx", "rx")
+# Most channels one feed filter may name (the listener's own limit).
+MAX_FILTER_CHANNELS = 24
 MAX_SEGMENT_SPAN_SECONDS = 600
 MAX_TRANSCRIPT_CHARS = 20000
 MAX_LANGUAGE_CHARS = 8
@@ -932,8 +934,12 @@ class RadioRepository(AbstractContextManager):
         radio_id: str | None = None,
         id_prefix: str | None = None,
         unit_radio_ids: list[str] | None = None,
+        channels: list[str] | None = None,
     ) -> list[tuple]:
         """Newest first, keyset-paged on (started_at, segment_id).
+
+        ``channels`` (two or more names) is the group-tab filter and takes
+        the place of the single ``channel``.
 
         Every user-supplied value travels as a bound parameter; the only SQL
         text assembled here is fixed fragments. ``radio_id`` is an exact
@@ -944,7 +950,10 @@ class RadioRepository(AbstractContextManager):
         """
         clauses: list[str] = []
         params: list[Any] = []
-        if channel:
+        if channels:
+            clauses.append("channel = ANY(%s::TEXT[])")
+            params.append(list(channels))
+        elif channel:
             clauses.append("channel = %s")
             params.append(channel)
         if direction:
@@ -1708,8 +1717,17 @@ class RadioService:
         q = str(q or "").strip()
         before = str(before or "").strip()
         radio_id = str(radio_id or "").strip()
-        if channel and not CHANNEL_PATTERN.fullmatch(channel):
-            raise RadioQueryError("The 'channel' filter is invalid.")
+        # One channel name, or a comma-separated list (a group tab reads
+        # several channels at once). Every name is checked individually.
+        channel_list: list[str] = []
+        if channel:
+            for name in channel.split(","):
+                if not CHANNEL_PATTERN.fullmatch(name):
+                    raise RadioQueryError("The 'channel' filter is invalid.")
+                if name not in channel_list:
+                    channel_list.append(name)
+            if len(channel_list) > MAX_FILTER_CHANNELS:
+                raise RadioQueryError("The 'channel' filter names too many channels.")
         if direction and direction not in DIRECTIONS:
             raise RadioQueryError("The 'direction' filter is invalid.")
         if radio_id and not RADIO_ID_PATTERN.fullmatch(radio_id):
@@ -1748,8 +1766,11 @@ class RadioService:
                     if needle in name.casefold()
                 )
                 unit_radio_ids = matched or None
+            channel_filter: dict[str, Any] = {"channel": channel_list[0] if channel_list else None}
+            if len(channel_list) > 1:
+                channel_filter["channels"] = channel_list
             rows = repository.list_segments(
-                channel=channel or None,
+                **channel_filter,
                 direction=direction or None,
                 like_pattern=f"%{escape_like_pattern(q)}%" if q else None,
                 cursor=cursor,

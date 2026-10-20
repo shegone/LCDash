@@ -14,10 +14,13 @@
 // inline -- no alert()/confirm(). All server text goes in via textContent
 // only (no HTML injection): transcripts are untrusted machine or human text.
 //
-// Layout: one tab per channel plus "All channels", and (administrators only)
-// "Alert keywords" and "Transcript fixes". Each channel tab is a feed of cards
-// (an <ol>), not a table, so it reads the same on a phone. Each tab keeps its
-// own keyset cursor and is fetched the first time it is opened.
+// Layout: one tab per channel group (Law, EMS, Fire, Other) plus "All
+// channels", and (administrators only) "Alert keywords", "Transcript fixes",
+// "Hint words" and "Units". Chips under a group tab narrow it to one channel.
+// Each feed tab is a list of cards (an <ol>), not a table, so it reads the same
+// on a phone. Each tab keeps its own keyset cursor and is fetched the first
+// time it is opened. A group tab asks the server for all of its channels at
+// once (`channel=a,b,c`).
 //
 // Corrections: each card has an Edit button that opens an inline editor. A
 // saved correction updates the card in place (its Play button and playback are
@@ -53,6 +56,73 @@
     const PAGE_SIZE = 50;
     const MAX_CORRECTION = 20000;
     const CHANNEL_PATTERN = /^[a-z0-9_]{1,32}$/;
+    // The feed tabs are channel groups. A channel belongs to the group its
+    // name starts with ("law", "law_ward_vhf" -> Law); any other name is Other.
+    const GROUPS = [
+        { key: "law", label: "Law" },
+        { key: "ems", label: "EMS" },
+        { key: "fire", label: "Fire" },
+        { key: "other", label: "Other" },
+    ];
+    // Listed in display order. `short` labels the chip inside a group; `full`
+    // is the name shown on a card. A channel the listener adds before this list
+    // is updated still works: it is shown under its own name.
+    const CHANNEL_CATALOG = {
+        law: { short: "IRP", full: "Law IRP" },
+        law_ward_vhf: { short: "Ward VHF", full: "Law Ward VHF" },
+        law_south_vhf: { short: "South VHF", full: "Law South VHF" },
+        law_park_vhf: { short: "Park VHF", full: "Law Park VHF" },
+        ems: { short: "IRP", full: "EMS IRP" },
+        ems_ward_vhf: { short: "WardRock VHF", full: "EMS WardRock VHF" },
+        ems_south_vhf: { short: "South VHF", full: "EMS South VHF" },
+        ems_park_vhf: { short: "Park VHF", full: "EMS Park VHF" },
+        ems_north_vhf: { short: "North VHF", full: "EMS North VHF" },
+        fire: { short: "IRP", full: "Fire IRP" },
+        fire_ward_vhf: { short: "WardRock VHF", full: "Fire WardRock VHF" },
+        fire_south_vhf: { short: "South VHF", full: "Fire South VHF" },
+        fire_park_vhf: { short: "Park/Hartland VHF", full: "Fire Park/Hartland VHF" },
+        fire_north_vhf: { short: "North VHF", full: "Fire North VHF" },
+        fire_horsepen_vhf: { short: "Horsepen VHF", full: "Fire Horsepen VHF" },
+        sirn_multi_vhf: { short: "SIRN Multi VHF", full: "SIRN Multi VHF" },
+    };
+    // Known channels in display order; channels seen in the statistics join at the end.
+    const knownChannels = new Set(Object.keys(CHANNEL_CATALOG));
+    // channel -> segments in the last 24 hours, from the latest statistics.
+    let channelCounts = new Map();
+
+    function channelGroup(channel) {
+        for (const group of GROUPS) {
+            if (group.key !== "other" &&
+                (channel === group.key || channel.startsWith(`${group.key}_`))) {
+                return group.key;
+            }
+        }
+        return "other";
+    }
+
+    function groupLabel(key) {
+        const group = GROUPS.find(function (entry) {
+            return entry.key === key;
+        });
+        return group ? group.label : key;
+    }
+
+    function groupChannels(key) {
+        return Array.from(knownChannels).filter(function (channel) {
+            return channelGroup(channel) === key;
+        });
+    }
+
+    function channelName(channel) {
+        const entry = CHANNEL_CATALOG[channel];
+        return entry ? entry.full : channel;
+    }
+
+    function channelShort(channel) {
+        const entry = CHANNEL_CATALOG[channel];
+        return entry ? entry.short : channel;
+    }
+
     const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
     const AUDIO_ERROR_TEXT =
         "Audio could not be played. It may have expired, or your session ended.";
@@ -76,6 +146,7 @@
     const hideNoiseBox = document.getElementById("radio-hide-noise");
     const noiseCount = document.getElementById("radio-noise-count");
     const idFilterBar = document.getElementById("radio-id-filter");
+    const districtBar = document.getElementById("radio-districts");
     if (!statsBox || !statsError || !form || !directionSelect || !textInput ||
         !applyButton || !tablist || !panelsBox || !updatedText || !refreshButton ||
         !playStatus) {
@@ -223,9 +294,8 @@
 
     // Small stable hash so an unknown channel always gets the same colour.
     function channelClass(channel) {
-        if (channel === "law" || channel === "ems" || channel === "fire") {
-            return `radio-chip-${channel}`;
-        }
+        const group = channelGroup(channel);
+        if (group !== "other") return `radio-chip-${group}`;
         let hash = 0;
         for (let i = 0; i < channel.length; i += 1) {
             hash = (hash * 31 + channel.charCodeAt(i)) >>> 0;
@@ -719,7 +789,7 @@
         const direction = String(segment.direction).toUpperCase();
         const time = formatTime(segment.started_at);
         const corrected = Boolean(segment.corrected);
-        state.descriptor = `${channel} ${direction} segment from ${time}`;
+        state.descriptor = `${channelName(channel)} ${direction} segment from ${time}`;
         if (!corrected) state.confirmRevert = false;
 
         let audio = state.audio;
@@ -738,7 +808,7 @@
 
         const meta = element("div", "radio-item-meta");
         meta.appendChild(element("span", "radio-item-time", time));
-        meta.appendChild(element("span", `radio-chip ${channelClass(channel)}`, channel));
+        meta.appendChild(element("span", `radio-chip ${channelClass(channel)}`, channelName(channel)));
         const dir = element("span", "radio-dir", direction);
         dir.title = direction === "TX" ? "Transmitted" : "Received";
         meta.appendChild(dir);
@@ -1068,8 +1138,21 @@
 
     // ------------------------------------------------------------------- tabs
 
-    function tabLabel(channel) {
-        return channel.toUpperCase();
+    // The name a feed's list is announced by, for screen readers.
+    function feedLabel(tab) {
+        if (!tab.group) return "All channels segments, newest first";
+        const what = tab.selected
+            ? channelName(tab.selected)
+            : `${groupLabel(tab.group)} channels`;
+        return `${what} segments, newest first`;
+    }
+
+    // What the server is asked for: the chosen channel, else every channel in
+    // the group, else (the All tab) no filter.
+    function tabChannelFilter(tab) {
+        if (tab.selected) return tab.selected;
+        if (!tab.group) return "";
+        return groupChannels(tab.group).join(",");
     }
 
     function buildPanel(tab) {
@@ -1098,9 +1181,7 @@
         empty.hidden = true;
 
         const list = element("ol", "radio-feed");
-        list.setAttribute("aria-label",
-            tab.channel ? `${tabLabel(tab.channel)} segments, newest first`
-                        : "All channels segments, newest first");
+        list.setAttribute("aria-label", feedLabel(tab));
 
         const more = element("div", "radio-more");
         const older = element("button", "");
@@ -1133,11 +1214,13 @@
     }
 
     function registerTab(button) {
-        const channel = button.dataset.channel || "";
+        const group = button.dataset.group || "";
         const tab = {
-            key: channel,
+            key: group,
             kind: "feed",
-            channel: channel,
+            group: group,
+            // The single channel the group is narrowed to ("" for the whole group).
+            selected: "",
             button: button,
             countNode: button.querySelector(".radio-tab-count"),
             labelNode: button.querySelector(".radio-tab-label"),
@@ -1160,23 +1243,73 @@
         return tab;
     }
 
-    function ensureChannelTab(channel) {
-        if (tabs.has(channel) || !CHANNEL_PATTERN.test(channel)) return;
-        const button = element("button", "radio-tab");
-        button.type = "button";
-        button.id = `radio-tab-${channel}`;
-        button.dataset.channel = channel;
-        button.setAttribute("role", "tab");
-        button.setAttribute("aria-selected", "false");
-        button.setAttribute("aria-controls", `radio-panel-${channel}`);
-        button.tabIndex = -1;
-        button.appendChild(element("span", "radio-tab-label", tabLabel(channel)));
-        const count = element("span", "radio-tab-count");
-        count.setAttribute("aria-hidden", "true");
-        button.appendChild(count);
-        // New channels sit with the channels, before any administrator tab.
-        tablist.insertBefore(button, tablist.querySelector("[data-admin-tab]"));
-        registerTab(button);
+    // A channel the listener reports that this page does not list yet joins
+    // its group (or Other) under its own name.
+    function noteChannel(channel) {
+        if (CHANNEL_PATTERN.test(channel)) knownChannels.add(channel);
+    }
+
+    // ----------------------------------------------- channel chips in a group
+
+    // The chips under the tabs narrow a group to one channel. They are rebuilt
+    // only when the group's channels change; the 15 s statistics refresh just
+    // updates the counts, so a focused chip keeps focus.
+    function renderDistricts() {
+        if (!districtBar) return;
+        const tab = tabs.get(activeKey);
+        const members = tab && tab.kind === "feed" && tab.group ? groupChannels(tab.group) : [];
+        if (members.length < 2) {
+            districtBar.hidden = true;
+            districtBar.textContent = "";
+            districtBar.dataset.sig = "";
+            return;
+        }
+        districtBar.hidden = false;
+        const sig = `${tab.key}|${members.join(",")}`;
+        if (districtBar.dataset.sig !== sig) {
+            districtBar.dataset.sig = sig;
+            districtBar.textContent = "";
+            const entries = [["", `All ${groupLabel(tab.group)}`]].concat(
+                members.map(function (channel) {
+                    return [channel, channelShort(channel)];
+                }));
+            entries.forEach(function (entry) {
+                const chip = element("button", "radio-district");
+                chip.type = "button";
+                chip.dataset.channel = entry[0];
+                chip.appendChild(element("span", "radio-district-label", entry[1]));
+                chip.appendChild(element("span", "radio-district-count"));
+                chip.addEventListener("click", function () {
+                    selectDistrict(tab, entry[0]);
+                });
+                districtBar.appendChild(chip);
+            });
+        }
+        let groupTotal = 0;
+        members.forEach(function (channel) {
+            groupTotal += channelCounts.get(channel) || 0;
+        });
+        Array.from(districtBar.children).forEach(function (chip) {
+            const channel = chip.dataset.channel;
+            const selected = channel === tab.selected;
+            chip.setAttribute("aria-pressed", selected ? "true" : "false");
+            const count = channel ? (channelCounts.get(channel) || 0) : groupTotal;
+            chip.querySelector(".radio-district-count").textContent = String(count);
+            chip.setAttribute("aria-label",
+                `${channel ? channelName(channel) : chip.firstChild.textContent}, ` +
+                `${count} segment${count === 1 ? "" : "s"} in the last 24 hours`);
+        });
+    }
+
+    function selectDistrict(tab, channel) {
+        if (tab.selected === channel) return;
+        if (feedsBlockedByEdit()) return;
+        tab.selected = channel;
+        tab.list.setAttribute("aria-label", feedLabel(tab));
+        renderDistricts();
+        const pressed = districtBar.querySelector('[aria-pressed="true"]');
+        if (pressed) pressed.focus({ preventScroll: true });
+        loadFirst(tab);
     }
 
     function setTabCount(tab, value) {
@@ -1215,6 +1348,7 @@
         // The filters only apply to the transcript feeds.
         form.hidden = tab.kind !== "feed";
         syncFilterBar();
+        renderDistricts();
         updateNoiseCount();
         if (focus) tab.button.focus();
         showUpdated(tab);
@@ -1499,11 +1633,12 @@
         channels.forEach(function (entry) {
             const name = String(entry.channel);
             const count = Number(entry.count) || 0;
-            tiles.appendChild(statTile(String(count), `${name}, last 24 h`, false));
-            ensureChannelTab(name);
+            tiles.appendChild(statTile(String(count), `${channelName(name)}, last 24 h`, false));
+            noteChannel(name);
             counts.set(name, count);
             total += count;
         });
+        channelCounts = counts;
         const last = stats.last_received_at;
         tiles.appendChild(statTile(
             last ? `${formatTime(last)} (${formatAge(last)})` : "Nothing received yet",
@@ -1520,9 +1655,14 @@
             if (tab.key === "") {
                 setTabCount(tab, Number.isFinite(Number(stats.total)) ? Number(stats.total) : total);
             } else {
-                setTabCount(tab, counts.has(tab.key) ? counts.get(tab.key) : 0);
+                let groupTotal = 0;
+                counts.forEach(function (count, channel) {
+                    if (channelGroup(channel) === tab.key) groupTotal += count;
+                });
+                setTabCount(tab, groupTotal);
             }
         });
+        renderDistricts();
     }
 
     let statsBusy = false;
@@ -1570,7 +1710,8 @@
 
     function currentQuery(tab, before) {
         const params = new URLSearchParams();
-        if (tab.channel) params.set("channel", tab.channel);
+        const channelFilter = tabChannelFilter(tab);
+        if (channelFilter) params.set("channel", channelFilter);
         if (directionSelect.value) params.set("direction", directionSelect.value);
         const q = textInput.value.trim();
         if (q) params.set("q", q);
@@ -1872,7 +2013,7 @@
         }
         channels.forEach(function (channel) {
             const name = String(channel);
-            wrap.appendChild(element("span", `radio-chip ${channelClass(name)}`, name));
+            wrap.appendChild(element("span", `radio-chip ${channelClass(name)}`, channelName(name)));
         });
         return wrap;
     }
@@ -1915,6 +2056,22 @@
         if (!list || !empty || !loading || !error || !addForm || !phrase || !formError ||
             !addButton) {
             return;
+        }
+        // One checkbox per known channel, grouped, after the fixed "All channels".
+        const channelBox = byId("radio-watch-channels");
+        if (channelBox) {
+            GROUPS.forEach(function (group) {
+                groupChannels(group.key).forEach(function (channel) {
+                    const label = element("label", "radio-check");
+                    const box = element("input");
+                    box.type = "checkbox";
+                    box.name = "channel";
+                    box.value = channel;
+                    label.appendChild(box);
+                    label.appendChild(document.createTextNode(` ${channelName(channel)}`));
+                    channelBox.appendChild(label);
+                });
+            });
         }
         const boxes = Array.from(addForm.querySelectorAll('input[name="channel"]'));
         const allBox = boxes.find(function (box) {

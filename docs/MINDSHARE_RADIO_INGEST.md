@@ -124,6 +124,8 @@ orphan object that the 15-day lifecycle removes.
   on them operationally."
 - `GET /api/radio/segments?channel=&direction=&q=&before=&limit=`: newest
   first, keyset pagination on `(started_at, segment_id)`, `limit` <= 200.
+  `channel` is one name or a comma-separated list of up to 24 (the group tabs
+  on the page); each name must match the channel pattern, else 400.
   Each item carries a `low_confidence` flag (true if any ASR segment has
   `avg_logprob < -1.0` or `no_speech_prob > 0.6`) and `audio_available`.
   v4 adds an optional `radio_id` (exact digits) filter, and `q` also matches a

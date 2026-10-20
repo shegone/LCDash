@@ -4,7 +4,7 @@
 
 {% block content %}
 <link rel="stylesheet" href="/static/css/lcdash-admin.css?v=20260809-admin-knowledge">
-<link rel="stylesheet" href="/static/css/lcdash-admin-radio.css?v=20261018-radio7">
+<link rel="stylesheet" href="/static/css/lcdash-admin-radio.css?v=20261020-radio8">
 
 <div class="command-page">
 <div class="command-safety-banner radio-banner mb-4" role="note">
@@ -81,20 +81,26 @@
     <div class="radio-tabbar">
         <div id="radio-tablist" class="radio-tabs" role="tablist" aria-label="Radio channels">
             <button type="button" role="tab" id="radio-tab-all" class="radio-tab"
-                    data-channel="" aria-selected="true" aria-controls="radio-panel-all" tabindex="0">
+                    data-group="" aria-selected="true" aria-controls="radio-panel-all" tabindex="0">
                 <span class="radio-tab-label">All channels</span><span class="radio-tab-count" aria-hidden="true"></span>
             </button>
+            {#- Group tabs: each reads every channel in its group; the chips
+                below the tab bar narrow it to one channel. -#}
             <button type="button" role="tab" id="radio-tab-law" class="radio-tab"
-                    data-channel="law" aria-selected="false" aria-controls="radio-panel-law" tabindex="-1">
+                    data-group="law" aria-selected="false" aria-controls="radio-panel-law" tabindex="-1">
                 <span class="radio-tab-label">Law</span><span class="radio-tab-count" aria-hidden="true"></span>
             </button>
             <button type="button" role="tab" id="radio-tab-ems" class="radio-tab"
-                    data-channel="ems" aria-selected="false" aria-controls="radio-panel-ems" tabindex="-1">
+                    data-group="ems" aria-selected="false" aria-controls="radio-panel-ems" tabindex="-1">
                 <span class="radio-tab-label">EMS</span><span class="radio-tab-count" aria-hidden="true"></span>
             </button>
             <button type="button" role="tab" id="radio-tab-fire" class="radio-tab"
-                    data-channel="fire" aria-selected="false" aria-controls="radio-panel-fire" tabindex="-1">
+                    data-group="fire" aria-selected="false" aria-controls="radio-panel-fire" tabindex="-1">
                 <span class="radio-tab-label">Fire</span><span class="radio-tab-count" aria-hidden="true"></span>
+            </button>
+            <button type="button" role="tab" id="radio-tab-other" class="radio-tab"
+                    data-group="other" aria-selected="false" aria-controls="radio-panel-other" tabindex="-1">
+                <span class="radio-tab-label">Other</span><span class="radio-tab-count" aria-hidden="true"></span>
             </button>
             {#- Administrator tabs. Rendered only for an administrator (the API
                 403s everyone else regardless). The script gives these buttons
@@ -125,6 +131,8 @@
             </button>
         </div>
     </div>
+
+    <div id="radio-districts" class="radio-districts" role="group" aria-label="Narrow to one channel" hidden></div>
 
     <p id="radio-play-status" class="radio-play-status" role="status" aria-live="polite"></p>
     <p id="radio-noise-count" class="radio-noise-count" aria-live="polite" hidden></p>
@@ -158,10 +166,9 @@
                         <legend>Channels</legend>
                         <div class="radio-check-group">
                             <label class="radio-check"><input type="checkbox" name="channel" value="all" checked> All channels</label>
-                            <label class="radio-check"><input type="checkbox" name="channel" value="law"> Law</label>
-                            <label class="radio-check"><input type="checkbox" name="channel" value="ems"> EMS</label>
-                            <label class="radio-check"><input type="checkbox" name="channel" value="fire"> Fire</label>
                         </div>
+                        {#- One checkbox per channel is added here by the script. -#}
+                        <div id="radio-watch-channels" class="radio-check-group"></div>
                     </fieldset>
                 </div>
                 <div id="radio-watch-form-error" class="radio-inline-error" role="alert" hidden></div>
@@ -302,6 +309,6 @@
     </div>
 </section>
 
-<script src="/static/js/lcdash-admin-radio.js?v=20261018-radio7"></script>
+<script src="/static/js/lcdash-admin-radio.js?v=20261020-radio8"></script>
 </div>
 {% endblock %}

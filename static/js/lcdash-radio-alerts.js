@@ -56,8 +56,11 @@
     }
 
     function chipClass(channel) {
-        if (channel === "law" || channel === "ems" || channel === "fire") {
-            return `radio-alert-chip is-${channel}`;
+        // "law_ward_vhf" and the like share the colour of their group.
+        for (const group of ["law", "ems", "fire"]) {
+            if (channel === group || channel.startsWith(`${group}_`)) {
+                return `radio-alert-chip is-${group}`;
+            }
         }
         return "radio-alert-chip";
     }

@@ -6,6 +6,7 @@ The scripts render transcripts that are untrusted machine or human text, so the
 central rule here is: server text only ever goes in through textContent.
 """
 
+import json
 import re
 import shutil
 import subprocess
@@ -17,10 +18,10 @@ RADIO_JS = ROOT / "static" / "js" / "lcdash-admin-radio.js"
 ALERTS_JS = ROOT / "static" / "js" / "lcdash-radio-alerts.js"
 RADIO_CSS = ROOT / "static" / "css" / "lcdash-admin-radio.css"
 ALERTS_CSS = ROOT / "static" / "css" / "lcdash-radio-alerts.css"
-CACHE_BUST = "20261018-radio7"
+CACHE_BUST = "20261020-radio8"
 # The dashboard alerts panel (dashboard.html and its script and style) did not
 # change in v3, so it keeps its own cache-bust string.
-ALERTS_CACHE_BUST = "20261017-radio3"
+ALERTS_CACHE_BUST = "20261020-radio4"
 
 
 def read(path: Path) -> str:
@@ -179,7 +180,7 @@ class PossibleNoiseUiTests(unittest.TestCase):
                       self.script)
 
     def test_the_changed_assets_use_the_new_cache_bust(self):
-        self.assertEqual(CACHE_BUST, "20261018-radio7")
+        self.assertEqual(CACHE_BUST, "20261020-radio8")
         self.assertIn(f"lcdash-admin-radio.js?v={CACHE_BUST}", self.template)
         self.assertIn(f"lcdash-admin-radio.css?v={CACHE_BUST}", self.template)
         self.assertNotIn("20261017-radio4", self.template)
@@ -229,9 +230,7 @@ class RadioTemplateTests(unittest.TestCase):
         for needle in (
             'minlength="2" maxlength="80"',
             'name="channel" value="all"',
-            'name="channel" value="law"',
-            'name="channel" value="ems"',
-            'name="channel" value="fire"',
+            'id="radio-watch-channels"',
             'id="radio-fix-find"',
             'id="radio-fix-replace"',
             'id="radio-fix-whole"',
@@ -257,9 +256,14 @@ class RadioTemplateTests(unittest.TestCase):
     def test_template_is_not_described_as_admin_only(self):
         self.assertNotIn("Administrators only", self.template)
 
-    def test_channel_tabs_are_unchanged(self):
-        # Four channel tabs carry the literal role; admin tabs get theirs from the script.
-        self.assertEqual(self.template.count('role="tab"'), 4)
+    def test_group_tabs_carry_the_literal_role(self):
+        # All, Law, EMS, Fire and Other carry the literal role; admin tabs get
+        # theirs from the script.
+        self.assertEqual(self.template.count('role="tab"'), 5)
+        for group in ("", "law", "ems", "fire", "other"):
+            self.assertIn(f'data-group="{group}"', self.template, group)
+        self.assertNotIn("data-channel=", self.template)
+        self.assertIn('id="radio-districts"', self.template)
 
 
 class ListenerHealthPanelTests(unittest.TestCase):
@@ -354,7 +358,7 @@ class ListenerHealthPanelTests(unittest.TestCase):
         self.assertIn('data-admin-tab="hints"', self.template)
         self.assertIn('data-panel="radio-panel-hints"', self.template)
         # The script, not the template, gives admin tabs their role.
-        self.assertEqual(self.template.count('role="tab"'), 4)
+        self.assertEqual(self.template.count('role="tab"'), 5)
         self.assertIn('button.setAttribute("role", "tab")', self.script)
         self.assertIn('tab.name === "hints"', self.script)
 
@@ -421,7 +425,7 @@ class RadioIdAndUnitsUiTests(unittest.TestCase):
         text = re.sub(r"\s+", " ", self.admin_only)
         self.assertIn("Names appear on every transcript card for everyone.", text)
         # The script, not the template, gives the admin tab its role.
-        self.assertEqual(self.template.count('role="tab"'), 4)
+        self.assertEqual(self.template.count('role="tab"'), 5)
         self.assertIn('tab.name === "units"', self.script)
         self.assertIn("setupUnitsTab(tab)", self.script)
 
@@ -619,3 +623,59 @@ class NavigationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ChannelGroupTests(unittest.TestCase):
+    """The 16 listener channels: grouping, labels and the group feed query."""
+
+    def setUp(self):
+        self.script = read(RADIO_JS)
+        self.alerts = read(ALERTS_JS)
+        self.css = read(RADIO_CSS)
+        self.config = json.loads(
+            read(ROOT / "radio_listener" / "config.json"))
+
+    def test_every_configured_channel_is_in_the_catalog(self):
+        names = [channel["name"] for channel in self.config["channels"]]
+        self.assertEqual(len(names), len(set(names)))
+        catalog = set(re.findall(r"^\s{8}(\w+): \{ short:", self.script, re.M))
+        self.assertEqual(set(names), catalog)
+        for name in names:
+            self.assertRegex(name, r"^[a-z0-9_]{1,32}$")
+
+    def test_vhf_channels_follow_the_mindshare_sheet(self):
+        by_name = {c["name"]: c for c in self.config["channels"]}
+        expected = {
+            "ems_ward_vhf": 20, "ems_south_vhf": 21, "ems_park_vhf": 22,
+            "ems_north_vhf": 23, "fire_ward_vhf": 24, "fire_south_vhf": 25,
+            "fire_park_vhf": 26, "fire_north_vhf": 27, "fire_horsepen_vhf": 28,
+            "law_ward_vhf": 29, "law_south_vhf": 30, "law_park_vhf": 31,
+            "sirn_multi_vhf": 38,
+        }
+        for name, number in expected.items():
+            channel = by_name[name]
+            self.assertEqual(channel["group"], f"235.98.99.{number}", name)
+            # Same direction convention as the IRP channels already running.
+            self.assertEqual(channel["ports"],
+                             {"tx": 10000 + number, "rx": 12000 + number}, name)
+        self.assertEqual(by_name["law"]["ports"], {"tx": 10032, "rx": 12032})
+        self.assertLessEqual(len(by_name), self.config["max_channels"])
+
+    def test_groups_and_the_group_query(self):
+        for needle in (
+            'channel === group.key || channel.startsWith(`${group.key}_`)',
+            'groupChannels(tab.group).join(",")',
+            "if (tab.selected) return tab.selected;",
+            'params.set("channel", channelFilter)',
+        ):
+            self.assertIn(needle, self.script, needle)
+        # No tab is built from a name the server sent.
+        self.assertNotIn("ensureChannelTab", self.script)
+
+    def test_alert_chips_follow_the_same_prefix_rule(self):
+        self.assertIn("channel.startsWith(`${group}_`)", self.alerts)
+
+    def test_district_chips_are_styled_and_accessible(self):
+        self.assertIn(".radio-district[aria-pressed=\"true\"]", self.css)
+        self.assertIn('chip.setAttribute("aria-pressed"', self.script)
+        self.assertIn('"Narrow to one channel"', read(ROOT / "templates" / "mindshare_radio.html"))
