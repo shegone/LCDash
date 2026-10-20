@@ -173,6 +173,14 @@ CREATE TABLE IF NOT EXISTS lcdash_radio.units (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- v5: marker rows for one-time data fixes (see the end of this file). Each
+-- fix runs once; the row records when and what it changed.
+CREATE TABLE IF NOT EXISTS lcdash_radio.schema_migrations (
+    name TEXT PRIMARY KEY,
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    detail JSONB NOT NULL DEFAULT '{}'::JSONB
+);
+
 -- Databases created before v2 carry the two-event audit constraint, and v2
 -- databases lack the two v3 hint events, and v3 databases lack the two v4 unit
 -- events; widen it once to the full list. This
@@ -198,6 +206,46 @@ BEGIN
                 'radio.alert.dismiss', 'radio.hint.add', 'radio.hint.remove',
                 'radio.unit.set', 'radio.unit.remove'
             ));
+    END IF;
+END
+$$;
+
+-- v5: one-time relabel of DMR audio stored under the wrong channel name.
+-- Mindshare sheet v117 (revised 2026-10-20) shows cards 23 and 27 are DMR EMS
+-- and DMR Fire. Until the listener config was corrected (2026-10-20 20:30:13
+-- UTC) they were captured as ems_north_vhf and fire_north_vhf. Only rows that
+-- started before that moment move; anything captured later under those names
+-- is genuine Fire North on card 35 and stays. Audio objects keep their stored
+-- key. The marker row makes this run exactly once, and its detail records how
+-- many rows moved (table schema_migrations, created above). Runs under the
+-- advisory lock taken at the top of this file.
+DO $$
+DECLARE
+    moved_ems BIGINT;
+    moved_fire BIGINT;
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM lcdash_radio.schema_migrations
+        WHERE name = 'relabel-dmr-2026-10-20'
+    ) THEN
+        UPDATE lcdash_radio.segments
+           SET channel = 'ems_dmr'
+         WHERE channel = 'ems_north_vhf'
+           AND started_at < TIMESTAMPTZ '2026-10-20 20:30:13+00';
+        GET DIAGNOSTICS moved_ems = ROW_COUNT;
+        UPDATE lcdash_radio.segments
+           SET channel = 'fire_dmr'
+         WHERE channel = 'fire_north_vhf'
+           AND started_at < TIMESTAMPTZ '2026-10-20 20:30:13+00';
+        GET DIAGNOSTICS moved_fire = ROW_COUNT;
+        INSERT INTO lcdash_radio.schema_migrations (name, detail)
+        VALUES (
+            'relabel-dmr-2026-10-20',
+            jsonb_build_object(
+                'ems_north_vhf_to_ems_dmr', moved_ems,
+                'fire_north_vhf_to_fire_dmr', moved_fire
+            )
+        );
     END IF;
 END
 $$;

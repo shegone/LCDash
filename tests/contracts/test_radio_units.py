@@ -314,7 +314,9 @@ class SchemaV4Tests(unittest.TestCase):
                 self.assertIn("IF NOT EXISTS", line, line)
         upper = SCHEMA_SQL.upper()
         self.assertEqual(upper.count("DROP "), 1)
-        self.assertEqual(SCHEMA_SQL.count("DO $$"), 1)
+        # Two DO blocks: the audit-constraint widening and the v5 one-time relabel
+        # (an UPDATE of channel names, guarded by a marker row). Neither deletes.
+        self.assertEqual(SCHEMA_SQL.count("DO $$"), 2)
         for forbidden in ("DROP TABLE", "DROP SCHEMA", "DROP COLUMN", "DROP INDEX",
                           "TRUNCATE", "DELETE FROM"):
             self.assertNotIn(forbidden, upper)

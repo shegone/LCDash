@@ -116,3 +116,41 @@ Open at the end of the day: delete the stale change set
 the ~34 segments stored as `ems_north_vhf` / `fire_north_vhf` (DMR audio);
 confirm LMARS voice arrives on a real transmission; confirm whether operators
 say "IRP" or "SIRN".
+
+## Update (evening 2026-10-20): colours, folded health, DMR relabel migration
+
+Built after web revision 115 and released together (see the release note below
+once it is filled in):
+
+- `c98d0f2` channel labels coloured by discipline: law blue, EMS green, fire red
+  (card chips, group tabs, channel chips, dashboard alert chips). "Other"
+  channels use violet, amber, slate, magenta. Cache-bust: page `20261020-radio9`,
+  dashboard alerts `20261020-radio5`.
+- `93c1691` listener health folded behind a Show/Hide button; a one-line status
+  (reporting / NOT reporting / undecoded audio / unavailable) stays on screen.
+  Open state is remembered in localStorage.
+- Relabel migration (Ted chose "option 1"): the end of `database/radio_schema.sql`
+  moves segments stored as `ems_north_vhf` to `ems_dmr` and `fire_north_vhf` to
+  `fire_dmr` when they started before 2026-10-20 20:30:13 UTC (the moment the
+  corrected listener config went live). Later rows under those names are real
+  Fire North and stay. It runs once: a marker row in the new
+  `lcdash_radio.schema_migrations` (name `relabel-dmr-2026-10-20`) records the
+  counts moved, so it cannot run again. Audio objects keep their S3 keys. The
+  audit-event constraint was deliberately left alone.
+  - Why a migration: the deployment profile cannot `ecs:RunTask`, and the
+    database is reachable only from inside the VPC.
+  - Tested against a real PostgreSQL 17.6 (EnterpriseDB binaries downloaded with
+    Ted's approval to the scratchpad, used only for testing, then deleted): an
+    upgrade from the v4 schema, a fresh database, re-runs, and a forced failure
+    rolling back. The live tests are in
+    `tests/contracts/test_radio_relabel_migration.py` and run when
+    `LCDASH_TEST_PG_DSN` is set; without it they skip (3 skipped) and the static
+    checks run.
+  - Two older guard tests in `test_radio_units.py` were adjusted on purpose:
+    the schema now has two `DO $$` blocks (was one). The "no DROP TABLE /
+    DELETE FROM / TRUNCATE" guard and "no CREATE after the first DO block" still
+    hold.
+  - After deploy, the first task to start applies it. Verify by looking at the
+    DMR chips on the EMS and Fire tabs (history appears there). The counts
+    moved are in `lcdash_radio.schema_migrations.detail`; there is no endpoint
+    to read it, so read it from a psql session if exact numbers matter.
