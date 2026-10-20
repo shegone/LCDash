@@ -626,7 +626,7 @@ if __name__ == "__main__":
 
 
 class ChannelGroupTests(unittest.TestCase):
-    """The 16 listener channels: grouping, labels and the group feed query."""
+    """The listener channels: grouping, labels and the group feed query."""
 
     def setUp(self):
         self.script = read(RADIO_JS)
@@ -643,23 +643,36 @@ class ChannelGroupTests(unittest.TestCase):
         for name in names:
             self.assertRegex(name, r"^[a-z0-9_]{1,32}$")
 
-    def test_vhf_channels_follow_the_mindshare_sheet(self):
+    def test_channels_follow_the_mindshare_sheet(self):
+        # Mindshare sheet v117 as revised 2026-10-20: card number -> channel.
         by_name = {c["name"]: c for c in self.config["channels"]}
         expected = {
             "ems_ward_vhf": 20, "ems_south_vhf": 21, "ems_park_vhf": 22,
-            "ems_north_vhf": 23, "fire_ward_vhf": 24, "fire_south_vhf": 25,
-            "fire_park_vhf": 26, "fire_north_vhf": 27, "fire_horsepen_vhf": 28,
+            "ems_dmr": 23, "fire_ward_vhf": 24, "fire_south_vhf": 25,
+            "fire_park_vhf": 26, "fire_dmr": 27, "fire_horsepen_vhf": 28,
             "law_ward_vhf": 29, "law_south_vhf": 30, "law_park_vhf": 31,
-            "sirn_multi_vhf": 38,
+            "sirn_multi_vhf": 38, "fire_north_vhf": 35, "law_dmr": 36,
+            "fire_lmars": 41, "ems_lmars": 42, "law_lmars": 43,
         }
         for name, number in expected.items():
             channel = by_name[name]
             self.assertEqual(channel["group"], f"235.98.99.{number}", name)
-            # Same direction convention as the IRP channels already running.
+            # Same direction convention as the SIRN channels already running.
             self.assertEqual(channel["ports"],
                              {"tx": 10000 + number, "rx": 12000 + number}, name)
         self.assertEqual(by_name["law"]["ports"], {"tx": 10032, "rx": 12032})
+        # Two cards were VHF channels in the first sheet and are DMR now;
+        # their old names must not come back on those addresses.
+        self.assertNotEqual(by_name["fire_north_vhf"]["group"], "235.98.99.27")
+        self.assertNotIn("ems_north_vhf", by_name)
+        groups = [c["group"] for c in self.config["channels"]]
+        self.assertEqual(len(groups), len(set(groups)))
         self.assertLessEqual(len(by_name), self.config["max_channels"])
+
+    def test_a_watch_keyword_can_name_every_channel(self):
+        from app.services import radio_text
+        self.assertGreaterEqual(
+            radio_text.MAX_TERM_CHANNELS, len(self.config["channels"]))
 
     def test_groups_and_the_group_query(self):
         for needle in (

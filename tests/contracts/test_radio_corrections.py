@@ -187,7 +187,7 @@ class TextValidationTests(unittest.TestCase):
     def test_channels(self):
         self.assertEqual(radio_text.clean_channels(None), [])
         self.assertEqual(radio_text.clean_channels(["law", "law", "ems"]), ["law", "ems"])
-        for bad in ("law", ["LAW"], [""], [3], ["a" * 33], ["x"] * 17, {"a": 1}):
+        for bad in ("law", ["LAW"], [""], [3], ["a" * 33], ["x"] * (radio_text.MAX_TERM_CHANNELS + 1), {"a": 1}):
             with self.subTest(bad=repr(bad)[:30]):
                 with self.assertRaises(radio_text.TextRuleError):
                     radio_text.clean_channels(bad)

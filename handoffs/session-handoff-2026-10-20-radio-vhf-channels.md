@@ -1,10 +1,11 @@
-# Session handoff, 2026-10-20: radio VHF channels and group tabs (not deployed)
+# Session handoff, 2026-10-20: radio VHF/DMR/LMARS channels and group tabs
 
 ## Headline
 
-Thirteen analog VHF dispatch channels were added to the listener configuration
-and the radio page was reworked into group tabs. Nothing is installed on `.227`
-and nothing is released to the AWS pilot yet: both wait for Ted's approval.
+Analog VHF, DMR and LMARS channels were added to the listener configuration and
+the radio page was reworked into group tabs. The listener config is installed on
+`.227`; the web release is built and staged but its change set has not been
+executed. See the update at the end for the revised channel map.
 
 ## Decisions (Ted, 2026-10-20)
 
@@ -69,5 +70,25 @@ and nothing is released to the AWS pilot yet: both wait for Ted's approval.
 
 ## State
 
-Branch `main`. Services untouched; the pilot and `.227` are as left in the
-2026-10-20 handoff (web revision 114, three `.227` services running).
+Branch `main`. Pilot web revision 114 until a change set is executed. `.227`
+runs the listener config as of the update below; all three services active.
+
+## Update (later 2026-10-20): revised sheet, DMR and LMARS
+
+Ted supplied a revised v117 sheet. It changes the channel map, so the first
+config (commit `d0547b3`, installed on `.227` at 15:10 local) was partly wrong:
+
+- Card 23 is now DMR EMS and card 27 is DMR Fire (the first sheet had them as
+  EMS North and Fire North VHF). Fire North moved to 35; DMR Law is 36; the
+  hot-standby cards are gone. The three LMARS channels (41 to 43) are new.
+- Config is now 21 channels: `ems_dmr`, `fire_dmr`, `law_dmr`, `fire_north_vhf`
+  (35), `fire_lmars`, `ems_lmars`, `law_lmars` (names follow the group-prefix
+  rule so they sit under Law, EMS and Fire).
+- The sheet now calls the 32 to 34 cards "SIRN" (the first said "IRP"). The
+  channel names `law`, `ems`, `fire` are unchanged so history keeps; the page
+  label is "SIRN". Ted should say if "IRP" is what operators use.
+- `MAX_TERM_CHANNELS` raised 16 to 24 so a keyword can name every channel.
+- Mislabelled history: segments stored as `ems_north_vhf` (about 32 in the
+  first hours) and `fire_north_vhf` (2) are DMR audio. Not relabelled.
+- Change set `radio-vhf-d0547b3-20261020` is stale (its image carries the old
+  catalog). Do not execute it.

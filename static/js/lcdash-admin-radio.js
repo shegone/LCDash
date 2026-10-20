@@ -68,21 +68,26 @@
     // is the name shown on a card. A channel the listener adds before this list
     // is updated still works: it is shown under its own name.
     const CHANNEL_CATALOG = {
-        law: { short: "IRP", full: "Law IRP" },
+        law: { short: "SIRN", full: "Law SIRN" },
         law_ward_vhf: { short: "Ward VHF", full: "Law Ward VHF" },
         law_south_vhf: { short: "South VHF", full: "Law South VHF" },
         law_park_vhf: { short: "Park VHF", full: "Law Park VHF" },
-        ems: { short: "IRP", full: "EMS IRP" },
+        law_dmr: { short: "DMR", full: "Law DMR" },
+        law_lmars: { short: "LMARS", full: "Law LMARS" },
+        ems: { short: "SIRN", full: "EMS SIRN" },
         ems_ward_vhf: { short: "WardRock VHF", full: "EMS WardRock VHF" },
         ems_south_vhf: { short: "South VHF", full: "EMS South VHF" },
         ems_park_vhf: { short: "Park VHF", full: "EMS Park VHF" },
-        ems_north_vhf: { short: "North VHF", full: "EMS North VHF" },
-        fire: { short: "IRP", full: "Fire IRP" },
+        ems_dmr: { short: "DMR", full: "EMS DMR" },
+        ems_lmars: { short: "LMARS", full: "EMS LMARS" },
+        fire: { short: "SIRN", full: "Fire SIRN" },
         fire_ward_vhf: { short: "WardRock VHF", full: "Fire WardRock VHF" },
         fire_south_vhf: { short: "South VHF", full: "Fire South VHF" },
-        fire_park_vhf: { short: "Park/Hartland VHF", full: "Fire Park/Hartland VHF" },
+        fire_park_vhf: { short: "Park VHF", full: "Fire Park VHF" },
         fire_north_vhf: { short: "North VHF", full: "Fire North VHF" },
         fire_horsepen_vhf: { short: "Horsepen VHF", full: "Fire Horsepen VHF" },
+        fire_dmr: { short: "DMR", full: "Fire DMR" },
+        fire_lmars: { short: "LMARS", full: "Fire LMARS" },
         sirn_multi_vhf: { short: "SIRN Multi VHF", full: "SIRN Multi VHF" },
     };
     // Known channels in display order; channels seen in the statistics join at the end.
