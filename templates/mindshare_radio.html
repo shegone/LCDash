@@ -27,22 +27,32 @@
     </div>
 </section>
 
-<section id="radio-health" class="admin-panel glass mt-4" aria-labelledby="radio-stats-title">
-    <div class="admin-panel-header">
-        <div>
-            <div class="admin-eyebrow">LISTENER HEALTH</div>
-            <h2 id="radio-stats-title">Listener health</h2>
-            <p>A quiet channel is normal. A listener that stops reporting is not, and neither is audio the listener cannot decode.</p>
-        </div>
+{#- The listener's details (capture lines, queues, per-channel counts) are behind
+    the button. The one-line status stays on screen so a silent listener is seen. -#}
+<section id="radio-health" class="radio-health-bar glass mt-4" aria-labelledby="radio-stats-title">
+    <div class="radio-health-summary">
+        <span id="radio-health-status" class="radio-health-status is-unknown" data-state="loading">
+            <i class="bi bi-broadcast" aria-hidden="true"></i>
+            <span id="radio-health-status-text">Listener status loading&hellip;</span>
+        </span>
+        <button id="radio-health-toggle" type="button" class="radio-health-toggle"
+                aria-expanded="false" aria-controls="radio-health-body">
+            <span id="radio-stats-title">Listener health</span>
+            <span id="radio-health-toggle-word" class="radio-health-toggle-word">Show</span>
+            <i class="bi bi-chevron-down" aria-hidden="true"></i>
+        </button>
     </div>
-    <div id="radio-stats" class="radio-stats" aria-live="off">
-        <div class="admin-progress">
-            <div class="admin-progress-spinner" aria-hidden="true"></div>
-            <div><strong>Loading listener health&hellip;</strong></div>
+    <div id="radio-health-body" class="radio-health-body" hidden>
+        <p class="radio-health-intro">A quiet channel is normal. A listener that stops reporting is not, and neither is audio the listener cannot decode.</p>
+        <div id="radio-stats" class="radio-stats" aria-live="off">
+            <div class="admin-progress">
+                <div class="admin-progress-spinner" aria-hidden="true"></div>
+                <div><strong>Loading listener health&hellip;</strong></div>
+            </div>
         </div>
+        <div id="radio-stats-error" class="admin-error" hidden></div>
     </div>
     <p id="radio-health-announce" class="radio-sr-only" role="status" aria-live="polite"></p>
-    <div id="radio-stats-error" class="admin-error" hidden></div>
 </section>
 
 <section class="admin-panel glass mt-4" aria-labelledby="radio-segments-title">

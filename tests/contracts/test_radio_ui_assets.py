@@ -725,3 +725,43 @@ class DisciplineColourTests(unittest.TestCase):
             self.assertIn(f'.radio-district[data-group="{group}"]', self.css)
             self.assertIn(f'[data-group="{group}"], .radio-district[data-group="{group}"] {{ --disc: {colour};', self.css)
         self.assertIn("chip.dataset.group = tab.group;", self.script)
+
+
+class FoldedHealthBarTests(unittest.TestCase):
+    """The listener's details sit behind a button; one status line stays visible."""
+
+    def setUp(self):
+        self.template = read(ROOT / "templates" / "mindshare_radio.html")
+        self.script = read(RADIO_JS)
+        self.css = read(RADIO_CSS)
+
+    def test_details_are_folded_by_default_and_the_status_line_is_not(self):
+        body = re.search(r'<div id="radio-health-body"[^>]*>', self.template).group(0)
+        self.assertIn("hidden", body)
+        self.assertIn('aria-expanded="false"', self.template)
+        self.assertIn('aria-controls="radio-health-body"', self.template)
+        # Status line, toggle and screen-reader announcer are outside the folded part.
+        folded = self.template[self.template.index('<div id="radio-health-body"'):]
+        folded = folded[:folded.index('id="radio-health-announce"')]
+        for marker in ('id="radio-health-status"', 'id="radio-health-toggle"'):
+            self.assertIn(marker, self.template)
+            self.assertNotIn(marker, folded)
+        # The capture lines and queues render into radio-stats, inside the fold.
+        self.assertIn('id="radio-stats"', folded)
+        self.assertIn('id="radio-stats-error"', folded)
+
+    def test_a_problem_is_visible_without_opening_the_details(self):
+        for needle in (
+            "Listener NOT reporting",
+            "No listener heartbeat received yet",
+            "undecoded audio, see details",
+            "Listener status could not be loaded",
+            "healthSummary(listener, state, undecoded, last);",
+        ):
+            self.assertIn(needle, self.script, needle)
+        for tone in ("is-ok", "is-warn", "is-bad", "is-unknown"):
+            self.assertIn(f".radio-health-status.{tone}", self.css, tone)
+
+    def test_open_state_is_a_per_viewer_convenience_guarded_by_try(self):
+        self.assertIn("lcdash.radio.health.open", self.script)
+        self.assertGreaterEqual(self.script.count("storage may be blocked"), 2)

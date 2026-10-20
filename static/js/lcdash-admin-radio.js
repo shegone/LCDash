@@ -152,6 +152,11 @@
     const noiseCount = document.getElementById("radio-noise-count");
     const idFilterBar = document.getElementById("radio-id-filter");
     const districtBar = document.getElementById("radio-districts");
+    const healthStatus = document.getElementById("radio-health-status");
+    const healthStatusText = document.getElementById("radio-health-status-text");
+    const healthToggle = document.getElementById("radio-health-toggle");
+    const healthToggleWord = document.getElementById("radio-health-toggle-word");
+    const healthBody = document.getElementById("radio-health-body");
     if (!statsBox || !statsError || !form || !directionSelect || !textInput ||
         !applyButton || !tablist || !panelsBox || !updatedText || !refreshButton ||
         !playStatus) {
@@ -1618,6 +1623,57 @@
         healthAnnounce.textContent = parts.join(" ");
     }
 
+    // The one-line status that stays on screen when the details are folded away.
+    function setHealthSummary(tone, text) {
+        if (!healthStatus || !healthStatusText) return;
+        healthStatus.className = `radio-health-status is-${tone}`;
+        healthStatus.dataset.state = tone;
+        healthStatusText.textContent = text;
+    }
+
+    function healthSummary(listener, state, undecoded, last) {
+        const parts = [];
+        let tone = "unknown";
+        if (state === "reporting") {
+            const age = formatSecondsAgo(listener.age_seconds);
+            parts.push(age ? `Listener reporting, ${age}` : "Listener reporting");
+            tone = undecoded.length ? "warn" : "ok";
+        } else if (state === "silent") {
+            const since = listener.last_heartbeat_at ? formatTime(listener.last_heartbeat_at) : "";
+            parts.push(since ? `Listener NOT reporting since ${since}` : "Listener NOT reporting");
+            tone = "bad";
+        } else {
+            parts.push("No listener heartbeat received yet");
+        }
+        if (undecoded.length) parts.push("undecoded audio, see details");
+        if (last) parts.push(`last segment ${formatAge(last)}`);
+        setHealthSummary(tone, parts.join(" \u00b7 "));
+    }
+
+    function setHealthOpen(open) {
+        if (!healthToggle || !healthBody) return;
+        healthBody.hidden = !open;
+        healthToggle.setAttribute("aria-expanded", open ? "true" : "false");
+        if (healthToggleWord) healthToggleWord.textContent = open ? "Hide" : "Show";
+        // A per-viewer convenience only; the page works without it.
+        try {
+            window.localStorage.setItem("lcdash.radio.health.open", open ? "1" : "0");
+        } catch (error) { /* storage may be blocked */ }
+    }
+
+    if (healthToggle && healthBody) {
+        let remembered = false;
+        try {
+            remembered = window.localStorage.getItem("lcdash.radio.health.open") === "1";
+        } catch (error) { /* storage may be blocked */ }
+        healthBody.hidden = !remembered;
+        healthToggle.setAttribute("aria-expanded", remembered ? "true" : "false");
+        if (healthToggleWord) healthToggleWord.textContent = remembered ? "Hide" : "Show";
+        healthToggle.addEventListener("click", function () {
+            setHealthOpen(healthBody.hidden);
+        });
+    }
+
     function renderStats(stats) {
         statsBox.textContent = "";
         statsBox.classList.remove("is-stale");
@@ -1655,6 +1711,7 @@
 
         if (undecoded.length) statsBox.appendChild(renderWarning(undecoded));
         if (state !== "never") statsBox.appendChild(renderDetail(listener, state));
+        healthSummary(listener, state, undecoded, last);
         announceHealth(state, undecoded);
 
         tabs.forEach(function (tab) {
@@ -1689,6 +1746,7 @@
             showError(statsError, result.error);
             // What is on screen is old: say so rather than leave a green tile up.
             statsBox.classList.add("is-stale");
+            setHealthSummary("unknown", "Listener status could not be loaded");
             return;
         }
         hideError(statsError);

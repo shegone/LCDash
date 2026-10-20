@@ -41,6 +41,71 @@ html,
 
 /* Listener health panel */
 
+/* The folded health bar: one status line, details behind the button. */
+
+.radio-health-bar { padding: 12px 16px; border-radius: 16px; }
+
+.radio-health-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 16px;
+}
+
+.radio-health-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    font-weight: 800;
+    font-size: .94rem;
+    overflow-wrap: anywhere;
+}
+
+.radio-health-status.is-ok { color: #8dffcb; }
+.radio-health-status.is-warn { color: #ffdc8a; }
+.radio-health-status.is-bad { color: #ffd0da; }
+.radio-health-status.is-unknown { color: #c4d6e6; }
+
+.radio-health-status.is-bad {
+    padding: 4px 12px;
+    border: 1px solid rgba(255, 138, 160, .7);
+    border-radius: 10px;
+    background: rgba(255, 91, 126, .12);
+}
+
+.radio-health-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 6px 14px;
+    border: 1px solid rgba(76, 201, 255, .3);
+    border-radius: 12px;
+    color: #cfeaf8;
+    background: rgba(5, 16, 30, .6);
+    font-size: .88rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.radio-health-toggle:hover { border-color: rgba(76, 201, 255, .65); }
+
+.radio-health-toggle:focus-visible {
+    outline: 3px solid rgba(85, 212, 255, .62);
+    outline-offset: 2px;
+}
+
+.radio-health-toggle-word { color: #4cc9ff; }
+
+.radio-health-toggle .bi { transition: transform .15s ease; }
+.radio-health-toggle[aria-expanded="true"] .bi { transform: rotate(180deg); }
+
+.radio-health-body[hidden] { display: none; }
+.radio-health-body { margin-top: 14px; }
+.radio-health-intro { margin: 0 0 12px; color: #9ec0da; font-size: .9rem; }
+
 .radio-stats {
     display: grid;
     gap: 12px;
