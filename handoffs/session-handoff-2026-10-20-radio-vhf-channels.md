@@ -91,4 +91,16 @@ config (commit `d0547b3`, installed on `.227` at 15:10 local) was partly wrong:
 - Mislabelled history: segments stored as `ems_north_vhf` (about 32 in the
   first hours) and `fire_north_vhf` (2) are DMR audio. Not relabelled.
 - Change set `radio-vhf-d0547b3-20261020` is stale (its image carries the old
-  catalog). Do not execute it.
+  catalog). Do not execute it; delete it with Ted's approval.
+- Release for the corrected map: commit `ea6ef83` (on both remotes), image tag
+  `release-ea6ef8373308`, digest
+  `sha256:4c266188ae14d6c132a97002bd874487b645028d7b9a5bfe100d76d9357f7422`,
+  the same nine accepted ECR findings. Change set
+  `radio-dmr-lmars-ea6ef83-20261020` is staged (standard five resources, only
+  `PilotImageDigest` differs) and waits for Ted to type its exact name.
+  Rollback target: digest `sha256:1ebf4a96a1dcb3f2ddcb112ca0dcc527669bf205b6f84c9d2662409489d847dc`
+  (revision 114).
+- `.227` runs the 21-channel config (installed 16:30 local, 42 listeners;
+  earlier 16-channel config and the original are in
+  `/opt/mindshare-radio-capture/backup-pre-vhf/`). LMARS multicast reaches
+  `10.5.2.12` (signalling packets seen); no LMARS voice heard yet.
