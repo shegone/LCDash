@@ -397,6 +397,50 @@ html,
 
 .radio-district[aria-pressed="true"] .radio-district-count { background: rgba(3, 16, 24, .16); }
 
+/* Discipline colours on the group tabs and the channel chips under them. */
+
+.radio-tab[data-group="law"], .radio-district[data-group="law"] { --disc: #4cc9ff; --disc-rgb: 76, 201, 255; }
+.radio-tab[data-group="ems"], .radio-district[data-group="ems"] { --disc: #5ee79a; --disc-rgb: 74, 222, 128; }
+.radio-tab[data-group="fire"], .radio-district[data-group="fire"] { --disc: #ff7070; --disc-rgb: 255, 90, 90; }
+
+.radio-tab[data-group="law"], .radio-tab[data-group="ems"], .radio-tab[data-group="fire"],
+.radio-district[data-group="law"], .radio-district[data-group="ems"], .radio-district[data-group="fire"] {
+    color: var(--disc);
+    border-color: rgba(var(--disc-rgb), .5);
+}
+
+.radio-tab[data-group="law"]:hover, .radio-tab[data-group="ems"]:hover, .radio-tab[data-group="fire"]:hover,
+.radio-district[data-group="law"]:hover, .radio-district[data-group="ems"]:hover, .radio-district[data-group="fire"]:hover {
+    border-color: var(--disc);
+}
+
+.radio-tab[data-group="law"] .radio-tab-count, .radio-tab[data-group="ems"] .radio-tab-count,
+.radio-tab[data-group="fire"] .radio-tab-count,
+.radio-district[data-group="law"] .radio-district-count, .radio-district[data-group="ems"] .radio-district-count,
+.radio-district[data-group="fire"] .radio-district-count {
+    color: var(--disc);
+    background: rgba(var(--disc-rgb), .16);
+}
+
+.radio-tab[data-group="law"][aria-selected="true"], .radio-tab[data-group="ems"][aria-selected="true"],
+.radio-tab[data-group="fire"][aria-selected="true"],
+.radio-district[data-group="law"][aria-pressed="true"], .radio-district[data-group="ems"][aria-pressed="true"],
+.radio-district[data-group="fire"][aria-pressed="true"] {
+    color: #031018;
+    border-color: var(--disc);
+    background: var(--disc);
+}
+
+.radio-tab[data-group="law"][aria-selected="true"] .radio-tab-count,
+.radio-tab[data-group="ems"][aria-selected="true"] .radio-tab-count,
+.radio-tab[data-group="fire"][aria-selected="true"] .radio-tab-count,
+.radio-district[data-group="law"][aria-pressed="true"] .radio-district-count,
+.radio-district[data-group="ems"][aria-pressed="true"] .radio-district-count,
+.radio-district[data-group="fire"][aria-pressed="true"] .radio-district-count {
+    color: #031018;
+    background: rgba(3, 16, 24, .16);
+}
+
 .radio-refresh {
     display: flex;
     align-items: center;
@@ -545,13 +589,15 @@ html,
     text-transform: uppercase;
 }
 
+/* One colour per discipline: law blue, EMS green, fire red. Channels outside
+   the three (the c0-c3 hash colours) keep clear of those hues. */
 .radio-chip-law { --chip: #4cc9ff; --chip-bg: rgba(76, 201, 255, .12); }
-.radio-chip-ems { --chip: #ff8aa0; --chip-bg: rgba(255, 91, 126, .14); }
-.radio-chip-fire { --chip: #ffab5e; --chip-bg: rgba(255, 140, 40, .14); }
-.radio-chip-c0 { --chip: #69ffb9; --chip-bg: rgba(105, 255, 185, .12); }
-.radio-chip-c1 { --chip: #b9a2ff; --chip-bg: rgba(150, 120, 255, .14); }
-.radio-chip-c2 { --chip: #ffd66b; --chip-bg: rgba(255, 214, 107, .12); }
-.radio-chip-c3 { --chip: #5eead4; --chip-bg: rgba(45, 212, 191, .12); }
+.radio-chip-ems { --chip: #5ee79a; --chip-bg: rgba(74, 222, 128, .13); }
+.radio-chip-fire { --chip: #ff7070; --chip-bg: rgba(255, 90, 90, .14); }
+.radio-chip-c0 { --chip: #b9a2ff; --chip-bg: rgba(150, 120, 255, .14); }
+.radio-chip-c1 { --chip: #ffd66b; --chip-bg: rgba(255, 214, 107, .12); }
+.radio-chip-c2 { --chip: #c9d4e0; --chip-bg: rgba(201, 212, 224, .10); }
+.radio-chip-c3 { --chip: #f0a6ff; --chip-bg: rgba(240, 166, 255, .12); }
 
 .radio-chip-all { --chip: #9ec0da; --chip-bg: rgba(158, 192, 218, .1); }
 

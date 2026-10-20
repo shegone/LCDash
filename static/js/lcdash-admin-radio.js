@@ -1282,6 +1282,8 @@
                 const chip = element("button", "radio-district");
                 chip.type = "button";
                 chip.dataset.channel = entry[0];
+                // The chip takes its group's colour (law blue, EMS green, fire red).
+                chip.dataset.group = tab.group;
                 chip.appendChild(element("span", "radio-district-label", entry[1]));
                 chip.appendChild(element("span", "radio-district-count"));
                 chip.addEventListener("click", function () {

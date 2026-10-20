@@ -18,10 +18,10 @@ RADIO_JS = ROOT / "static" / "js" / "lcdash-admin-radio.js"
 ALERTS_JS = ROOT / "static" / "js" / "lcdash-radio-alerts.js"
 RADIO_CSS = ROOT / "static" / "css" / "lcdash-admin-radio.css"
 ALERTS_CSS = ROOT / "static" / "css" / "lcdash-radio-alerts.css"
-CACHE_BUST = "20261020-radio8"
+CACHE_BUST = "20261020-radio9"
 # The dashboard alerts panel (dashboard.html and its script and style) did not
 # change in v3, so it keeps its own cache-bust string.
-ALERTS_CACHE_BUST = "20261020-radio4"
+ALERTS_CACHE_BUST = "20261020-radio5"
 
 
 def read(path: Path) -> str:
@@ -180,7 +180,7 @@ class PossibleNoiseUiTests(unittest.TestCase):
                       self.script)
 
     def test_the_changed_assets_use_the_new_cache_bust(self):
-        self.assertEqual(CACHE_BUST, "20261020-radio8")
+        self.assertEqual(CACHE_BUST, "20261020-radio9")
         self.assertIn(f"lcdash-admin-radio.js?v={CACHE_BUST}", self.template)
         self.assertIn(f"lcdash-admin-radio.css?v={CACHE_BUST}", self.template)
         self.assertNotIn("20261017-radio4", self.template)
@@ -692,3 +692,36 @@ class ChannelGroupTests(unittest.TestCase):
         self.assertIn(".radio-district[aria-pressed=\"true\"]", self.css)
         self.assertIn('chip.setAttribute("aria-pressed"', self.script)
         self.assertIn('"Narrow to one channel"', read(ROOT / "templates" / "mindshare_radio.html"))
+
+
+class DisciplineColourTests(unittest.TestCase):
+    """Law blue, EMS green, fire red, on cards, tabs, chips and dashboard alerts."""
+
+    def setUp(self):
+        self.css = read(RADIO_CSS)
+        self.alerts_css = read(ALERTS_CSS)
+        self.script = read(RADIO_JS)
+
+    def test_card_chips_and_alert_chips_use_the_three_colours(self):
+        for rule, colour in (
+            (".radio-chip-law", "#4cc9ff"),
+            (".radio-chip-ems", "#5ee79a"),
+            (".radio-chip-fire", "#ff7070"),
+        ):
+            self.assertRegex(self.css, re.escape(rule) + r" \{ --chip: " + colour)
+        self.assertIn(".radio-alert-chip.is-ems { border-color: #5ee79a", self.alerts_css)
+        self.assertIn(".radio-alert-chip.is-fire { border-color: #ff7070", self.alerts_css)
+
+    def test_other_channel_colours_avoid_the_discipline_hues(self):
+        others = re.findall(r"\.radio-chip-c\d \{ --chip: (#\w+)", self.css)
+        self.assertEqual(len(others), 4)
+        for colour in ("#4cc9ff", "#5ee79a", "#ff7070", "#69ffb9", "#5eead4",
+                       "#ff8aa0", "#ffab5e"):
+            self.assertNotIn(colour, others)
+
+    def test_group_tabs_and_chips_take_the_group_colour(self):
+        for group, colour in (("law", "#4cc9ff"), ("ems", "#5ee79a"), ("fire", "#ff7070")):
+            self.assertIn(f'.radio-tab[data-group="{group}"]', self.css)
+            self.assertIn(f'.radio-district[data-group="{group}"]', self.css)
+            self.assertIn(f'[data-group="{group}"], .radio-district[data-group="{group}"] {{ --disc: {colour};', self.css)
+        self.assertIn("chip.dataset.group = tab.group;", self.script)

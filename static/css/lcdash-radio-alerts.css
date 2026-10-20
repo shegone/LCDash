@@ -106,8 +106,8 @@
     text-transform: uppercase;
 }
 
-.radio-alert-chip.is-ems { border-color: #ff8aa0; color: #ff8aa0; background: rgba(255, 91, 126, .14); }
-.radio-alert-chip.is-fire { border-color: #ffab5e; color: #ffab5e; background: rgba(255, 140, 40, .14); }
+.radio-alert-chip.is-ems { border-color: #5ee79a; color: #5ee79a; background: rgba(74, 222, 128, .13); }
+.radio-alert-chip.is-fire { border-color: #ff7070; color: #ff7070; background: rgba(255, 90, 90, .14); }
 
 .radio-alert-tag {
     padding: 1px 9px;
