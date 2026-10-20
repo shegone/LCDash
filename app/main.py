@@ -106,6 +106,7 @@ from app.services.cloud_report_service import (
     create_report_template,
     safe_template_record,
 )
+from app.services import domestic_call_report_service
 from app.services.county_commission_report_service import (
     CountyCommissionReportBusyError,
     build_county_commission_pdf,
@@ -2878,6 +2879,10 @@ def reports_page(request: Request):
         name="reports.html",
         context={
             "cloud_reporting_available": cloud_reporting_available,
+            # The domestic-calls report reads CentralSquare through the pilot's
+            # own read-only connector, so it is offered whenever that
+            # connector is enabled -- independent of the legacy report source.
+            "domestic_report_available": bool(settings.cloud_cad_enabled),
             "version": "0.4.0",
         },
         headers={"Cache-Control": "no-store"},
@@ -2927,6 +2932,51 @@ def county_commission_job_api(
     )
     if not job:
         raise HTTPException(status_code=404, detail="Monthly report job not found.")
+    return job
+
+
+@app.post("/api/reports/domestic-calls/jobs")
+def domestic_calls_job_start_api(
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
+):
+    """Start (or join) the year-to-date domestic-call percentage report.
+
+    Reading CentralSquare for a whole year is the heaviest read the pilot does,
+    so starting it needs the same roles as saving a report (supervisor,
+    dispatcher, admin), never happens on its own, and runs one job at a time.
+    """
+
+    context = _require_cloud_report_identity(tenant_context, write=True)
+    if not settings.cloud_cad_enabled:
+        raise HTTPException(
+            status_code=409,
+            detail="Live CAD reads are not enabled, so this report cannot run.",
+        )
+    try:
+        return domestic_call_report_service.start_domestic_job(
+            cloud_cad_connector_provider, context.tenant_id
+        )
+    except domestic_call_report_service.DomesticReportBusyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get("/api/reports/domestic-calls/jobs/{job_id}")
+def domestic_calls_job_api(
+    job_id: str,
+    response: Response,
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
+):
+    response.headers["Cache-Control"] = "no-store"
+    context = _require_cloud_report_identity(tenant_context)
+    job = domestic_call_report_service.get_domestic_job(job_id, context.tenant_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Report job not found.")
     return job
 
 

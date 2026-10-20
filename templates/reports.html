@@ -3,7 +3,7 @@
 {% block title %}Pre-Built Reports | LCDash{% endblock %}
 
 {% block content %}
-<link rel="stylesheet" href="/static/css/lcdash-reports.css?v=20260803-county-commission">
+<link rel="stylesheet" href="/static/css/lcdash-reports.css?v=20261020-domestic">
 
 <div class="command-page">
 <section class="reports-hero glass">
@@ -37,6 +37,17 @@
         <span class="report-ready-chip">HISTORICAL DATA REQUIRED</span>
         {% endif %}
     </article>
+    {% if domestic_report_available %}
+    <article class="report-catalog-card glass is-active">
+        <div class="report-card-icon"><i class="bi bi-house-heart"></i></div>
+        <div>
+            <div class="reports-eyebrow">YEAR TO DATE</div>
+            <h3>Domestic-Related Calls</h3>
+            <p>Share of calls with a domestic call type, by month, since January 1.</p>
+        </div>
+        <span class="report-ready-chip">READY</span>
+    </article>
+    {% endif %}
     <article class="report-catalog-card glass is-placeholder">
         <div class="report-card-icon"><i class="bi bi-plus-lg"></i></div>
         <div>
@@ -146,6 +157,102 @@
         </footer>
     </article>
 </section>
+
+
+{% if domestic_report_available %}
+<section class="report-builder glass mt-4" aria-labelledby="domestic-report-title">
+    <div class="report-builder-header">
+        <div>
+            <div class="reports-eyebrow">YEAR TO DATE</div>
+            <h2 id="domestic-report-title">Domestic-Related Calls</h2>
+            <p>Percentage of calls with a domestic call type, by month, from January 1 through today.</p>
+        </div>
+        <form id="domestic-report-form" class="report-controls">
+            <div class="report-control-row">
+                <button id="domestic-report-run" type="submit">
+                    <i class="bi bi-play-fill"></i> Run report
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <div class="report-definition">
+        <i class="bi bi-info-circle-fill"></i>
+        <div>
+            <strong>Report definition</strong>
+            <span>
+                Read-only CentralSquare query, one calendar month at a time. A call counts as
+                domestic-related when its primary call type (incident code) contains
+                &ldquo;domestic&rdquo;. The call types counted are listed in the report so the
+                definition can be checked. Only counts are kept; no call details are shown or stored.
+                The first run reads about ten months of calls and can take several minutes; finished
+                months are remembered for a day, so a re-run only re-reads the current month.
+            </span>
+        </div>
+    </div>
+
+    <div id="domestic-report-progress" class="report-progress" hidden aria-live="polite">
+        <div class="report-progress-spinner" aria-hidden="true"></div>
+        <div>
+            <strong id="domestic-report-progress-title">Starting query&hellip;</strong>
+            <span id="domestic-report-progress-detail">This can take several minutes the first time.</span>
+        </div>
+    </div>
+
+    <div id="domestic-report-error" class="report-error" hidden></div>
+
+    <article id="domestic-report-output" class="county-report" hidden>
+        <header class="county-report-heading">
+            <div class="county-report-mark"><i class="bi bi-house-heart"></i></div>
+            <div>
+                <div class="county-report-county">Logan County 911</div>
+                <h2>Domestic-Related Calls</h2>
+                <div id="domestic-report-period" class="county-report-period"></div>
+            </div>
+            <div class="county-report-actions">
+                <button id="domestic-report-print" type="button"><i class="bi bi-printer"></i> Print</button>
+            </div>
+        </header>
+
+        <div class="domestic-report-headline">
+            <div class="domestic-report-percent" id="domestic-report-percent"></div>
+            <div id="domestic-report-headline-detail" class="domestic-report-headline-detail"></div>
+        </div>
+
+        <section class="county-report-section domestic">
+            <h3>By Month</h3>
+            <table>
+                <thead><tr><th>Month</th><th>All calls</th><th>Domestic</th><th>Percent</th></tr></thead>
+                <tbody id="domestic-report-months"></tbody>
+                <tfoot><tr><th>YEAR TO DATE</th><th id="domestic-report-total"></th><th id="domestic-report-domestic"></th><th id="domestic-report-total-percent"></th></tr></tfoot>
+            </table>
+        </section>
+
+        <div class="county-report-grid">
+            <section class="county-report-section domestic">
+                <h3>Call types counted as domestic</h3>
+                <table>
+                    <thead><tr><th>Call type</th><th>Calls</th></tr></thead>
+                    <tbody id="domestic-report-matched"></tbody>
+                </table>
+            </section>
+            <section class="county-report-section domestic-other">
+                <h3>Most common call types not counted</h3>
+                <table>
+                    <thead><tr><th>Call type</th><th>Calls</th></tr></thead>
+                    <tbody id="domestic-report-other"></tbody>
+                </table>
+            </section>
+        </div>
+
+        <footer class="county-report-footer">
+            <span id="domestic-report-source"></span>
+            <span id="domestic-report-generated"></span>
+        </footer>
+    </article>
+</section>
+<script src="/static/js/lcdash-domestic-report.js?v=20261020-domestic"></script>
+{% endif %}
 
 {% if not cloud_reporting_available %}
 {#- Cloud pilot only: MAE-saved report templates live in the cloud analytics

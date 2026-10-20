@@ -380,9 +380,14 @@
 
 @media print {
     body * { visibility: hidden !important; }
-    #county-report-output,
-    #county-report-output * { visibility: visible !important; }
-    #county-report-output {
+    /* Print only the report that asked: the domestic report sets
+       body.print-domestic before calling window.print(). */
+    body:not(.print-domestic) #county-report-output,
+    body:not(.print-domestic) #county-report-output *,
+    body.print-domestic #domestic-report-output,
+    body.print-domestic #domestic-report-output * { visibility: visible !important; }
+    body:not(.print-domestic) #county-report-output,
+    body.print-domestic #domestic-report-output {
         position: absolute;
         inset: 0;
         margin: 0;
@@ -390,4 +395,28 @@
         border-radius: 0;
     }
     .county-report-actions { display: none !important; }
+}
+
+/* Domestic-related calls report (templates/reports.html) */
+.county-report-section.domestic thead { background: #6b4fa0; }
+.county-report-section.domestic-other thead { background: #6c7f90; }
+.county-report-section.domestic { margin-top: 20px; }
+.county-report-section.domestic table th:not(:first-child),
+.county-report-section.domestic table td:not(:first-child) { text-align: right; width: 110px; }
+.county-report-grid .county-report-section.domestic,
+.county-report-grid .county-report-section.domestic-other { grid-column: auto; margin-top: 0; }
+
+.domestic-report-headline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 18px;
+    margin-top: 20px;
+}
+.domestic-report-percent { color: #6b4fa0; font-size: 3rem; font-weight: 950; line-height: 1; }
+.domestic-report-headline-detail { color: #4a6275; font-weight: 700; }
+
+@media (max-width: 760px) {
+    .county-report-grid .county-report-section.domestic,
+    .county-report-grid .county-report-section.domestic-other { grid-column: 1 / -1; }
 }
