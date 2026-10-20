@@ -154,3 +154,12 @@ once it is filled in):
     DMR chips on the EMS and Fire tabs (history appears there). The counts
     moved are in `lcdash_radio.schema_migrations.detail`; there is no endpoint
     to read it, so read it from a psql session if exact numbers matter.
+
+Release for this update: commit `ebed969`, image tag `release-ebed969f7dc5`,
+digest `sha256:778f9a959b8ec39c3549c76993cc99a5ecdbe4143e4bfcb835e593f9ea2e5456`,
+the same nine accepted ECR findings. Change set `radio-dmr-fold-ebed969-20261020`
+is staged (standard five resources, only `PilotImageDigest` differs) and waits
+for Ted to type its exact name. Rollback target: digest
+`sha256:4c266188ae14d6c132a97002bd874487b645028d7b9a5bfe100d76d9357f7422`
+(revision 115). Note: rolling back the image does not undo the relabel (the
+marker row stays and the moved rows keep their new channel names).
