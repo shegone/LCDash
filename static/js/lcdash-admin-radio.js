@@ -53,6 +53,13 @@
     const CONSOLE_LABEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9 _.-]{0,31}$/;
     const MIN_HINT = 2;
     const FEED_REFRESH_MS = 30000;
+    // Scanner mode (auto-play). Every feed fetch is audited, so this polls every
+    // 10 s rather than faster. A call older than SCAN_MAX_AGE_MS when it shows
+    // up is not played (it would be stale news), and at most SCAN_MAX_QUEUE calls
+    // wait their turn; the oldest are dropped first.
+    const SCAN_REFRESH_MS = 10000;
+    const SCAN_MAX_AGE_MS = 180000;
+    const SCAN_MAX_QUEUE = 10;
     const PAGE_SIZE = 50;
     const MAX_CORRECTION = 20000;
     const CHANNEL_PATTERN = /^[a-z0-9_]{1,32}$/;
@@ -157,6 +164,8 @@
     const healthToggle = document.getElementById("radio-health-toggle");
     const healthToggleWord = document.getElementById("radio-health-toggle-word");
     const healthBody = document.getElementById("radio-health-body");
+    const scanBox = document.getElementById("radio-autoplay");
+    const scanStatus = document.getElementById("radio-autoplay-status");
     if (!statsBox || !statsError || !form || !directionSelect || !textInput ||
         !applyButton || !tablist || !panelsBox || !updatedText || !refreshButton ||
         !playStatus) {
@@ -359,6 +368,12 @@
     player.preload = "none";
     // {segmentId, controls, state}; state: loading | playing | paused
     let current = null;
+    // Scanner mode state (see "scanner mode" below). Off on every page load.
+    let scanOn = false;
+    let scanBlocked = false;
+    let scanQueue = [];
+    let scanSkipped = 0;
+    let scanTimer = null;
 
     function audioActive() {
         return Boolean(current && (current.state === "loading" || current.state === "playing"));
@@ -401,9 +416,13 @@
         paintControls(controls, "idle");
         showError(controls.note, AUDIO_ERROR_TEXT);
         announce(AUDIO_ERROR_TEXT);
+        scanPump();
     }
 
-    function startPlayback(segment, controls) {
+    // `auto` is true only for scanner mode. The browser may refuse sound until
+    // the person has clicked the page; that is not a failure of the audio, so
+    // the call goes back to the front of the queue and the page asks for a click.
+    function startPlayback(segment, controls, auto) {
         if (current && current.controls !== controls) {
             player.pause();
             releaseCurrent();
@@ -421,6 +440,13 @@
                 // not a failure of the audio.
                 if (!current || current.controls !== controls) return;
                 if (error && error.name === "AbortError") return;
+                if (auto && error && error.name === "NotAllowedError") {
+                    releaseCurrent();
+                    scanQueue.unshift(segment);
+                    scanBlocked = true;
+                    scanPaint();
+                    return;
+                }
                 failPlayback(controls);
             });
         }
@@ -462,6 +488,7 @@
         current.state = "playing";
         paintControls(current.controls, "playing");
         announce(`Playing ${current.controls.descriptor}`);
+        scanPaint();
     });
     player.addEventListener("waiting", function () {
         if (!current || current.state !== "playing") return;
@@ -475,11 +502,13 @@
         current.state = "paused";
         paintControls(current.controls, "paused");
         announce("Paused");
+        scanPaint();
     });
     player.addEventListener("ended", function () {
         if (!current) return;
         releaseCurrent();
         announce("Finished");
+        scanPump();
     });
     player.addEventListener("error", function () {
         if (!current || !player.error) return;
@@ -771,6 +800,7 @@
     }
 
     function reloadFeeds() {
+        scanReset();
         const active = tabs.get(activeKey);
         tabs.forEach(function (tab) {
             if (tab.kind === "feed" && tab.key !== activeKey) clearTab(tab);
@@ -1317,6 +1347,7 @@
         if (tab.selected === channel) return;
         if (feedsBlockedByEdit()) return;
         tab.selected = channel;
+        scanReset();
         tab.list.setAttribute("aria-label", feedLabel(tab));
         renderDistricts();
         const pressed = districtBar.querySelector('[aria-pressed="true"]');
@@ -1350,6 +1381,7 @@
     function activateTab(key, focus) {
         const tab = tabs.get(key);
         if (!tab) return;
+        if (key !== activeKey) scanReset();
         activeKey = key;
         tabs.forEach(function (other) {
             const selected = other.key === key;
@@ -1378,6 +1410,7 @@
         if (!tab.loaded) {
             loadFirst(tab);
         } else if (Date.now() - tab.updatedAt > FEED_REFRESH_MS) {
+            tab.scanQuiet = scanOn;
             refreshNewest(tab);
         }
     }
@@ -1768,6 +1801,7 @@
             window.clearInterval(feedTimer);
             feedTimer = null;
         }
+        scanSet(false);
         if (current) player.pause();
     }
 
@@ -1824,6 +1858,7 @@
     }
 
     function clearTab(tab) {
+        tab.scanQuiet = false;
         tab.token += 1;
         tab.busy = false;
         tab.loaded = false;
@@ -1952,6 +1987,135 @@
         tab.updatedAt = Date.now();
         updateSummary(tab);
         if (tab.key === activeKey) showUpdated(tab);
+        // The first refresh after switching tabs, or after turning the switch
+        // on, only catches the page up: what arrived while the person was not
+        // listening is not played.
+        if (fresh.length && !tab.scanQuiet) scanOffer(tab, fresh);
+        tab.scanQuiet = false;
+    }
+
+    // ---------------------------------------------------------- scanner mode
+    //
+    // "Auto-play new calls": calls that arrive while the switch is on play one
+    // after another, oldest first, for the tab (and channel chip) being watched.
+    // Each card keeps its Play button, so a call can be replayed at any time.
+    // It never plays what was already on screen, only new arrivals; it waits
+    // behind anything a person is playing or has paused; it asks for a click
+    // when the browser blocks sound; and it is off again on every page load.
+    // Playing a call goes through the same path as the Play button, so every
+    // listen is audited like any other.
+
+    function scanItemControls(tab, segment) {
+        const item = tab.items.get(String(segment.segment_id));
+        const state = item && itemState.get(item);
+        return state && state.audio ? state.audio.controls : null;
+    }
+
+    // Is this call recent enough to be worth playing now?
+    function scanIsCurrent(segment) {
+        const stamp = Date.parse(segment.ended_at || segment.started_at || "");
+        return Number.isFinite(stamp) && Date.now() - stamp <= SCAN_MAX_AGE_MS;
+    }
+
+    function scanReset() {
+        scanQueue = [];
+        scanSkipped = 0;
+        scanPaint();
+    }
+
+    function scanOffer(tab, fresh) {
+        if (!scanOn || tab.key !== activeKey) return;
+        // `fresh` is newest first; the queue plays oldest first.
+        fresh.slice().reverse().forEach(function (segment) {
+            if (!segment.audio_available) return;
+            if (segment.possible_noise && hideNoiseBox && hideNoiseBox.checked) return;
+            if (!scanIsCurrent(segment)) return;
+            scanQueue.push(segment);
+        });
+        while (scanQueue.length > SCAN_MAX_QUEUE) {
+            scanQueue.shift();
+            scanSkipped += 1;
+        }
+        scanPump();
+    }
+
+    // Start the next waiting call, unless something is already loading, playing
+    // or paused (a person's pause holds the scanner until they resume or stop).
+    function scanPump() {
+        if (!scanOn || scanBlocked || current) {
+            scanPaint();
+            return;
+        }
+        const tab = tabs.get(activeKey);
+        while (tab && tab.kind === "feed" && scanQueue.length) {
+            const segment = scanQueue.shift();
+            const controls = scanItemControls(tab, segment);
+            if (!controls) continue;
+            startPlayback(segment, controls, true);
+            break;
+        }
+        scanPaint();
+    }
+
+    function scanPaint() {
+        if (!scanStatus) return;
+        scanStatus.hidden = !scanOn;
+        if (!scanOn) return;
+        const waiting = scanQueue.length ? ` (${scanQueue.length} waiting)` : "";
+        let text;
+        if (scanBlocked) {
+            text = "Click anywhere on the page to start playing";
+        } else if (current && current.state === "paused") {
+            text = `Paused${waiting}`;
+        } else if (current) {
+            text = `Playing now${waiting}`;
+        } else {
+            text = "Listening for new calls";
+        }
+        if (scanSkipped) text += `, ${scanSkipped} skipped`;
+        scanStatus.textContent = text;
+    }
+
+    function scanTick() {
+        const tab = tabs.get(activeKey);
+        if (scanOn && tab && tab.kind === "feed") refreshNewest(tab);
+    }
+
+    function scanSet(on) {
+        scanOn = on;
+        scanBlocked = false;
+        scanReset();
+        if (scanBox && scanBox.checked !== on) scanBox.checked = on;
+        if (scanTimer !== null) {
+            window.clearInterval(scanTimer);
+            scanTimer = null;
+        }
+        const watched = tabs.get(activeKey);
+        if (on && watched) watched.scanQuiet = true;
+        if (on) {
+            // Unlike the 30 s refresh this keeps running while the page is hidden:
+            // a scanner is often left on a second screen.
+            scanTimer = window.setInterval(scanTick, SCAN_REFRESH_MS);
+            scanTick();
+        }
+        scanPaint();
+    }
+
+    // A click or key press is the permission the browser wants before sound.
+    function scanUnblock() {
+        if (!scanBlocked) return;
+        scanBlocked = false;
+        scanPump();
+    }
+    ["pointerdown", "keydown", "click"].forEach(function (name) {
+        document.addEventListener(name, scanUnblock, true);
+    });
+
+    if (scanBox) {
+        scanBox.checked = false;
+        scanBox.addEventListener("change", function () {
+            scanSet(scanBox.checked);
+        });
     }
 
     function autoRefresh() {

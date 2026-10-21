@@ -4,7 +4,7 @@
 
 {% block content %}
 <link rel="stylesheet" href="/static/css/lcdash-admin.css?v=20260809-admin-knowledge">
-<link rel="stylesheet" href="/static/css/lcdash-admin-radio.css?v=20261020-radio9">
+<link rel="stylesheet" href="/static/css/lcdash-admin-radio.css?v=20261021-radio10">
 
 <div class="command-page">
 <div class="command-safety-banner radio-banner mb-4" role="note">
@@ -135,6 +135,15 @@
             {% endif %}
         </div>
         <div class="radio-refresh">
+            {#- Scanner mode: plays each new call in the tab being watched, one after
+                another. Off on every page load; turning it on is the click the
+                browser needs before it allows sound. -#}
+            <label class="radio-scan" for="radio-autoplay"
+                   title="Play each new call as it arrives, like a scanner. Use a card's Play button to replay it.">
+                <input id="radio-autoplay" type="checkbox">
+                <span>Auto-play new calls</span>
+            </label>
+            <span id="radio-autoplay-status" class="radio-scan-status" aria-live="off" hidden></span>
             <span id="radio-updated" class="radio-updated" aria-live="off">Not updated yet</span>
             <button id="radio-refresh-button" type="button" class="radio-refresh-button">
                 <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Refresh
@@ -319,6 +328,6 @@
     </div>
 </section>
 
-<script src="/static/js/lcdash-admin-radio.js?v=20261020-radio9"></script>
+<script src="/static/js/lcdash-admin-radio.js?v=20261021-radio10"></script>
 </div>
 {% endblock %}

@@ -18,7 +18,7 @@ RADIO_JS = ROOT / "static" / "js" / "lcdash-admin-radio.js"
 ALERTS_JS = ROOT / "static" / "js" / "lcdash-radio-alerts.js"
 RADIO_CSS = ROOT / "static" / "css" / "lcdash-admin-radio.css"
 ALERTS_CSS = ROOT / "static" / "css" / "lcdash-radio-alerts.css"
-CACHE_BUST = "20261020-radio9"
+CACHE_BUST = "20261021-radio10"
 # The dashboard alerts panel (dashboard.html and its script and style) did not
 # change in v3, so it keeps its own cache-bust string.
 ALERTS_CACHE_BUST = "20261020-radio5"
@@ -180,7 +180,7 @@ class PossibleNoiseUiTests(unittest.TestCase):
                       self.script)
 
     def test_the_changed_assets_use_the_new_cache_bust(self):
-        self.assertEqual(CACHE_BUST, "20261020-radio9")
+        self.assertEqual(CACHE_BUST, "20261021-radio10")
         self.assertIn(f"lcdash-admin-radio.js?v={CACHE_BUST}", self.template)
         self.assertIn(f"lcdash-admin-radio.css?v={CACHE_BUST}", self.template)
         self.assertNotIn("20261017-radio4", self.template)
@@ -765,3 +765,63 @@ class FoldedHealthBarTests(unittest.TestCase):
     def test_open_state_is_a_per_viewer_convenience_guarded_by_try(self):
         self.assertIn("lcdash.radio.health.open", self.script)
         self.assertGreaterEqual(self.script.count("storage may be blocked"), 2)
+
+
+class ScannerModeTests(unittest.TestCase):
+    """Auto-play new calls: a switch that plays arrivals one after another."""
+
+    def setUp(self):
+        self.template = read(ROOT / "templates" / "mindshare_radio.html")
+        self.script = read(RADIO_JS)
+        self.css = read(RADIO_CSS)
+
+    def test_the_switch_exists_and_is_off_by_default(self):
+        self.assertRegex(self.template, r'<input id="radio-autoplay" type="checkbox">')
+        self.assertNotIn("checked", re.search(r'<input id="radio-autoplay"[^>]*>', self.template).group(0))
+        self.assertIn('id="radio-autoplay-status"', self.template)
+        self.assertIn("let scanOn = false;", self.script)
+        # Never remembered across page loads: sound must not start unasked.
+        scan_code = self.script[self.script.index("function scanItemControls"):
+                                self.script.index("// ----------------------------------------------------- administrator tabs")]
+        for storage in ("localStorage", "sessionStorage"):
+            self.assertNotIn(storage, scan_code)
+        self.assertIn("scanBox.checked = false;", self.script)
+
+    def test_only_new_arrivals_play_and_only_when_recent(self):
+        for needle in (
+            "const SCAN_REFRESH_MS = 10000;",
+            "const SCAN_MAX_AGE_MS = 180000;",
+            "const SCAN_MAX_QUEUE = 10;",
+            "if (fresh.length && !tab.scanQuiet) scanOffer(tab, fresh);",
+            "fresh.slice().reverse()",
+            "if (!segment.audio_available) return;",
+            "if (!scanIsCurrent(segment)) return;",
+        ):
+            self.assertIn(needle, self.script, needle)
+        # The first load of a feed is never offered to the scanner.
+        load_first = self.script[self.script.index("async function loadFirst"):
+                                 self.script.index("async function loadOlder")]
+        self.assertNotIn("scanOffer", load_first)
+
+    def test_it_uses_the_same_playback_path_as_the_play_button(self):
+        # One Audio object and one place a source is assigned (audited listens).
+        self.assertEqual(self.script.count("new Audio()"), 1)
+        self.assertEqual(self.script.count("player.src ="), 1)
+        self.assertIn("startPlayback(segment, controls, true);", self.script)
+
+    def test_it_waits_for_people_and_for_the_browser(self):
+        self.assertIn("if (!scanOn || scanBlocked || current) {", self.script)
+        self.assertIn('error.name === "NotAllowedError"', self.script)
+        self.assertIn("Click anywhere on the page to start playing", self.script)
+        for event in ('"pointerdown"', '"keydown"', '"click"'):
+            self.assertIn(event, self.script[self.script.index("function scanUnblock"):])
+
+    def test_it_resets_when_the_selection_changes_and_stops_with_the_session(self):
+        for needle in ("if (key !== activeKey) scanReset();", "scanSet(false);"):
+            self.assertIn(needle, self.script, needle)
+        reload_feeds = self.script[self.script.index("function reloadFeeds"):]
+        self.assertIn("scanReset();", reload_feeds[:120])
+
+    def test_the_playing_card_is_highlighted(self):
+        self.assertIn(".radio-item:has(.radio-play.is-playing)", self.css)
+        self.assertIn(".radio-scan", self.css)

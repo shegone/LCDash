@@ -506,10 +506,41 @@ html,
     background: rgba(3, 16, 24, .16);
 }
 
+/* Scanner mode switch, and the card being played. */
+
+.radio-scan {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 6px 14px;
+    border: 1px solid rgba(76, 201, 255, .3);
+    border-radius: 12px;
+    color: #cfeaf8;
+    background: rgba(5, 16, 30, .6);
+    font-size: .88rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.radio-scan:hover { border-color: rgba(76, 201, 255, .65); }
+.radio-scan input { width: 18px; height: 18px; accent-color: #4cc9ff; cursor: pointer; }
+.radio-scan:has(input:checked) { border-color: #4cc9ff; color: #031018; background: #4cc9ff; }
+.radio-scan:has(input:focus-visible) { outline: 3px solid rgba(85, 212, 255, .62); outline-offset: 2px; }
+
+.radio-scan-status { color: #8dffcb; font-size: .85rem; font-weight: 800; }
+.radio-scan-status[hidden] { display: none; }
+
+.radio-item:has(.radio-play.is-playing) {
+    border-color: #4cc9ff;
+    box-shadow: 0 0 0 1px rgba(76, 201, 255, .5), 0 0 18px rgba(76, 201, 255, .22);
+}
+
 .radio-refresh {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 12px;
+    gap: 8px 12px;
 }
 
 .radio-updated { color: #91afc9; font-size: .82rem; }

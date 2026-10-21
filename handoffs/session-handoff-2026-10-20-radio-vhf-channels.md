@@ -171,3 +171,31 @@ DMR history under the EMS and Fire tabs. Rollback target: digest
 `sha256:4c266188ae14d6c132a97002bd874487b645028d7b9a5bfe100d76d9357f7422`
 (revision 115). Note: rolling back the image does not undo the relabel (the
 marker row stays and the moved rows keep their new channel names).
+
+## Update (2026-10-21): scanner mode (auto-play), not yet released
+
+Ted asked for the page to play calls as they come in, with a Play button on each
+call to replay. Built, tested, committed locally; not pushed or released.
+
+- Toolbar switch "Auto-play new calls" (off on every page load, never remembered,
+  so sound does not start unasked). It plays calls that arrive while it is on,
+  for the tab and channel chip being watched, oldest first, one at a time.
+  Nothing already on screen plays; calls older than 3 minutes when they appear
+  are skipped; at most 10 wait (oldest dropped, "N skipped" shown).
+- It polls the active feed every 10 s (every list is audited, so not faster) and
+  keeps polling while the page is hidden. Switching tab or channel chip clears
+  the queue, and the first catch-up refresh after a switch or after turning it on
+  is silent (what arrived while nobody was listening is not played).
+- It uses the Play button's own path (`startPlayback`), so every listen is
+  audited as usual and there is still one `Audio` object. A person's play or
+  pause wins: the scanner waits behind anything playing or paused. If the browser
+  refuses sound it says "Click anywhere on the page to start playing" and keeps
+  the call. The playing card is outlined.
+- Cache-bust `20261021-radio10`. Tests: `ScannerModeTests` in
+  `tests/contracts/test_radio_ui_assets.py`; behaviour checked in a browser
+  harness with simulated audio (order, staleness, tab switch, blocked sound,
+  pause, switch off).
+- Not tested with real sound or on a real signed-in page. A tab left in the
+  background can still be throttled by the browser; keep it visible or on a
+  second screen. Operators may want a volume control or a per-channel mute; not
+  built.
