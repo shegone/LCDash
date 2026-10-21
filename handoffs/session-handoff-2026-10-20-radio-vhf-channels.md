@@ -175,7 +175,7 @@ marker row stays and the moved rows keep their new channel names).
 ## Update (2026-10-21): scanner mode (auto-play), not yet released
 
 Ted asked for the page to play calls as they come in, with a Play button on each
-call to replay. Built, tested, committed locally; not pushed or released.
+call to replay. Built, tested, pushed (`5288951`) and staged for release.
 
 - Toolbar switch "Auto-play new calls" (off on every page load, never remembered,
   so sound does not start unasked). It plays calls that arrive while it is on,
@@ -199,3 +199,11 @@ call to replay. Built, tested, committed locally; not pushed or released.
   background can still be throttled by the browser; keep it visible or on a
   second screen. Operators may want a volume control or a per-channel mute; not
   built.
+
+Release for scanner mode: commit `5288951`, image tag `release-5288951e6343`,
+digest `sha256:d85f5bea27d7402916398b6e01e391d18a3c8de7da48077eb6116b65815c6cc1`,
+the same nine accepted ECR findings. Change set `radio-scanner-5288951-20261021`
+is staged (standard five resources, only `PilotImageDigest` differs) and waits
+for Ted to type its exact name. Rollback target: digest
+`sha256:778f9a959b8ec39c3549c76993cc99a5ecdbe4143e4bfcb835e593f9ea2e5456`
+(revision 116).
