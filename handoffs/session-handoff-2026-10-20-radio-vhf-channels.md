@@ -70,7 +70,7 @@ revised channel map.
 
 ## State
 
-Branch `main`. Pilot web revision 116 (digest `sha256:778f9a95...`). `.227`
+Branch `main`. Pilot web revision 117 (digest `sha256:d85f5bea...`). `.227`
 runs the listener config as of the update below; all three services active.
 
 ## Update (later 2026-10-20): revised sheet, DMR and LMARS
@@ -203,7 +203,14 @@ call to replay. Built, tested, pushed (`5288951`) and staged for release.
 Release for scanner mode: commit `5288951`, image tag `release-5288951e6343`,
 digest `sha256:d85f5bea27d7402916398b6e01e391d18a3c8de7da48077eb6116b65815c6cc1`,
 the same nine accepted ECR findings. Change set `radio-scanner-5288951-20261021`
-is staged (standard five resources, only `PilotImageDigest` differs) and waits
-for Ted to type its exact name. Rollback target: digest
+(standard five resources, only `PilotImageDigest` differs) was executed on
+2026-10-21 after Ted typed its exact name. Verified: foundation `UPDATE_COMPLETE`;
+web task definition revision 117 running that digest (task started 10:31 EDT),
+rollout COMPLETED 1/1, ALB target healthy; `/mindshare/radio` redirects to
+Cognito; unsigned ingest 401; 15 signed ingests 201, no errors in the web log.
+Not verified: the signed-in page and real sound (static files are behind
+sign-in, so the new script could not be fetched from outside). Ted should open
+`/mindshare/radio`, turn on "Auto-play new calls" and listen to a few calls.
+Rollback target: digest
 `sha256:778f9a959b8ec39c3549c76993cc99a5ecdbe4143e4bfcb835e593f9ea2e5456`
 (revision 116).
