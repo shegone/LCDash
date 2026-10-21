@@ -639,7 +639,11 @@ class ChannelGroupTests(unittest.TestCase):
         names = [channel["name"] for channel in self.config["channels"]]
         self.assertEqual(len(names), len(set(names)))
         catalog = set(re.findall(r"^\s{8}(\w+): \{ short:", self.script, re.M))
-        self.assertEqual(set(names), catalog)
+        # The DMR channels left the listener (they duplicate their paired analog
+        # channels) but stay in the catalog so their stored history keeps its
+        # labels and its group until it ages out (30 days from 2026-10-21).
+        self.assertTrue(set(names) <= catalog)
+        self.assertEqual(catalog - set(names), {"ems_dmr", "fire_dmr", "law_dmr"})
         for name in names:
             self.assertRegex(name, r"^[a-z0-9_]{1,32}$")
 
@@ -648,12 +652,18 @@ class ChannelGroupTests(unittest.TestCase):
         by_name = {c["name"]: c for c in self.config["channels"]}
         expected = {
             "ems_ward_vhf": 20, "ems_south_vhf": 21, "ems_park_vhf": 22,
-            "ems_dmr": 23, "fire_ward_vhf": 24, "fire_south_vhf": 25,
-            "fire_park_vhf": 26, "fire_dmr": 27, "fire_horsepen_vhf": 28,
+            "fire_ward_vhf": 24, "fire_south_vhf": 25,
+            "fire_park_vhf": 26, "fire_horsepen_vhf": 28,
             "law_ward_vhf": 29, "law_south_vhf": 30, "law_park_vhf": 31,
-            "sirn_multi_vhf": 38, "fire_north_vhf": 35, "law_dmr": 36,
+            "sirn_multi_vhf": 38, "fire_north_vhf": 35,
             "fire_lmars": 41, "ems_lmars": 42, "law_lmars": 43,
         }
+        # DMR is bridged onto its paired analog channels, so listening to it too
+        # would transcribe every call twice (Ted, 2026-10-21).
+        self.assertEqual([n for n in by_name if "dmr" in n], [])
+        groups_in_use = {c["group"] for c in self.config["channels"]}
+        for address in (23, 27, 36):
+            self.assertNotIn(f"235.98.99.{address}", groups_in_use)
         for name, number in expected.items():
             channel = by_name[name]
             self.assertEqual(channel["group"], f"235.98.99.{number}", name)

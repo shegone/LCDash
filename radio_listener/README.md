@@ -1,9 +1,11 @@
 # Mindshare multicast capture and local transcription
 
 This listen-only service supports up to **24 channels / 48 UDP multicast
-listeners**. The configuration holds 21 channels: the three SIRN channels,
-13 analog VHF dispatch channels, three DMR channels and three LMARS channels.
-Each channel has a separate TX and RX port.
+listeners**. The configuration holds 18 channels: the three SIRN channels,
+12 analog VHF dispatch channels and three LMARS channels. Each channel has a
+separate TX and RX port. The three DMR channels were removed on 2026-10-21: DMR
+is bridged onto its paired analog channels, so capturing both would transcribe
+every call twice.
 
 ## Current channels
 
@@ -22,17 +24,14 @@ list them the other way round).
 | `ems_ward_vhf` | Logan EMS WardRock | 235.98.99.20 | 10020 | 12020 |
 | `ems_south_vhf` | Logan EMS South | 235.98.99.21 | 10021 | 12021 |
 | `ems_park_vhf` | Logan EMS Park | 235.98.99.22 | 10022 | 12022 |
-| `ems_dmr` | DMR EMS | 235.98.99.23 | 10023 | 12023 |
 | `fire_ward_vhf` | Logan Fire WardRock | 235.98.99.24 | 10024 | 12024 |
 | `fire_south_vhf` | Logan Fire South | 235.98.99.25 | 10025 | 12025 |
 | `fire_park_vhf` | Logan Fire Park | 235.98.99.26 | 10026 | 12026 |
-| `fire_dmr` | DMR Fire | 235.98.99.27 | 10027 | 12027 |
 | `fire_horsepen_vhf` | Logan Fire Horsepen | 235.98.99.28 | 10028 | 12028 |
 | `law_ward_vhf` | Logan Law Ward | 235.98.99.29 | 10029 | 12029 |
 | `law_south_vhf` | Logan Law South | 235.98.99.30 | 10030 | 12030 |
 | `law_park_vhf` | Logan Law Park | 235.98.99.31 | 10031 | 12031 |
 | `fire_north_vhf` | Fire North | 235.98.99.35 | 10035 | 12035 |
-| `law_dmr` | DMR Law | 235.98.99.36 | 10036 | 12036 |
 | `sirn_multi_vhf` | SIRN Multi | 235.98.99.38 | 10038 | 12038 |
 | `fire_lmars` | LMARS Fire | 235.98.99.41 | 10041 | 12041 |
 | `ems_lmars` | LMARS EMS | 235.98.99.42 | 10042 | 12042 |
@@ -41,10 +40,11 @@ list them the other way round).
 Notes on the sheet:
 
 - The first v117 listed EMS North (23) and Fire North (27) as analog VHF
-  channels. The revised sheet shows those cards as DMR EMS and DMR Fire and
-  moves Fire North to 35. Segments captured under `ems_north_vhf` and
-  `fire_north_vhf` between 2026-10-20 15:10 and the config change are DMR
-  audio (and, for `fire_north_vhf`, possibly a few Fire North segments).
+  channels. The revised sheet shows those cards as DMR EMS and DMR Fire (and DMR
+  Law at 36) and moves Fire North to 35. Those DMR cards are no longer captured.
+  Segments already stored as `ems_north_vhf` / `fire_north_vhf` were relabelled
+  `ems_dmr` / `fire_dmr` by the radio schema migration, and the page keeps
+  those labels for the stored history (it ages out 30 days after 2026-10-21).
 - The LMARS cards sit on the `192.168.1.x` network (card IPs `.41` to `.43`).
   Whether their multicast reaches `10.5.2.12` is checked by looking for
   packets after install. The gateway station line for LMARS Law lists the
@@ -104,3 +104,16 @@ radio equipment, make dispatch decisions, or send audio/transcripts to AWS.
 The separate LCDash AWS work should use an approved integration contract
 rather than connecting directly to internal queue files. The first live Law
 RX/TX segments and a sample WAV have been transcribed successfully on `.227`.
+
+## Key-ups and beeps are not processed
+
+`skip_segments_up_to_seconds` (2.1 in the shipped config) drops a segment whose
+start-to-close span is that long or shorter: the audio file is deleted, nothing
+is queued, and nothing is transcribed or uploaded. The span includes the
+`segment_silence_seconds` wait (1.5 s) that closes a segment, so 2.1 s is roughly
+half a second of actual sound. On the 2026-10-21 data, about 97% of segments at or
+under this length were stock phrases the transcriber invents from noise ("Thanks
+for watching!", "Thank you.", "Beep."), and real words ("Go ahead.") only start
+above it. `0` turns the filter off. A stream's `summary()` (the file written when
+capture stops) counts them as `short_segments_skipped`. Segments already stored
+keep a "Key-up or beep" badge on the page.

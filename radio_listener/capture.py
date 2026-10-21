@@ -128,6 +128,11 @@ def load_config(path: Path):
     config.setdefault("max_channels", MAX_CHANNELS)
     config.setdefault("segment_silence_seconds", 1.5)
     config.setdefault("max_segment_seconds", 120)
+    # A segment whose start-to-close span is this long or shorter is a key-up or a
+    # beep and is dropped without transcription or upload (0 keeps everything).
+    # The span includes the silence wait that closes a segment, so 2.1 s is
+    # roughly half a second of actual sound.
+    config.setdefault("skip_segments_up_to_seconds", 0)
     channels = config.get("channels")
     if not isinstance(channels, list) or not channels:
         raise ValueError("Config must contain a non-empty channels array.")
@@ -145,6 +150,9 @@ def load_config(path: Path):
     for key in ("segment_silence_seconds", "max_segment_seconds"):
         if not isinstance(config[key], (int, float)) or config[key] <= 0:
             raise ValueError(f"{key} must be greater than zero.")
+    skip = config["skip_segments_up_to_seconds"]
+    if isinstance(skip, bool) or not isinstance(skip, (int, float)) or not 0 <= skip <= 10:
+        raise ValueError("skip_segments_up_to_seconds must be a number from 0 to 10.")
     seen_names, seen_streams = set(), set()
     normalized = []
     for index, channel in enumerate(channels, 1):
@@ -352,7 +360,8 @@ def write_stats_file(path: Path, payload: dict) -> None:
 
 class Stream:
     def __init__(self, name, direction, group, port, interface, audio_dir,
-                 pending_dir, silence_seconds, max_segment_seconds):
+                 pending_dir, silence_seconds, max_segment_seconds,
+                 skip_up_to_seconds=0.0):
         self.name, self.direction = name, direction
         self.group, self.port, self.interface = group, port, interface
         self.socket = open_listener(group, port, interface)
@@ -376,6 +385,8 @@ class Stream:
         self.segment_sources = collections.Counter()
         self.segment_packets = 0
         self.segments_written = 0
+        self.skip_up_to_seconds = float(skip_up_to_seconds)
+        self.short_skipped = 0
         self.stats = ListenerStats(name, direction)
         # Who-is-talking signalling. `_pre_signal` collects messages seen while no
         # segment is open; `segment_signal` belongs to the open segment.
@@ -453,6 +464,17 @@ class Stream:
             return
         self.wav.close()
         self.wav = None
+        ended = dt.datetime.now(dt.timezone.utc)
+        span = (ended - self.segment_started_utc).total_seconds()
+        if self.skip_up_to_seconds and span <= self.skip_up_to_seconds:
+            # A key-up or a beep: nothing to transcribe, store or upload.
+            try:
+                self.wav_path.unlink()
+            except OSError:
+                pass
+            self.short_skipped += 1
+            self._reset_segment()
+            return
         metadata = {
             "segment_id": self.segment_id,
             "channel": self.name,
@@ -464,7 +486,7 @@ class Stream:
             "sample_rate_hz": SAMPLE_RATE,
             "audio_file": str(self.wav_path),
             "started_at": self.segment_started_utc.isoformat(),
-            "ended_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+            "ended_at": ended.isoformat(),
             "pcmu_packet_count": self.segment_packets,
             "source_packet_counts": dict(self.segment_sources),
         }
@@ -477,14 +499,17 @@ class Stream:
         temporary_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
         temporary_path.chmod(0o600)
         os.replace(temporary_path, ready_path)
+        self._reset_segment()
+        self.segments_written += 1
+        self.stats.segment_closed()
+
+    def _reset_segment(self):
         self.wav_path = None
         self.segment_started = None
         self.segment_started_utc = None
         self.last_packet_at = None
         self.last_rtp_timestamp = None
         self.segment_signal = {}
-        self.segments_written += 1
-        self.stats.segment_closed()
 
     def accept(self, packet, source):
         self.count += 1
@@ -551,6 +576,7 @@ class Stream:
             "invalid_rtp_packets": self.bad_rtp,
             "source_packet_counts": dict(self.sources),
             "segments_written": self.segments_written,
+            "short_segments_skipped": self.short_skipped,
         }
 
 
@@ -597,6 +623,7 @@ def main():
             stream = Stream(
                 name, direction, group, port, interface, audio_dir, pending_dir,
                 config["segment_silence_seconds"], config["max_segment_seconds"],
+                config["skip_segments_up_to_seconds"],
             )
             streams.append(stream)
             selector.register(stream.socket, selectors.EVENT_READ, stream)

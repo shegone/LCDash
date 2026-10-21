@@ -5,6 +5,7 @@
   "max_channels": 24,
   "segment_silence_seconds": 1.5,
   "max_segment_seconds": 120,
+  "skip_segments_up_to_seconds": 2.1,
   "transcription": {
     "model": "large-v3",
     "device": "cuda",
@@ -47,14 +48,6 @@
       }
     },
     {
-      "name": "law_dmr",
-      "group": "235.98.99.36",
-      "ports": {
-        "tx": 10036,
-        "rx": 12036
-      }
-    },
-    {
       "name": "law_lmars",
       "group": "235.98.99.43",
       "ports": {
@@ -92,14 +85,6 @@
       "ports": {
         "tx": 10022,
         "rx": 12022
-      }
-    },
-    {
-      "name": "ems_dmr",
-      "group": "235.98.99.23",
-      "ports": {
-        "tx": 10023,
-        "rx": 12023
       }
     },
     {
@@ -156,14 +141,6 @@
       "ports": {
         "tx": 10028,
         "rx": 12028
-      }
-    },
-    {
-      "name": "fire_dmr",
-      "group": "235.98.99.27",
-      "ports": {
-        "tx": 10027,
-        "rx": 12027
       }
     },
     {

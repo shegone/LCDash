@@ -207,11 +207,12 @@ class FakeSocket:
 def stream_factory(tmp_path, monkeypatch):
     monkeypatch.setattr(capture, "open_listener", lambda *args: FakeSocket())
 
-    def make(silence=1.5, maximum=120):
+    def make(silence=1.5, maximum=120, skip=0.0):
         audio = tmp_path / "audio"
         pending = tmp_path / "pending"
         pending.mkdir(exist_ok=True)
-        return capture.Stream("law", "rx", "235.98.99.32", 12032, "10.5.2.12", audio, pending, silence, maximum)
+        return capture.Stream("law", "rx", "235.98.99.32", 12032, "10.5.2.12", audio, pending,
+                              silence, maximum, skip)
 
     return make
 
@@ -604,3 +605,88 @@ def test_signal_state_stays_at_three_keys_at_most(stream_factory, clock):
     for index in range(2000):
         stream.accept(signal_rtp(f"{index}:G{index % 1000}::::0:0", index), ("10.0.0.1", 1))
     assert len(stream._pre_signal) <= 3
+
+
+
+# ------------------------------------------------- key-ups and beeps are not processed
+
+
+def _open_segment(stream, seconds_ago):
+    """One voice packet, with the segment started `seconds_ago` seconds ago."""
+    import datetime as dt
+
+    stream.accept(rtp(0, 0), ("10.0.0.1", 1))
+    stream.segment_started_utc = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=seconds_ago)
+
+
+def test_a_clip_of_2_1_seconds_or_less_is_dropped_without_a_trace(stream_factory):
+    stream = stream_factory(skip=2.1)
+    _open_segment(stream, 1.8)
+    wav_path = stream.wav_path
+    stream.finish_segment()
+
+    assert not wav_path.exists()
+    assert written_metadata(stream) == []
+    assert stream.short_skipped == 1
+    assert stream.segments_written == 0
+    assert stream.stats.segments_closed_total == 0
+    assert stream.summary()["short_segments_skipped"] == 1
+    # The stream is ready for the next transmission.
+    assert stream.wav is None and stream.wav_path is None and stream.segment_signal == {}
+
+
+def test_a_longer_clip_is_kept_and_queued_as_before(stream_factory):
+    stream = stream_factory(skip=2.1)
+    _open_segment(stream, 2.6)
+    wav_path = stream.wav_path
+    stream.finish_segment()
+
+    assert wav_path.exists()
+    assert len(written_metadata(stream)) == 1
+    assert stream.short_skipped == 0
+    assert stream.stats.segments_closed_total == 1
+
+
+def test_the_default_keeps_every_clip(stream_factory):
+    stream = stream_factory()  # skip is off unless the config turns it on
+    _open_segment(stream, 0.2)
+    stream.finish_segment()
+    assert len(written_metadata(stream)) == 1
+    assert stream.short_skipped == 0
+
+
+def test_a_dropped_clip_does_not_leak_its_signal_into_the_next_segment(stream_factory, clock):
+    stream = stream_factory(skip=2.1)
+    stream.accept(signal_rtp("12345:G7:x"), ("10.0.0.1", 1))
+    _open_segment(stream, 1.0)
+    stream.finish_segment()
+    clock.now += 10
+    _open_segment(stream, 3.0)
+    stream.finish_segment()
+    kept = written_metadata(stream)
+    assert len(kept) == 1
+    assert "signal" not in kept[0]
+
+
+def test_the_config_setting_is_validated(tmp_path):
+    base = {"capture_interface": "10.5.2.12", "duration_seconds": 0,
+            "output_directory": str(tmp_path / "data"),
+            "channels": [{"name": "law", "group": "235.98.99.32", "ports": {"tx": 10032, "rx": 12032}}]}
+
+    def load(extra):
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps({**base, **extra}), encoding="utf-8")
+        return capture.load_config(path)
+
+    assert load({})["skip_segments_up_to_seconds"] == 0
+    assert load({"skip_segments_up_to_seconds": 2.1})["skip_segments_up_to_seconds"] == 2.1
+    for bad in (-1, 11, True, "2.1", None):
+        with pytest.raises(ValueError):
+            load({"skip_segments_up_to_seconds": bad})
+
+
+def test_the_shipped_config_skips_2_1_seconds_and_carries_no_dmr_channel():
+    config = capture.load_config(Path(__file__).resolve().parents[1] / "radio_listener" / "config.json")
+    assert config["skip_segments_up_to_seconds"] == 2.1
+    assert not [name for name, *_ in config["_streams"] if "dmr" in name]
+    assert len({name for name, *_ in config["_streams"]}) == 18
