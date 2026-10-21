@@ -18,7 +18,7 @@ RADIO_JS = ROOT / "static" / "js" / "lcdash-admin-radio.js"
 ALERTS_JS = ROOT / "static" / "js" / "lcdash-radio-alerts.js"
 RADIO_CSS = ROOT / "static" / "css" / "lcdash-admin-radio.css"
 ALERTS_CSS = ROOT / "static" / "css" / "lcdash-radio-alerts.css"
-CACHE_BUST = "20261021-radio10"
+CACHE_BUST = "20261021-radio11"
 # The dashboard alerts panel (dashboard.html and its script and style) did not
 # change in v3, so it keeps its own cache-bust string.
 ALERTS_CACHE_BUST = "20261020-radio5"
@@ -180,7 +180,7 @@ class PossibleNoiseUiTests(unittest.TestCase):
                       self.script)
 
     def test_the_changed_assets_use_the_new_cache_bust(self):
-        self.assertEqual(CACHE_BUST, "20261021-radio10")
+        self.assertEqual(CACHE_BUST, "20261021-radio11")
         self.assertIn(f"lcdash-admin-radio.js?v={CACHE_BUST}", self.template)
         self.assertIn(f"lcdash-admin-radio.css?v={CACHE_BUST}", self.template)
         self.assertNotIn("20261017-radio4", self.template)
@@ -825,3 +825,23 @@ class ScannerModeTests(unittest.TestCase):
     def test_the_playing_card_is_highlighted(self):
         self.assertIn(".radio-item:has(.radio-play.is-playing)", self.css)
         self.assertIn(".radio-scan", self.css)
+
+
+class KeyupUiTests(unittest.TestCase):
+    """A segment of 2.1 s or less shows "Key-up or beep" and the scanner skips it."""
+
+    def setUp(self):
+        self.script = read(RADIO_JS)
+
+    def test_the_badge_says_key_up_and_still_counts_as_noise(self):
+        self.assertIn('badge.textContent = "Key-up or beep";', self.script)
+        self.assertIn("if (segment.keyup) {", self.script)
+        self.assertIn("2.1 seconds or less", self.script)
+        # Still the same display-only flag, so Hide possible noise hides it too.
+        self.assertIn('item.classList.toggle("is-noise", noise);', self.script)
+        self.assertIn("segment.keyup ? 1 : 0", self.script)
+
+    def test_the_scanner_never_plays_possible_noise(self):
+        offer = self.script[self.script.index("function scanOffer"):self.script.index("function scanPump")]
+        self.assertIn("if (segment.possible_noise) return;", offer)
+        self.assertNotIn("hideNoiseBox", offer)

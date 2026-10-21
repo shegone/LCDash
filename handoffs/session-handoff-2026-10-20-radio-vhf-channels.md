@@ -243,3 +243,55 @@ fixes. Built and tested locally; not pushed or released.
   `sha256(convert_to(...))` reference, `COUNT(*) OVER ()` with LIMIT) is covered
   only by recording fakes. Run it against PG 17 before releasing (needs Ted's
   approval to download the binaries again).
+
+## Update (2026-10-21, later): discipline breakdown, ISO fire view, key-up rule (not released)
+
+Ted approved using the 2016 NFPA 1221 figures and re-approved a one-time
+PostgreSQL 17.6 download for testing (downloaded, used, and deleted again). Built
+and committed locally; NOT pushed or released.
+
+- **Analytics, by discipline** (`app/services/analytics_reporting.py`
+  `_discipline_metrics`, `templates/analytics.html`): for Fire, EMS and Law, a
+  table per discipline with an "All dispatchers" row then each dispatcher: timed,
+  average, median, 90th %, <= 64 s, <= 106 s, > 3 min. A call counts once in every
+  discipline dispatched to it, timed from the CAD call-received time to the first
+  dispatch of that discipline (same exclusions as the main table: scheduled, over
+  1 h, excluded identity). Discipline by agency: fire `FC n`, EMS `LEASA`, law
+  `CPD DNR DPS LCSO LPD MHPD MPD WLPD WVSP` (the union of the lists the analytics
+  page and the county commission report each use; the analytics page alone lacked
+  WLPD and MHPD).
+- **ISO fire card**: fire calls within 64 s (target 90%) and 106 s (target 95%),
+  with meets / below target. Figures are the 2016 NFPA 1221 / NFPA 1710 ones
+  (older 2013: 80% in 60 s). Caveats shown on the page: the clock starts at CAD
+  call received, not 911 answer, so it understates; calls NFPA allows longer for
+  (medical protocol, language/TTY, hazmat, technical rescue, possible criminal
+  activity, text, unclear location) are not marked in CAD and count against the
+  standard window; it is a management aid, not an ISO result. Fire percentages are
+  one decimal and compared unrounded (89.9% does not meet 90%).
+- Research basis (secondary sources; ISO's own schedule and NFPA text were not
+  reachable): ISO scores telecommunicators under Item 422, with an "Alarm
+  Processing" component worth 20 points, from a review of records showing the
+  centre meets NFPA 1221 answering and dispatch times. Verify the edition ISO uses
+  for Logan County before quoting these to ISO.
+- **Radio key-up rule** (Ted, 2026-10-21: audio of 2.1 s or less is just beeps and
+  key-ups): checked on `.227` (416 segments of 2.1 s or less; about 97% were stock
+  phrases such as "Thanks for watching!", "Thank you.", "Beep."; real words such as
+  "Go ahead." appear just above 2.1 s). Segments of 2.1 s or less now carry
+  `keyup: true`, show a "Key-up or beep" badge, count as possible noise (Hide
+  possible noise hides them), and the scanner never plays possible noise. The text
+  is kept and keyword alerts are NOT suppressed by this rule (only the text rules
+  suppress alerts), so a real two-second call that names a watch word still
+  alerts. A human correction clears it. Cache-bust `20261021-radio11`.
+- Tests: `tests/test_analytics_disciplines.py`, `tests/test_analytics_slow_calls.py`,
+  `tests/test_analytics_postgres_live.py` (runs when `LCDASH_TEST_PG_DSN` is set;
+  skipped otherwise), `KeyupLengthTests` in `tests/contracts/test_radio_noise.py`,
+  `KeyupUiTests`. With a real PG 17.6: 2,049 passed; without: the live tests skip.
+  Two older tests were changed on purpose (their 1-second fixture clip is now a
+  key-up; the percentile-query test counts the two dispatcher queries).
+- Real-Postgres checks passed for: 90th percentile, dispatcher reference hash,
+  slow-call list vs the table count, discipline grouping (GROUPING SETS), mixed-case
+  agency codes, first-dispatch-per-discipline, exclusions, empty window.
+- Still to do: release (push, builder deploy, build, scan, change set, Ted types the
+  name). Phone-answer times (NGA911) would let the ISO view start at answer.
+  Possible follow-ups: drill-down of slow calls by discipline; separate longer-window
+  call types if CAD can mark them.

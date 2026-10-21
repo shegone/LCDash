@@ -22,6 +22,7 @@ from .test_radio_routes import SEGMENT_ID, build_service, ingest_record
 
 SHORT_START = "2026-10-16T14:05:00+00:00"
 SHORT_END = "2026-10-16T14:05:01+00:00"  # 1.0 s
+LONG_END = "2026-10-16T14:05:05+00:00"  # 5.0 s: past the key-up length
 LOW_SEGMENTS = [{"start": 0, "end": 1, "text": "x",
                  "avg_logprob": -1.4, "no_speech_prob": 0.1}]
 
@@ -166,7 +167,8 @@ class CorrectedIsNeverNoiseTests(unittest.TestCase):
 class ListedFieldTests(unittest.TestCase):
     def test_every_listed_item_carries_a_boolean_possible_noise(self):
         service, _, _ = build_service()
-        short_clip(service, "Go for 50")
+        ingest_record(service, segment_id=SEGMENT_ID, transcript="Go for 50",
+                      started_at=SHORT_START, ended_at=LONG_END)
         item = listed(service)[SEGMENT_ID]
         self.assertIn("possible_noise", item)
         self.assertIs(item["possible_noise"], False)
@@ -199,7 +201,8 @@ class ListedFieldTests(unittest.TestCase):
     def test_the_flag_follows_the_displayed_text(self):
         service, _, _ = build_service()
         add_fix(service, "bye", "Unit Bravo copies the traffic")
-        short_clip(service, "bye")
+        ingest_record(service, segment_id=SEGMENT_ID, transcript="bye",
+                      started_at=SHORT_START, ended_at=LONG_END)
         item = listed(service)[SEGMENT_ID]
         self.assertEqual(item["text"], "Unit Bravo copies the traffic")
         self.assertFalse(item["possible_noise"])
@@ -252,3 +255,66 @@ class AlertSuppressionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
+class KeyupLengthTests(unittest.TestCase):
+    """2.1 seconds or less is a key-up or a beep (Ted, 2026-10-21; the data agrees)."""
+
+    def test_the_boundary_is_inclusive_at_two_point_one(self):
+        self.assertEqual(radio_text.KEYUP_MAX_SECONDS, 2.1)
+        self.assertTrue(radio_text.is_keyup_length(2.1))
+        self.assertTrue(radio_text.is_keyup_length(0.0))
+        self.assertTrue(radio_text.is_keyup_length(1.0))
+        self.assertFalse(radio_text.is_keyup_length(2.11))
+        self.assertFalse(radio_text.is_keyup_length(3.0))
+
+    def test_bad_or_missing_durations_and_corrections_are_never_flagged(self):
+        for bad in (None, "n/a", "", -1):
+            self.assertFalse(radio_text.is_keyup_length(bad), repr(bad))
+        self.assertFalse(radio_text.is_keyup_length(1.0, corrected=True))
+
+    def test_a_short_clip_is_flagged_whatever_it_says_and_the_text_is_kept(self):
+        service, _, _ = build_service()
+        short_clip(service, "Go for 50")  # confident, real-looking words, 1.0 s
+        item = listed(service)[SEGMENT_ID]
+        self.assertIs(item["keyup"], True)
+        self.assertIs(item["possible_noise"], True)
+        self.assertEqual(item["text"], "Go for 50")
+
+    def test_exactly_2_1_seconds_is_flagged_and_2_2_is_not(self):
+        service, _, _ = build_service()
+        ingest_record(service, segment_id="keyup_exact_0001", transcript="copy",
+                      started_at=SHORT_START, ended_at="2026-10-16T14:05:02.100000+00:00")
+        ingest_record(service, segment_id="keyup_over_0001", transcript="copy",
+                      started_at=SHORT_START, ended_at="2026-10-16T14:05:02.200000+00:00")
+        items = listed(service)
+        self.assertIs(items["keyup_exact_0001"]["keyup"], True)
+        self.assertIs(items["keyup_over_0001"]["keyup"], False)
+        self.assertIs(items["keyup_over_0001"]["possible_noise"], False)
+
+    def test_a_longer_clip_with_real_words_is_not_flagged(self):
+        service, _, _ = build_service()
+        ingest_record(service, segment_id=SEGMENT_ID, transcript="Go ahead with your traffic",
+                      started_at=SHORT_START, ended_at=LONG_END)
+        item = listed(service)[SEGMENT_ID]
+        self.assertIs(item["keyup"], False)
+        self.assertIs(item["possible_noise"], False)
+
+    def test_a_correction_clears_it_and_a_revert_restores_it(self):
+        service, _, _ = build_service()
+        short_clip(service, "Go for 50")
+        corrected = service.correct_segment(SEGMENT_ID, "Go for 50", actor=ACTOR)
+        self.assertIs(corrected["keyup"], False)
+        self.assertIs(corrected["possible_noise"], False)
+        reverted = service.revert_correction(SEGMENT_ID, actor=ACTOR)
+        self.assertIs(reverted["keyup"], True)
+        self.assertIs(reverted["possible_noise"], True)
+
+    def test_a_real_short_call_that_names_a_watch_phrase_still_alerts(self):
+        # The key-up rule only marks the card; it must not hide an alert.
+        service, _, _ = build_service()
+        add_term(service, "fire")
+        short_clip(service, "fire")
+        self.assertEqual(alert_phrases(service), ["fire"])
+        self.assertIs(listed(service)[SEGMENT_ID]["keyup"], True)

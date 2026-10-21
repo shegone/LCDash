@@ -1685,9 +1685,12 @@ class RadioService:
             "model": model,
             "low_confidence": bool(low_confidence),
             # Display only: the text itself is never altered or removed.
+            # A clip of 2.1 s or less is a key-up or a beep; it is flagged as
+            # noise too, but only the text rules suppress keyword alerts.
             "possible_noise": radio_text.is_possible_noise(
                 text, float(duration), bool(low_confidence), corrected
-            ),
+            ) or radio_text.is_keyup_length(duration, corrected),
+            "keyup": radio_text.is_keyup_length(duration, corrected),
             "audio_available": self._audio_available(
                 audio_key, received_at, retain_until
             ),

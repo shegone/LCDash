@@ -340,6 +340,31 @@ def is_possible_noise(
     )
 
 
+# A segment this short or shorter is a key-up or a beep, not speech. Ted listened
+# to the audio (2026-10-21), and the data agrees: of 416 segments of 2.1 s or
+# less on the listener, about 97% were stock phrases such as "Thanks for
+# watching!", "Thank you.", "Beep." or credit lines, and real words ("Go ahead.")
+# only start to appear just above 2.1 s. Display only, like possible noise: the
+# text is kept, and it does NOT suppress keyword alerts (a real two-second call
+# that names a watch phrase must still alert).
+KEYUP_MAX_SECONDS = 2.1
+
+
+def is_keyup_length(duration_seconds, corrected: bool = False) -> bool:
+    """Whether a clip is short enough to be a key-up or a beep.
+
+    A human-corrected segment is never flagged (a person said it is speech).
+    A missing or unreadable duration is not flagged.
+    """
+    if corrected:
+        return False
+    try:
+        seconds = float(duration_seconds)
+    except (TypeError, ValueError):
+        return False
+    return 0 <= seconds <= KEYUP_MAX_SECONDS
+
+
 # ---------------------------------------------------------------- watch terms
 
 

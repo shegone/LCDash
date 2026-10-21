@@ -142,6 +142,8 @@
     const NO_SPEECH = "(no speech recognized)";
     const NOISE_TITLE = "Very short or boilerplate text that the transcriber often " +
         "invents from background noise. Listen to confirm.";
+    const KEYUP_TITLE = "2.1 seconds or less: almost always a key-up or a beep, " +
+        "not speech. The text is kept; listen to confirm.";
 
     const statsBox = document.getElementById("radio-stats");
     const statsError = document.getElementById("radio-stats-error");
@@ -554,7 +556,7 @@
     function segmentSig(segment) {
         return [displayText(segment), segment.corrected_at || "", segment.corrected ? 1 : 0,
                 segment.audio_available ? 1 : 0, segment.low_confidence ? 1 : 0,
-                segment.possible_noise ? 1 : 0,
+                segment.possible_noise ? 1 : 0, segment.keyup ? 1 : 0,
                 segment.retained_until || "",
                 segment.radio_id || "", segment.unit_name || "",
                 segment.talkgroup || "", segment.console_label || ""].join("|");
@@ -874,6 +876,10 @@
         if (noise) {
             const badge = element("span", "radio-badge is-noise", "Possible noise");
             badge.title = NOISE_TITLE;
+            if (segment.keyup) {
+                badge.textContent = "Key-up or beep";
+                badge.title = KEYUP_TITLE;
+            }
             meta.appendChild(badge);
         }
         item.appendChild(meta);
@@ -1999,7 +2005,8 @@
     // "Auto-play new calls": calls that arrive while the switch is on play one
     // after another, oldest first, for the tab (and channel chip) being watched.
     // Each card keeps its Play button, so a call can be replayed at any time.
-    // It never plays what was already on screen, only new arrivals; it waits
+    // It never plays what was already on screen, only new arrivals (and never a
+    // key-up, beep or other possible noise); it waits
     // behind anything a person is playing or has paused; it asks for a click
     // when the browser blocks sound; and it is off again on every page load.
     // Playing a call goes through the same path as the Play button, so every
@@ -2028,7 +2035,8 @@
         // `fresh` is newest first; the queue plays oldest first.
         fresh.slice().reverse().forEach(function (segment) {
             if (!segment.audio_available) return;
-            if (segment.possible_noise && hideNoiseBox && hideNoiseBox.checked) return;
+            // Key-ups, beeps and invented boilerplate are not traffic to listen to.
+            if (segment.possible_noise) return;
             if (!scanIsCurrent(segment)) return;
             scanQueue.push(segment);
         });
