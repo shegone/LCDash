@@ -96,8 +96,10 @@ from app.services.cloud_pilot_readiness_service import get_cloud_pilot_readiness
 from app.services.cloud_presentation_status import build_cloud_presentation_status
 from app.services.analytics_reporting import (
     AnalyticsRangeError,
+    AnalyticsReferenceError,
     PERIOD_OPTIONS,
     get_analytics_overview,
+    get_dispatcher_slow_calls,
 )
 from app.services.mae_analytics_report_service import build_analytics_report
 from app.services.cloud_report_service import (
@@ -2718,6 +2720,37 @@ def analytics_overview_api(
             tenant_context=tenant_context,
         )
     except AnalyticsRangeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/analytics/dispatcher-slow-calls")
+def analytics_dispatcher_slow_calls_api(
+    response: Response,
+    dispatcher: str = "",
+    period: str = "30d",
+    start: str = "",
+    end: str = "",
+    tenant_context: Annotated[
+        TenantContext | None,
+        Depends(get_trusted_tenant_context),
+    ] = None,
+):
+    """The calls behind a dispatcher's "> 3 Min" count, longest first.
+
+    Read-only, aggregate-store fields only (no location, no narrative). The
+    dispatcher is named by the opaque reference the analytics page produces,
+    never by a CAD identifier.
+    """
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return get_dispatcher_slow_calls(
+            dispatcher,
+            period=period,
+            start=start,
+            end=end,
+            tenant_context=tenant_context,
+        )
+    except (AnalyticsRangeError, AnalyticsReferenceError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 

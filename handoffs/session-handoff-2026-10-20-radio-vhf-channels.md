@@ -214,3 +214,32 @@ sign-in, so the new script could not be fetched from outside). Ted should open
 Rollback target: digest
 `sha256:778f9a959b8ec39c3549c76993cc99a5ecdbe4143e4bfcb835e593f9ea2e5456`
 (revision 116).
+
+## Update (2026-10-21): Analytics dispatcher table (not released)
+
+Ted asked why the dispatcher "Average" is far above the "Median" (a few very
+long calls pull the mean up; the table's own columns prove the calls over 3 min
+must average 14 to 24 min for the busiest dispatchers) and asked for all three
+fixes. Built and tested locally; not pushed or released.
+
+- New "90th %" column (summary KPI and each dispatcher): `PERCENTILE_CONT(0.9)`
+  over the same population as the median (received to first dispatch, not
+  scheduled, under 1 h).
+- The "> 3 Min" count opens a list of those calls, longest first (max 100): new
+  `GET /api/analytics/dispatcher-slow-calls?dispatcher=<ref>&period=|start=&end=`.
+  The dispatcher is named by an opaque 16-hex reference (first 16 of SHA-256 of
+  the CAD key), not the CAD identifier. Fields: CFS, received time, time to
+  dispatch, incident, priority, agency; no location, no narrative. Same tenant
+  authorization as the overview. Reaches only roles that already reach analytics
+  (the allowlist tiers deny it).
+- "Average" header says "pulled up by long calls" with a tooltip, the KPI
+  subtitle says a few long calls raise it, and a note explains average vs median
+  vs 90th percentile. Median and 90th percentile have tooltips too.
+- Files: `app/services/analytics_reporting.py`, `app/main.py`,
+  `templates/analytics.html`, `static/js/lcdash-analytics.js` (cache-bust
+  `20261021-slow-calls`), tests in `tests/test_analytics_slow_calls.py`; two fake
+  repositories in other tests gained the new summary column.
+- NOT yet run against a real PostgreSQL: the new SQL (`PERCENTILE_CONT(0.9)`, the
+  `sha256(convert_to(...))` reference, `COUNT(*) OVER ()` with LIMIT) is covered
+  only by recording fakes. Run it against PG 17 before releasing (needs Ted's
+  approval to download the binaries again).

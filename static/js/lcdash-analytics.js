@@ -394,12 +394,117 @@
         });
     }
 
+    // ------------------------------------------------ calls over 3 minutes
+    //
+    // Selecting a number in the dispatcher table's "> 3 Min" column lists the
+    // calls behind it, longest first. Everything from the server goes in with
+    // textContent. The dispatcher is named by an opaque reference.
+
+    function slowCallsQuery(snapshot, reference) {
+        const params = new URLSearchParams();
+        params.set("dispatcher", reference);
+        if (snapshot.period_key === "custom") {
+            params.set("start", snapshot.start_date || "");
+            params.set("end", snapshot.end_date || "");
+        } else {
+            params.set("period", snapshot.period_key || "30d");
+        }
+        return params.toString();
+    }
+
+    function node(tag, className, text) {
+        const element = document.createElement(tag);
+        if (className) element.className = className;
+        if (text !== undefined) element.textContent = text;
+        return element;
+    }
+
+    function renderSlowCalls(panel, name, data, button) {
+        panel.textContent = "";
+        const head = node("div", "slow-calls-head");
+        const title = node("h6", "", `Calls over 3 minutes: ${name}`);
+        const close = node("button", "slow-calls-close", "Close");
+        close.type = "button";
+        close.addEventListener("click", function () {
+            panel.hidden = true;
+            panel.textContent = "";
+            button.setAttribute("aria-expanded", "false");
+            button.focus();
+        });
+        head.appendChild(title);
+        head.appendChild(close);
+        panel.appendChild(head);
+
+        const calls = Array.isArray(data.calls) ? data.calls : [];
+        const total = Number(data.total) || calls.length;
+        const shown = node("div", "slow-calls-meta",
+            `${data.period_label || ""}. Received to first dispatch, longest first. ` +
+            (total > calls.length ? `Showing ${calls.length} of ${total}.` : `${total} call${total === 1 ? "" : "s"}.`));
+        panel.appendChild(shown);
+        if (!calls.length) {
+            panel.appendChild(node("div", "text-secondary py-2",
+                data.message || "No calls over 3 minutes in this period."));
+            return;
+        }
+        const wrap = node("div", "table-responsive mt-2");
+        const table = node("table", "table analytics-table align-middle");
+        const headRow = node("tr");
+        ["CFS", "Received", "Time to dispatch", "Incident", "Priority", "Agency"].forEach(function (label, index) {
+            headRow.appendChild(node("th", index === 2 ? "text-end" : "", label));
+        });
+        const thead = node("thead");
+        thead.appendChild(headRow);
+        table.appendChild(thead);
+        const body = node("tbody");
+        calls.forEach(function (call) {
+            const row = node("tr");
+            row.appendChild(node("td", "fw-bold text-white", String(call.cfs_number || "")));
+            row.appendChild(node("td", "", String(call.received_at || "")));
+            row.appendChild(node("td", "text-end text-warning fw-bold", String(call.processing || "")));
+            row.appendChild(node("td", "", String(call.incident || "")));
+            row.appendChild(node("td", "", String(call.priority || "")));
+            row.appendChild(node("td", "", String(call.agency || "")));
+            body.appendChild(row);
+        });
+        table.appendChild(body);
+        wrap.appendChild(table);
+        panel.appendChild(wrap);
+    }
+
+    function bindSlowCalls(snapshot) {
+        const panel = document.getElementById("dispatcher-slow-calls");
+        if (!panel) return;
+        document.querySelectorAll("[data-slow-calls]").forEach(function (button) {
+            button.addEventListener("click", async function () {
+                const name = button.dataset.dispatcherName || "";
+                document.querySelectorAll("[data-slow-calls]").forEach(function (other) {
+                    other.setAttribute("aria-expanded", other === button ? "true" : "false");
+                });
+                panel.hidden = false;
+                panel.textContent = "Loading calls…";
+                try {
+                    const response = await fetch(
+                        `/api/analytics/dispatcher-slow-calls?${slowCallsQuery(snapshot, button.dataset.slowCalls)}`,
+                        { credentials: "same-origin", headers: { Accept: "application/json" } });
+                    if (!response.ok) {
+                        panel.textContent = `The calls could not be loaded (HTTP ${response.status}).`;
+                        return;
+                    }
+                    renderSlowCalls(panel, name, await response.json(), button);
+                } catch (error) {
+                    panel.textContent = "The calls could not be loaded (network error).";
+                }
+            });
+        });
+    }
+
     function start() {
         const snapshot = readSnapshot();
         if (!snapshot || !snapshot.available) {
             return;
         }
         bindPrintButtons(snapshot);
+        bindSlowCalls(snapshot);
         if (typeof Chart === "undefined") {
             document.querySelectorAll(".chart-wrap, .station-chart-wrap")
                 .forEach((chartWrap) => {

@@ -185,6 +185,7 @@ def _empty_overview(window: AnalyticsWindow, message: str) -> dict:
             "busiest_call_count": 0,
             "average_processing": "—",
             "median_processing": "—",
+            "p90_processing": "—",
             "processing_samples": 0,
             "within_90_percent": 0,
             "over_180_count": 0,
@@ -346,11 +347,19 @@ def _query_overview(
                 WHERE EXTRACT(EPOCH FROM first_dispatched_at - call_received_at) > 180
                   AND NOT is_scheduled
                   AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
-            ) AS over_180_seconds
+            ) AS over_180_seconds,
+            PERCENTILE_CONT(0.9) WITHIN GROUP (
+                ORDER BY EXTRACT(EPOCH FROM first_dispatched_at - call_received_at)
+            ) FILTER (
+                WHERE first_dispatched_at IS NOT NULL
+                  AND NOT is_scheduled
+                  AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
+            )
+                AS p90_processing_seconds
         FROM call_processing
         """,
         params,
-    ) or (0, 0, None, None, 0, 0)
+    ) or (0, 0, None, None, 0, 0, None)
 
     dispatcher_rows = repository.fetchall(
         """
@@ -422,7 +431,19 @@ def _query_overview(
                 WHERE EXTRACT(EPOCH FROM first_dispatched_at - call_received_at) > 180
                   AND NOT is_scheduled
                   AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
-            ) AS over_180_seconds
+            ) AS over_180_seconds,
+            PERCENTILE_CONT(0.9) WITHIN GROUP (
+                ORDER BY EXTRACT(EPOCH FROM first_dispatched_at - call_received_at)
+            ) FILTER (
+                WHERE first_dispatched_at IS NOT NULL
+                  AND NOT is_scheduled
+                  AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
+            )
+                AS p90_processing_seconds,
+            LEFT(
+                encode(sha256(convert_to(dispatcher_key, 'UTF8')), 'hex'),
+                16
+            ) AS dispatcher_ref
         FROM call_processing
         GROUP BY dispatcher_key
         ORDER BY calls_entered DESC, MAX(call_taker)
@@ -448,6 +469,10 @@ def _query_overview(
                 ) if calls_with_call_taker else 0,
                 "average_processing": _format_duration(row[3]),
                 "median_processing": _format_duration(row[4]),
+                "p90_processing": _format_duration(row[7]),
+                # An opaque handle for the slow-call list; the CAD identifier
+                # itself never leaves the server.
+                "dispatcher_ref": str(row[8] or ""),
                 "processing_samples": processing_samples,
                 "within_90_percent": round(
                     (within_90 / processing_samples) * 100
@@ -465,6 +490,7 @@ def _query_overview(
         "busiest_call_count": dispatchers[0]["calls_entered"] if dispatchers else 0,
         "average_processing": _format_duration(dispatcher_summary_row[2]),
         "median_processing": _format_duration(dispatcher_summary_row[3]),
+        "p90_processing": _format_duration(dispatcher_summary_row[6]),
         "processing_samples": dispatcher_processing_samples,
         "within_90_percent": round(
             (int(dispatcher_summary_row[4] or 0) / dispatcher_processing_samples) * 100
@@ -894,6 +920,175 @@ def _query_overview(
         "station_discipline_groups": station_discipline_groups,
         "station_discipline_quality": station_discipline_quality,
     }
+
+
+SLOW_CALL_THRESHOLD_SECONDS = 180
+SLOW_CALL_LIMIT = 100
+DISPATCHER_REF_PATTERN = re.compile(r"^[0-9a-f]{16}$")
+
+
+class AnalyticsReferenceError(ValueError):
+    """The dispatcher reference is not one this page produces."""
+
+
+def _query_slow_calls(
+    repository: AnalyticsRepository,
+    window: AnalyticsWindow,
+    dispatcher_ref: str,
+) -> dict:
+    """Calls the dispatcher entered that took over three minutes to dispatch.
+
+    Same population as the "> 3 Min" count in the dispatcher table: scheduled
+    calls and intervals over one hour are excluded. Only fields the analytics
+    store already shows elsewhere (CFS number, incident type, priority, agency
+    and the times); no location and no narrative.
+    """
+    rows = repository.fetchall(
+        """
+        WITH selected_calls AS (
+            SELECT
+                cfs_number,
+                call_taker,
+                call_taker_unique_identifier,
+                call_received_at,
+                is_scheduled,
+                incident_code,
+                incident_description,
+                priority,
+                dispatch_agency
+            FROM lcdash_analytics.calls
+            WHERE call_received_at >= %(window_start)s
+              AND call_received_at < %(window_end)s
+              AND BTRIM(call_taker) <> ''
+              AND UPPER(BTRIM(call_taker)) <> %(excluded_dispatcher_identity)s
+        ),
+        call_processing AS (
+            SELECT
+                selected_calls.cfs_number,
+                COALESCE(
+                    NULLIF(selected_calls.call_taker_unique_identifier, ''),
+                    'legacy:' || UPPER(selected_calls.call_taker)
+                ) AS dispatcher_key,
+                selected_calls.call_received_at,
+                selected_calls.is_scheduled,
+                selected_calls.incident_code,
+                selected_calls.incident_description,
+                selected_calls.priority,
+                selected_calls.dispatch_agency,
+                MIN(agency_times.dispatched_at) FILTER (
+                    WHERE agency_times.dispatched_at >= selected_calls.call_received_at
+                ) AS first_dispatched_at
+            FROM selected_calls
+            LEFT JOIN lcdash_analytics.call_agency_times AS agency_times
+                ON agency_times.cfs_number = selected_calls.cfs_number
+            GROUP BY
+                selected_calls.cfs_number,
+                selected_calls.call_taker,
+                selected_calls.call_taker_unique_identifier,
+                selected_calls.call_received_at,
+                selected_calls.is_scheduled,
+                selected_calls.incident_code,
+                selected_calls.incident_description,
+                selected_calls.priority,
+                selected_calls.dispatch_agency
+        )
+        SELECT
+            cfs_number,
+            call_received_at,
+            EXTRACT(EPOCH FROM first_dispatched_at - call_received_at)
+                AS dispatch_seconds,
+            incident_description,
+            incident_code,
+            priority,
+            dispatch_agency,
+            COUNT(*) OVER () AS total_matches
+        FROM call_processing
+        WHERE LEFT(
+                encode(sha256(convert_to(dispatcher_key, 'UTF8')), 'hex'),
+                16
+              ) = %(dispatcher_ref)s
+          AND first_dispatched_at IS NOT NULL
+          AND NOT is_scheduled
+          AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
+          AND EXTRACT(EPOCH FROM first_dispatched_at - call_received_at)
+              > %(threshold_seconds)s
+        ORDER BY dispatch_seconds DESC, call_received_at DESC
+        LIMIT %(row_limit)s
+        """,
+        {
+            "window_start": window.start_at,
+            "window_end": window.end_at,
+            "excluded_dispatcher_identity": EXCLUDED_DISPATCHER_IDENTITY,
+            "dispatcher_ref": dispatcher_ref,
+            "threshold_seconds": SLOW_CALL_THRESHOLD_SECONDS,
+            "row_limit": SLOW_CALL_LIMIT,
+        },
+    )
+    calls = []
+    for row in rows:
+        received = row[1]
+        calls.append(
+            {
+                "cfs_number": str(row[0] or ""),
+                "received_at": (
+                    received.astimezone(LOCAL_TIMEZONE).strftime("%b %d, %H:%M")
+                    if received is not None
+                    else "—"
+                ),
+                "processing": _format_duration(row[2]),
+                "processing_seconds": int(round(float(row[2]))) if row[2] is not None else None,
+                "incident": str(row[3] or row[4] or "").strip() or "—",
+                "priority": str(row[5] or "").strip() or "—",
+                "agency": _agency_display_label(str(row[6] or "")) or "—",
+            }
+        )
+    total = int(rows[0][7]) if rows else 0
+    return {
+        "threshold_seconds": SLOW_CALL_THRESHOLD_SECONDS,
+        "total": total,
+        "shown": len(calls),
+        "calls": calls,
+    }
+
+
+def get_dispatcher_slow_calls(
+    dispatcher_ref: str,
+    period: str = DEFAULT_PERIOD,
+    start: str = "",
+    end: str = "",
+    tenant_context: TenantContext | None = None,
+) -> dict:
+    """The calls behind a dispatcher's "> 3 Min" count, longest first."""
+    if not DISPATCHER_REF_PATTERN.fullmatch(str(dispatcher_ref or "")):
+        raise AnalyticsReferenceError("That dispatcher reference is not valid.")
+
+    if tenant_context is not None:
+        county_profile = resolve_county_profile(tenant_context)
+        authorize_tenant_action(
+            tenant_context,
+            county_profile,
+            ModuleCapability.ANALYTICS,
+            "read",
+        )
+
+    window = resolve_analytics_window(period=period, start=start, end=end)
+    empty = {
+        "available": False,
+        "period_label": window.label,
+        "threshold_seconds": SLOW_CALL_THRESHOLD_SECONDS,
+        "total": 0,
+        "shown": 0,
+        "calls": [],
+    }
+    if not analytics_database_is_configured():
+        return {**empty, "message": "PostgreSQL analytics is not configured on this machine."}
+    try:
+        with AnalyticsRepository() as repository:
+            repository.initialize_schema()
+            result = _query_slow_calls(repository, window, dispatcher_ref)
+    except AnalyticsDatabaseError:
+        return {**empty, "message": "PostgreSQL analytics is configured but unavailable."}
+    return {"available": True, "period_label": window.label, **result}
 
 
 def get_analytics_overview(

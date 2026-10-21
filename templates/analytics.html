@@ -385,6 +385,69 @@
         font-size: .82rem;
     }
 
+    .analytics-th-note {
+        display: block;
+        margin-top: 2px;
+        color: #6f93b3;
+        font-size: .62rem;
+        letter-spacing: .3px;
+        text-transform: none;
+        font-weight: 600;
+    }
+
+    .slow-calls-button {
+        min-width: 2.2em;
+        padding: 2px 10px;
+        border: 1px solid rgba(255, 193, 7, .55);
+        border-radius: 999px;
+        color: #ffe08a;
+        background: rgba(255, 193, 7, .10);
+        font-weight: 850;
+        cursor: pointer;
+    }
+
+    .slow-calls-button:hover,
+    .slow-calls-button[aria-expanded="true"] {
+        color: #1a1300;
+        background: #ffc107;
+    }
+
+    .slow-calls-button:focus-visible {
+        outline: 3px solid rgba(85, 212, 255, .62);
+        outline-offset: 2px;
+    }
+
+    .slow-calls-panel {
+        margin-top: 16px;
+        padding: 16px;
+        border: 1px solid rgba(255, 193, 7, .35);
+        border-radius: 14px;
+        background: rgba(255, 193, 7, .05);
+    }
+
+    .slow-calls-panel[hidden] { display: none; }
+
+    .slow-calls-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 6px 14px;
+    }
+
+    .slow-calls-head h6 { margin: 0; color: #fff; font-weight: 850; }
+    .slow-calls-meta { color: #8fb7d9; font-size: .8rem; }
+
+    .slow-calls-close {
+        padding: 4px 12px;
+        border: 1px solid rgba(76, 201, 255, .32);
+        border-radius: 10px;
+        color: #dbeeff;
+        background: rgba(76, 201, 255, .10);
+        font-size: .78rem;
+        font-weight: 850;
+    }
+
     @media (max-width: 767.98px) {
         .analytics-hero,
         .analytics-filter-bar,
@@ -649,7 +712,9 @@
                     <div class="analytics-kpi dispatcher-kpi">
                         <div class="analytics-eyebrow">AVG CAD PROCESSING</div>
                         <div class="analytics-value">{{ dispatcher_metrics.average_processing }}</div>
-                        <div class="analytics-subvalue">Received to first dispatch</div>
+                        <div class="analytics-subvalue">
+                            Received to first dispatch; a few long calls raise it
+                        </div>
                     </div>
                 </div>
                 <div class="col-6 col-xl">
@@ -658,6 +723,7 @@
                         <div class="analytics-value">{{ dispatcher_metrics.median_processing }}</div>
                         <div class="analytics-subvalue">
                             {{ dispatcher_metrics.processing_samples }} timed calls
+                            &middot; 90th percentile {{ dispatcher_metrics.p90_processing|default('—') }}
                         </div>
                     </div>
                 </div>
@@ -704,8 +770,19 @@
                                         <th class="text-end">Calls</th>
                                         <th class="text-end">Share</th>
                                         <th class="text-end">Timed</th>
-                                        <th class="text-end">Average</th>
-                                        <th class="text-end">Median</th>
+                                        <th class="text-end"
+                                            title="The mean. A few very long calls pull it up, so read it next to the median and the 90th percentile.">
+                                            Average
+                                            <span class="analytics-th-note">pulled up by long calls</span>
+                                        </th>
+                                        <th class="text-end"
+                                            title="The middle call: half were dispatched faster, half slower. Long calls do not move it.">
+                                            Median
+                                        </th>
+                                        <th class="text-end"
+                                            title="Nine in ten calls were dispatched within this time. It shows the slow tail without a single call deciding it.">
+                                            90th %
+                                        </th>
                                         <th class="text-end">≤ 90 Sec</th>
                                         <th class="text-end">&gt; 3 Min</th>
                                     </tr>
@@ -719,13 +796,28 @@
                                             <td class="text-end">{{ dispatcher.processing_samples }}</td>
                                             <td class="text-end">{{ dispatcher.average_processing }}</td>
                                             <td class="text-end">{{ dispatcher.median_processing }}</td>
+                                            <td class="text-end">{{ dispatcher.p90_processing|default('—') }}</td>
                                             <td class="text-end text-success">{{ dispatcher.within_90_percent }}%</td>
-                                            <td class="text-end">{{ dispatcher.over_180_count }}</td>
+                                            <td class="text-end">
+                                                {% if dispatcher.over_180_count and dispatcher.dispatcher_ref %}
+                                                    <button type="button" class="slow-calls-button"
+                                                            data-slow-calls="{{ dispatcher.dispatcher_ref }}"
+                                                            data-dispatcher-name="{{ dispatcher.call_taker }}"
+                                                            aria-expanded="false"
+                                                            aria-controls="dispatcher-slow-calls"
+                                                            aria-label="Show the {{ dispatcher.over_180_count }} calls over 3 minutes for {{ dispatcher.call_taker }}"
+                                                            title="Show these calls">{{ dispatcher.over_180_count }}</button>
+                                                {% else %}
+                                                    {{ dispatcher.over_180_count }}
+                                                {% endif %}
+                                            </td>
                                         </tr>
                                     {% endfor %}
                                 </tbody>
                             </table>
                         </div>
+                        <div id="dispatcher-slow-calls" class="slow-calls-panel" hidden
+                             role="region" aria-live="polite" aria-label="Calls over 3 minutes"></div>
                     </div>
                 </div>
             {% else %}
@@ -739,6 +831,12 @@
                 <i class="bi bi-info-circle text-info"></i>
                 CAD-processing calculations exclude scheduled calls and atypical
                 intervals longer than one hour.
+                <br>
+                The average adds every second, so a few calls that waited many
+                minutes (a held call, a unit that was not free) raise it well above
+                the median. Use the median for the typical call and the 90th
+                percentile for the slow tail; select a number in the &gt; 3 Min
+                column to see those calls.
                 <br>
                 NGA911 integration will later add phone-answer time, call duration,
                 abandoned calls, transfers, queue delay, and callback metrics.
@@ -1012,7 +1110,7 @@
 
 <script id="analytics-snapshot" type="application/json">{{ analytics_snapshot|tojson }}</script>
 <script src="/static/js/chart.umd.min.js?v=4.4.7"></script>
-<script src="/static/js/lcdash-analytics.js?v=20260803-saved-widgets"></script>
+<script src="/static/js/lcdash-analytics.js?v=20261021-slow-calls"></script>
 <script>
     LCDashTime.updateCadDisplayTimes();
 </script>
