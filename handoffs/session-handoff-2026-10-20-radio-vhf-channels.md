@@ -295,3 +295,38 @@ and committed locally; NOT pushed or released.
   name). Phone-answer times (NGA911) would let the ISO view start at answer.
   Possible follow-ups: drill-down of slow calls by discipline; separate longer-window
   call types if CAD can mark them.
+
+## Update (2026-10-21, evening): DMR channels removed, key-ups not processed (live on .227)
+
+Ted: the DMR channels duplicate the analog channels they are bridged onto, so
+remove them from the listener; and do not process anything of 2.1 seconds or
+less ("just beeps").
+
+- `radio_listener/config.json`: 18 channels (the three `*_dmr` removed;
+  235.98.99.23, .27, .36 are no longer joined) and a new setting
+  `skip_segments_up_to_seconds: 2.1`. Commit `eb09217` (local, not pushed).
+- `radio_listener/capture.py`: a segment whose start-to-close span is at or under
+  that setting is dropped at close: the WAV is deleted, nothing is queued,
+  transcribed, stored or uploaded; `summary()` counts `short_segments_skipped`.
+  IMPORTANT: the span includes the 1.5 s silence wait that closes a segment, so
+  the 2.1 s shown on the page is about half a second of real sound. The
+  setting is validated (0 to 10, 0 = off); a dropped clip's signalling does not
+  leak into the next segment.
+- Installed on `.227` 2026-10-21 15:15 local: previous files in
+  `/opt/mindshare-radio-capture/backup-pre-skip/`; only the capture service was
+  restarted (36 listeners = 18 channels); transcribe and upload untouched; all
+  three active. Deployed files matched the repo before the change (no drift).
+- The page still lists DMR in `CHANNEL_CATALOG` on purpose: stored DMR history
+  (including the relabelled rows) keeps its labels and stays in the Fire / EMS /
+  Law group feeds, because a group feed asks for the channels known from the
+  catalog plus the last 24 hours of traffic. Remove the three DMR catalog lines
+  after the history ages out (30 days: about 2026-11-20); the test
+  `test_every_configured_channel_is_in_the_catalog` pins exactly those three.
+- The "Key-up or beep" badge (web, staged below) now only matters for rows stored
+  before this change; new key-ups never reach the server.
+- Web release `analytics-keyup-fdf657f-20261021` (commit `fdf657f`, digest
+  `sha256:d2ecc4f39f88f2b5a0569e4cb2e03102b2bb68b0e716901b610d11657eb66ced`,
+  same nine accepted ECR findings, standard five resources, only the digest
+  differs) is STAGED and waits for Ted to type its exact name. The listener
+  change needs no web release. Rollback target: digest `sha256:d85f5bea...`
+  (revision 117). Pushed: `fdf657f` is on both remotes; `eb09217` is not.
