@@ -70,7 +70,7 @@ revised channel map.
 
 ## State
 
-Branch `main`. Pilot web revision 117 (digest `sha256:d85f5bea...`). `.227`
+Branch `main`. Pilot web revision 118 (digest `sha256:d2ecc4f3...`). `.227`
 runs the listener config as of the update below; all three services active.
 
 ## Update (later 2026-10-20): revised sheet, DMR and LMARS
@@ -327,6 +327,14 @@ less ("just beeps").
 - Web release `analytics-keyup-fdf657f-20261021` (commit `fdf657f`, digest
   `sha256:d2ecc4f39f88f2b5a0569e4cb2e03102b2bb68b0e716901b610d11657eb66ced`,
   same nine accepted ECR findings, standard five resources, only the digest
-  differs) is STAGED and waits for Ted to type its exact name. The listener
-  change needs no web release. Rollback target: digest `sha256:d85f5bea...`
-  (revision 117). Pushed: `fdf657f` is on both remotes; `eb09217` is not.
+  differs) was EXECUTED on 2026-10-21 after Ted typed its exact name. Verified:
+  foundation `UPDATE_COMPLETE`; web task definition revision 118 running that
+  digest (task started 16:05 EDT), rollout COMPLETED 1/1, ALB target healthy;
+  `/mindshare/radio`, `/analytics` and the new
+  `/api/analytics/dispatcher-slow-calls` redirect to sign-in when unauthenticated;
+  unsigned ingest 401; 23 signed ingests 201; no errors in the web log. NOT
+  verified: the signed-in Analytics page (90th %, slow-call list, discipline
+  tables, ISO card) and the radio page badge. Ted should open `/analytics` and
+  `/mindshare/radio`. The listener change needed no web release. Rollback target:
+  digest `sha256:d85f5bea...` (revision 117). Pushed: `fdf657f` is on both
+  remotes; `eb09217` (listener) and the handoff commits are local only.
