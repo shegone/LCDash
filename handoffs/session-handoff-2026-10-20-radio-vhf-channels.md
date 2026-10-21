@@ -4,8 +4,8 @@
 
 Analog VHF, DMR and LMARS channels were added to the listener configuration and
 the radio page was reworked into group tabs. The listener config is installed on
-`.227`; the web release is built and staged but its change set has not been
-executed. See the update at the end for the revised channel map.
+`.227`; the web release is live (revision 116). See the updates at the end for the
+revised channel map.
 
 ## Decisions (Ted, 2026-10-20)
 
@@ -70,7 +70,7 @@ executed. See the update at the end for the revised channel map.
 
 ## State
 
-Branch `main`. Pilot web revision 115 (digest `sha256:4c266188...`). `.227`
+Branch `main`. Pilot web revision 116 (digest `sha256:778f9a95...`). `.227`
 runs the listener config as of the update below; all three services active.
 
 ## Update (later 2026-10-20): revised sheet, DMR and LMARS
@@ -158,8 +158,16 @@ once it is filled in):
 Release for this update: commit `ebed969`, image tag `release-ebed969f7dc5`,
 digest `sha256:778f9a959b8ec39c3549c76993cc99a5ecdbe4143e4bfcb835e593f9ea2e5456`,
 the same nine accepted ECR findings. Change set `radio-dmr-fold-ebed969-20261020`
-is staged (standard five resources, only `PilotImageDigest` differs) and waits
-for Ted to type its exact name. Rollback target: digest
+was executed on 2026-10-21 after Ted typed its exact name (the SSO session had
+expired overnight and was renewed first). Verified: foundation `UPDATE_COMPLETE`;
+web task definition revision 116 running that digest (task started 10:05 EDT),
+rollout COMPLETED 1/1, ALB target healthy; `/mindshare/radio` redirects to
+Cognito; unsigned ingest 401; signed ingests 201 from the new task, no errors
+in the web log, so the schema (and relabel migration) applied cleanly on its
+first radio request. Not verified: the moved row counts (no endpoint; see
+`lcdash_radio.schema_migrations.detail`) and the signed-in page in a browser.
+Ted should open `/mindshare/radio`: colours, the folded Listener health bar, and
+DMR history under the EMS and Fire tabs. Rollback target: digest
 `sha256:4c266188ae14d6c132a97002bd874487b645028d7b9a5bfe100d76d9357f7422`
 (revision 115). Note: rolling back the image does not undo the relabel (the
 marker row stays and the moved rows keep their new channel names).
