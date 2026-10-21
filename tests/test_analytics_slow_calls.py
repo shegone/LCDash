@@ -88,7 +88,7 @@ class NinetiethPercentileTests(unittest.TestCase):
         self.assertEqual(row["average_processing"], "5:00")
 
     def test_both_queries_use_the_same_population_as_the_median(self):
-        sql = [q for q, _ in self.repository.queries if "PERCENTILE_CONT(0.9)" in q]
+        sql = [q for q, _ in self.repository.queries if "p90_processing_seconds" in q]
         self.assertEqual(len(sql), 2)
         for query in sql:
             p90 = query[query.index("PERCENTILE_CONT(0.9)"):]

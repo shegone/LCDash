@@ -395,6 +395,28 @@
         font-weight: 600;
     }
 
+    .iso-card {
+        padding: 16px;
+        border: 1px solid rgba(76, 201, 255, .28);
+        border-radius: 14px;
+        background: rgba(76, 201, 255, .05);
+    }
+
+    .iso-rows { display: grid; gap: 6px; margin-top: 6px; }
+
+    .iso-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 4px 14px;
+    }
+
+    .iso-label { min-width: 11em; color: #cfe6fb; }
+    .iso-value { font-size: 1.25rem; }
+    .iso-target { color: #8fb7d9; font-size: .82rem; }
+
+    .discipline-overall td { background: rgba(76, 201, 255, .06); }
+
     .slow-calls-button {
         min-width: 2.2em;
         padding: 2px 10px;
@@ -841,6 +863,117 @@
                 NGA911 integration will later add phone-answer time, call duration,
                 abandoned calls, transfers, queue delay, and callback metrics.
             </div>
+
+            {% if analytics_snapshot.dispatcher_disciplines %}
+                {% set iso = analytics_snapshot.iso_fire %}
+                <div class="mt-5" id="discipline-metrics">
+                    <div class="analytics-eyebrow">BY DISCIPLINE</div>
+                    <h5 class="mb-1">Dispatcher Metrics by Discipline</h5>
+                    <p class="data-note mb-3">
+                        A call counts once in every discipline dispatched to it, timed from
+                        the CAD call-received time to the first dispatch of that discipline,
+                        so a dispatcher can be compared on fire, EMS and law separately.
+                        The &le; {{ iso.fast_seconds }} sec and &le; {{ iso.slow_seconds }} sec
+                        columns are the NFPA 1221 (2016) alarm-processing benchmarks.
+                    </p>
+
+                    <div class="iso-card" id="iso-fire-card">
+                        <div class="analytics-eyebrow">ISO FIRE ALARM PROCESSING</div>
+                        {% if iso.timed %}
+                            <div class="iso-rows">
+                                <div class="iso-row">
+                                    <span class="iso-label">Within {{ iso.fast_seconds }} seconds</span>
+                                    <strong class="iso-value {{ 'text-success' if iso.meets_fast else 'text-warning' }}">{{ iso.fast_percent }}%</strong>
+                                    <span class="iso-target">target {{ iso.fast_target_percent }}%
+                                        &middot; {{ 'meets' if iso.meets_fast else 'below target' }}</span>
+                                </div>
+                                <div class="iso-row">
+                                    <span class="iso-label">Within {{ iso.slow_seconds }} seconds</span>
+                                    <strong class="iso-value {{ 'text-success' if iso.meets_slow else 'text-warning' }}">{{ iso.slow_percent }}%</strong>
+                                    <span class="iso-target">target {{ iso.slow_target_percent }}%
+                                        &middot; {{ 'meets' if iso.meets_slow else 'below target' }}</span>
+                                </div>
+                                <div class="iso-row">
+                                    <span class="iso-label">Timed fire calls</span>
+                                    <strong class="iso-value">{{ iso.timed }}</strong>
+                                </div>
+                            </div>
+                        {% else %}
+                            <div class="text-secondary py-2">No timed fire calls in this period.</div>
+                        {% endif %}
+                        <div class="data-note mt-2">
+                            Measured from the CAD call-received time, not the 911 answer time,
+                            so it understates processing time until phone-answer times are
+                            added. Calls NFPA allows more time for (medical-protocol questions,
+                            language or TTY relay, hazmat, technical rescue, possible criminal
+                            activity, text, unclear location) are not marked in CAD and are
+                            counted against the standard window, so the result is conservative.
+                            ISO scores communications from a review of the centre's records;
+                            this view is a management aid, not an ISO result.
+                        </div>
+                    </div>
+
+                    {% for group in analytics_snapshot.dispatcher_disciplines %}
+                        <div class="d-flex justify-content-between align-items-start gap-3 mt-4">
+                            <div>
+                                <div class="analytics-eyebrow">{{ group.label|upper }} CALLS</div>
+                                <h6 class="mb-0">{{ group.label }} Call Processing by Dispatcher</h6>
+                            </div>
+                            <button
+                                class="analytics-print-button"
+                                type="button"
+                                data-print-analytics="discipline-{{ group.key }}-table"
+                                data-print-title="{{ group.label }} Call Processing by Dispatcher"
+                            >
+                                <i class="bi bi-printer-fill"></i> Print / PDF
+                            </button>
+                        </div>
+                        <div class="table-responsive mt-2" id="discipline-{{ group.key }}-table">
+                            <table class="table analytics-table align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>Dispatcher</th>
+                                        <th class="text-end">Timed</th>
+                                        <th class="text-end">Average</th>
+                                        <th class="text-end">Median</th>
+                                        <th class="text-end">90th %</th>
+                                        <th class="text-end">&le; {{ iso.fast_seconds }} Sec</th>
+                                        <th class="text-end">&le; {{ iso.slow_seconds }} Sec</th>
+                                        <th class="text-end">&gt; 3 Min</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% set rows = ([group.overall] if group.overall else []) + group.dispatchers %}
+                                    {% for entry in rows %}
+                                        <tr class="{{ 'discipline-overall' if loop.first and group.overall else '' }}">
+                                            <td class="fw-bold text-white">{{ entry.call_taker }}</td>
+                                            <td class="text-end text-warning fw-bold">{{ entry.timed }}</td>
+                                            <td class="text-end">{{ entry.average }}</td>
+                                            <td class="text-end">{{ entry.median }}</td>
+                                            <td class="text-end">{{ entry.p90 }}</td>
+                                            <td class="text-end {{ ('text-success' if entry.within_fast_percent >= iso.fast_target_percent else 'text-warning') if group.key == 'fire' else '' }}">{{ entry.within_fast_percent }}%</td>
+                                            <td class="text-end {{ ('text-success' if entry.within_slow_percent >= iso.slow_target_percent else 'text-warning') if group.key == 'fire' else '' }}">{{ entry.within_slow_percent }}%</td>
+                                            <td class="text-end">{{ entry.over_180_count }}</td>
+                                        </tr>
+                                    {% else %}
+                                        <tr>
+                                            <td colspan="8" class="text-secondary">
+                                                No timed {{ group.label }} calls in this period.
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% endfor %}
+                    <div class="data-note mt-2">
+                        Green and amber colouring is shown for fire only, where the ISO benchmark
+                        applies. The first row of each table is every dispatcher together, for
+                        comparison. Like the table above, scheduled calls and intervals over one
+                        hour are excluded.
+                    </div>
+                </div>
+            {% endif %}
         </div>
 
         <div class="row g-4 mb-4">

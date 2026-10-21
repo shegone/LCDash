@@ -191,6 +191,18 @@ def _empty_overview(window: AnalyticsWindow, message: str) -> dict:
             "over_180_count": 0,
         },
         "dispatchers": [],
+        "dispatcher_disciplines": [],
+        "iso_fire": {
+            "timed": 0,
+            "fast_seconds": PROCESSING_TARGET_FAST_SECONDS,
+            "fast_target_percent": PROCESSING_TARGET_FAST_PERCENT,
+            "fast_percent": 0.0,
+            "slow_seconds": PROCESSING_TARGET_SLOW_SECONDS,
+            "slow_target_percent": PROCESSING_TARGET_SLOW_PERCENT,
+            "slow_percent": 0.0,
+            "meets_fast": None,
+            "meets_slow": None,
+        },
         "daily_volume": [],
         "hourly_volume": [],
         "weekday_volume": [],
@@ -480,6 +492,8 @@ def _query_overview(
                 "over_180_count": over_180,
             }
         )
+
+    dispatcher_disciplines, iso_fire = _discipline_metrics(repository, params)
 
     dispatcher_metrics = {
         "calls_with_call_taker": calls_with_call_taker,
@@ -909,6 +923,8 @@ def _query_overview(
         },
         "dispatcher_metrics": dispatcher_metrics,
         "dispatchers": dispatchers,
+        "dispatcher_disciplines": dispatcher_disciplines,
+        "iso_fire": iso_fire,
         "daily_volume": daily_volume,
         "hourly_volume": hourly_volume,
         "weekday_volume": weekday_volume,
@@ -922,6 +938,26 @@ def _query_overview(
     }
 
 
+# Alarm-processing benchmarks the ISO fire rating looks at (NFPA 1221, 2016
+# edition; the same figures appear in NFPA 1710): 90% of alarms processed in 64
+# seconds and 95% in 106 seconds. The older 2013 edition used 80% in 60 seconds.
+# NFPA lets some calls run longer (medical-protocol questioning, language or
+# TTY relay, hazmat, technical rescue, possible criminal activity, text, an
+# unclear location); CAD does not mark those, so they are counted against the
+# standard window and the view reads conservatively.
+PROCESSING_TARGET_FAST_SECONDS = 64
+PROCESSING_TARGET_FAST_PERCENT = 90
+PROCESSING_TARGET_SLOW_SECONDS = 106
+PROCESSING_TARGET_SLOW_PERCENT = 95
+
+# Which agencies count as which discipline when a call is dispatched. Fire is
+# every "FC n" department; EMS is LEASA; law is the sheriff and the state, city
+# and town police agencies (the union of the lists the analytics page and the
+# county commission report already use).
+DISCIPLINES = (("fire", "Fire"), ("ems", "EMS"), ("law", "Law"))
+EMS_AGENCY_CODES = ("LEASA",)
+LAW_AGENCY_CODES = ("CPD", "DNR", "DPS", "LCSO", "LPD", "MHPD", "MPD", "WLPD", "WVSP")
+
 SLOW_CALL_THRESHOLD_SECONDS = 180
 SLOW_CALL_LIMIT = 100
 DISPATCHER_REF_PATTERN = re.compile(r"^[0-9a-f]{16}$")
@@ -929,6 +965,153 @@ DISPATCHER_REF_PATTERN = re.compile(r"^[0-9a-f]{16}$")
 
 class AnalyticsReferenceError(ValueError):
     """The dispatcher reference is not one this page produces."""
+
+
+def _discipline_metrics(
+    repository: AnalyticsRepository,
+    params: dict,
+) -> tuple[list[dict], dict]:
+    """Call processing time by discipline, for every dispatcher and for all.
+
+    A call counts once in each discipline that was dispatched to it, measured
+    from the CAD "call received" time to the first dispatch of that discipline,
+    so a dispatcher can be compared on law, EMS and fire separately. The same
+    rules as the main table apply: scheduled calls and intervals over one hour
+    are left out.
+    """
+    rows = repository.fetchall(
+        """
+        WITH selected_calls AS (
+            SELECT
+                cfs_number,
+                call_taker,
+                call_taker_unique_identifier,
+                call_received_at,
+                is_scheduled
+            FROM lcdash_analytics.calls
+            WHERE call_received_at >= %(window_start)s
+              AND call_received_at < %(window_end)s
+              AND BTRIM(call_taker) <> ''
+              AND UPPER(BTRIM(call_taker)) <> %(excluded_dispatcher_identity)s
+        ),
+        classified_times AS (
+            SELECT
+                cfs_number,
+                dispatched_at,
+                CASE
+                    WHEN UPPER(agency_ori) LIKE 'FC %%' THEN 'fire'
+                    WHEN UPPER(agency_ori) = ANY(%(ems_agencies)s) THEN 'ems'
+                    WHEN UPPER(agency_ori) = ANY(%(law_agencies)s) THEN 'law'
+                END AS discipline
+            FROM lcdash_analytics.call_agency_times
+        ),
+        discipline_dispatch AS (
+            SELECT
+                selected_calls.cfs_number,
+                selected_calls.call_taker,
+                COALESCE(
+                    NULLIF(selected_calls.call_taker_unique_identifier, ''),
+                    'legacy:' || UPPER(selected_calls.call_taker)
+                ) AS dispatcher_key,
+                selected_calls.call_received_at,
+                selected_calls.is_scheduled,
+                classified_times.discipline,
+                MIN(classified_times.dispatched_at) FILTER (
+                    WHERE classified_times.dispatched_at >= selected_calls.call_received_at
+                ) AS first_dispatched_at
+            FROM selected_calls
+            JOIN classified_times
+                ON classified_times.cfs_number = selected_calls.cfs_number
+            WHERE classified_times.discipline IS NOT NULL
+            GROUP BY
+                selected_calls.cfs_number,
+                selected_calls.call_taker,
+                selected_calls.call_taker_unique_identifier,
+                selected_calls.call_received_at,
+                selected_calls.is_scheduled,
+                classified_times.discipline
+        ),
+        timed AS (
+            SELECT
+                discipline,
+                dispatcher_key,
+                call_taker,
+                EXTRACT(EPOCH FROM first_dispatched_at - call_received_at) AS seconds
+            FROM discipline_dispatch
+            WHERE first_dispatched_at IS NOT NULL
+              AND NOT is_scheduled
+              AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
+        )
+        SELECT
+            discipline,
+            GROUPING(dispatcher_key) AS is_total,
+            MAX(call_taker) AS call_taker,
+            LEFT(encode(sha256(convert_to(dispatcher_key, 'UTF8')), 'hex'), 16)
+                AS dispatcher_ref,
+            COUNT(*) AS timed_calls,
+            AVG(seconds) AS average_seconds,
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY seconds) AS median_seconds,
+            PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY seconds) AS p90_seconds,
+            COUNT(*) FILTER (WHERE seconds <= %(fast_seconds)s) AS within_fast,
+            COUNT(*) FILTER (WHERE seconds <= %(slow_seconds)s) AS within_slow,
+            COUNT(*) FILTER (WHERE seconds > 180) AS over_180
+        FROM timed
+        GROUP BY GROUPING SETS ((discipline, dispatcher_key), (discipline))
+        """,
+        {
+            **params,
+            "ems_agencies": list(EMS_AGENCY_CODES),
+            "law_agencies": list(LAW_AGENCY_CODES),
+            "fast_seconds": PROCESSING_TARGET_FAST_SECONDS,
+            "slow_seconds": PROCESSING_TARGET_SLOW_SECONDS,
+        },
+    )
+
+    def percent(part, whole) -> float:
+        return round((int(part or 0) / whole) * 100, 1) if whole else 0.0
+
+    groups = {key: {"key": key, "label": label, "overall": None, "dispatchers": []}
+              for key, label in DISCIPLINES}
+    for row in rows:
+        group = groups.get(row[0])
+        if group is None:
+            continue
+        timed = int(row[4] or 0)
+        entry = {
+            "call_taker": "All dispatchers" if row[1] else str(row[2] or ""),
+            "dispatcher_ref": "" if row[1] else str(row[3] or ""),
+            "timed": timed,
+            "average": _format_duration(row[5]),
+            "median": _format_duration(row[6]),
+            "p90": _format_duration(row[7]),
+            "within_fast_percent": percent(row[8], timed),
+            "within_slow_percent": percent(row[9], timed),
+            "over_180_count": int(row[10] or 0),
+        }
+        if row[1]:
+            group["overall"] = entry
+        else:
+            group["dispatchers"].append(entry)
+    for group in groups.values():
+        group["dispatchers"].sort(key=lambda item: (-item["timed"], item["call_taker"]))
+
+    fire = groups["fire"]["overall"]
+    iso_fire = {
+        "timed": fire["timed"] if fire else 0,
+        "fast_seconds": PROCESSING_TARGET_FAST_SECONDS,
+        "fast_target_percent": PROCESSING_TARGET_FAST_PERCENT,
+        "fast_percent": fire["within_fast_percent"] if fire else 0.0,
+        "slow_seconds": PROCESSING_TARGET_SLOW_SECONDS,
+        "slow_target_percent": PROCESSING_TARGET_SLOW_PERCENT,
+        "slow_percent": fire["within_slow_percent"] if fire else 0.0,
+        "meets_fast": (
+            fire["within_fast_percent"] >= PROCESSING_TARGET_FAST_PERCENT if fire else None
+        ),
+        "meets_slow": (
+            fire["within_slow_percent"] >= PROCESSING_TARGET_SLOW_PERCENT if fire else None
+        ),
+    }
+    return [groups[key] for key, _label in DISCIPLINES], iso_fire
 
 
 def _query_slow_calls(
