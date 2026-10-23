@@ -18,7 +18,7 @@ RADIO_JS = ROOT / "static" / "js" / "lcdash-admin-radio.js"
 ALERTS_JS = ROOT / "static" / "js" / "lcdash-radio-alerts.js"
 RADIO_CSS = ROOT / "static" / "css" / "lcdash-admin-radio.css"
 ALERTS_CSS = ROOT / "static" / "css" / "lcdash-radio-alerts.css"
-CACHE_BUST = "20261021-radio11"
+CACHE_BUST = "20261023-radio12"
 # The dashboard alerts panel (dashboard.html and its script and style) did not
 # change in v3, so it keeps its own cache-bust string.
 ALERTS_CACHE_BUST = "20261020-radio5"
@@ -180,7 +180,7 @@ class PossibleNoiseUiTests(unittest.TestCase):
                       self.script)
 
     def test_the_changed_assets_use_the_new_cache_bust(self):
-        self.assertEqual(CACHE_BUST, "20261021-radio11")
+        self.assertEqual(CACHE_BUST, "20261023-radio12")
         self.assertIn(f"lcdash-admin-radio.js?v={CACHE_BUST}", self.template)
         self.assertIn(f"lcdash-admin-radio.css?v={CACHE_BUST}", self.template)
         self.assertNotIn("20261017-radio4", self.template)
