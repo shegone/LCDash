@@ -110,25 +110,6 @@ class IamPolicyTemplateTests(unittest.TestCase):
                 )
         self.assertNotIn("ecs:UpdateService", json.dumps(self.deployment))
 
-    def test_nexis_alert_exec_exception_is_scoped_to_that_cluster_only(self):
-        # Documented, human-approved exception (docs/planning/PHASE1_IAM_REVIEW.md,
-        # 2026-10-23): a shell into the NexisAlert backend container to read
-        # and correct its unit roster. Scoped to that one cluster, never the
-        # LCDash pilot cluster, and removed once the roster work is done; this
-        # test is deleted with the statement.
-        statement = statements(self.deployment)[
-            "TemporaryNexisAlertRosterExecException20261023"
-        ]
-        self.assertEqual(actions(statement), {"ecs:ExecuteCommand"})
-        self.assertEqual(
-            set(statement["Resource"]),
-            {
-                f"arn:aws:ecs:{REGION}:{ACCOUNT}:cluster/nexis-alert-logan",
-                f"arn:aws:ecs:{REGION}:{ACCOUNT}:task/nexis-alert-logan/*",
-            },
-        )
-        self.assertNotIn("lcdash-p1-logan-use1-cluster", json.dumps(statement))
-
     def test_boundary_lets_the_deployment_set_assume_only_bootstrap_roles(self):
         # The deployment policy always allowed sts:AssumeRole on the CDK
         # bootstrap roles, but the boundary never did, so the effective

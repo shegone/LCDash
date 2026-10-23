@@ -161,5 +161,10 @@ work. Update this review package and obtain a new human decision.
   default, delete the new version, delete the statement, its test
   (`test_nexis_alert_exec_exception_is_scoped_to_that_cluster_only`) and
   mark this entry closed with the date.
-- **Status:** OPEN. Applied 2026-10-23 15:59 UTC as policy version `v3`
-  (default) after the owner's typed approval. Remove per the steps above.
+- **Status:** CLOSED 2026-10-23. Applied 15:59 UTC as policy version `v3`
+  after the owner's typed approval; used for one read, one `sync-roster`
+  dry run and real run (3 CAD units added), and one hand insert of an
+  "Out of County Mutual Aid" agency, station and 3 station-less CAD units.
+  Removed about 16:07 UTC: `v2` restored as default, `v3` deleted, the
+  statement and its test deleted from the repo. The deployment set is back
+  to describe/list-only on ECS.

@@ -170,15 +170,6 @@
       "Resource": "*"
     },
     {
-      "Sid": "TemporaryNexisAlertRosterExecException20261023",
-      "Effect": "Allow",
-      "Action": "ecs:ExecuteCommand",
-      "Resource": [
-        "arn:aws:ecs:us-east-1:862772137583:cluster/nexis-alert-logan",
-        "arn:aws:ecs:us-east-1:862772137583:task/nexis-alert-logan/*"
-      ]
-    },
-    {
       "Sid": "ReadPilotImagesLogsAndAlertTopicOnly",
       "Effect": "Allow",
       "Action": [
