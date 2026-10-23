@@ -1651,6 +1651,24 @@ class IngestRouteTests(_RouteCase):
         response = self.post(metadata_as_file=False)
         self.assertEqual(response.status_code, 201, response.text)
 
+    def test_a_clip_over_one_mib_is_ingested_without_a_temp_directory(self):
+        # 2026-10-23: a 75 s EMS clip (1.14 MB) answered 500 and stalled the
+        # listener's upload queue for ten hours. Starlette spools a multipart
+        # file part past 1 MiB to a temp file, and the pilot's container has
+        # no writable temp directory. The parser must keep the (already
+        # size-capped) audio part in memory, so a temp file is never opened.
+        audio = make_wav(samples=600_000)  # 1.2 MB, 75 s at 8 kHz 16-bit
+        self.assertGreater(len(audio), 1024 * 1024)
+        self.assertLess(len(audio), radio_service.MAX_AUDIO_BYTES)
+        no_temp = FileNotFoundError(2, "No usable temporary directory found")
+        with patch("tempfile.TemporaryFile", side_effect=no_temp), patch(
+            "tempfile.gettempdir", side_effect=no_temp
+        ):
+            response = self.post(audio=audio)
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertEqual(len(self.s3.put_calls), 1)
+        self.assertEqual(len(self.s3.put_calls[0]["Body"]), len(audio))
+
     def test_unconfigured_ingest_answers_503_and_accepts_nothing(self):
         for blank in ("", "   "):
             with self.subTest(key=blank), patch.object(

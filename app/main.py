@@ -1635,6 +1635,13 @@ async def receive_radio_segment(request: Request):
         max_fields=2,
         max_part_size=radio_service.MAX_METADATA_BYTES,
     )
+    # Keep the audio part in memory. Starlette spools a file part past
+    # ``spool_max_size`` (1 MiB) to a temp file, and the pilot's container has
+    # no writable temp directory (read-only root, ``/tmp`` not writable by its
+    # user), so a clip over 1 MiB used to fail with a 500 and stall the
+    # listener's upload queue (2026-10-23). The body is already capped at
+    # ``MAX_REQUEST_BYTES`` by ``capped_stream``, so memory stays bounded.
+    parser.spool_max_size = radio_service.MAX_REQUEST_BYTES
     try:
         form = await parser.parse()
     except _RadioBodyTooLarge as exc:

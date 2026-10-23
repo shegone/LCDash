@@ -106,6 +106,14 @@ Order of operations: verify signature first (before parsing metadata beyond
 (`ON CONFLICT (segment_id) DO NOTHING`). A crash between the two leaves an
 orphan object that the 15-day lifecycle removes.
 
+The multipart parser keeps the audio part in memory (`spool_max_size` raised
+to the request cap). Starlette's default spools a part over 1 MiB to a temp
+file, and the web container has no writable temp directory (read-only root,
+`/tmp` not writable by uid 10001), so until 2026-10-23 a clip over 1 MiB
+(about 65 s of 8 kHz PCM16) answered `500` and, because the listener's
+uploader retries a 5xx forever in order, stalled every later upload. The
+regression test is `test_a_clip_over_one_mib_is_ingested_without_a_temp_directory`.
+
 ## Storage and retention
 
 - Audio: content bucket `lcdash-p1-logan-use1-862772137583-content`, key
