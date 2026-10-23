@@ -137,3 +137,29 @@ work. Update this review package and obtain a new human decision.
 6. After the approval window, remove the assignment. Retain or remove the policy
    objects only under separate IAM lifecycle approval; never delete CDKToolkit
    as part of application teardown.
+
+## Approved exceptions
+
+### 2026-10-23: temporary `ecs:ExecuteCommand` on the NexisAlert cluster
+
+- **What:** statement `TemporaryNexisAlertRosterExecException20261023` in
+  `infrastructure/iam/LCDashPhase1DeploymentRolePolicy.json`, allowing only
+  `ecs:ExecuteCommand` on cluster `nexis-alert-logan` and its tasks. The
+  LCDash pilot cluster is not included. The `ssm:StartSession` deny stays.
+- **Why:** NexisAlert's delivery sweep raised twelve high `no_recipients`
+  alarms (2026-10-16 to 22) for dispatches naming units absent from its
+  `units` roster. There is no admin console yet, the RDS database is
+  reachable only from inside the VPC, and the deployment set cannot
+  `ecs:RunTask`, so the only path to read and correct the roster is a shell
+  in the running backend container (`python -m nexis_alert.manage`).
+- **How applied:** a new version of the customer-managed IAM policy
+  `LCDashPhase1Deployment` (which the `LCDashPhase1Deployment` permission
+  set references; there is no inline policy) set as default with the
+  `lcdash-sandbox-admin` profile, after the owner approved the exact
+  command. Prior default: `v2` (2026-09-14), identical to the repo file.
+- **Removal:** once the roster work is verified, set `v2` back as the
+  default, delete the new version, delete the statement, its test
+  (`test_nexis_alert_exec_exception_is_scoped_to_that_cluster_only`) and
+  mark this entry closed with the date.
+- **Status:** OPEN. Applied 2026-10-23 15:59 UTC as policy version `v3`
+  (default) after the owner's typed approval. Remove per the steps above.
