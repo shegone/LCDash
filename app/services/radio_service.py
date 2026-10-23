@@ -587,6 +587,11 @@ _TRANSCRIBER_FIELDS = frozenset({"pending", "failed"})
 _UPLOADER_FIELDS = frozenset({
     "queued", "oldest_queued_age_seconds", "rejected_total", "last_success_at",
 })
+# Added 2026-10-23 (head-of-queue stall and parked segments). Optional so a
+# listener running the older uploader still validates; absent means 0/None.
+_UPLOADER_OPTIONAL_FIELDS = frozenset({
+    "head_failing_since", "head_attempts", "parked_total",
+})
 _PAYLOAD_TYPE_KEY = re.compile(r"^(?:0|[1-9][0-9]{0,2})$")
 
 
@@ -597,9 +602,15 @@ def _bad_heartbeat(field: str | None = None) -> RadioIngestError:
     return RadioIngestError(400, "Heartbeat is invalid.")
 
 
-def _hb_object(value: Any, allowed: frozenset[str], field: str) -> dict:
-    """A nested heartbeat object with exactly the known keys (all required)."""
-    if not isinstance(value, dict) or set(value) != allowed:
+def _hb_object(
+    value: Any, allowed: frozenset[str], field: str, optional: frozenset[str] = frozenset()
+) -> dict:
+    """A nested heartbeat object with exactly the known keys: every key in
+    ``allowed`` present, any of ``optional`` present or not, nothing else."""
+    if not isinstance(value, dict):
+        raise _bad_heartbeat(field)
+    keys = set(value)
+    if not allowed <= keys or keys - allowed - optional:
         raise _bad_heartbeat(field)
     return value
 
@@ -679,7 +690,9 @@ def validate_heartbeat(body: bytes) -> dict:
         })
 
     transcriber = _hb_object(document["transcriber"], _TRANSCRIBER_FIELDS, "transcriber")
-    uploader = _hb_object(document["uploader"], _UPLOADER_FIELDS, "uploader")
+    uploader = _hb_object(
+        document["uploader"], _UPLOADER_FIELDS, "uploader", optional=_UPLOADER_OPTIONAL_FIELDS
+    )
 
     glossary_version = document.get("glossary_version")
     if glossary_version is not None:
@@ -711,6 +724,11 @@ def validate_heartbeat(body: bytes) -> dict:
             ),
             "rejected_total": _hb_count(uploader["rejected_total"], "uploader"),
             "last_success_at": _hb_optional_time(uploader["last_success_at"], "uploader"),
+            "head_failing_since": _hb_optional_time(
+                uploader.get("head_failing_since"), "uploader"
+            ),
+            "head_attempts": _hb_count(uploader.get("head_attempts", 0), "uploader"),
+            "parked_total": _hb_count(uploader.get("parked_total", 0), "uploader"),
         },
         "glossary_version": glossary_version,
     }

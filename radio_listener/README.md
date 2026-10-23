@@ -87,6 +87,15 @@ The service data root is `/var/lib/mindshare-radio-capture/data`:
 - `queue/processing/`: work currently claimed by the transcription worker.
 - `queue/failed/`: metadata for segments that failed transcription.
 - `transcripts/`: transcript JSON, with timing and model details.
+- `uploaded/<segment_id>.done|.rejected|.parked`: the uploader's per-segment
+  markers. `.done` = stored in the cloud (retention may then delete the local
+  copies); `.rejected` = the server or a local check refused it for good
+  (400/413 or a contract violation); `.parked` = the server answered `5xx`
+  `park_after_server_errors` times in a row (default 12, `upload_config.json`)
+  and the uploader set it aside so later segments could flow. Audio and
+  transcript of a parked segment are kept. Re-queue it with
+  `rm /var/lib/mindshare-radio-capture/data/uploaded/<segment_id>.parked`;
+  the uploader retries it on its next pass. See `docs/MINDSHARE_RADIO_HEALTH.md`.
 - `summary_*.json`: packet/source counts from each capture-service run.
 
 Directories are private to the service account; files use owner-only

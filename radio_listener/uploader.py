@@ -42,6 +42,7 @@ HTTP_TIMEOUT_SECONDS = 30
 OPENSSL_TIMEOUT_SECONDS = 20
 BACKOFF_START_SECONDS = 5
 BACKOFF_MAX_SECONDS = 300
+PARK_AFTER_SERVER_ERRORS = 12
 RETENTION_INTERVAL_SECONDS = 3600
 MAX_METADATA_BYTES = 64 * 1024
 SEGMENT_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{8,128}$")
@@ -71,6 +72,13 @@ DEFAULT_UPLOAD_CONFIG = {
     "skip_segment_prefixes": ["pipeline_check_"],
     "heartbeat_endpoint": None,  # None: derived from `endpoint` (same host, /api/radio/heartbeat)
     "heartbeat_seconds": HEARTBEAT_SECONDS,
+    # Park the head segment after this many consecutive 5xx replies to it, so
+    # one clip the server cannot take stops blocking everything behind it
+    # (2026-10-23: one 1.1 MB clip answered 500 for ten hours and 1,125 later
+    # segments waited). At the 5-minute backoff ceiling, 12 is about an hour.
+    # Only server replies count: a network outage or a local signing problem
+    # is not the segment's fault and must not park it.
+    "park_after_server_errors": PARK_AFTER_SERVER_ERRORS,
 }
 
 # The only transcript fields that may leave this host. Everything else in the
@@ -153,6 +161,8 @@ def load_configs(config_path: Path, upload_path: Path) -> tuple[Path, dict]:
     upload["skip_segment_prefixes"] = [str(p) for p in upload.get("skip_segment_prefixes") or []]
     upload["heartbeat_endpoint"] = validate_endpoint(heartbeat_url(upload))
     upload["heartbeat_seconds"] = max(1, int(upload["heartbeat_seconds"]))
+    # 0 disables parking (the pre-2026-10-23 behaviour: retry the head forever).
+    upload["park_after_server_errors"] = max(0, int(upload.get("park_after_server_errors") or 0))
     return root, upload
 
 
@@ -190,7 +200,29 @@ def has_final_marker(root: Path, segment_id: str) -> bool:
     return (
         marker_path(root, segment_id, "done").exists()
         or marker_path(root, segment_id, "rejected").exists()
+        or marker_path(root, segment_id, "parked").exists()
     )
+
+
+def write_parked_marker(root: Path, segment_id: str, status, attempts: int, failing_since) -> None:
+    """Park a segment the server keeps answering 5xx to: it leaves the queue
+    until someone deletes this marker (see radio_listener/README.md). Unlike
+    .done, a parked segment's audio and transcript are kept by retention."""
+    private_write(
+        marker_path(root, segment_id, "parked"),
+        json.dumps({
+            "segment_id": segment_id,
+            "status": status,
+            "attempts": int(attempts),
+            "failing_since": _iso_from_epoch(failing_since),
+            "parked_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        }),
+    )
+
+
+def count_parked(root: Path) -> int:
+    uploaded = Path(root) / "uploaded"
+    return sum(1 for _ in uploaded.glob("*.parked")) if uploaded.is_dir() else 0
 
 
 def write_done_marker(root: Path, segment_id: str, status: str) -> None:
@@ -456,8 +488,12 @@ def post_heartbeat(endpoint: str, body: bytes, timestamp: int, signature: str):
 # ---------------------------------------------------------------- processing
 
 
-def process_segment(root: Path, upload: dict, transcript_path: Path, now=time.time) -> str:
-    """Upload one transcript. Returns 'done', 'rejected' or 'retry'."""
+def process_segment(root: Path, upload: dict, transcript_path: Path, now=time.time, stats=None) -> str:
+    """Upload one transcript. Returns 'done', 'rejected', 'retry' or 'parked'.
+
+    'parked' needs `stats` (the per-process head-of-queue counter) and a
+    non-zero `park_after_server_errors`; without them a 5xx is just 'retry'.
+    """
     segment_id = transcript_path.stem
     root = Path(root)
     try:
@@ -496,23 +532,35 @@ def process_segment(root: Path, upload: dict, transcript_path: Path, now=time.ti
         write_done_marker(root, segment_id, str(result or status))
     elif outcome == "rejected":
         write_rejected_marker(root, segment_id, status, detail)
+    elif stats is not None and isinstance(status, int) and status >= 500:
+        # The server answered and refused this one segment. Count it; after
+        # enough consecutive 5xx replies park it so the queue moves on.
+        attempts, failing_since = stats.record_server_error(segment_id, status, now())
+        limit = int(upload.get("park_after_server_errors") or 0)
+        if limit and attempts >= limit:
+            write_parked_marker(root, segment_id, status, attempts, failing_since)
+            stats.record_parked(segment_id)
+            log(f"segment_id={segment_id} status=parked after={attempts} last_status={status}")
+            return "parked"
     return outcome
 
 
 def process_queue(root: Path, upload: dict, stop=STOP, now=time.time, stats=None) -> dict:
     """One pass over the queue. Stops at the first retryable failure so order is kept."""
-    counts = {"done": 0, "rejected": 0, "retry": 0}
+    counts = {"done": 0, "rejected": 0, "retry": 0, "parked": 0}
     for path in queued_transcripts(root, upload["skip_segment_prefixes"]):
         if stop.is_set():
             break
         try:
-            outcome = process_segment(root, upload, path, now=now)
+            outcome = process_segment(root, upload, path, now=now, stats=stats)
         except Exception as exc:  # unexpected I/O problem: keep the segment queued
             log(f"segment_id={path.stem} status=error bytes=0 error={type(exc).__name__}")
             outcome = "retry"
         counts[outcome] += 1
         if stats is not None:
             stats.record(outcome, now())
+            if outcome != "retry":
+                stats.clear_head(path.stem)
         if outcome == "retry":
             break
     return counts
@@ -528,6 +576,13 @@ class UploaderStats:
         self._lock = threading.Lock()
         self.rejected_total = 0
         self.last_success_epoch = None
+        # The segment at the head of the queue that the server keeps answering
+        # 5xx to: id, consecutive 5xx count, when that started, last status.
+        self.head_segment_id = None
+        self.head_attempts = 0
+        self.head_failing_since_epoch = None
+        self.head_last_status = None
+        self.parked_this_run = 0
 
     def record(self, outcome: str, when: float) -> None:
         with self._lock:
@@ -536,10 +591,41 @@ class UploaderStats:
             elif outcome == "done":
                 self.last_success_epoch = when
 
+    def record_server_error(self, segment_id: str, status: int, when: float) -> tuple[int, float]:
+        """Count one 5xx for `segment_id`; a different segment starts over.
+        Returns (consecutive attempts, epoch of the first of them)."""
+        with self._lock:
+            if self.head_segment_id != segment_id:
+                self.head_segment_id = segment_id
+                self.head_attempts = 0
+                self.head_failing_since_epoch = when
+            self.head_attempts += 1
+            self.head_last_status = status
+            return self.head_attempts, self.head_failing_since_epoch
+
+    def record_parked(self, segment_id: str) -> None:
+        with self._lock:
+            self.parked_this_run += 1
+        self.clear_head(segment_id)
+
+    def clear_head(self, segment_id: str) -> None:
+        """The segment reached a final state (or was parked): forget its count."""
+        with self._lock:
+            if self.head_segment_id == segment_id:
+                self.head_segment_id = None
+                self.head_attempts = 0
+                self.head_failing_since_epoch = None
+                self.head_last_status = None
+
     def snapshot(self) -> tuple[int, str | None]:
         with self._lock:
             last = self.last_success_epoch
             return self.rejected_total, _iso_from_epoch(last)
+
+    def head_snapshot(self) -> tuple[str | None, int]:
+        """(ISO time the head segment started failing or None, consecutive 5xx count)."""
+        with self._lock:
+            return _iso_from_epoch(self.head_failing_since_epoch), self.head_attempts
 
 
 def _iso_from_epoch(value) -> str | None:
@@ -671,6 +757,7 @@ def build_heartbeat(root: Path, upload: dict, stats: UploaderStats | None, now: 
         capture["listeners"] = []
     queued, oldest_age = queue_summary(root, upload.get("skip_segment_prefixes") or [], now)
     rejected_total, last_success_at = stats.snapshot() if stats is not None else (0, None)
+    head_failing_since, head_attempts = stats.head_snapshot() if stats is not None else (None, 0)
     queue_dir = root / "queue"
     return {
         "schema_version": 1,
@@ -685,6 +772,12 @@ def build_heartbeat(root: Path, upload: dict, stats: UploaderStats | None, now: 
             "oldest_queued_age_seconds": oldest_age,
             "rejected_total": rejected_total,
             "last_success_at": last_success_at,
+            # Head-of-queue stall (2026-10-23): the server keeps answering 5xx
+            # to the oldest segment, so nothing behind it moves. Parked = such
+            # segments set aside (marker files, so the count survives restarts).
+            "head_failing_since": head_failing_since,
+            "head_attempts": head_attempts,
+            "parked_total": count_parked(root),
         },
         "glossary_version": current_glossary_version(root),
     }

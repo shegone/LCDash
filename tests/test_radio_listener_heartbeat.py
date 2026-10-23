@@ -305,7 +305,9 @@ def test_heartbeat_body_matches_the_spec_shape(tmp_path):
     assert all(set(row) == LISTENER_KEYS for row in body["capture"]["listeners"])
     assert body["transcriber"] == {"pending": 0, "failed": 0}
     assert body["uploader"] == {"queued": 0, "oldest_queued_age_seconds": None,
-                                "rejected_total": 0, "last_success_at": None}
+                                "rejected_total": 0, "last_success_at": None,
+                                "head_failing_since": None, "head_attempts": 0,
+                                "parked_total": 0}
     assert body["glossary_version"] is None
     assert len(uploader.serialize_heartbeat(body)) < uploader.MAX_HEARTBEAT_BYTES
 

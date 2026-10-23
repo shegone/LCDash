@@ -50,7 +50,11 @@ non-negative ints unless noted; strings length-capped):
   },
   "transcriber": {"pending": int, "failed": int},
   "uploader": {"queued": int, "oldest_queued_age_seconds": int|null,
-               "rejected_total": int, "last_success_at": ISO|null},
+               "rejected_total": int, "last_success_at": ISO|null,
+               // optional, added 2026-10-23 (older uploaders omit them; absent = null/0):
+               "head_failing_since": ISO|null,   // when the oldest queued segment first got a 5xx
+               "head_attempts": int,             // consecutive 5xx replies to that segment
+               "parked_total": int},             // segments set aside after `park_after_server_errors`
   "glossary_version": string (<= 32) | null
 }
 ```
@@ -80,7 +84,35 @@ heartbeat has ever arrived. The page's health panel shows a Listener tile
 line "law: 3,412 packets in the last minute" or "fire: no traffic (quiet)", a
 visible warning when any `other_payload_types` count is non-zero ("undecoded
 audio: payload type 103, N packets, these are not being transcribed"), and
-queue depths. Honest wording: a quiet channel is normal.
+queue depths. Honest wording: a quiet channel is normal. When `head_attempts`
+is non-zero the Queues card adds a warning line ("oldest segment refused by the
+server N times since <time>; later segments are waiting"), and a non-zero
+`parked_total` adds "N parked on the listener after repeated refusals".
+
+## Head-of-queue stall and parked segments (2026-10-23)
+
+The uploader sends segments oldest first and stops a pass at the first
+retryable failure, so order is kept. A segment the server keeps answering
+`5xx` to therefore blocks everything behind it (seen 2026-10-23: one 1.1 MB
+clip, ten hours, 1,125 segments waiting, nothing visible on the page). Now:
+
+- Only `5xx` replies count (a network outage or a local signing error is not
+  the segment's fault and never parks it). After
+  `park_after_server_errors` consecutive `5xx` to the same segment (default
+  12, about an hour at the 300 s backoff ceiling; 0 disables parking) the
+  uploader writes `uploaded/<segment_id>.parked` (status, attempts,
+  `failing_since`, `parked_at`), logs one `status=parked` line, and carries
+  on with the next segment.
+- A parked segment keeps its audio and transcript (retention deletes only
+  `.done` segments). To re-queue it, delete the marker and the uploader picks
+  it up on the next pass:
+  `rm /var/lib/mindshare-radio-capture/data/uploaded/<segment_id>.parked`
+- The heartbeat carries the stall while it is happening (`head_failing_since`,
+  `head_attempts`) and `parked_total` (counted from the marker files, so it
+  survives restarts); the page shows both as warnings.
+- A server-wide outage that answers `5xx` to everything would park one
+  segment per `park_after_server_errors` attempts; that is the accepted
+  trade-off for never silently stalling, and the page shows each one.
 
 ## Silent-listener alarm
 

@@ -23,8 +23,13 @@ touches CAD. Standard library only; signing uses the system `openssl` (3.x).
 - `201` or `200` writes `<segment_id>.done`. `400` or `413` writes
   `<segment_id>.rejected` (status and a short detail) and is not retried.
   `401`, `5xx` and network errors are retried with backoff (5 s doubling to
-  5 min) and the segment is never dropped. The queue is processed in order, so
-  one retryable failure pauses the pass.
+  5 min). The queue is processed in order, so one retryable failure pauses the
+  pass. Since 2026-10-23 a segment the server answers `5xx` to
+  `park_after_server_errors` times in a row (default 12, about an hour at the
+  backoff ceiling; 0 disables) is parked instead: `<segment_id>.parked` is
+  written, one `status=parked` line is logged, and the pass continues with
+  the next segment. Only `5xx` counts; network errors and `401` never park
+  (they are not the segment's fault). Parked segments keep their files.
 - Segments that can never be valid (bad id, missing or out-of-tree WAV, WAV over
   `max_bytes`, malformed transcript) get a `.rejected` marker with status
   `local`.
@@ -91,10 +96,13 @@ The body is built from:
 - the queue directories: `transcriber.pending` is the number of jobs in
   `queue/pending` plus `queue/processing`, `transcriber.failed` is `queue/failed`;
 - the uploader's own counters: `queued` and `oldest_queued_age_seconds` (the
-  transcripts still waiting for a `.done` or `.rejected` marker, oldest file
-  time), `rejected_total` (segments rejected, including local rejects) and
-  `last_success_at` (last 200/201 segment reply). `rejected_total` and
-  `last_success_at` start again from 0/null when the uploader restarts;
+  transcripts still waiting for a `.done`, `.rejected` or `.parked` marker,
+  oldest file time), `rejected_total` (segments rejected, including local
+  rejects), `last_success_at` (last 200/201 segment reply),
+  `head_failing_since` and `head_attempts` (the oldest queued segment's run
+  of consecutive `5xx` replies, null/0 when none) and `parked_total` (count of
+  `.parked` markers). `rejected_total`, `last_success_at` and the head fields
+  start again from 0/null when the uploader restarts; `parked_total` does not;
 - `glossary_version`, read from `status/glossary.json`.
 
 The heartbeat has its own timing and backoff and shares no failure path with
@@ -158,16 +166,25 @@ Heartbeat check: `.venv/bin/python uploader.py --config config.json --upload-con
 
 Each upload attempt logs one line: `segment_id=... status=... bytes=...`.
 `status=network-error` or `sign-error` means a retry is scheduled.
-Waiting segments are the transcripts in `transcripts/` without a `.done` or
-`.rejected` marker.
+`status=parked after=N last_status=5xx` means the segment was set aside.
+Waiting segments are the transcripts in `transcripts/` without a `.done`,
+`.rejected` or `.parked` marker.
 
-## Replaying a rejected segment
+## Replaying a rejected or parked segment
 
 Read the reason, fix the cause, then delete the marker so the next pass retries:
 
 ```bash
 cat /var/lib/mindshare-radio-capture/data/uploaded/<segment_id>.rejected
 rm  /var/lib/mindshare-radio-capture/data/uploaded/<segment_id>.rejected
+```
+
+The same for a parked one (`.parked` holds status, attempts, `failing_since`,
+`parked_at`); re-queue it once the server-side cause is fixed, or it will be
+parked again after another `park_after_server_errors` attempts:
+
+```bash
+rm /var/lib/mindshare-radio-capture/data/uploaded/<segment_id>.parked
 ```
 
 Uploading the same segment twice is safe: the app answers `200 duplicate`.

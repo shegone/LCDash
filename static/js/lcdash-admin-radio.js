@@ -1637,6 +1637,25 @@
         if (rejected) {
             lines.push({ text: `Uploader: ${formatCount(rejected)} rejected by the server`, tone: "warn" });
         }
+        // Head-of-queue stall: the server keeps refusing the oldest segment, so
+        // nothing behind it reaches the page (2026-10-23). Parked = set aside
+        // after repeated refusals so the rest can flow; see the listener README.
+        const headAttempts = wholeNumber(uploader.head_attempts);
+        if (headAttempts) {
+            const since = uploader.head_failing_since ? formatTime(uploader.head_failing_since) : "unknown";
+            lines.push({
+                text: `Uploader: oldest segment refused by the server ${formatCount(headAttempts)} ` +
+                    `${headAttempts === 1 ? "time" : "times"} since ${since}; later segments are waiting`,
+                tone: "warn",
+            });
+        }
+        const parked = wholeNumber(uploader.parked_total);
+        if (parked) {
+            lines.push({
+                text: `Uploader: ${formatCount(parked)} parked on the listener after repeated refusals`,
+                tone: "warn",
+            });
+        }
         healthLines(queues, lines);
         detail.appendChild(queues);
 

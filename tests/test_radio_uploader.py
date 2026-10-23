@@ -514,10 +514,10 @@ def test_queue_stops_at_first_retry_then_recovers(tmp_path, fake_sign):
     with FakeIngest([503, 201]) as server:
         settings = upload_settings(server.endpoint)
         counts = uploader.process_queue(root, settings, stop=threading.Event())
-        assert counts == {"done": 0, "rejected": 0, "retry": 1}
+        assert counts == {"done": 0, "rejected": 0, "retry": 1, "parked": 0}
         assert len(server.requests) == 1
         counts = uploader.process_queue(root, settings, stop=threading.Event())
-        assert counts == {"done": 2, "rejected": 0, "retry": 0}
+        assert counts == {"done": 2, "rejected": 0, "retry": 0, "parked": 0}
     assert uploader.marker_path(root, first.stem, "done").exists()
     assert uploader.marker_path(root, second.stem, "done").exists()
 
@@ -641,3 +641,120 @@ def test_uploaded_request_carries_the_sanitized_signal(tmp_path, fake_sign):
     assert metadata["signal"] == {"radio_id": "98426", "talkgroup": "G4407"}
     assert parts["metadata"]["payload"] == uploader.serialize_metadata(metadata)
     assert b"rssi" not in request["body"]
+
+
+# ------------------------------------------------- parking a poisoned head segment (2026-10-23)
+
+
+def _parking_settings(endpoint: str, limit: int) -> dict:
+    settings = upload_settings(endpoint)
+    settings["park_after_server_errors"] = limit
+    return settings
+
+
+def test_parked_marker_is_final_and_retention_keeps_its_audio(tmp_path):
+    root = make_root(tmp_path)
+    segment_id = "ems_tx_20261023T074358Z_54ebe071"
+    path = write_segment(root, segment_id, age_days=40)
+    uploader.write_parked_marker(root, segment_id, 500, 12, time.time() - 3600)
+    marker = uploader.marker_path(root, segment_id, "parked")
+    assert marker.exists()
+    assert uploader.has_final_marker(root, segment_id)
+    assert uploader.queued_transcripts(root, []) == []
+    assert uploader.count_parked(root) == 1
+    body = json.loads(marker.read_text())
+    assert body["attempts"] == 12 and body["status"] == 500 and body["failing_since"]
+    # Retention only removes segments marked .done: a parked one keeps its files.
+    removed = uploader.run_retention(root, {"audio": 15, "transcripts": 30})
+    assert removed == []
+    assert path.exists()
+    # Re-queue by hand = delete the marker (documented in radio_listener/README.md).
+    marker.unlink()
+    assert uploader.queued_transcripts(root, []) == [path]
+    assert uploader.count_parked(root) == 0
+
+
+def test_head_segment_is_parked_after_n_server_errors_and_the_queue_moves_on(tmp_path, fake_sign):
+    root = make_root(tmp_path)
+    first = write_segment(root, "law_rx_20261016T120000Z_aaa111", age_days=0.2)
+    second = write_segment(root, "law_rx_20261016T120100Z_bbb222", age_days=0.1)
+    stats = uploader.UploaderStats()
+    with FakeIngest([500, 500, 500, 201]) as server:
+        settings = _parking_settings(server.endpoint, 3)
+        for expected_attempts in (1, 2):
+            counts = uploader.process_queue(root, settings, stop=threading.Event(), stats=stats)
+            assert counts == {"done": 0, "rejected": 0, "retry": 1, "parked": 0}
+            assert stats.head_snapshot()[1] == expected_attempts
+            assert stats.head_snapshot()[0] is not None
+        # Third 5xx reaches the limit: parked, and the pass continues to the next segment.
+        counts = uploader.process_queue(root, settings, stop=threading.Event(), stats=stats)
+        assert counts == {"done": 1, "rejected": 0, "retry": 0, "parked": 1}
+        assert [r["headers"]["x-radio-segment-id"] if "x-radio-segment-id" in r["headers"] else None
+                for r in server.requests].count(None) in (0, 4)
+        assert len(server.requests) == 4
+    assert uploader.marker_path(root, first.stem, "parked").exists()
+    assert not uploader.marker_path(root, first.stem, "done").exists()
+    assert uploader.marker_path(root, second.stem, "done").exists()
+    assert uploader.queued_transcripts(root, []) == []
+    assert stats.head_snapshot() == (None, 0)
+    assert stats.parked_this_run == 1
+    assert uploader.count_parked(root) == 1
+
+
+def test_only_5xx_replies_count_toward_parking(tmp_path, fake_sign):
+    root = make_root(tmp_path)
+    path = write_segment(root, "law_rx_20261016T120000Z_aaa111")
+    stats = uploader.UploaderStats()
+    # A network error (endpoint gone) is not the segment's fault.
+    with FakeIngest([201]) as server:
+        endpoint = server.endpoint
+    settings = _parking_settings(endpoint, 1)
+    assert uploader.process_segment(root, settings, path, stats=stats) == "retry"
+    assert stats.head_snapshot() == (None, 0)
+    # A permanent 4xx is rejected, never parked.
+    with FakeIngest([413]) as server:
+        assert uploader.process_segment(root, _parking_settings(server.endpoint, 1), path, stats=stats) == "rejected"
+    assert uploader.marker_path(root, path.stem, "rejected").exists()
+    assert not uploader.marker_path(root, path.stem, "parked").exists()
+
+
+def test_parking_is_off_when_the_limit_is_zero_or_stats_are_absent(tmp_path, fake_sign):
+    root = make_root(tmp_path)
+    path = write_segment(root, "law_rx_20261016T120000Z_aaa111")
+    with FakeIngest([500]) as server:
+        off = _parking_settings(server.endpoint, 0)
+        stats = uploader.UploaderStats()
+        for _ in range(3):
+            assert uploader.process_segment(root, off, path, stats=stats) == "retry"
+        assert stats.head_snapshot()[1] == 3
+        # No stats object (e.g. a one-off call): plain retry, nothing counted.
+        assert uploader.process_segment(root, _parking_settings(server.endpoint, 1), path) == "retry"
+    assert not uploader.marker_path(root, path.stem, "parked").exists()
+    assert uploader.queued_transcripts(root, []) == [path]
+
+
+def test_a_different_head_segment_restarts_the_count(tmp_path, fake_sign):
+    root = make_root(tmp_path)
+    first = write_segment(root, "law_rx_20261016T120000Z_aaa111", age_days=0.2)
+    second = write_segment(root, "law_rx_20261016T120100Z_bbb222", age_days=0.1)
+    stats = uploader.UploaderStats()
+    with FakeIngest([500]) as server:
+        settings = _parking_settings(server.endpoint, 3)
+        assert uploader.process_segment(root, settings, first, stats=stats) == "retry"
+        assert uploader.process_segment(root, settings, first, stats=stats) == "retry"
+        assert stats.head_snapshot()[1] == 2
+        assert uploader.process_segment(root, settings, second, stats=stats) == "retry"
+        assert stats.head_snapshot()[1] == 1
+    assert uploader.count_parked(root) == 0
+
+
+def test_load_configs_normalizes_the_parking_limit(tmp_path):
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps({"output_directory": str(tmp_path / "data")}))
+    for raw, expected in ((None, 12), ("7", 7), (-3, 0), (0, 0)):
+        upload = {"endpoint": "https://aws.logan911.com/api/radio/ingest"}
+        if raw is not None:
+            upload["park_after_server_errors"] = raw
+        path = tmp_path / "upload.json"
+        path.write_text(json.dumps(upload))
+        assert uploader.load_configs(config, path)[1]["park_after_server_errors"] == expected

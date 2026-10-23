@@ -283,6 +283,24 @@ class HeartbeatValidationTests(unittest.TestCase):
         self.assertIsNone(stored["uploader"]["oldest_queued_age_seconds"])
         self.assertIsNone(stored["glossary_version"])
 
+    def test_head_stall_and_parked_fields_are_optional_and_normalized(self):
+        # 2026-10-23: an older uploader omits the three fields; absent = quiet.
+        stored = validate_heartbeat(hb_encode(make_heartbeat()))
+        self.assertEqual(
+            {k: stored["uploader"][k] for k in ("head_failing_since", "head_attempts", "parked_total")},
+            {"head_failing_since": None, "head_attempts": 0, "parked_total": 0},
+        )
+        stalled = make_heartbeat()
+        stalled["uploader"].update({
+            "head_failing_since": "2026-10-23T03:45:21-04:00",
+            "head_attempts": 7,
+            "parked_total": 1,
+        })
+        stored = validate_heartbeat(hb_encode(stalled))
+        self.assertEqual(stored["uploader"]["head_failing_since"], "2026-10-23T07:45:21+00:00")
+        self.assertEqual(stored["uploader"]["head_attempts"], 7)
+        self.assertEqual(stored["uploader"]["parked_total"], 1)
+
     def test_zero_listeners_is_valid_and_so_is_the_maximum(self):
         empty = mutated(make_heartbeat(), "capture", "listeners", value=[])
         self.assertEqual(validate_heartbeat(hb_encode(empty))["capture"]["listeners"], [])
@@ -340,6 +358,11 @@ class HeartbeatValidationTests(unittest.TestCase):
             "uploader field missing": mutated(base, "uploader", "rejected_total", value=DELETE),
             "uploader age negative": mutated(base, "uploader", "oldest_queued_age_seconds", value=-1),
             "uploader last_success naive": mutated(base, "uploader", "last_success_at", value="2026-10-16T14:59:30"),
+            "uploader head_attempts negative": mutated(base, "uploader", "head_attempts", value=-1),
+            "uploader head_attempts not an int": mutated(base, "uploader", "head_attempts", value="3"),
+            "uploader parked_total negative": mutated(base, "uploader", "parked_total", value=-1),
+            "uploader head_failing_since naive": mutated(base, "uploader", "head_failing_since", value="2026-10-23T07:45:21"),
+            "uploader unknown key": mutated(base, "uploader", "parked", value=1),
             "glossary_version too long": {**base, "glossary_version": "v" * 33},
             "glossary_version not a string": {**base, "glossary_version": 7},
         }
@@ -1116,7 +1139,8 @@ class ListenerStatsTests(unittest.TestCase):
         self.assertEqual(
             listener["uploader"],
             {"queued": 2, "oldest_queued_age_seconds": 14, "rejected_total": 0,
-             "last_success_at": "2026-10-16T14:59:30+00:00"},
+             "last_success_at": "2026-10-16T14:59:30+00:00",
+             "head_failing_since": None, "head_attempts": 0, "parked_total": 0},
         )
         self.assertEqual(
             listener["listeners"],
