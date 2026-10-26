@@ -278,6 +278,14 @@
                 </div>
 
                 <div id="incident-map" class="mt-4"></div>
+                <div class="d-flex flex-wrap gap-3 mt-3">
+                    <a id="incident-directions" class="btn btn-outline-light px-4" href="https://www.google.com/maps/dir/?api=1&amp;destination={{ call.latitude }},{{ call.longitude }}&amp;travelmode=driving" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">
+                        <i class="bi bi-signpost-split-fill"></i> Google driving directions
+                    </a>
+                    <a id="incident-street-view" class="btn btn-outline-light px-4" href="https://www.google.com/maps/@?api=1&amp;map_action=pano&amp;viewpoint={{ call.latitude }},{{ call.longitude }}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">
+                        <i class="bi bi-binoculars-fill"></i> Google Street View
+                    </a>
+                </div>
             {% else %}
                 <div class="text-secondary mt-2">
                     No verified GIS coordinates returned for this call.

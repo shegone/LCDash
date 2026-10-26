@@ -81,6 +81,14 @@
                 </div>
                 {% if call.latitude is not none and call.longitude is not none %}
                 <div id="incident-map" aria-label="Read-only incident location map"></div>
+                <div class="d-flex flex-wrap gap-3 mt-3">
+                    <a id="incident-directions" class="btn btn-outline-light px-4" href="https://www.google.com/maps/dir/?api=1&amp;destination={{ call.latitude }},{{ call.longitude }}&amp;travelmode=driving" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">
+                        <i class="bi bi-signpost-split-fill"></i> Google driving directions
+                    </a>
+                    <a id="incident-street-view" class="btn btn-outline-light px-4" href="https://www.google.com/maps/@?api=1&amp;map_action=pano&amp;viewpoint={{ call.latitude }},{{ call.longitude }}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">
+                        <i class="bi bi-binoculars-fill"></i> Google Street View
+                    </a>
+                </div>
                 {% else %}
                 <div class="map-unavailable" role="status"><div><i class="bi bi-geo-alt fs-2 d-block mb-2"></i><strong>No verified GIS coordinates</strong><div class="mt-1">The normalized text location remains available above.</div></div></div>
                 {% endif %}

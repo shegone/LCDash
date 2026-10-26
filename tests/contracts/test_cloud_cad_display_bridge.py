@@ -388,6 +388,39 @@ class CloudCadDisplayBridgeTests(unittest.TestCase):
         self.assertNotIn("/static/vendor/leaflet/leaflet.js", rendered_missing)
         self.assertIn("No verified GIS coordinates", rendered_missing)
 
+        # The Google links use only the validated coordinates, open in a
+        # new tab and send no referrer (the LCDash URL carries the CFS
+        # number) -- and they disappear with the map.
+        point = f"{mapped['latitude']},{mapped['longitude']}"
+        directions = f"https://www.google.com/maps/dir/?api=1&amp;destination={point}&amp;travelmode=driving"
+        street_view = f"https://www.google.com/maps/@?api=1&amp;map_action=pano&amp;viewpoint={point}"
+        self.assertIn('id="incident-directions"', rendered_map)
+        self.assertIn(f'href="{directions}"', rendered_map)
+        self.assertIn('id="incident-street-view"', rendered_map)
+        self.assertIn(f'href="{street_view}"', rendered_map)
+        self.assertEqual(rendered_map.count('rel="noopener noreferrer" referrerpolicy="no-referrer"'), 2)
+        self.assertNotIn('id="incident-directions"', rendered_missing)
+        self.assertNotIn('id="incident-street-view"', rendered_missing)
+        self.assertNotIn("google.com/maps", rendered_missing)
+
+    def test_legacy_detail_offers_the_same_directions_link_only_with_coordinates(self):
+        repository = Path(__file__).parents[2]
+        source = (repository / "templates" / "call_detail.html").read_text(encoding="utf-8")
+        guard = source.index("{% if call.latitude and call.longitude %}")
+        fallback = source.index("{% else %}", guard)
+        for link_id in ('id="incident-directions"', 'id="incident-street-view"'):
+            self.assertLess(guard, source.index(link_id))
+            self.assertLess(source.index(link_id), fallback)
+        self.assertIn(
+            'href="https://www.google.com/maps/dir/?api=1&amp;destination={{ call.latitude }},{{ call.longitude }}&amp;travelmode=driving"',
+            source,
+        )
+        self.assertIn(
+            'href="https://www.google.com/maps/@?api=1&amp;map_action=pano&amp;viewpoint={{ call.latitude }},{{ call.longitude }}"',
+            source,
+        )
+        self.assertEqual(source.count('rel="noopener noreferrer" referrerpolicy="no-referrer"'), 2)
+
     def test_cloud_detail_matches_sanitized_command_layout_hierarchy(self):
         repository = Path(__file__).parents[2]
         source = (repository / "templates" / "call_detail_cloud.html").read_text(
