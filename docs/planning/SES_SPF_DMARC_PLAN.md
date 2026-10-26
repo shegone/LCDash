@@ -269,3 +269,17 @@ record 4 can wait for a report mailbox.
 Decisions needed from Ted: approve rows 1 to 3 and the SES setting; name the
 DMARC report mailbox (or defer row 4); say whether the agent may apply them or
 Ted will.
+
+## 8. Applied 2026-10-26 (Part 2B only)
+
+Ted approved Part 2B in chat; rows 1 and 4 (apex SPF, DMARC `rua`) were not
+approved and remain unchanged.
+
+- Cloudflare: `bounce` MX 10 `feedback-smtp.us-east-1.amazonses.com` and `bounce`
+  TXT `v=spf1 include:amazonses.com ~all` added; both resolve through 1.1.1.1.
+- SES identity `logan911.com` (account 862772137583, us-east-1): custom MAIL FROM
+  domain set to `bounce.logan911.com`, behavior on MX failure "Use default MAIL
+  FROM domain". Console shows MAIL FROM configuration **Pending** at the time of
+  writing; it must reach **Successful**.
+- Not yet done: confirm Successful, then send a test sign-in code and check the
+  headers (Part 4). Apex SPF and DMARC `rua` still open.
