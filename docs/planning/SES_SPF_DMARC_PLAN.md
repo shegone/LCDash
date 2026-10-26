@@ -286,3 +286,7 @@ approved and remain unchanged.
 - Later 2026-10-26: SES console reports MAIL FROM configuration **Successful**
   (confirmed by reloading the identity page). Still to do: test sign-in code
   header check.
+- Later 2026-10-26, 17:38: test sign-in code to a Gmail mailbox shows
+  `mailed-by: bounce.logan911.com` and `signed-by: logan911.com`, so the custom
+  MAIL FROM applies to Cognito mail and SPF and DKIM are both aligned. The
+  Yahoo placement result is not yet known. Apex SPF and DMARC `rua` still open.
