@@ -54,7 +54,10 @@ credentials, no transcript text.
 ## Open items
 
 1. Push this handoff (Ted's yes).
-2. Decide on the watchdog and alarm-routing packages above.
+2. ~~Decide on the watchdog~~ **Done 2026-10-26 16:40 EDT**: recommendation 1
+   is applied and proven from a cold boot; see the Applied table in
+   `docs/PC227_WATCHDOG_PLAN.md`. Alarm routing (recommendation 2) is still
+   open.
 3. Carried from the release-120 handoff.
 
 Services on `.227` were left running; nothing was changed there or in AWS

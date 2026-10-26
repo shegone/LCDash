@@ -1,8 +1,12 @@
 # PC .227: hardware watchdog plan
 
-Status: plan only, 2026-10-26. **Nothing in this document has been applied.**
-Every step in "Steps" changes `.227` and needs Ted's typed approval before it
-runs (charter: changing anything on `.227` is an explicit-approval action).
+Status: **applied and proven, 2026-10-26 16:40 EDT.** Steps 1, 2b, 3, 4 and 5
+are done (see "Applied" at the end); the watchdog arms itself from a cold
+boot and the radio services recover unattended. Step 2 as first written does
+not work on Ubuntu and was replaced by Step 2b. Step 6 (simulated freeze) has
+not been run and is optional. Every step in "Steps" changes `.227` and needs
+Ted's typed approval before it runs (charter: changing anything on `.227` is
+an explicit-approval action).
 Follows `handoffs/session-handoff-2026-10-26-227-freeze.md` recommendation 1.
 
 Scope: `.227` host only (`lcdash-server`, `14.1.1.227`) and the three
@@ -35,16 +39,22 @@ Not verified (cannot be read without changing something or without root):
 - Whether the BIOS leaves the TCO "no reboot" strap off. If it is set, the
   driver loads but refuses to arm ("reboot disabled by hardware/BIOS" in
   `dmesg`). Step 1 reveals this; see "If the driver will not arm".
-- That `modprobe iTCO_wdt` by name overrides the Ubuntu blacklist. This is
-  standard kmod behaviour (a blacklist only stops alias autoloading, and
-  `systemd-modules-load` loads by name), but it is proven only by Step 1.
+- That `modprobe iTCO_wdt` by name overrides the Ubuntu blacklist. **Proven
+  by Step 1 for the `modprobe` CLI only.** `systemd-modules-load` does NOT:
+  it probes with the kmod blacklist applied and logged `Module 'iTCO_wdt' is
+  deny-listed (by kmod)` at the Step 5 boot (2026-10-26 14:19 EDT). So
+  `/etc/modules-load.d/` cannot load this module; see Step 2b.
 - The cause of the freeze. A watchdog restores service; it does not explain it.
 
 ## Design
 
-1. Load `iTCO_wdt` by explicit name, now (Step 1) and at every boot through
-   `/etc/modules-load.d/` (Step 2). Do not edit the Ubuntu-generated
-   blacklist: it is rewritten per kernel package and would reappear.
+1. Load `iTCO_wdt` by explicit name, now (Step 1) and at every boot through a
+   small oneshot unit that calls `/usr/sbin/modprobe` (Step 2b; the
+   `/etc/modules-load.d/` route of the original Step 2 is blocked by the
+   blacklist). Do not edit the Ubuntu-generated blacklist: it is rewritten
+   per kernel package and would reappear. Shadowing it with a same-named file
+   in `/etc/modprobe.d/` would work but is tied to one kernel version and
+   silently stops working at the next kernel update, so it is not used.
 2. Have systemd (PID 1) arm and pet the device: `RuntimeWatchdogSec=60`.
    PID 1 pets it from its event loop, so a hang that stops PID 1 or the whole
    kernel stops the petting and the chipset resets the board after 60 s.
@@ -107,6 +117,54 @@ cat /etc/modules-load.d/watchdog.conf
 ```
 
 Check: the file contains exactly `iTCO_wdt`. It is proven at boot in Step 5.
+
+**Result (2026-10-26 14:19 EDT): failed at boot.** `systemd-modules-load`
+honours the kmod blacklist and refused the module. Step 2b replaces it and
+removes this file.
+
+### Step 2b: load the module at every boot through a oneshot unit
+
+Approval line: `APPROVE WDOG-2b install itco-watchdog.service on .227`
+
+Why a unit: `/usr/sbin/modprobe <name>` ignores the blacklist for an
+explicitly named module (proven in Step 1), and a plain
+`systemctl daemon-reload` is enough for PID 1 to open `/dev/watchdog0` once it
+exists (proven 14:20 EDT; no `daemon-reexec` needed). The unit runs after
+`systemd-modules-load.service` and before `sysinit.target`, so the device is
+armed before any ordinary service starts.
+
+```bash
+sudo tee /etc/systemd/system/itco-watchdog.service >/dev/null <<'EOF'
+[Unit]
+Description=Load the Intel TCO watchdog (iTCO_wdt) and arm the PID 1 runtime watchdog
+Documentation=file:///opt/mindshare-radio-capture/README.md
+# Ubuntu deny-lists iTCO_wdt for systemd-modules-load; modprobe by name is allowed.
+DefaultDependencies=no
+After=systemd-modules-load.service
+Before=sysinit.target
+ConditionPathExists=/lib/modules/%v/kernel/drivers/watchdog/iTCO_wdt.ko.zst
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/modprobe iTCO_wdt
+# PID 1 only looks for /dev/watchdog0 at start and on reload; make it look again.
+ExecStart=/usr/bin/systemctl daemon-reload
+
+[Install]
+WantedBy=sysinit.target
+EOF
+sudo rm /etc/modules-load.d/watchdog.conf
+sudo systemctl daemon-reload
+sudo systemctl enable itco-watchdog.service
+systemd-analyze verify /etc/systemd/system/itco-watchdog.service
+```
+
+Check: `systemctl is-enabled itco-watchdog.service` prints `enabled`;
+`systemd-analyze verify` prints nothing; `/etc/modules-load.d/` no longer has
+`watchdog.conf`. Nothing changes in the running system until the next boot
+(the module is already loaded and armed by Steps 1 and 3). Proven by
+repeating Step 5.
 
 ### Step 3: arm systemd's watchdog (backup first)
 
@@ -199,7 +257,10 @@ sudo cp -a /etc/systemd/system.conf.bak-20261026 /etc/systemd/system.conf
 sudo systemctl daemon-reexec
 systemctl show -p RuntimeWatchdogUSec          # expect 0
 # R2: stop loading it at boot
-sudo rm /etc/modules-load.d/watchdog.conf
+sudo systemctl disable itco-watchdog.service
+sudo rm /etc/systemd/system/itco-watchdog.service
+sudo rm -f /etc/modules-load.d/watchdog.conf      # only if Step 2b was never applied
+sudo systemctl daemon-reload
 # R3: unload (only after R1 shows 0; nowayout is 0, so this is allowed)
 sudo rmmod iTCO_wdt
 ls /dev/watchdog* 2>&1                          # expect: no such file
@@ -251,3 +312,16 @@ to a silent freeze.
 - `kernel.panic = 0` means a kernel panic hangs until the watchdog resets it.
   Setting `kernel.panic=10` would reboot sooner on a panic; not proposed here
   to keep this change to one thing.
+
+## Applied (2026-10-26, run from the main session on Ted's typed approvals)
+
+| Time (EDT) | Step | Result |
+| --- | --- | --- |
+| 13:50 | 1 `APPROVE WDOG-1` | `modprobe iTCO_wdt` exit 0; `/dev/watchdog0` (244,0); identity `iTCO_wdt`, timeout 30, nowayout 0; dmesg `Found a Intel PCH TCO device (Version=6, TCOBASE=0x0400)`, `initialized. heartbeat=30 sec (nowayout=0)`. No BIOS block. |
+| 14:14 | 2 `APPROVE WDOG-2` | `/etc/modules-load.d/watchdog.conf` = `iTCO_wdt`. Later shown not to work (below). |
+| 14:16 | 3 `APPROVE WDOG-3` | backup `system.conf.bak-20261026`; diff exactly `RuntimeWatchdogSec=60`, `RebootWatchdogSec=5min`; `daemon-reexec` exit 0. |
+| 14:16 | 4 (read-only) | `WatchdogDevice=/dev/watchdog0`, `RuntimeWatchdogUSec=1min`, `RebootWatchdogUSec=5min`; watchdog0 `state=active`, `timeout=60`; `fuser`: PID 1 systemd. Radio units active; pilot heartbeat continuing; alarm OK. |
+| 14:18 | 5 `APPROVE WDOG-5` | reboot issued 14:18:08, host back 14:19:11 (boot 14:19:03). Radio units active at 14:19:08 unattended, uploader heartbeat 200 at 14:19:09, pilot missed one heartbeat, alarm stayed OK. **Module did not load at boot:** `systemd-modules-load[596]: Module 'iTCO_wdt' is deny-listed (by kmod)`; no `/dev/watchdog0`, `WatchdogDevice=` empty. Service-recovery half passed, boot-load half failed. |
+| 14:20 | re-apply 1 and 3 | `modprobe iTCO_wdt`, then `systemctl daemon-reload` alone armed it (`WatchdogDevice=/dev/watchdog0`, `RuntimeWatchdogUSec=1min`, PID 1 holds the device). Armed again until the next reboot; Step 2b pending. |
+| 14:27 | 2b `APPROVE WDOG-2b` | `/etc/systemd/system/itco-watchdog.service` written as above; `watchdog.conf` removed (`modules-load.d` holds only `modules.conf`); `daemon-reload`; `enable` created `sysinit.target.wants/itco-watchdog.service`; `is-enabled` = `enabled`; condition path exists for `6.8.0-147-generic`. Running state unchanged (still armed). `systemd-analyze verify` as non-root only complains it cannot read the 0600 `mindshare-radio-upload.service`, unrelated. Proof: repeat Step 5. |
+| 16:39 | 5 again `APPROVE WDOG-5` | reboot issued 16:39:11, host back 16:40:13 (boot 16:40:06). **Passed.** `itco-watchdog.service` `active (exited)` at 16:40:06; kernel logged `Found a Intel PCH TCO device` and `initialized` from the unit's modprobe (no manual load); `WatchdogDevice=/dev/watchdog0`, `RuntimeWatchdogUSec=1min`, `RebootWatchdogUSec=5min`; watchdog0 `state=active`, `timeout=60`, `nowayout=0`; `fuser`: PID 1 systemd. Radio units active at 16:40:12 unattended; uploader heartbeat 200 and first segment 201 at 16:40:13. |
