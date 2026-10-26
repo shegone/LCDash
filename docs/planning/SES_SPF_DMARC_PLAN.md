@@ -290,3 +290,9 @@ approved and remain unchanged.
   `mailed-by: bounce.logan911.com` and `signed-by: logan911.com`, so the custom
   MAIL FROM applies to Cognito mail and SPF and DKIM are both aligned. The
   Yahoo placement result is not yet known. Apex SPF and DMARC `rua` still open.
+- Full Gmail headers for the same test message (code omitted): `spf=pass` for
+  `...@bounce.logan911.com` (client 54.240.8.73), `dkim=pass` for
+  `header.i=@logan911.com` and for `@amazonses.com`, `dmarc=pass (p=NONE)`
+  `header.from=logan911.com`, `Return-Path` on `bounce.logan911.com`. Part 2B is
+  verified. Observation for Part 5: the message is a single `text/html` part with
+  no `text/plain` alternative, which some filters score against. Not changed.
