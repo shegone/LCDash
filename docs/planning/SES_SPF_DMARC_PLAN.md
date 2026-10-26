@@ -279,7 +279,10 @@ approved and remain unchanged.
   TXT `v=spf1 include:amazonses.com ~all` added; both resolve through 1.1.1.1.
 - SES identity `logan911.com` (account 862772137583, us-east-1): custom MAIL FROM
   domain set to `bounce.logan911.com`, behavior on MX failure "Use default MAIL
-  FROM domain". Console shows MAIL FROM configuration **Pending** at the time of
+  FROM domain". Console showed MAIL FROM configuration **Pending** at the time of
   writing; it must reach **Successful**.
 - Not yet done: confirm Successful, then send a test sign-in code and check the
   headers (Part 4). Apex SPF and DMARC `rua` still open.
+- Later 2026-10-26: SES console reports MAIL FROM configuration **Successful**
+  (confirmed by reloading the identity page). Still to do: test sign-in code
+  header check.
