@@ -260,6 +260,7 @@ class AnalyticsOverviewRouteTests(unittest.TestCase):
             start="",
             end="",
             tenant_context=None,
+            discipline="",
         )
 
     @patch("app.main.get_analytics_overview")
@@ -276,6 +277,7 @@ class AnalyticsOverviewRouteTests(unittest.TestCase):
             start="",
             end="",
             tenant_context=None,
+            discipline="",
         )
 
     def test_analytics_overview_api_rejects_invalid_custom_range(self):

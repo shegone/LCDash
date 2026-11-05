@@ -409,6 +409,7 @@
         } else {
             params.set("period", snapshot.period_key || "30d");
         }
+        if (snapshot.discipline_key) params.set("discipline", snapshot.discipline_key);
         return params.toString();
     }
 

@@ -701,16 +701,29 @@
             <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
                 <div>
                     <div class="analytics-eyebrow">DISPATCHER / CAD ENTRY METRICS</div>
-                    <h4 class="mb-1">Call-Taker Workload and CAD Processing</h4>
+                    <h4 class="mb-1">Call-Taker Workload and CAD Processing{% if analytics_snapshot.discipline_key %}: {{ analytics_snapshot.discipline_label }}{% endif %}</h4>
                     <div class="data-note">
                         Calls entered are attributed from CentralSquare's CallTaker field.
                         CAD processing runs from call received to the earliest action by any unit of any agency on the call (assigned, en route, staged or on scene), read from both the per-agency and the per-unit CAD timing records.
+                        {% if analytics_snapshot.discipline_key %}
+                            Showing {{ analytics_snapshot.discipline_label }} only: the calls that {{ analytics_snapshot.discipline_label }} units acted on, timed to the first {{ analytics_snapshot.discipline_label }} unit action (a call with EMS and fire units counts under both).
+                        {% endif %}
                     </div>
                 </div>
-                <span class="coverage-chip">
-                    <i class="bi bi-person-check-fill"></i>
-                    {{ dispatcher_metrics.coverage_percent }}% call-taker coverage
-                </span>
+                <div class="d-flex flex-column align-items-end gap-2">
+                    <span class="coverage-chip">
+                        <i class="bi bi-person-check-fill"></i>
+                        {{ dispatcher_metrics.coverage_percent }}% call-taker coverage
+                    </span>
+                    <div class="d-flex flex-wrap gap-2" id="dispatcher-discipline-filter" aria-label="Discipline filter">
+                        {% for option in analytics_snapshot.discipline_options|default([]) %}
+                            <a
+                                class="period-link {% if analytics_snapshot.discipline_key == option.key %}active{% endif %}"
+                                href="/analytics?{% if analytics_snapshot.start_date and analytics_snapshot.end_date and analytics_snapshot.period_key == 'custom' %}start={{ analytics_snapshot.start_date }}&amp;end={{ analytics_snapshot.end_date }}{% else %}period={{ analytics_snapshot.period_key }}{% endif %}{% if option.key %}&amp;discipline={{ option.key }}{% endif %}"
+                            >{{ 'All' if not option.key else option.label }}</a>
+                        {% endfor %}
+                    </div>
+                </div>
             </div>
 
             <div class="row g-3 mt-2">
@@ -760,7 +773,7 @@
                 </div>
             </div>
             <div class="data-note mt-2">
-                Not timed: {{ dispatcher_metrics.excluded_scheduled|default(0) }} scheduled &middot; {{ dispatcher_metrics.excluded_no_stamp|default(0) }} with no unit stamp after the received time &middot; {{ dispatcher_metrics.excluded_over_cap|default(0) }} over {{ dispatcher_metrics.processing_cap_minutes|default(60) }} minutes (held or queued; see the calls behind the &gt; 3 Min count for the rest).
+                Not timed: {{ dispatcher_metrics.excluded_type|default(0) }} of a call type that is not timed <span title="{{ dispatcher_metrics.excluded_call_types|default([])|join(', ') }}">({{ dispatcher_metrics.excluded_call_types|default([])|length }} types)</span> &middot; {{ dispatcher_metrics.excluded_scheduled|default(0) }} scheduled &middot; {{ dispatcher_metrics.excluded_no_stamp|default(0) }} with no unit stamp after the received time &middot; {{ dispatcher_metrics.excluded_over_cap|default(0) }} over {{ dispatcher_metrics.processing_cap_minutes|default(60) }} minutes (held or queued; see the calls behind the &gt; 3 Min count for the rest).
                 Stacked first: {{ dispatcher_metrics.stacked_calls|default(0) }} timed calls were queued on a busy unit, average hold {{ dispatcher_metrics.average_hold|default('—') }} from Stack to Assign or En route; that hold is the unit's, not the dispatcher's, and is not in the processing figures.
             </div>
 
@@ -825,7 +838,7 @@
                                             <td class="text-end text-warning fw-bold">{{ dispatcher.calls_entered }}</td>
                                             <td class="text-end">{{ dispatcher.share_percent }}%</td>
                                             <td class="text-end">{{ dispatcher.processing_samples }}</td>
-                                            <td class="text-end text-secondary" title="{{ dispatcher.excluded_scheduled|default(0) }} scheduled · {{ dispatcher.excluded_no_stamp|default(0) }} no unit stamp · {{ dispatcher.excluded_over_cap|default(0) }} over {{ dispatcher_metrics.processing_cap_minutes|default(60) }} min">{{ (dispatcher.excluded_scheduled|default(0)) + (dispatcher.excluded_no_stamp|default(0)) + (dispatcher.excluded_over_cap|default(0)) }}</td>
+                                            <td class="text-end text-secondary" title="{{ dispatcher.excluded_type|default(0) }} call type not timed · {{ dispatcher.excluded_scheduled|default(0) }} scheduled · {{ dispatcher.excluded_no_stamp|default(0) }} no unit stamp · {{ dispatcher.excluded_over_cap|default(0) }} over {{ dispatcher_metrics.processing_cap_minutes|default(60) }} min">{{ (dispatcher.excluded_type|default(0)) + (dispatcher.excluded_scheduled|default(0)) + (dispatcher.excluded_no_stamp|default(0)) + (dispatcher.excluded_over_cap|default(0)) }}</td>
                                             <td class="text-end text-secondary" title="average unit hold {{ dispatcher.average_hold|default('—') }}">{{ dispatcher.stacked_calls|default(0) }}</td>
                                             <td class="text-end">{{ dispatcher.average_processing }}</td>
                                             <td class="text-end">{{ dispatcher.median_processing }}</td>
@@ -864,7 +877,10 @@
                 <i class="bi bi-info-circle text-info"></i>
                 CAD processing is call received to the earliest unit action on the call.
                 It excludes scheduled calls, calls with no unit stamp at or after the
-                received time, and intervals over {{ dispatcher_metrics.processing_cap_minutes|default(60) }} minutes.
+                received time, intervals over {{ dispatcher_metrics.processing_cap_minutes|default(60) }} minutes,
+                and these call types, which are not dispatched as emergencies:
+                {{ dispatcher_metrics.excluded_call_types|default([])|join(', ') }}.
+                Those calls still count as entered.
                 A Stack (the call queued on a busy unit) ends the interval like an
                 Assign, because someone was added to the call; the unit's wait from
                 that Stack to its Assign or En route is reported as the hold, apart
@@ -1265,7 +1281,7 @@
 
 <script id="analytics-snapshot" type="application/json">{{ analytics_snapshot|tojson }}</script>
 <script src="/static/js/chart.umd.min.js?v=4.4.7"></script>
-<script src="/static/js/lcdash-analytics.js?v=20261105-stack"></script>
+<script src="/static/js/lcdash-analytics.js?v=20261105-discipline"></script>
 <script>
     LCDashTime.updateCadDisplayTimes();
 </script>

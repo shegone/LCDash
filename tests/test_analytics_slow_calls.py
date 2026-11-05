@@ -63,13 +63,13 @@ class RecordingRepository:
         if "calls_with_call_taker" in query:
             # calls, samples, average, median, within 90, over 180, p90,
             # excluded scheduled, no stamp, over cap, stacked, average hold
-            return (4, 3, 300.0, 120.0, 1, 1, 540.0, 1, 0, 0, 0, None)
+            return (4, 3, 300.0, 120.0, 1, 1, 540.0, 1, 0, 0, 0, None, 0)
         return (0, 0, 0)
 
     def fetchall(self, query, params=None):
         self.queries.append((query, params))
         if "AS dispatcher_ref" in query:
-            return [("A DISPATCHER", 4, 3, 300.0, 120.0, 1, 1, 540.0, 1, 0, 0, 0, None, REF)]
+            return [("A DISPATCHER", 4, 3, 300.0, 120.0, 1, 1, 540.0, 1, 0, 0, 0, None, 0, REF)]
         if "AS agency" in query and "LIMIT 8" in query:
             return [("SLD", 10)]
         return []
@@ -213,6 +213,15 @@ class SlowCallListTests(unittest.TestCase):
         self.assertEqual(params["row_limit"], SLOW_CALL_LIMIT)
         self.assertEqual(params["dispatcher_ref"], REF)
         self.assertEqual(params["processing_cap_seconds"], 3600)
+        self.assertEqual(params["discipline"], "")
+        self.assertEqual(params["excluded_call_types"], list(analytics_reporting.EXCLUDED_CALL_TYPE_KEYS))
+
+    def test_the_discipline_filter_narrows_the_list_the_same_way_as_the_table(self):
+        get_dispatcher_slow_calls(REF, period="24h", discipline="law")
+        query, params = self.repository.calls[-1]
+        self.assertEqual(params["discipline"], "law")
+        self.assertIn("WHERE stamps.discipline = %(discipline)s", query)
+        self.assertIn("AND EXISTS (SELECT 1 FROM action_stamps", query)
         # Same rules as the table's count, plus the over-cap list.
         for rule in ("timing_status IN ('timed', 'over_cap')",
                      "> %(threshold_seconds)s", "ORDER BY dispatch_seconds DESC",
@@ -269,7 +278,7 @@ class SlowCallRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["cache-control"], "no-store")
         service.assert_called_once_with(
-            REF, period="7d", start="", end="", tenant_context=None)
+            REF, period="7d", start="", end="", tenant_context=None, discipline="")
 
     @patch("app.main.get_dispatcher_slow_calls")
     def test_a_custom_range_is_forwarded(self, service):
@@ -280,7 +289,8 @@ class SlowCallRouteTests(unittest.TestCase):
             "&start=2026-10-01&end=2026-10-03")
 
         service.assert_called_once_with(
-            REF, period="30d", start="2026-10-01", end="2026-10-03", tenant_context=None)
+            REF, period="30d", start="2026-10-01", end="2026-10-03", tenant_context=None,
+            discipline="")
 
     @patch("app.main.get_dispatcher_slow_calls")
     def test_a_bad_reference_or_range_is_a_400(self, service):
@@ -319,7 +329,7 @@ class TablePageTests(unittest.TestCase):
         self.assertIn(f'data-slow-calls="{REF}"', self.html)
         self.assertIn('id="dispatcher-slow-calls"', self.html)
         self.assertIn('aria-controls="dispatcher-slow-calls"', self.html)
-        self.assertIn("lcdash-analytics.js?v=20261105-stack", self.html)
+        self.assertIn("lcdash-analytics.js?v=20261105-discipline", self.html)
 
     def test_a_dispatcher_with_no_slow_calls_gets_a_plain_number(self):
         self.overview["dispatchers"][0]["over_180_count"] = 0

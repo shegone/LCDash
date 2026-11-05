@@ -53,6 +53,52 @@ FIRST_ACTION_LABELS = {
     "staged": "Staged",
     "on_scene": "On scene",
 }
+# The dispatcher section can be narrowed to one discipline: the calls that
+# discipline's units responded to, timed to that discipline's first action
+# (the same unit-roster rule the discipline tables use).
+DISCIPLINE_FILTERS = (
+    ("", "All disciplines"),
+    ("ems", "EMS"),
+    ("fire", "Fire"),
+    ("law", "Law"),
+)
+DISCIPLINE_FILTER_LABELS = dict(DISCIPLINE_FILTERS)
+# Call types that are never dispatched as an emergency (administrative or
+# scheduled transport natures, information and lookout entries, hang-ups
+# and open lines), so their "received to first unit action" interval says
+# nothing about the dispatcher. They stay in the call counts and are
+# reported as not timed. Ted's list, 2026-11-05. Matching ignores case,
+# spaces and punctuation ("911 Hang Up" = "911 HANG-UP" = "911 HANGUP").
+EXCLUDED_CALL_TYPES = (
+    "Roundtrip",
+    "Take Home",
+    "Transfer / Inter-Facility",
+    "Contact",
+    "Move-Up",
+    "Shoplifting",
+    "Complaint",
+    "911 Hang Up",
+    "Call Through Office",
+    "911 Open Line",
+    "Information",
+    "Be On the Lookout",
+)
+
+
+def call_type_key(value: str | None) -> str:
+    """The comparison form of a CAD incident description: A-Z and 0-9 only."""
+    return re.sub(r"[^A-Z0-9]", "", str(value or "").upper())
+
+
+EXCLUDED_CALL_TYPE_KEYS = tuple(call_type_key(name) for name in EXCLUDED_CALL_TYPES)
+
+
+def resolve_discipline(value: str | None) -> str:
+    """Normalise a discipline filter; '' means every discipline."""
+    key = str(value or "").strip().lower()
+    if key not in DISCIPLINE_FILTER_LABELS:
+        raise AnalyticsRangeError("Choose EMS, Fire or Law, or all disciplines.")
+    return key
 
 
 class AnalyticsRangeError(ValueError):
@@ -182,65 +228,108 @@ def _format_duration(seconds) -> str:
 # and the command log's status events (unit_status_events, the only place
 # Stack appears). ``stamp_rank`` orders stamps that share a timestamp (an
 # "Assigned" derived from an "En route" carries the same time; a Stack at
-# the same second as an Assign is named first).
+# the same second as an Assign is named first). ``discipline`` is the acting
+# unit's roster agency / unit type (ems, fire, law or ''), with the per-agency
+# ORI as the fallback; ``__STAMP_FILTER__`` is replaced by a WHERE clause
+# when the caller narrows the stamps to one discipline.
 ACTION_STAMPS_SQL = """
         action_stamps AS (
             SELECT
-                cfs_number,
-                unit_number AS party,
-                'log' AS source,
-                occurred_at AS stamp_at,
-                event_kind AS kind,
-                CASE event_kind
-                    WHEN 'stacked' THEN 0
-                    WHEN 'assigned' THEN 1
-                    WHEN 'enroute' THEN 2
-                    WHEN 'staged' THEN 3
-                    ELSE 4
-                END AS stamp_rank
-            FROM lcdash_analytics.unit_status_events
-            WHERE event_kind IN ('stacked', 'assigned', 'enroute', 'staged', 'on_scene')
-            UNION ALL
-            SELECT
-                timing.cfs_number,
-                timing.party,
-                timing.source,
-                stamp.stamp_at,
-                stamp.kind,
-                stamp.stamp_rank
+                stamps.cfs_number,
+                stamps.party,
+                stamps.source,
+                stamps.stamp_at,
+                stamps.kind,
+                stamps.stamp_rank,
+                CASE
+                    WHEN stamps.agency = ANY(%(ems_agencies)s)
+                      OR stamps.unit_type LIKE 'EMS %%' THEN 'ems'
+                    WHEN stamps.agency LIKE 'FC %%'
+                      OR stamps.unit_type LIKE 'FIRE %%' THEN 'fire'
+                    WHEN stamps.agency = ANY(%(law_agencies)s)
+                      OR stamps.unit_type IN ('PATROL CAR', 'COUNTY ADMIN') THEN 'law'
+                    ELSE ''
+                END AS discipline
             FROM (
                 SELECT
-                    cfs_number,
-                    agency_ori AS party,
-                    'agency' AS source,
-                    dispatched_at,
-                    enroute_at,
-                    staged_at,
-                    on_scene_at
-                FROM lcdash_analytics.call_agency_times
+                    status_event.cfs_number,
+                    status_event.unit_number AS party,
+                    'log' AS source,
+                    status_event.occurred_at AS stamp_at,
+                    status_event.event_kind AS kind,
+                    CASE status_event.event_kind
+                        WHEN 'stacked' THEN 0
+                        WHEN 'assigned' THEN 1
+                        WHEN 'enroute' THEN 2
+                        WHEN 'staged' THEN 3
+                        ELSE 4
+                    END AS stamp_rank,
+                    UPPER(COALESCE(NULLIF(unit_record.agency, ''), '')) AS agency,
+                    UPPER(COALESCE(NULLIF(unit_record.unit_type, ''), '')) AS unit_type
+                FROM lcdash_analytics.unit_status_events AS status_event
+                LEFT JOIN lcdash_analytics.units AS unit_record
+                    ON unit_record.unit_number = status_event.unit_number
+                WHERE status_event.event_kind IN ('stacked', 'assigned', 'enroute', 'staged', 'on_scene')
                 UNION ALL
                 SELECT
-                    cfs_number,
-                    unit_number,
-                    'unit',
-                    dispatched_at,
-                    enroute_at,
-                    staged_at,
-                    on_scene_at
-                FROM lcdash_analytics.unit_responses
-            ) AS timing
-            CROSS JOIN LATERAL (
-                VALUES
-                    (timing.dispatched_at, 'assigned', 1),
-                    (timing.enroute_at, 'enroute', 2),
-                    (timing.staged_at, 'staged', 3),
-                    (timing.on_scene_at, 'on_scene', 4)
-            ) AS stamp(stamp_at, kind, stamp_rank)
-            WHERE stamp.stamp_at IS NOT NULL
+                    timing.cfs_number,
+                    timing.party,
+                    timing.source,
+                    stamp.stamp_at,
+                    stamp.kind,
+                    stamp.stamp_rank,
+                    timing.agency,
+                    timing.unit_type
+                FROM (
+                    SELECT
+                        cfs_number,
+                        agency_ori AS party,
+                        'agency' AS source,
+                        UPPER(agency_ori) AS agency,
+                        '' AS unit_type,
+                        dispatched_at,
+                        enroute_at,
+                        staged_at,
+                        on_scene_at
+                    FROM lcdash_analytics.call_agency_times
+                    UNION ALL
+                    SELECT
+                        unit_response.cfs_number,
+                        unit_response.unit_number,
+                        'unit',
+                        UPPER(COALESCE(NULLIF(unit_record.agency, ''), '')),
+                        UPPER(COALESCE(
+                            NULLIF(unit_record.unit_type, ''),
+                            NULLIF(unit_response.unit_type, ''),
+                            ''
+                        )),
+                        unit_response.dispatched_at,
+                        unit_response.enroute_at,
+                        unit_response.staged_at,
+                        unit_response.on_scene_at
+                    FROM lcdash_analytics.unit_responses AS unit_response
+                    LEFT JOIN lcdash_analytics.units AS unit_record
+                        ON unit_record.unit_number = unit_response.unit_number
+                ) AS timing
+                CROSS JOIN LATERAL (
+                    VALUES
+                        (timing.dispatched_at, 'assigned', 1),
+                        (timing.enroute_at, 'enroute', 2),
+                        (timing.staged_at, 'staged', 3),
+                        (timing.on_scene_at, 'on_scene', 4)
+                ) AS stamp(stamp_at, kind, stamp_rank)
+                WHERE stamp.stamp_at IS NOT NULL
+            ) AS stamps
+            __STAMP_FILTER__
         )"""
 
 
-def _call_processing_sql(*, dispatcher_calls: bool, extra_columns: str = "") -> str:
+def _call_processing_sql(
+    *,
+    dispatcher_calls: bool,
+    extra_columns: str = "",
+    discipline: str = "",
+) -> str:
     """CTEs ending in ``call_processing``: one row per completed call in the window.
 
     Each row carries ``first_action_at`` (the earliest unit action at or
@@ -251,10 +340,14 @@ def _call_processing_sql(*, dispatcher_calls: bool, extra_columns: str = "") -> 
     ``processing_seconds`` and ``timing_status``: ``timed``, ``scheduled``,
     ``no_stamp`` (no unit action at or after the received time) or
     ``over_cap``. Only ``timed`` rows enter any average; the other three are
-    counted so the exclusions are visible on the page. ``dispatcher_calls`` restricts the population
-    to calls with a call taker, minus the excluded identity. Bound
-    parameters: window_start, window_end, processing_cap_seconds and, for
-    dispatcher calls, excluded_dispatcher_identity.
+    counted so the exclusions are visible on the page, as is
+    ``excluded_type`` (an EXCLUDED_CALL_TYPES nature). ``dispatcher_calls``
+    restricts the population to calls with a call taker, minus the excluded
+    identity. ``discipline`` (ems, fire or law) keeps only the calls that
+    discipline's units acted on and times them to that discipline's first
+    action. Bound parameters: window_start, window_end,
+    processing_cap_seconds, ems_agencies, law_agencies, excluded_call_types
+    and, when used, excluded_dispatcher_identity and discipline.
     """
     taker_filter = ""
     if dispatcher_calls:
@@ -262,8 +355,17 @@ def _call_processing_sql(*, dispatcher_calls: bool, extra_columns: str = "") -> 
             "AND BTRIM(call_taker) <> '' "
             "AND UPPER(BTRIM(call_taker)) <> %(excluded_dispatcher_identity)s"
         )
+    stamp_filter = ""
+    discipline_filter = ""
+    if discipline:
+        stamp_filter = "WHERE stamps.discipline = %(discipline)s"
+        discipline_filter = (
+            "AND EXISTS (SELECT 1 FROM action_stamps "
+            "WHERE action_stamps.cfs_number = lcdash_analytics.calls.cfs_number)"
+        )
     return f"""
-        WITH selected_calls AS (
+        WITH {ACTION_STAMPS_SQL.replace("__STAMP_FILTER__", stamp_filter)},
+        selected_calls AS (
             SELECT
                 cfs_number,
                 call_taker,
@@ -273,13 +375,15 @@ def _call_processing_sql(*, dispatcher_calls: bool, extra_columns: str = "") -> 
                 ) AS dispatcher_key,
                 call_received_at,
                 is_scheduled,
+                regexp_replace(UPPER(incident_description), '[^A-Z0-9]', '', 'g')
+                    = ANY(%(excluded_call_types)s) AS excluded_type,
                 source_collected_at{extra_columns}
             FROM lcdash_analytics.calls
             WHERE call_received_at >= %(window_start)s
               AND call_received_at < %(window_end)s
               {taker_filter}
+              {discipline_filter}
         ),
-        {ACTION_STAMPS_SQL},
         call_milestones AS (
             SELECT
                 selected_calls.cfs_number,
@@ -316,6 +420,7 @@ def _call_processing_sql(*, dispatcher_calls: bool, extra_columns: str = "") -> 
                     )
                 END AS hold_seconds,
                 CASE
+                    WHEN selected_calls.excluded_type THEN 'excluded_type'
                     WHEN selected_calls.is_scheduled THEN 'scheduled'
                     WHEN call_milestones.first_action_at IS NULL THEN 'no_stamp'
                     WHEN call_milestones.first_action_at
@@ -366,12 +471,18 @@ def _empty_overview(window: AnalyticsWindow, message: str) -> dict:
             "excluded_scheduled": 0,
             "excluded_no_stamp": 0,
             "excluded_over_cap": 0,
+            "excluded_type": 0,
+            "excluded_call_types": list(EXCLUDED_CALL_TYPES),
             "processing_cap_minutes": PROCESSING_CAP_MINUTES,
             "stacked_calls": 0,
             "average_hold": "—",
         },
         "dispatchers": [],
         "dispatcher_disciplines": [],
+        "discipline_key": "",
+        "discipline_label": DISCIPLINE_FILTER_LABELS[""],
+        "discipline_options": [
+            {"key": key, "label": label} for key, label in DISCIPLINE_FILTERS],
         "iso_fire": {
             "timed": 0,
             "fast_seconds": PROCESSING_TARGET_FAST_SECONDS,
@@ -405,12 +516,17 @@ def _query_overview(
     repository: AnalyticsRepository,
     window: AnalyticsWindow,
     county_profile: CountyProfile | None = None,
+    discipline: str = "",
 ) -> dict:
     params = {
         "window_start": window.start_at,
         "window_end": window.end_at,
         "excluded_dispatcher_identity": EXCLUDED_DISPATCHER_IDENTITY,
         "processing_cap_seconds": PROCESSING_CAP_SECONDS,
+        "ems_agencies": list(EMS_AGENCY_CODES),
+        "law_agencies": list(LAW_AGENCY_CODES),
+        "excluded_call_types": list(EXCLUDED_CALL_TYPE_KEYS),
+        "discipline": discipline,
     }
 
     # Response time: received to the earliest on-scene stamp from either
@@ -483,11 +599,16 @@ def _query_overview(
             COUNT(*) FILTER (WHERE timing_status = 'timed' AND hold_seconds > 0)
                 AS stacked_calls,
             AVG(hold_seconds) FILTER (WHERE timing_status = 'timed' AND hold_seconds > 0)
-                AS average_hold_seconds
+                AS average_hold_seconds,
+            COUNT(*) FILTER (WHERE timing_status = 'excluded_type')
+                AS excluded_type
     """
 
+    # The dispatcher section alone follows the discipline filter: the calls
+    # that discipline's units acted on, timed to that discipline's first
+    # action. The page-level metrics and charts stay county-wide.
     dispatcher_summary_row = repository.fetchone(
-        _call_processing_sql(dispatcher_calls=True)
+        _call_processing_sql(dispatcher_calls=True, discipline=discipline)
         + """
         SELECT
             COUNT(*) AS calls_with_call_taker,
@@ -497,10 +618,10 @@ def _query_overview(
         FROM call_processing
         """,
         params,
-    ) or (0, 0, None, None, 0, 0, None, 0, 0, 0, 0, None)
+    ) or (0, 0, None, None, 0, 0, None, 0, 0, 0, 0, None, 0)
 
     dispatcher_rows = repository.fetchall(
-        _call_processing_sql(dispatcher_calls=True)
+        _call_processing_sql(dispatcher_calls=True, discipline=discipline)
         + """
         SELECT
             MAX(call_taker) AS call_taker,
@@ -525,7 +646,8 @@ def _query_overview(
     dispatchers = []
     for row in dispatcher_rows:
         # taker, calls, timed, average, median, within 90, over 180, p90,
-        # scheduled, no stamp, over cap, stacked, average hold, ref
+        # scheduled, no stamp, over cap, stacked, average hold, excluded
+        # type, ref
         calls_entered = int(row[1] or 0)
         processing_samples = int(row[2] or 0)
         within_90 = int(row[5] or 0)
@@ -543,7 +665,7 @@ def _query_overview(
                 "p90_processing": _format_duration(row[7]),
                 # An opaque handle for the slow-call list; the CAD identifier
                 # itself never leaves the server.
-                "dispatcher_ref": str(row[13] or ""),
+                "dispatcher_ref": str(row[14] or ""),
                 "processing_samples": processing_samples,
                 "within_90_percent": round(
                     (within_90 / processing_samples) * 100
@@ -556,6 +678,7 @@ def _query_overview(
                 # wait from that Stack to the first Assign / En route.
                 "stacked_calls": int(row[11] or 0),
                 "average_hold": _format_duration(row[12]),
+                "excluded_type": int(row[13] or 0),
             }
         )
 
@@ -579,6 +702,8 @@ def _query_overview(
         "excluded_scheduled": int(dispatcher_summary_row[7] or 0),
         "excluded_no_stamp": int(dispatcher_summary_row[8] or 0),
         "excluded_over_cap": int(dispatcher_summary_row[9] or 0),
+        "excluded_type": int(dispatcher_summary_row[12] or 0),
+        "excluded_call_types": list(EXCLUDED_CALL_TYPES),
         "processing_cap_minutes": PROCESSING_CAP_MINUTES,
         "stacked_calls": int(dispatcher_summary_row[10] or 0),
         "average_hold": _format_duration(dispatcher_summary_row[11]),
@@ -1003,6 +1128,10 @@ def _query_overview(
         "dispatcher_metrics": dispatcher_metrics,
         "dispatchers": dispatchers,
         "dispatcher_disciplines": dispatcher_disciplines,
+        "discipline_key": discipline,
+        "discipline_label": DISCIPLINE_FILTER_LABELS[discipline],
+        "discipline_options": [
+            {"key": key, "label": label} for key, label in DISCIPLINE_FILTERS],
         "iso_fire": iso_fire,
         "daily_volume": daily_volume,
         "hourly_volume": hourly_volume,
@@ -1059,8 +1188,8 @@ def _discipline_metrics(
     from the responding unit's roster agency or unit type (the same rule the
     station-discipline chart uses, which classifies every response); the
     per-agency record's ORI is a fallback. The same rules as the main table
-    apply: scheduled calls, calls with no unit stamp and intervals over the
-    cap are left out.
+    apply: EXCLUDED_CALL_TYPES natures, scheduled calls, calls with no unit
+    stamp and intervals over the cap are left out.
     """
     rows = repository.fetchall(
         """
@@ -1079,6 +1208,10 @@ def _discipline_metrics(
               AND call_received_at < %(window_end)s
               AND BTRIM(call_taker) <> ''
               AND UPPER(BTRIM(call_taker)) <> %(excluded_dispatcher_identity)s
+              AND NOT (
+                  regexp_replace(UPPER(incident_description), '[^A-Z0-9]', '', 'g')
+                      = ANY(%(excluded_call_types)s)
+              )
         ),
         discipline_stamps AS (
             SELECT
@@ -1130,8 +1263,7 @@ def _discipline_metrics(
                 FROM lcdash_analytics.unit_status_events AS status_event
                 LEFT JOIN lcdash_analytics.units AS unit_record
                     ON unit_record.unit_number = status_event.unit_number
-                WHERE status_event.event_kind
-                    IN ('stacked', 'assigned', 'enroute', 'staged', 'on_scene')
+                WHERE status_event.event_kind IN ('stacked', 'assigned', 'enroute', 'staged', 'on_scene')
             ) AS timing
             CROSS JOIN LATERAL (
                 VALUES
@@ -1198,6 +1330,7 @@ def _discipline_metrics(
             **params,
             "ems_agencies": list(EMS_AGENCY_CODES),
             "law_agencies": list(LAW_AGENCY_CODES),
+            "excluded_call_types": list(EXCLUDED_CALL_TYPE_KEYS),
             "fast_seconds": PROCESSING_TARGET_FAST_SECONDS,
             "slow_seconds": PROCESSING_TARGET_SLOW_SECONDS,
         },
@@ -1254,6 +1387,7 @@ def _query_slow_calls(
     repository: AnalyticsRepository,
     window: AnalyticsWindow,
     dispatcher_ref: str,
+    discipline: str = "",
 ) -> dict:
     """Calls the dispatcher entered that took over three minutes to a unit action.
 
@@ -1270,6 +1404,7 @@ def _query_slow_calls(
     rows = repository.fetchall(
         _call_processing_sql(
             dispatcher_calls=True,
+            discipline=discipline,
             extra_columns=(
                 ",\n                incident_code,"
                 "\n                incident_description,"
@@ -1333,6 +1468,10 @@ def _query_slow_calls(
             "window_end": window.end_at,
             "excluded_dispatcher_identity": EXCLUDED_DISPATCHER_IDENTITY,
             "processing_cap_seconds": PROCESSING_CAP_SECONDS,
+            "ems_agencies": list(EMS_AGENCY_CODES),
+            "law_agencies": list(LAW_AGENCY_CODES),
+            "excluded_call_types": list(EXCLUDED_CALL_TYPE_KEYS),
+            "discipline": discipline,
             "dispatcher_ref": dispatcher_ref,
             "threshold_seconds": SLOW_CALL_THRESHOLD_SECONDS,
             "row_limit": SLOW_CALL_LIMIT,
@@ -1387,10 +1526,12 @@ def get_dispatcher_slow_calls(
     start: str = "",
     end: str = "",
     tenant_context: TenantContext | None = None,
+    discipline: str = "",
 ) -> dict:
     """The calls behind a dispatcher's "> 3 Min" count, longest first."""
     if not DISPATCHER_REF_PATTERN.fullmatch(str(dispatcher_ref or "")):
         raise AnalyticsReferenceError("That dispatcher reference is not valid.")
+    discipline = resolve_discipline(discipline)
 
     if tenant_context is not None:
         county_profile = resolve_county_profile(tenant_context)
@@ -1417,7 +1558,7 @@ def get_dispatcher_slow_calls(
     try:
         with AnalyticsRepository() as repository:
             repository.initialize_schema()
-            result = _query_slow_calls(repository, window, dispatcher_ref)
+            result = _query_slow_calls(repository, window, dispatcher_ref, discipline)
     except AnalyticsDatabaseError:
         return {**empty, "message": "PostgreSQL analytics is configured but unavailable."}
     return {"available": True, "period_label": window.label, **result}
@@ -1431,7 +1572,9 @@ def get_analytics_overview(
     tenant_context: TenantContext | None = None,
     *,
     hours: int | None = None,
+    discipline: str = "",
 ) -> dict:
+    discipline = resolve_discipline(discipline)
     if tenant_context is not None:
         if county_profile is not None:
             raise TenantAuthorizationDenied(
@@ -1456,7 +1599,7 @@ def get_analytics_overview(
     try:
         with AnalyticsRepository() as repository:
             repository.initialize_schema()
-            return _query_overview(repository, window, county_profile)
+            return _query_overview(repository, window, county_profile, discipline)
     except AnalyticsDatabaseError:
         return _empty_overview(
             window,

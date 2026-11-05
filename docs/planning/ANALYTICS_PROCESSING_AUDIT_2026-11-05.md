@@ -197,11 +197,28 @@ count as "within 90 s".
   earliest of `dispatched_at`, `enroute_at`, `staged_at`, `on_scene_at` at
   or after the received time, across `unit_responses` and
   `call_agency_times` for the call.
-- **Timed**: not scheduled, has such a stamp, interval ≤ 60 minutes. Only
-  timed calls enter the average, median, 90th percentile, "≤ 90 s" and
-  "> 3 Min". The three excluded buckets are counted in the summary line,
-  in the new "Not timed" column (tooltip gives the split) and over-cap
-  calls are listed in the drill-down as "not averaged".
+- **Timed**: call type not on the not-timed list, not scheduled, has such
+  a stamp, interval ≤ 60 minutes. Only timed calls enter the average,
+  median, 90th percentile, "≤ 90 s" and "> 3 Min". The four excluded
+  buckets are counted in the summary line, in the "Not timed" column
+  (tooltip gives the split) and over-cap calls are listed in the
+  drill-down as "not averaged".
+- **Not-timed call types** (added 2026-11-05 at Ted's request): Roundtrip,
+  Take Home, Transfer / Inter-Facility, Contact, Move-Up, Shoplifting,
+  Complaint, 911 Hang Up, Call Through Office, 911 Open Line, Information,
+  Be On the Lookout. Matched on `incident_description` ignoring case,
+  spaces and punctuation (`EXCLUDED_CALL_TYPES`); the calls still count as
+  entered and are left out of the discipline tables as well. The CAD's
+  exact wording of these natures was not read from the warehouse; if a
+  nature is spelt differently there (an abbreviation rather than the full
+  name), the list needs that spelling too and the page's "Not timed"
+  summary will show the count staying low.
+- **Discipline filter** (added 2026-11-05): the dispatcher section can be
+  narrowed to EMS, Fire or Law. The filtered population is the calls with
+  at least one stamp by a unit of that discipline (roster rule above,
+  ORI fallback), each timed to that discipline's first action; the same
+  timed rule and not-timed buckets apply. The overview metrics and charts
+  are not filtered.
 - **By discipline**: a call counts once per discipline whose units acted on
   it; discipline from the unit roster agency / unit type (EMS: LEASA or
   `EMS *` unit type; fire: `FC *` or `FIRE *`; law: sheriff and police

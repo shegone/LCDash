@@ -2713,6 +2713,7 @@ def analytics_overview_api(
     period: str = "30d",
     start: str = "",
     end: str = "",
+    discipline: str = "",
     tenant_context: Annotated[
         TenantContext | None,
         Depends(get_trusted_tenant_context),
@@ -2725,6 +2726,7 @@ def analytics_overview_api(
             start=start,
             end=end,
             tenant_context=tenant_context,
+            discipline=discipline,
         )
     except AnalyticsRangeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -2737,6 +2739,7 @@ def analytics_dispatcher_slow_calls_api(
     period: str = "30d",
     start: str = "",
     end: str = "",
+    discipline: str = "",
     tenant_context: Annotated[
         TenantContext | None,
         Depends(get_trusted_tenant_context),
@@ -2756,6 +2759,7 @@ def analytics_dispatcher_slow_calls_api(
             start=start,
             end=end,
             tenant_context=tenant_context,
+            discipline=discipline,
         )
     except (AnalyticsRangeError, AnalyticsReferenceError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -2861,6 +2865,7 @@ def analytics_page(
     period: str = "30d",
     start: str = "",
     end: str = "",
+    discipline: str = "",
     tenant_context: Annotated[
         TenantContext | None,
         Depends(get_trusted_tenant_context),
@@ -2874,6 +2879,7 @@ def analytics_page(
             start=start,
             end=end,
             tenant_context=tenant_context,
+            discipline=discipline,
         )
     except AnalyticsRangeError as exc:
         range_error = str(exc)
@@ -2882,6 +2888,7 @@ def analytics_page(
             start="",
             end="",
             tenant_context=tenant_context,
+            discipline="",
         )
 
     return templates.TemplateResponse(

@@ -53,8 +53,9 @@ class SyntheticAnalyticsRepository:
             return (10, 0, None, None, None, 0, None, 0)
         if "calls_with_call_taker" in query:
             # calls, timed, average, median, within 90, over 180, p90,
-            # excluded scheduled, no stamp, over cap, stacked, average hold
-            return (0, 0, None, None, 0, 0, None, 0, 0, 0, 0, None)
+            # excluded scheduled, no stamp, over cap, stacked, average hold,
+            # excluded call type
+            return (0, 0, None, None, 0, 0, None, 0, 0, 0, 0, None, 0)
         return (0, 0, 0)
 
     def fetchall(self, query, params):

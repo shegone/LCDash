@@ -44,15 +44,16 @@ class RecordingRepository:
             return (12, 20, 118.0, 900.0, 700.0, 6, None, 2)
         if "calls_with_call_taker" in query:
             # calls, timed, average, median, within 90, over 180, p90,
-            # scheduled, no stamp, over cap, stacked, average hold
-            return (10, 6, 200.0, 118.0, 2, 2, 600.0, 1, 2, 1, 2, 1956.0)
+            # scheduled, no stamp, over cap, stacked, average hold,
+            # excluded call type
+            return (10, 6, 200.0, 118.0, 2, 2, 600.0, 1, 2, 1, 2, 1956.0, 3)
         return (0, 0, 0)
 
     def fetchall(self, query, params=None):
         self.queries.append((query, params))
         if "AS dispatcher_ref" in query:
             return [("A DISPATCHER", 10, 6, 200.0, 118.0, 2, 2, 600.0, 1, 2, 1,
-                     1, 1122.0, "0123456789abcdef")]
+                     1, 1122.0, 2, "0123456789abcdef")]
         return []
 
 
@@ -91,6 +92,7 @@ class ProcessingDefinitionTests(unittest.TestCase):
     def test_the_timing_status_buckets_are_the_only_population_rule(self):
         for query in self.processing_queries:
             status = query[query.index("CASE"):query.index("END AS timing_status")]
+            self.assertIn("excluded_type THEN 'excluded_type'", status)
             self.assertIn("is_scheduled THEN 'scheduled'", status)
             self.assertIn("first_action_at IS NULL THEN 'no_stamp'", status)
             self.assertIn("make_interval(secs => %(processing_cap_seconds)s)", status)
@@ -135,6 +137,39 @@ class ProcessingDefinitionTests(unittest.TestCase):
                           row["excluded_over_cap"]), (1, 2, 1))
         self.assertEqual(row["within_90_percent"], 33)
 
+    def test_the_listed_call_types_are_not_timed_but_still_counted(self):
+        # Ted's list (2026-11-05): natures that are never dispatched as an
+        # emergency, so the interval says nothing about the dispatcher.
+        self.assertEqual(ar.EXCLUDED_CALL_TYPES, (
+            "Roundtrip", "Take Home", "Transfer / Inter-Facility", "Contact",
+            "Move-Up", "Shoplifting", "Complaint", "911 Hang Up",
+            "Call Through Office", "911 Open Line", "Information",
+            "Be On the Lookout"))
+        # Matching ignores case, spaces and punctuation.
+        self.assertEqual(ar.call_type_key(" 911 hang-up "), "911HANGUP")
+        self.assertEqual(ar.call_type_key("TRANSFER/INTER-FACILITY"), "TRANSFERINTERFACILITY")
+        self.assertEqual(ar.call_type_key(None), "")
+        self.assertIn("TRANSFERINTERFACILITY", ar.EXCLUDED_CALL_TYPE_KEYS)
+        self.assertIn("BEONTHELOOKOUT", ar.EXCLUDED_CALL_TYPE_KEYS)
+        for query in self.processing_queries:
+            self.assertIn(
+                "regexp_replace(UPPER(incident_description), '[^A-Z0-9]', '', 'g')\n"
+                "                    = ANY(%(excluded_call_types)s) AS excluded_type", query)
+        for query in self.processing_queries[1:]:
+            self.assertIn("COUNT(*) FILTER (WHERE timing_status = 'excluded_type')", query)
+        for _, params in self.repository.queries:
+            if params and "excluded_call_types" in params:
+                self.assertEqual(params["excluded_call_types"], list(ar.EXCLUDED_CALL_TYPE_KEYS))
+        # The count travels with the other exclusions, so Calls = timed + not timed.
+        summary = self.result["dispatcher_metrics"]
+        self.assertEqual(summary["excluded_type"], 3)
+        self.assertEqual(summary["excluded_call_types"], list(ar.EXCLUDED_CALL_TYPES))
+        self.assertEqual(self.result["dispatchers"][0]["excluded_type"], 2)
+        # The discipline tables leave the same calls out.
+        discipline_query = next(
+            q for q, _ in self.repository.queries if "GROUPING SETS" in q)
+        self.assertIn("= ANY(%(excluded_call_types)s)", discipline_query)
+
     def test_stacked_calls_and_the_unit_hold_are_reported_apart(self):
         summary = self.result["dispatcher_metrics"]
         self.assertEqual((summary["stacked_calls"], summary["average_hold"]), (2, "32:36"))
@@ -151,6 +186,13 @@ class ProcessingDefinitionTests(unittest.TestCase):
         self.assertEqual(empty["dispatcher_metrics"]["processing_cap_minutes"], 60)
         self.assertEqual((empty["dispatcher_metrics"]["stacked_calls"],
                           empty["dispatcher_metrics"]["average_hold"]), (0, "—"))
+        self.assertEqual(empty["dispatcher_metrics"]["excluded_type"], 0)
+        self.assertEqual(empty["dispatcher_metrics"]["excluded_call_types"],
+                         list(ar.EXCLUDED_CALL_TYPES))
+        self.assertEqual((empty["discipline_key"], empty["discipline_label"]),
+                         ("", "All disciplines"))
+        self.assertEqual([o["key"] for o in empty["discipline_options"]],
+                         ["", "ems", "fire", "law"])
 
     def test_no_location_or_narrative_columns(self):
         for query, _ in self.repository.queries:
@@ -182,17 +224,117 @@ class SharedSqlTests(unittest.TestCase):
         self.assertIn("IN ('stacked', 'assigned', 'enroute', 'staged', 'on_scene')", query)
 
 
+class DisciplineFilterTests(unittest.TestCase):
+    """The dispatcher section can be narrowed to EMS, Fire or Law: the calls
+    that discipline's units acted on, timed to that discipline's first
+    action. The page-level metrics stay county-wide."""
+
+    def setUp(self):
+        self.repository = RecordingRepository()
+        self.window = ar.resolve_analytics_window(period="24h")
+        self.result = ar._query_overview(self.repository, self.window, None, "fire")
+        self.processing_queries = [
+            q for q, _ in self.repository.queries if "END AS timing_status" in q]
+
+    def test_only_the_dispatcher_queries_are_narrowed(self):
+        overview_query = self.processing_queries[0]
+        self.assertNotIn("%(discipline)s", overview_query)
+        self.assertNotIn("EXISTS (SELECT 1 FROM action_stamps", overview_query)
+        for query in self.processing_queries[1:]:
+            self.assertIn("WHERE stamps.discipline = %(discipline)s", query)
+            self.assertIn(
+                "AND EXISTS (SELECT 1 FROM action_stamps "
+                "WHERE action_stamps.cfs_number = lcdash_analytics.calls.cfs_number)", query)
+            # The stamps are filtered before the milestones are taken, so the
+            # interval ends at that discipline's first action.
+            self.assertLess(query.index("WHERE stamps.discipline"), query.index("call_milestones AS"))
+        for _, params in self.repository.queries:
+            if params and "discipline" in params:
+                self.assertEqual(params["discipline"], "fire")
+
+    def test_every_stamp_carries_the_roster_discipline(self):
+        for query in self.processing_queries:
+            self.assertIn("END AS discipline", query)
+            self.assertIn("stamps.agency = ANY(%(ems_agencies)s)", query)
+            self.assertIn("stamps.unit_type LIKE 'EMS %%' THEN 'ems'", query)
+            self.assertIn("stamps.agency LIKE 'FC %%'", query)
+            self.assertIn("stamps.unit_type LIKE 'FIRE %%' THEN 'fire'", query)
+            self.assertIn("stamps.agency = ANY(%(law_agencies)s)", query)
+            self.assertIn("stamps.unit_type IN ('PATROL CAR', 'COUNTY ADMIN') THEN 'law'", query)
+            # The log and per-unit stamps read the unit roster; the
+            # per-agency stamp falls back to its ORI.
+            self.assertEqual(query.count("LEFT JOIN lcdash_analytics.units AS unit_record"), 2)
+            self.assertIn("UPPER(agency_ori) AS agency", query)
+        for _, params in self.repository.queries:
+            if params and "ems_agencies" in params:
+                self.assertEqual(params["ems_agencies"], list(ar.EMS_AGENCY_CODES))
+                self.assertEqual(params["law_agencies"], list(ar.LAW_AGENCY_CODES))
+
+    def test_the_snapshot_names_the_filter(self):
+        self.assertEqual((self.result["discipline_key"], self.result["discipline_label"]),
+                         ("fire", "Fire"))
+        self.assertEqual(self.result["discipline_options"], [
+            {"key": "", "label": "All disciplines"}, {"key": "ems", "label": "EMS"},
+            {"key": "fire", "label": "Fire"}, {"key": "law", "label": "Law"}])
+
+    def test_the_filter_value_is_checked(self):
+        self.assertEqual(ar.resolve_discipline(" EMS "), "ems")
+        self.assertEqual(ar.resolve_discipline(None), "")
+        for bad in ("police", "all", "fire;drop"):
+            with self.assertRaises(ar.AnalyticsRangeError):
+                ar.resolve_discipline(bad)
+        with self.assertRaises(ar.AnalyticsRangeError):
+            ar.get_analytics_overview(period="24h", discipline="police")
+        with self.assertRaises(ar.AnalyticsRangeError):
+            ar.get_dispatcher_slow_calls("0123456789abcdef", period="24h", discipline="police")
+
+    def test_the_routes_forward_the_filter(self):
+        client = TestClient(app)
+        with patch("app.main.get_analytics_overview") as overview:
+            overview.return_value = ar._empty_overview(self.window, "none")
+            self.assertEqual(client.get("/api/analytics/overview?period=7d&discipline=law").status_code, 200)
+            overview.assert_called_once_with(
+                period="7d", start="", end="", tenant_context=None, discipline="law")
+        with patch("app.main.get_dispatcher_slow_calls") as slow:
+            slow.return_value = {"available": True, "calls": [], "total": 0, "shown": 0}
+            client.get("/api/analytics/dispatcher-slow-calls?dispatcher=0123456789abcdef"
+                       "&period=7d&discipline=ems")
+            slow.assert_called_once_with(
+                "0123456789abcdef", period="7d", start="", end="", tenant_context=None,
+                discipline="ems")
+        with patch("app.main.get_analytics_overview") as overview, \
+                patch("app.main.get_analytics_database_status",
+                      return_value=_route_test_fixture().status):
+            overview.return_value = ar._empty_overview(self.window, "none")
+            self.assertEqual(client.get("/analytics?period=7d&discipline=fire").status_code, 200)
+            overview.assert_called_once_with(
+                period="7d", start="", end="", tenant_context=None, discipline="fire")
+
+    def test_a_bad_filter_on_the_api_is_a_400(self):
+        client = TestClient(app)
+        with patch("app.main.get_analytics_overview",
+                   side_effect=ar.AnalyticsRangeError("Choose EMS, Fire or Law, or all disciplines.")):
+            response = client.get("/api/analytics/overview?period=7d&discipline=police")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("EMS, Fire or Law", response.json()["detail"])
+
+
 class PageWordingTests(unittest.TestCase):
     def setUp(self):
         base = _route_test_fixture()
         self.overview = base.overview
         self.overview["dispatcher_metrics"].update(
             {"excluded_scheduled": 3, "excluded_no_stamp": 4, "excluded_over_cap": 5,
+             "excluded_type": 6, "excluded_call_types": list(ar.EXCLUDED_CALL_TYPES),
              "processing_cap_minutes": 60, "stacked_calls": 2, "average_hold": "32:36"})
         self.overview["dispatchers"][0].update(
             {"dispatcher_ref": "0123456789abcdef", "excluded_scheduled": 1,
-             "excluded_no_stamp": 2, "excluded_over_cap": 3,
+             "excluded_no_stamp": 2, "excluded_over_cap": 3, "excluded_type": 4,
              "stacked_calls": 1, "average_hold": "18:42"})
+        self.overview["discipline_key"] = "fire"
+        self.overview["discipline_label"] = "Fire"
+        self.overview["discipline_options"] = [
+            {"key": key, "label": label} for key, label in ar.DISCIPLINE_FILTERS]
         self.overview["metrics"].update(
             {"response_samples": 38, "response_eligible_calls": 40})
         # The discipline section renders only when the server sent its groups.
@@ -212,20 +354,59 @@ class PageWordingTests(unittest.TestCase):
                       self.html)
         self.assertIn("Stacked first: 2 timed calls were queued on a busy unit, average hold 32:36",
                       self.html)
-        self.assertIn("Not timed: 3 scheduled &middot; 4 with no unit stamp", self.html)
+        self.assertIn("Not timed: 6 of a call type that is not timed", self.html)
+        self.assertIn("(12 types)</span> &middot; 3 scheduled &middot; 4 with no unit stamp", self.html)
         self.assertIn("5 over 60 minutes", self.html)
+        self.assertIn("these call types, which are not dispatched as emergencies: "
+                      "Roundtrip, Take Home, Transfer / Inter-Facility, Contact, Move-Up, "
+                      "Shoplifting, Complaint, 911 Hang Up, Call Through Office, 911 Open Line, "
+                      "Information, Be On the Lookout. Those calls still count as entered.",
+                      self.html)
         self.assertIn("38 of 40 calls", self.html)
         self.assertIn("scheduled calls are excluded", self.html)
 
     def test_each_dispatcher_row_shows_its_untimed_calls(self):
         self.assertIn("Not timed", self.html)
-        self.assertIn('title="1 scheduled · 2 no unit stamp · 3 over 60 min">6</td>', self.html)
+        self.assertIn('title="4 call type not timed · 1 scheduled · 2 no unit stamp · 3 over 60 min">10</td>',
+                      self.html)
         self.assertIn('title="average unit hold 18:42">1</td>', self.html)
         self.assertIn(">Stacked</th>", self.html)
 
     def test_the_discipline_rule_and_the_unit_average_are_explained(self):
         self.assertIn("agency in the unit roster", self.html)
         self.assertIn("Call received to on scene; scheduled calls excluded", self.html)
+
+    def test_the_discipline_filter_links_keep_the_window_and_name_the_view(self):
+        self.assertIn("Call-Taker Workload and CAD Processing: Fire</h4>", self.html)
+        self.assertIn("Showing Fire only: the calls that Fire units acted on, timed to the first "
+                      "Fire unit action", self.html)
+        self.assertIn('id="dispatcher-discipline-filter"', self.html)
+        self.assertIn('class="period-link " href="/analytics?period=30d" >All</a>', self.html)
+        self.assertIn('class="period-link " href="/analytics?period=30d&amp;discipline=ems" >EMS</a>',
+                      self.html)
+        self.assertIn('class="period-link active" href="/analytics?period=30d&amp;discipline=fire" >Fire</a>',
+                      self.html)
+        self.assertIn('class="period-link " href="/analytics?period=30d&amp;discipline=law" >Law</a>',
+                      self.html)
+
+    def test_a_custom_range_travels_with_the_filter(self):
+        base = _route_test_fixture()
+        overview = base.overview
+        overview.update({"period_key": "custom", "start_date": "2026-10-01",
+                         "end_date": "2026-10-03", "discipline_key": "",
+                         "discipline_label": "All disciplines",
+                         "discipline_options": [
+                             {"key": key, "label": label} for key, label in ar.DISCIPLINE_FILTERS]})
+        with patch("app.main.get_analytics_overview", return_value=overview), \
+                patch("app.main.get_analytics_database_status", return_value=base.status):
+            html = " ".join(TestClient(app).get(
+                "/analytics?start=2026-10-01&end=2026-10-03").text.split())
+        self.assertIn('class="period-link active" href="/analytics?start=2026-10-01&amp;end=2026-10-03" >All</a>',
+                      html)
+        self.assertIn('href="/analytics?start=2026-10-01&amp;end=2026-10-03&amp;discipline=law" >Law</a>',
+                      html)
+        self.assertIn("Call-Taker Workload and CAD Processing</h4>", html)
+        self.assertNotIn("Showing ", html.split("DISPATCHER / CAD ENTRY METRICS")[1][:600])
 
 
 class ScriptTests(unittest.TestCase):
@@ -237,6 +418,9 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('"Unit hold"', self.script)
         self.assertIn("call.hold", self.script)
         self.assertIn("call.first_action_by", self.script)
+        # The drill-down asks for the same discipline the table shows.
+        self.assertIn('if (snapshot.discipline_key) params.set("discipline", snapshot.discipline_key);',
+                      self.script)
         self.assertIn("data.over_cap", self.script)
         self.assertIn("not averaged and not in the count above", self.script)
         for banned in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write"):

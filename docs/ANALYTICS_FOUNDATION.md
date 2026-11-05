@@ -48,11 +48,18 @@ being added to the call. It is measured from the CFS `CallDateTime` to the
 earliest action by any unit of any agency on the call (Stacked, Assigned, En
 route, Staged or On scene), read from `unit_status_events` (the CAD command
 log's status rows, the only place Stack appears), `unit_responses` and
-`call_agency_times`. A call is timed only when it is not scheduled, has such a
-stamp at or after the received time, and the interval is within the 60-minute
-cap; the three excluded buckets are counted on the page (summary line and the
-"Not timed" column) and calls over the cap are listed in the slow-call
-drill-down as "not averaged". A Stack (the call queued on a busy unit) ends
+`call_agency_times`. A call is timed only when its call type is not on the
+not-timed list, it is not scheduled, it has such a stamp at or after the
+received time, and the interval is within the 60-minute cap; the four excluded
+buckets are counted on the page (summary line and the "Not timed" column) and
+calls over the cap are listed in the slow-call drill-down as "not averaged".
+The not-timed call types (`EXCLUDED_CALL_TYPES` in
+`app/services/analytics_reporting.py`, Ted's list of 2026-11-05) are natures
+that are never dispatched as an emergency: Roundtrip, Take Home, Transfer /
+Inter-Facility, Contact, Move-Up, Shoplifting, Complaint, 911 Hang Up, Call
+Through Office, 911 Open Line, Information and Be On the Lookout. They are
+matched on the CAD incident description ignoring case, spaces and punctuation,
+still count as calls entered, and are left out of the discipline tables too. A Stack (the call queued on a busy unit) ends
 the interval like an Assign; the unit's wait from that Stack to its first
 Assign or En route is the hold, reported apart (the "Stacked" column with the
 average hold, the "Stacked first" summary line, the drill-down's "Unit hold")
@@ -64,6 +71,16 @@ earlier calls have no Stack and time to their first Assign. See
 options and the data-model change. CAD processing is not 911
 phone-answer time. NGA911 integration can later add answer time, call duration,
 abandoned-call, transfer, queue-delay, and callback metrics.
+
+The dispatcher section (its KPIs, the table and the slow-call drill-down) can
+be narrowed to one discipline with the All / EMS / Fire / Law links beside the
+coverage chip (`?discipline=ems|fire|law` on `/analytics`,
+`/api/analytics/overview` and `/api/analytics/dispatcher-slow-calls`; any
+other value is a 400). The filtered view keeps the calls that discipline's
+units acted on and times each to that discipline's first unit action, using
+the same unit-roster rule as the discipline tables, so a call with EMS and
+fire units counts under both. The page-level metrics, charts and the
+by-discipline tables stay county-wide.
 
 Response times (average and median response, coverage, busiest-unit average)
 use the earliest on-scene stamp from either record and exclude scheduled calls.

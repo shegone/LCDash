@@ -271,15 +271,21 @@ class LiveAnalyticsTests(unittest.TestCase):
         unit("C-SCHED", "M1", dispatched=10, on_scene=600)
         call("C-ZERO", 80)
         unit("C-ZERO", "S1", dispatched=0)
+        # Two of the call types that are never timed: one with a late unit
+        # (not over the cap: the type decides first), one with no unit at
+        # all (not a no-stamp), spelt with CAD's own punctuation.
+        call("C-INFO", 90, desc="Information")
+        unit("C-INFO", "S1", dispatched=3000)
+        call("C-HANGUP", 95, desc="911 HANG-UP")
         repository.connection.commit()
 
         window = ar.resolve_analytics_window(period="24h")
         overview = ar._query_overview(repository, window, None)
         row = next(d for d in overview["dispatchers"] if d["call_taker"] == "DISPATCHER T")
-        self.assertEqual(row["calls_entered"], 8)
+        self.assertEqual(row["calls_entered"], 10)
         self.assertEqual(row["processing_samples"], 5)
         self.assertEqual((row["excluded_scheduled"], row["excluded_no_stamp"],
-                          row["excluded_over_cap"]), (1, 1, 1))
+                          row["excluded_over_cap"], row["excluded_type"]), (1, 1, 1, 2))
         # 1:58 / 2:17 / 7:59 / 1:39: the CAD report's own figures.
         timed = [118, 137, 479, 99, 0]
         self.assertEqual(row["median_processing"], "1:58")
@@ -292,8 +298,9 @@ class LiveAnalyticsTests(unittest.TestCase):
         summary = overview["dispatcher_metrics"]
         self.assertEqual((summary["processing_samples"], summary["over_180_count"],
                           summary["excluded_over_cap"], summary["processing_cap_minutes"],
-                          summary["stacked_calls"], summary["average_hold"]),
-                         (5, 1, 1, 60, 2, "32:36"))
+                          summary["stacked_calls"], summary["average_hold"],
+                          summary["excluded_type"]),
+                         (5, 1, 1, 60, 2, "32:36", 2))
 
         slow = ar._query_slow_calls(repository, window, row["dispatcher_ref"])
         self.assertEqual([(c["cfs_number"], c["processing_seconds"], c["first_action"],
@@ -307,8 +314,8 @@ class LiveAnalyticsTests(unittest.TestCase):
         # Response time: earliest on-scene from either record, scheduled left out.
         metrics = overview["metrics"]
         self.assertEqual(metrics["response_samples"], 2)
-        self.assertEqual(metrics["response_eligible_calls"], 7)
-        self.assertEqual(metrics["response_coverage_percent"], 29)
+        self.assertEqual(metrics["response_eligible_calls"], 9)
+        self.assertEqual(metrics["response_coverage_percent"], 22)
         self.assertEqual(metrics["average_response"], ar._format_duration((1235 + 2039) / 2))
         self.assertEqual(metrics["average_processing"], ar._format_duration(statistics.mean(timed)))
         m1 = next(u for u in overview["busiest_units"] if u["unit_number"] == "M1")
@@ -327,6 +334,32 @@ class LiveAnalyticsTests(unittest.TestCase):
                          (5, 2))
         self.assertIsNone(by["ems"]["overall"])
         self.assertEqual(iso["timed"], 1)
+
+        # The discipline filter on the dispatcher section: law keeps the
+        # calls a sheriff's unit acted on (the fire call too, timed to the
+        # deputy's Stack at 25:00) and drops the scheduled EMS call and the
+        # hang-up; fire keeps the fire call alone, timed to the engine's
+        # Assign; EMS keeps only the scheduled transport.
+        law = next(d for d in ar._query_overview(repository, window, None, "law")["dispatchers"]
+                   if d["call_taker"] == "DISPATCHER T")
+        self.assertEqual(law["calls_entered"], 8)
+        self.assertEqual(law["processing_samples"], 5)
+        self.assertEqual(law["median_processing"], "2:17")
+        self.assertEqual(law["over_180_count"], 2)
+        self.assertEqual((law["excluded_scheduled"], law["excluded_no_stamp"],
+                          law["excluded_over_cap"], law["excluded_type"]), (0, 1, 1, 1))
+        self.assertEqual(law["stacked_calls"], 3)
+        fire = next(d for d in ar._query_overview(repository, window, None, "fire")["dispatchers"]
+                    if d["call_taker"] == "DISPATCHER T")
+        self.assertEqual((fire["calls_entered"], fire["processing_samples"],
+                          fire["median_processing"]), (1, 1, "1:58"))
+        ems = next(d for d in ar._query_overview(repository, window, None, "ems")["dispatchers"]
+                   if d["call_taker"] == "DISPATCHER T")
+        self.assertEqual((ems["calls_entered"], ems["processing_samples"],
+                          ems["excluded_scheduled"]), (1, 0, 1))
+        law_slow = ar._query_slow_calls(repository, window, row["dispatcher_ref"], "law")
+        self.assertEqual([(c["cfs_number"], c["processing_seconds"]) for c in law_slow["calls"]],
+                         [("C-FIRE", 1500), ("C-HELD", 479)])
 
 
 if __name__ == "__main__":

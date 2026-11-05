@@ -47,7 +47,7 @@ class AnalyticsOverviewRouteWiringTests(unittest.TestCase):
         argument_names = [argument.arg for argument in self.handler.args.args]
         self.assertEqual(
             argument_names,
-            ["response", "period", "start", "end", "tenant_context"],
+            ["response", "period", "start", "end", "discipline", "tenant_context"],
         )
         context_argument = self.handler.args.args[-1]
         annotation = ast.unparse(context_argument.annotation)
@@ -111,7 +111,7 @@ class AnalyticsOverviewRouteWiringTests(unittest.TestCase):
         argument_names = [argument.arg for argument in handler.args.args]
         self.assertEqual(
             argument_names,
-            ["request", "period", "start", "end", "tenant_context"],
+            ["request", "period", "start", "end", "discipline", "tenant_context"],
         )
         annotation = ast.unparse(handler.args.args[-1].annotation)
         self.assertIn("Depends(get_trusted_tenant_context)", annotation)
