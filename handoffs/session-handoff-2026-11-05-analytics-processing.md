@@ -7,7 +7,11 @@ Follows `session-handoff-2026-10-26-release-120.md`. Facts first.
 | Item | State | Last verified |
 | --- | --- | --- |
 | LCDash repo | `main` at `a747596` (`3d182c5` first-action metric, `5d07c98` yardstick note, `a747596` Stack collection), **pushed to GitHub and Bitbucket on 2026-11-05** at Ted's "Yes, push main". Nothing built or deployed; the release-builder has not run for this commit. | 2026-11-05 |
-| LCDash pilot (AWS) | unchanged: foundation stack `UPDATE_COMPLETE` (2026-10-26), web task definition revision 120, digest `sha256:4d02e77f96ca0414b02e06ce25ad04f6243d760a0af4adaee41173d9111d45d1`; `AnalyticsCollectorEnabled=true`, schedule 30 min; collector runs today all `complete`, 0 failures. | 2026-11-05 (read-only) |
+| LCDash pilot (AWS) | **Released.** Foundation stack `UPDATE_COMPLETE` 20:39:58Z (15:39 EST) via change set `release-4fcc645-20261105` (Ted typed the name; executed 20:36:59Z). Web task definition **revision 121**, collector revision 81, both image tag `release-4fcc6457782c`, digest `sha256:14d3f80abe58c6f3c581d34b39a9d0aca801b823f39ccf79e97f70cb70a25764`. ECS rollout COMPLETED 1/1; ALB target `10.42.1.175:8000` healthy; `/active-calls` 302 to Cognito; 55 web-log events after the rollout, 0 errors. Of 23 stack parameters only `PilotImageDigest` changed; five resources modified. | 2026-11-05 15:42 EST |
+| Rollback target | change set with digest `sha256:4d02e77f96ca0414b02e06ce25ad04f6243d760a0af4adaee41173d9111d45d1` (revision 120). | |
+| Release build | CodeBuild `lcdash-p1-logan-use1-release-builder:1a3a5a1a-e419-4e87-9bbb-7935d7a0193b`, SUCCEEDED 14:52:53 to 14:53:43 EST; `source_asset_sha256` `e6814cee9d258fe1018a75285b099e244068e1f4f58d431aa8f43c91bb10aa8e` (matches the release-builder deploy output). | 2026-11-05 |
+| ECR scan (new digest) | COMPLETE 14:57 EST: 9 findings, exactly the accepted baseline (util-linux 2.42.1-r0 CVE-2026-27456/53612/53613/53614/76642/78408/78409/78410, zlib 1.3.2-r0 CVE-2026-85091). | 2026-11-05 |
+| `unit_status_events` on the pilot | **Confirmed in use**: the first collector run on revision 81 (task created 16:07:06 EST, stopped 16:08:04, exit 0) logged `status: complete, calls_stored: 26, analytics_failures: 0` for window 18:37Z to 21:07Z. `upsert_bundle` writes the status rows for every stored call and a database error would have failed the run, so the table exists and accepts rows. Row count not read (RDS is reachable only from the VPC); Ted can read `unit_status_events_stored` from `/api/analytics/status` when signed in. | 2026-11-05 16:10 EST |
 | Tests | after the Stack commit: application `python -m pytest tests/` 2078 passed, 6 skipped, 2623 subtests passed; infrastructure `python -m pytest infrastructure/tests/` 151 passed, 9 subtests passed. `tests/test_analytics_postgres_live.py` (3 tests, including the four CFS timelines with Stack) **skipped**: no PostgreSQL reachable from this session. | 2026-11-05 |
 | Decisions open | listed in `docs/planning/ANALYTICS_PROCESSING_AUDIT_2026-11-05.md` section 1.4 (definition, data-model change, cap, benchmarks, scheduled exclusion, duplicate identity). Ted's yardstick (2026-11-05): call added to CAD → someone added to the call, i.e. first Assign **or Stack**. Ted approved the command-log collection ("Yes, add Stack") the same day; implemented, see below. Still open: `HowReported`, `UnitType.Discipline`, the backfill of older calls, cap, benchmarks, duplicate identity. | 2026-11-05 |
 
@@ -122,16 +126,11 @@ after the release (audit section 5 item 5).
 1. Ted: read audit section 1.4 and answer the six decisions (the code
    implements the recommended defaults; any change is a small edit).
 2. Run the live PostgreSQL test file as above; fix anything it finds.
-3. Release through the guarded path (AGENTS.md "Production deployment
-   rules"): `main` is pushed (done); next is the release builder for
-   the release commit, CodeBuild with `IMAGE_TAG=release-<first 12 hex of
-   HEAD>` (confirm with `git rev-parse HEAD` once this handoff commit is
-   pushed), ECR scan against
-   the accepted baseline, named change set with only `PilotImageDigest`
-   changing, execute only after Ted types the change-set name, verify ECS
-   rollout, ALB target, signed-in page, and then compare the four CFS numbers
-   in the drill-down with the audit table (expected 1:58, 20:59, 54:29,
-   1:39; the first and last leave the "> 3 Min" list).
+3. Released (see the state table). Still Ted's: the signed-in page check
+   (name and role render; the dispatcher table shows the "Stacked" column
+   and the "Stacked first" line; the four CFS numbers in the drill-down
+   read 1:58 / 20:59 / 54:29 / 1:39 — the older two stay at their first
+   Assign because they were collected before Stack existed).
 4. After the release, confirm on the pilot that `unit_status_events` fills
    (`/api/analytics/status` → `unit_status_events_stored` rising with each
    collector run) and that a known stacked call shows "Stacked" with a
@@ -141,6 +140,17 @@ after the release (audit section 5 item 5).
 5. Separate work packages, each needing Ted's approval: the bounded
    backfill of closed calls (audit section 5 item 5), `calls.how_reported`
    and `units.discipline` (items 2 and 3).
+
+## Release notes learned today
+
+- The foundation CDK app is `python cdk_app.py` (the default in
+  `infrastructure/cdk.json`), not `python app.py` as the 2026-08-08 plan
+  wrote; the first prepare attempt failed in synth and created nothing, so
+  the change-set name stayed free. The release-builder app is
+  `python release_builder_app.py`.
+- A collector run that starts in the minute the change set executes still
+  uses the old task definition revision; the new table is created by the
+  first run on the new revision, about 30 minutes later.
 
 Services were left running; nothing was stopped, started or changed on AWS,
 `.227` or `.15`. The SSO device-code login was approved by Ted for read-only
