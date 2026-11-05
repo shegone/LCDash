@@ -43,19 +43,25 @@ The Analytics page includes a Dispatcher / CAD Entry section for:
 - Calls taking longer than three minutes to reach first dispatch
 - Call-taker data coverage for the selected reporting window
 
-CAD processing is measured from the CFS `CallDateTime` to the earliest action
-by any unit of any agency on the call (Assigned, En route, Staged or On scene),
-read from both `call_agency_times` and `unit_responses`. A call is timed only
-when it is not scheduled, has such a stamp at or after the received time, and
-the interval is within the 60-minute cap; the three excluded buckets are
-counted on the page (summary line and the "Not timed" column) and calls over
-the cap are listed in the slow-call drill-down as "not averaged". The
-drill-down names the first action (event and unit or agency) so an interval can
-be checked against the CAD report. CAD's Stack event is not in `cfs_analytics`
-and is not collected, so time a unit spends holding a stacked call cannot be
-separated from call-taker time yet; see
+CAD processing is the public yardstick: the call being added to CAD to someone
+being added to the call. It is measured from the CFS `CallDateTime` to the
+earliest action by any unit of any agency on the call (Stacked, Assigned, En
+route, Staged or On scene), read from `unit_status_events` (the CAD command
+log's status rows, the only place Stack appears), `unit_responses` and
+`call_agency_times`. A call is timed only when it is not scheduled, has such a
+stamp at or after the received time, and the interval is within the 60-minute
+cap; the three excluded buckets are counted on the page (summary line and the
+"Not timed" column) and calls over the cap are listed in the slow-call
+drill-down as "not averaged". A Stack (the call queued on a busy unit) ends
+the interval like an Assign; the unit's wait from that Stack to its first
+Assign or En route is the hold, reported apart (the "Stacked" column with the
+average hold, the "Stacked first" summary line, the drill-down's "Unit hold")
+and never added to the dispatcher's time. The drill-down names the first
+action (event and unit or agency) so an interval can be checked against the
+CAD report. Status rows are collected from the day the table was introduced;
+earlier calls have no Stack and time to their first Assign. See
 `docs/planning/ANALYTICS_PROCESSING_AUDIT_2026-11-05.md` for the audit, the
-options and the proposed data-model change. CAD processing is not 911
+options and the data-model change. CAD processing is not 911
 phone-answer time. NGA911 integration can later add answer time, call duration,
 abandoned-call, transfer, queue-delay, and callback metrics.
 
@@ -87,6 +93,8 @@ within the selected historical reporting window.
 - `lcdash_analytics.units`
 - `lcdash_analytics.call_agency_times`
 - `lcdash_analytics.unit_responses`
+- `lcdash_analytics.unit_status_events` (command-log status rows: timestamp,
+  unit, status and its kind; no narrative, creator or destination)
 - `lcdash_analytics.sync_state`
 - `lcdash_analytics.sync_runs`
 

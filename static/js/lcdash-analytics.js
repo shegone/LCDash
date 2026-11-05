@@ -438,7 +438,7 @@
         const calls = Array.isArray(data.calls) ? data.calls : [];
         const total = Number(data.total) || calls.length;
         const shown = node("div", "slow-calls-meta",
-            `${data.period_label || ""}. Received to first unit action (assigned, en route, staged or on scene), longest first. ` +
+            `${data.period_label || ""}. Received to first unit action (stacked, assigned, en route, staged or on scene), longest first. ` +
             (total > calls.length ? `Showing ${calls.length} of ${total}.` : `${total} call${total === 1 ? "" : "s"}.`));
         panel.appendChild(shown);
         if (!calls.length) {
@@ -466,8 +466,10 @@
         const wrap = node("div", "table-responsive mt-2");
         const table = node("table", "table analytics-table align-middle");
         const headRow = node("tr");
-        ["CFS", "Received", "Time to first action", "First action", "Incident", "Priority", "Agency"].forEach(function (label, index) {
-            headRow.appendChild(node("th", index === 2 ? "text-end" : "", label));
+        ["CFS", "Received", "Time to first action", "First action", "Unit hold", "Incident", "Priority", "Agency"].forEach(function (label, index) {
+            const cell = node("th", index === 2 || index === 4 ? "text-end" : "", label);
+            if (index === 4) cell.title = "Stack to the unit's Assign or En route, when the call was stacked first.";
+            headRow.appendChild(cell);
         });
         const thead = node("thead");
         thead.appendChild(headRow);
@@ -479,6 +481,7 @@
             row.appendChild(node("td", "", String(call.received_at || "")));
             row.appendChild(node("td", "text-end text-warning fw-bold", String(call.processing || "")));
             row.appendChild(node("td", "", [call.first_action, call.first_action_by].filter(Boolean).join(" ")));
+            row.appendChild(node("td", "text-end text-secondary", String(call.hold || "")));
             row.appendChild(node("td", "", String(call.incident || "")));
             row.appendChild(node("td", "", String(call.priority || "")));
             row.appendChild(node("td", "", String(call.agency || "")));

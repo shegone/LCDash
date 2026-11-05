@@ -211,6 +211,16 @@ class LiveAnalyticsTests(unittest.TestCase):
                 "dispatched_at, enroute_at, on_scene_at) VALUES (%s,%s,%s,%s,%s)",
                 (cfs, ori, at(cfs, dispatched), at(cfs, enroute), at(cfs, on_scene)))
 
+        order = {}
+
+        def log(cfs, number, kind, seconds, description=""):
+            order[cfs] = order.get(cfs, -1) + 1
+            repository.connection.execute(
+                "INSERT INTO lcdash_analytics.unit_status_events (cfs_number, event_order, "
+                "unit_number, status_code, status_description, event_kind, occurred_at) "
+                "VALUES (%s,%s,%s,'',%s,%s,%s)",
+                (cfs, order[cfs], number, description or kind, kind, at(cfs, seconds)))
+
         def roster(number, agency_code, unit_type=""):
             repository.connection.execute(
                 "INSERT INTO lcdash_analytics.units (unit_number, agency, unit_type, "
@@ -232,15 +242,22 @@ class LiveAnalyticsTests(unittest.TestCase):
         unit("C-FIRE", "F1", enroute=2609, on_scene=4158)
         unit("C-FIRE", "S1", on_scene=4962)            # stacked, then on scene
         agency("C-FIRE", "WVDOF", dispatched=2609, enroute=2609, on_scene=4158)
-        # Stack-then-enroute: Enroute at 20:59, Assign entered at 47:00 after
-        # the unit was on scene. The 2:17 Stack is not in the data.
+        log("C-FIRE", "E1", "assigned", 118, "Assign")   # same event as the unit stamp
+        log("C-FIRE", "S1", "stacked", 1500, "Stack")    # a later Stack changes nothing
+        log("C-FIRE", "", "", 60, "Narrative")            # a status outside the five kinds
+        # Stack-then-enroute: Stack at 2:17 from the command log, Enroute at
+        # 20:59, Assign entered at 47:00 after the unit was on scene.
         call("C-STACK", 20)
         unit("C-STACK", "S2", enroute=1259, on_scene=2039, dispatched=2821)
         agency("C-STACK", "WVLCSO", dispatched=2821, enroute=1259, on_scene=2039)
-        # Held unit: stacked at 7:59 (not in the data), assigned at 54:29.
+        log("C-STACK", "S2", "stacked", 137, "Stack")
+        log("C-STACK", "S2", "enroute", 1259, "Enroute")
+        # Held unit: stacked at 7:59, assigned at 54:29. The hold is the unit's.
         call("C-HELD", 30)
         unit("C-HELD", "S3", dispatched=3269)
         agency("C-HELD", "WVLCSO", dispatched=3269)
+        log("C-HELD", "S3", "stacked", 479, "Stack")
+        log("C-HELD", "S3", "assigned", 3269, "Assign")
         # Re-assign after the first leg was complete: Enroute 1:39, Assign 7:12.
         call("C-REASSIGN", 40)
         unit("C-REASSIGN", "S1", enroute=99, dispatched=432)
@@ -263,22 +280,26 @@ class LiveAnalyticsTests(unittest.TestCase):
         self.assertEqual(row["processing_samples"], 5)
         self.assertEqual((row["excluded_scheduled"], row["excluded_no_stamp"],
                           row["excluded_over_cap"]), (1, 1, 1))
+        # 1:58 / 2:17 / 7:59 / 1:39: the CAD report's own figures.
+        timed = [118, 137, 479, 99, 0]
         self.assertEqual(row["median_processing"], "1:58")
-        self.assertEqual(row["average_processing"],
-                         ar._format_duration(statistics.mean([118, 1259, 3269, 99, 0])))
-        self.assertEqual(row["over_180_count"], 2)
+        self.assertEqual(row["average_processing"], ar._format_duration(statistics.mean(timed)))
+        self.assertEqual(row["over_180_count"], 1)
         self.assertEqual(row["within_90_percent"], 20)
+        # The two stacked calls waited 46:30 and 18:42 on their units.
+        self.assertEqual((row["stacked_calls"], row["average_hold"]),
+                         (2, ar._format_duration((3269 - 479 + 1259 - 137) / 2)))
         summary = overview["dispatcher_metrics"]
         self.assertEqual((summary["processing_samples"], summary["over_180_count"],
-                          summary["excluded_over_cap"], summary["processing_cap_minutes"]),
-                         (5, 2, 1, 60))
+                          summary["excluded_over_cap"], summary["processing_cap_minutes"],
+                          summary["stacked_calls"], summary["average_hold"]),
+                         (5, 1, 1, 60, 2, "32:36"))
 
         slow = ar._query_slow_calls(repository, window, row["dispatcher_ref"])
         self.assertEqual([(c["cfs_number"], c["processing_seconds"], c["first_action"],
-                           c["first_action_by"], c["agency"]) for c in slow["calls"]],
-                         [("C-HELD", 3269, "Assigned", "S3", "LCSO"),
-                          ("C-STACK", 1259, "En route", "S2", "LCSO")])
-        self.assertEqual(slow["total"], 2)
+                           c["first_action_by"], c["agency"], c["hold"]) for c in slow["calls"]],
+                         [("C-HELD", 479, "Stacked", "S3", "LCSO", "46:30")])
+        self.assertEqual(slow["total"], 1)
         self.assertEqual([(c["cfs_number"], c["processing_seconds"]) for c in slow["over_cap"]["calls"]],
                          [("C-OVERCAP", 5400)])
         self.assertEqual(slow["over_cap"]["total"], 1)
@@ -289,13 +310,13 @@ class LiveAnalyticsTests(unittest.TestCase):
         self.assertEqual(metrics["response_eligible_calls"], 7)
         self.assertEqual(metrics["response_coverage_percent"], 29)
         self.assertEqual(metrics["average_response"], ar._format_duration((1235 + 2039) / 2))
-        self.assertEqual(metrics["average_processing"],
-                         ar._format_duration(statistics.mean([118, 1259, 3269, 99, 0])))
+        self.assertEqual(metrics["average_processing"], ar._format_duration(statistics.mean(timed)))
         m1 = next(u for u in overview["busiest_units"] if u["unit_number"] == "M1")
         self.assertEqual((m1["responses"], m1["average_response"]), (1, "—"))
 
         # Disciplines from the unit roster: fire times the fire unit's Assign,
-        # law times the sheriff's units; the forestry unit is unclassified.
+        # law times the sheriff's units (on the fire call, the deputy's Stack
+        # at 25:00 is law's first action); the forestry unit is unclassified.
         groups, iso = ar._discipline_metrics(repository, {
             "window_start": window.start_at, "window_end": window.end_at,
             "excluded_dispatcher_identity": ar.EXCLUDED_DISPATCHER_IDENTITY})
@@ -303,7 +324,7 @@ class LiveAnalyticsTests(unittest.TestCase):
         self.assertEqual((by["fire"]["overall"]["timed"], by["fire"]["overall"]["median"]),
                          (1, "1:58"))
         self.assertEqual((by["law"]["overall"]["timed"], by["law"]["overall"]["over_180_count"]),
-                         (4, 2))
+                         (5, 2))
         self.assertIsNone(by["ems"]["overall"])
         self.assertEqual(iso["timed"], 1)
 

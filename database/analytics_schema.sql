@@ -82,6 +82,22 @@ CREATE TABLE IF NOT EXISTS lcdash_analytics.unit_responses (
     PRIMARY KEY (cfs_number, unit_number)
 );
 
+-- Unit status events from the CAD command log (cfs_core CommandLog): the
+-- timestamp, the unit and the status only. Stack is recorded here and
+-- nowhere else in the CAD API. The log's Text, Creator, Destination and
+-- Tag fields carry narrative and names and are never stored.
+CREATE TABLE IF NOT EXISTS lcdash_analytics.unit_status_events (
+    cfs_number TEXT NOT NULL
+        REFERENCES lcdash_analytics.calls(cfs_number) ON DELETE CASCADE,
+    event_order INTEGER NOT NULL,
+    unit_number TEXT NOT NULL DEFAULT '',
+    status_code TEXT NOT NULL DEFAULT '',
+    status_description TEXT NOT NULL DEFAULT '',
+    event_kind TEXT NOT NULL DEFAULT '',
+    occurred_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (cfs_number, event_order)
+);
+
 CREATE TABLE IF NOT EXISTS lcdash_analytics.sync_state (
     state_key TEXT PRIMARY KEY,
     state_timestamp TIMESTAMPTZ,
@@ -274,6 +290,8 @@ CREATE INDEX IF NOT EXISTS idx_analytics_unit_responses_unit
     ON lcdash_analytics.unit_responses(unit_number, dispatched_at);
 CREATE INDEX IF NOT EXISTS idx_analytics_unit_responses_station
     ON lcdash_analytics.unit_responses(station, dispatched_at);
+CREATE INDEX IF NOT EXISTS idx_analytics_unit_status_events_kind
+    ON lcdash_analytics.unit_status_events(cfs_number, event_kind, occurred_at);
 CREATE INDEX IF NOT EXISTS idx_mae_interactions_created
     ON lcdash_analytics.mae_interactions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_mae_interactions_user

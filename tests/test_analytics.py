@@ -196,6 +196,70 @@ class AnalyticsModelTests(unittest.TestCase):
         self.assertEqual(bundle["unit_responses"][0]["station"], "ASTA 10")
         self.assertEqual(bundle["units"][0]["agency"], "LEASA")
 
+    def test_command_log_status_rows_become_unit_status_events_without_narrative(self):
+        raw_call = completed_call()
+        raw_call["CommandLog"] = [
+            # Narrative-only rows (no status) are dropped entirely.
+            {"Timestamp": "2026-07-23T15:00:30Z", "Text": "PRIVATE COMMAND NOTE",
+             "Creator": {"FirstName": "PRIVATE", "LastName": "CREATOR"}},
+            # Stack has no ConsiderAs flag; CAD names it "Stack".
+            {"Timestamp": "2026-07-23T15:00:40Z", "UnitNumber": "MED10",
+             "Status": {"Description": "Stack", "Abbreviation": "STK"},
+             "Text": "PRIVATE STACK NOTE", "Destination": "PRIVATE PLACE",
+             "Creator": {"FirstName": "PRIVATE", "LastName": "DISPATCHER"}, "Tag": "PRIVATE TAG"},
+            {"Timestamp": "2026-07-23T15:01:00Z", "UnitNumber": "MED10",
+             "Status": {"Description": "Assigned", "ConsiderAsDispatched": True}},
+            {"Timestamp": "2026-07-23T15:02:00Z", "UnitNumber": "MED10",
+             "Status": {"Description": "Enroute", "ConsiderAsEnrouteToCFSLocation": True}},
+            {"Timestamp": "2026-07-23T15:03:00Z", "UnitNumber": "MED10",
+             "Status": {"Description": "Unstack"}},
+            {"Timestamp": "2026-07-23T15:08:00Z", "UnitNumber": "MED10",
+             "Status": {"Description": "On Scene"}},
+            {"Timestamp": "2026-07-23T15:40:00Z", "UnitNumber": "MED10",
+             "Status": {"Description": "Arrived at Destination"}},
+            {"Timestamp": "", "UnitNumber": "MED10", "Status": {"Description": "Available"}},
+            "not a row",
+        ]
+
+        bundle = normalize_analytics_bundle(raw_call, cfs_analytics(), collected_at=NOW)
+
+        events = bundle["unit_status_events"]
+        self.assertEqual(
+            [(e["event_order"], e["unit_number"], e["event_kind"], e["status_code"],
+              e["status_description"], e["occurred_at"].strftime("%H:%M:%S"))
+             for e in events],
+            [(0, "MED10", "stacked", "STK", "Stack", "15:00:40"),
+             (1, "MED10", "assigned", "", "Assigned", "15:01:00"),
+             (2, "MED10", "enroute", "", "Enroute", "15:02:00"),
+             (3, "MED10", "", "", "Unstack", "15:03:00"),
+             (4, "MED10", "on_scene", "", "On Scene", "15:08:00"),
+             (5, "MED10", "", "", "Arrived at Destination", "15:40:00")])
+        self.assertTrue(all(e["cfs_number"] == "CFS26-40001" for e in events))
+        self.assertEqual(
+            set(events[0]),
+            {"cfs_number", "event_order", "unit_number", "status_code",
+             "status_description", "event_kind", "occurred_at"})
+        serialized = str(bundle).lower()
+        for forbidden in ("private", "creator", "private place", "command note",
+                          "stack note", "private tag"):
+            self.assertNotIn(forbidden, serialized)
+
+    def test_status_classification_prefers_the_flags_and_names_stack_by_wording(self):
+        from app.services.analytics_models import classify_status_event
+
+        self.assertEqual(classify_status_event({"Description": "STACKED"}), "stacked")
+        self.assertEqual(classify_status_event({"Abbreviation": "STACK"}), "stacked")
+        self.assertEqual(classify_status_event({"Description": "Unstack"}), "")
+        self.assertEqual(
+            classify_status_event({"Description": "Custom", "ConsiderAsStaged": True}), "staged")
+        self.assertEqual(
+            classify_status_event({"Description": "Custom", "ConsiderAsArrivedAtCFSLocation": True}),
+            "on_scene")
+        self.assertEqual(classify_status_event({"Description": "Dispatched"}), "assigned")
+        self.assertEqual(classify_status_event({"Description": "En Route"}), "enroute")
+        self.assertEqual(classify_status_event({"Description": "Arrived"}), "")
+        self.assertEqual(classify_status_event({}), "")
+
     def test_bundle_excludes_sensitive_and_raw_cad_content(self):
         bundle = normalize_analytics_bundle(
             completed_call(),
@@ -305,6 +369,10 @@ class AnalyticsCollectorTests(unittest.TestCase):
         self.assertIn("primary key (cfs_number, unit_number)", schema)
         self.assertIn("unit_response_metrics", schema)
         self.assertIn("call_response_metrics", schema)
+        self.assertIn("lcdash_analytics.unit_status_events", schema)
+        self.assertIn("primary key (cfs_number, event_order)", schema)
+        for column in ("creator text", "command_text", "destination text", "tag text"):
+            self.assertNotIn(column, schema)
         self.assertIn("call_taker text not null default ''", schema)
         self.assertIn(
             "call_taker_unique_identifier text not null default ''",

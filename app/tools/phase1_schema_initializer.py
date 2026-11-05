@@ -19,6 +19,9 @@ APPROVED_OBJECTS = frozenset(
         "lcdash_analytics.units",
         "lcdash_analytics.call_agency_times",
         "lcdash_analytics.unit_responses",
+        # CAD command-log status rows (timestamp, unit, status); approved by
+        # the owner on 2026-11-05 for the Stack-aware processing metric.
+        "lcdash_analytics.unit_status_events",
         "lcdash_analytics.mae_interactions",
         "lcdash_analytics.mae_feedback",
         "lcdash_analytics.jack_interactions",

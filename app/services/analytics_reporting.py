@@ -40,11 +40,14 @@ EXCLUDED_DISPATCHER_IDENTITY = "KIM MAYNARD"
 # scene), read from both the per-agency and the per-unit timing records.
 # Intervals over the cap are held or queued calls rather than call-taker
 # work: they are kept out of the averages but stay visible as a count and in
-# the slow-call drill-down. CAD's Stack event is not collected, so unit hold
-# time cannot be separated yet (docs/planning/ANALYTICS_PROCESSING_AUDIT_2026-11-05.md).
+# the slow-call drill-down. CAD's Stack event (a call queued on a busy unit)
+# comes from the command log in unit_status_events and ends the interval
+# like an Assign; the wait from that Stack to the first Assign / En route is
+# the unit's hold, reported apart (docs/planning/ANALYTICS_PROCESSING_AUDIT_2026-11-05.md).
 PROCESSING_CAP_SECONDS = 3600
 PROCESSING_CAP_MINUTES = PROCESSING_CAP_SECONDS // 60
 FIRST_ACTION_LABELS = {
+    "stacked": "Stacked",
     "assigned": "Assigned",
     "enroute": "En route",
     "staged": "Staged",
@@ -175,11 +178,29 @@ def _format_duration(seconds) -> str:
 
 
 # Every dispatch-related stamp CAD recorded for a call, one row per stamp,
-# from both the per-agency record (CallTimes) and the per-unit record
-# (UnitTimes). ``stamp_rank`` orders stamps that share a timestamp (an
-# "Assigned" derived from an "En route" carries the same time).
+# from the per-agency record (CallTimes), the per-unit record (UnitTimes)
+# and the command log's status events (unit_status_events, the only place
+# Stack appears). ``stamp_rank`` orders stamps that share a timestamp (an
+# "Assigned" derived from an "En route" carries the same time; a Stack at
+# the same second as an Assign is named first).
 ACTION_STAMPS_SQL = """
         action_stamps AS (
+            SELECT
+                cfs_number,
+                unit_number AS party,
+                'log' AS source,
+                occurred_at AS stamp_at,
+                event_kind AS kind,
+                CASE event_kind
+                    WHEN 'stacked' THEN 0
+                    WHEN 'assigned' THEN 1
+                    WHEN 'enroute' THEN 2
+                    WHEN 'staged' THEN 3
+                    ELSE 4
+                END AS stamp_rank
+            FROM lcdash_analytics.unit_status_events
+            WHERE event_kind IN ('stacked', 'assigned', 'enroute', 'staged', 'on_scene')
+            UNION ALL
             SELECT
                 timing.cfs_number,
                 timing.party,
@@ -223,11 +244,14 @@ def _call_processing_sql(*, dispatcher_calls: bool, extra_columns: str = "") -> 
     """CTEs ending in ``call_processing``: one row per completed call in the window.
 
     Each row carries ``first_action_at`` (the earliest unit action at or
-    after the received time), ``first_on_scene_at``, ``processing_seconds``
-    and ``timing_status``: ``timed``, ``scheduled``, ``no_stamp`` (no unit
-    action at or after the received time) or ``over_cap``. Only ``timed``
-    rows enter any average; the other three are counted so the exclusions
-    are visible on the page. ``dispatcher_calls`` restricts the population
+    after the received time: Stack, Assign, En route, Staged or On scene),
+    ``first_dispatch_at`` (the earliest of those other than Stack),
+    ``hold_seconds`` (Stack to that dispatch when the call was stacked first;
+    the unit's wait, not the dispatcher's), ``first_on_scene_at``,
+    ``processing_seconds`` and ``timing_status``: ``timed``, ``scheduled``,
+    ``no_stamp`` (no unit action at or after the received time) or
+    ``over_cap``. Only ``timed`` rows enter any average; the other three are
+    counted so the exclusions are visible on the page. ``dispatcher_calls`` restricts the population
     to calls with a call taker, minus the excluded identity. Bound
     parameters: window_start, window_end, processing_cap_seconds and, for
     dispatcher calls, excluded_dispatcher_identity.
@@ -263,6 +287,10 @@ def _call_processing_sql(*, dispatcher_calls: bool, extra_columns: str = "") -> 
                     WHERE action_stamps.stamp_at >= selected_calls.call_received_at
                 ) AS first_action_at,
                 MIN(action_stamps.stamp_at) FILTER (
+                    WHERE action_stamps.kind <> 'stacked'
+                      AND action_stamps.stamp_at >= selected_calls.call_received_at
+                ) AS first_dispatch_at,
+                MIN(action_stamps.stamp_at) FILTER (
                     WHERE action_stamps.kind = 'on_scene'
                       AND action_stamps.stamp_at >= selected_calls.call_received_at
                 ) AS first_on_scene_at
@@ -275,10 +303,18 @@ def _call_processing_sql(*, dispatcher_calls: bool, extra_columns: str = "") -> 
             SELECT
                 selected_calls.*,
                 call_milestones.first_action_at,
+                call_milestones.first_dispatch_at,
                 call_milestones.first_on_scene_at,
                 EXTRACT(
                     EPOCH FROM call_milestones.first_action_at - selected_calls.call_received_at
                 ) AS processing_seconds,
+                CASE
+                    WHEN call_milestones.first_dispatch_at > call_milestones.first_action_at
+                    THEN EXTRACT(
+                        EPOCH FROM call_milestones.first_dispatch_at
+                            - call_milestones.first_action_at
+                    )
+                END AS hold_seconds,
                 CASE
                     WHEN selected_calls.is_scheduled THEN 'scheduled'
                     WHEN call_milestones.first_action_at IS NULL THEN 'no_stamp'
@@ -331,6 +367,8 @@ def _empty_overview(window: AnalyticsWindow, message: str) -> dict:
             "excluded_no_stamp": 0,
             "excluded_over_cap": 0,
             "processing_cap_minutes": PROCESSING_CAP_MINUTES,
+            "stacked_calls": 0,
+            "average_hold": "—",
         },
         "dispatchers": [],
         "dispatcher_disciplines": [],
@@ -441,7 +479,11 @@ def _query_overview(
             COUNT(*) FILTER (WHERE timing_status = 'no_stamp')
                 AS excluded_no_stamp,
             COUNT(*) FILTER (WHERE timing_status = 'over_cap')
-                AS excluded_over_cap
+                AS excluded_over_cap,
+            COUNT(*) FILTER (WHERE timing_status = 'timed' AND hold_seconds > 0)
+                AS stacked_calls,
+            AVG(hold_seconds) FILTER (WHERE timing_status = 'timed' AND hold_seconds > 0)
+                AS average_hold_seconds
     """
 
     dispatcher_summary_row = repository.fetchone(
@@ -455,7 +497,7 @@ def _query_overview(
         FROM call_processing
         """,
         params,
-    ) or (0, 0, None, None, 0, 0, None, 0, 0, 0)
+    ) or (0, 0, None, None, 0, 0, None, 0, 0, 0, 0, None)
 
     dispatcher_rows = repository.fetchall(
         _call_processing_sql(dispatcher_calls=True)
@@ -483,7 +525,7 @@ def _query_overview(
     dispatchers = []
     for row in dispatcher_rows:
         # taker, calls, timed, average, median, within 90, over 180, p90,
-        # scheduled, no stamp, over cap, ref
+        # scheduled, no stamp, over cap, stacked, average hold, ref
         calls_entered = int(row[1] or 0)
         processing_samples = int(row[2] or 0)
         within_90 = int(row[5] or 0)
@@ -501,7 +543,7 @@ def _query_overview(
                 "p90_processing": _format_duration(row[7]),
                 # An opaque handle for the slow-call list; the CAD identifier
                 # itself never leaves the server.
-                "dispatcher_ref": str(row[11] or ""),
+                "dispatcher_ref": str(row[13] or ""),
                 "processing_samples": processing_samples,
                 "within_90_percent": round(
                     (within_90 / processing_samples) * 100
@@ -510,6 +552,10 @@ def _query_overview(
                 "excluded_scheduled": int(row[8] or 0),
                 "excluded_no_stamp": int(row[9] or 0),
                 "excluded_over_cap": int(row[10] or 0),
+                # Timed calls whose first action was a Stack, and the mean
+                # wait from that Stack to the first Assign / En route.
+                "stacked_calls": int(row[11] or 0),
+                "average_hold": _format_duration(row[12]),
             }
         )
 
@@ -534,6 +580,8 @@ def _query_overview(
         "excluded_no_stamp": int(dispatcher_summary_row[8] or 0),
         "excluded_over_cap": int(dispatcher_summary_row[9] or 0),
         "processing_cap_minutes": PROCESSING_CAP_MINUTES,
+        "stacked_calls": int(dispatcher_summary_row[10] or 0),
+        "average_hold": _format_duration(dispatcher_summary_row[11]),
     }
 
     daily_rows = repository.fetchall(
@@ -1005,8 +1053,8 @@ def _discipline_metrics(
     """Call processing time by discipline, for every dispatcher and for all.
 
     A call counts once in each discipline whose units acted on it, measured
-    from the CAD "call received" time to the earliest action (assigned, en
-    route, staged or on scene) by a unit of that discipline, so a dispatcher
+    from the CAD "call received" time to the earliest action (stacked,
+    assigned, en route, staged or on scene) by a unit of that discipline, so a dispatcher
     can be compared on law, EMS and fire separately. The discipline comes
     from the responding unit's roster agency or unit type (the same rule the
     station-discipline chart uses, which classifies every response); the
@@ -1070,6 +1118,20 @@ def _discipline_metrics(
                 FROM lcdash_analytics.unit_responses AS unit_response
                 LEFT JOIN lcdash_analytics.units AS unit_record
                     ON unit_record.unit_number = unit_response.unit_number
+                UNION ALL
+                SELECT
+                    status_event.cfs_number,
+                    UPPER(COALESCE(NULLIF(unit_record.agency, ''), '')),
+                    UPPER(COALESCE(NULLIF(unit_record.unit_type, ''), '')),
+                    status_event.occurred_at,
+                    NULL::timestamptz,
+                    NULL::timestamptz,
+                    NULL::timestamptz
+                FROM lcdash_analytics.unit_status_events AS status_event
+                LEFT JOIN lcdash_analytics.units AS unit_record
+                    ON unit_record.unit_number = status_event.unit_number
+                WHERE status_event.event_kind
+                    IN ('stacked', 'assigned', 'enroute', 'staged', 'on_scene')
             ) AS timing
             CROSS JOIN LATERAL (
                 VALUES
@@ -1199,8 +1261,9 @@ def _query_slow_calls(
     table (scheduled calls and intervals over the cap excluded). Calls over
     the cap are returned separately in ``over_cap`` so nothing is hidden;
     they are not in any average. Each row names the first unit action (the
-    event and the unit or agency) so the interval can be checked against the
-    CAD report. Only fields the analytics store already shows elsewhere (CFS
+    event and the unit or agency) and, for a stacked call, the unit's hold,
+    so the interval can be checked against the CAD report. Only fields the
+    analytics store already shows elsewhere (CFS
     number, incident type, priority, responding agency, unit number and the
     times); no location and no narrative.
     """
@@ -1251,7 +1314,8 @@ def _query_slow_calls(
             COUNT(*) FILTER (WHERE call_processing.timing_status = 'timed') OVER ()
                 AS total_timed,
             COUNT(*) FILTER (WHERE call_processing.timing_status = 'over_cap') OVER ()
-                AS total_over_cap
+                AS total_over_cap,
+            call_processing.hold_seconds
         FROM call_processing
         LEFT JOIN first_actions
             ON first_actions.cfs_number = call_processing.cfs_number
@@ -1293,6 +1357,9 @@ def _query_slow_calls(
             "agency": _agency_display_label(str(row[6] or "")) or "—",
             "first_action": FIRST_ACTION_LABELS.get(kind, kind.replace("_", " ").title()),
             "first_action_by": str(row[8] or "").strip(),
+            # Stack to the first Assign / En route, when the call was stacked
+            # first: the unit's wait, shown apart from the dispatcher's time.
+            "hold": _format_duration(row[13]) if row[13] else "",
         }
         if str(row[10] or "") == "over_cap":
             over_cap_calls.append(entry)

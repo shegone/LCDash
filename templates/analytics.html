@@ -761,6 +761,7 @@
             </div>
             <div class="data-note mt-2">
                 Not timed: {{ dispatcher_metrics.excluded_scheduled|default(0) }} scheduled &middot; {{ dispatcher_metrics.excluded_no_stamp|default(0) }} with no unit stamp after the received time &middot; {{ dispatcher_metrics.excluded_over_cap|default(0) }} over {{ dispatcher_metrics.processing_cap_minutes|default(60) }} minutes (held or queued; see the calls behind the &gt; 3 Min count for the rest).
+                Stacked first: {{ dispatcher_metrics.stacked_calls|default(0) }} timed calls were queued on a busy unit, average hold {{ dispatcher_metrics.average_hold|default('—') }} from Stack to Assign or En route; that hold is the unit's, not the dispatcher's, and is not in the processing figures.
             </div>
 
             {% if analytics_snapshot.dispatchers %}
@@ -795,9 +796,11 @@
                                         <th class="text-end">Calls</th>
                                         <th class="text-end">Share</th>
                                         <th class="text-end"
-                                            title="Calls timed from received to the first unit action (assigned, en route, staged or on scene).">Timed</th>
+                                            title="Calls timed from received to the first unit action (stacked, assigned, en route, staged or on scene).">Timed</th>
                                         <th class="text-end"
                                             title="Calls that could not be timed: scheduled, no unit stamp at or after the received time, or over 60 minutes.">Not timed</th>
+                                        <th class="text-end"
+                                            title="Timed calls whose first action was a Stack: the dispatcher queued the call on a busy unit. The unit's average hold from Stack to Assign or En route is in each cell's tooltip; it is not charged to the dispatcher.">Stacked</th>
                                         <th class="text-end"
                                             title="The mean. A few very long calls pull it up, so read it next to the median and the 90th percentile.">
                                             Average
@@ -823,6 +826,7 @@
                                             <td class="text-end">{{ dispatcher.share_percent }}%</td>
                                             <td class="text-end">{{ dispatcher.processing_samples }}</td>
                                             <td class="text-end text-secondary" title="{{ dispatcher.excluded_scheduled|default(0) }} scheduled · {{ dispatcher.excluded_no_stamp|default(0) }} no unit stamp · {{ dispatcher.excluded_over_cap|default(0) }} over {{ dispatcher_metrics.processing_cap_minutes|default(60) }} min">{{ (dispatcher.excluded_scheduled|default(0)) + (dispatcher.excluded_no_stamp|default(0)) + (dispatcher.excluded_over_cap|default(0)) }}</td>
+                                            <td class="text-end text-secondary" title="average unit hold {{ dispatcher.average_hold|default('—') }}">{{ dispatcher.stacked_calls|default(0) }}</td>
                                             <td class="text-end">{{ dispatcher.average_processing }}</td>
                                             <td class="text-end">{{ dispatcher.median_processing }}</td>
                                             <td class="text-end">{{ dispatcher.p90_processing|default('—') }}</td>
@@ -861,10 +865,13 @@
                 CAD processing is call received to the earliest unit action on the call.
                 It excludes scheduled calls, calls with no unit stamp at or after the
                 received time, and intervals over {{ dispatcher_metrics.processing_cap_minutes|default(60) }} minutes.
-                CAD's Stack event is not collected, so time a unit spends holding a
-                stacked call (the unit was busy, or asked to keep the call) is still
-                charged to the call that was entered; the calls behind the &gt; 3 Min
-                count show which unit action ended the interval.
+                A Stack (the call queued on a busy unit) ends the interval like an
+                Assign, because someone was added to the call; the unit's wait from
+                that Stack to its Assign or En route is reported as the hold, apart
+                from the dispatcher's time. Stack comes from the CAD command log and
+                is present for calls collected from the day it was switched on; the
+                calls behind the &gt; 3 Min count show which unit action ended each
+                interval.
                 <br>
                 The average adds every second, so a few calls that waited many
                 minutes (a held call, a unit that was not free) raise it well above
@@ -1258,7 +1265,7 @@
 
 <script id="analytics-snapshot" type="application/json">{{ analytics_snapshot|tojson }}</script>
 <script src="/static/js/chart.umd.min.js?v=4.4.7"></script>
-<script src="/static/js/lcdash-analytics.js?v=20261105-first-action"></script>
+<script src="/static/js/lcdash-analytics.js?v=20261105-stack"></script>
 <script>
     LCDashTime.updateCadDisplayTimes();
 </script>

@@ -62,14 +62,14 @@ class RecordingRepository:
             return (10, 0, None, None, None, 0, None, 0)
         if "calls_with_call_taker" in query:
             # calls, samples, average, median, within 90, over 180, p90,
-            # excluded scheduled, no stamp, over cap
-            return (4, 3, 300.0, 120.0, 1, 1, 540.0, 1, 0, 0)
+            # excluded scheduled, no stamp, over cap, stacked, average hold
+            return (4, 3, 300.0, 120.0, 1, 1, 540.0, 1, 0, 0, 0, None)
         return (0, 0, 0)
 
     def fetchall(self, query, params=None):
         self.queries.append((query, params))
         if "AS dispatcher_ref" in query:
-            return [("A DISPATCHER", 4, 3, 300.0, 120.0, 1, 1, 540.0, 1, 0, 0, REF)]
+            return [("A DISPATCHER", 4, 3, 300.0, 120.0, 1, 1, 540.0, 1, 0, 0, 0, None, REF)]
         if "AS agency" in query and "LIMIT 8" in query:
             return [("SLD", 10)]
         return []
@@ -145,12 +145,12 @@ class SlowCallListTests(unittest.TestCase):
         received = datetime(2026, 10, 21, 17, 7, tzinfo=timezone.utc)
         # cfs, received, seconds, description, code, priority, agency,
         # first-action kind, party, source, timing_status, total timed,
-        # total over cap
+        # total over cap, hold seconds
         FakeSlowCallRepository.rows = [
             ("CFS-1", received, 1800.0, "Welfare check", "WELCK", "3", "LEASA",
-             "enroute", "MED10", "unit", "timed", 2, 0),
+             "enroute", "MED10", "unit", "timed", 2, 0, None),
             ("CFS-2", received, 240.0, "", "MED", "", "",
-             "assigned", "SYN-AG", "agency", "timed", 2, 0),
+             "stacked", "SYN-7", "log", "timed", 2, 0, 1122.0),
         ]
         self.repository = FakeSlowCallRepository()
         self.patches = [
@@ -178,11 +178,12 @@ class SlowCallListTests(unittest.TestCase):
         self.assertEqual(second["agency"], "Unknown")
         self.assertEqual(first["first_action"], "En route")
         self.assertEqual(first["first_action_by"], "MED10")
-        self.assertEqual(second["first_action"], "Assigned")
+        self.assertEqual(second["first_action"], "Stacked")
+        self.assertEqual((first["hold"], second["hold"]), ("", "18:42"))
         self.assertEqual(
             set(first), {"cfs_number", "received_at", "processing",
                          "processing_seconds", "incident", "priority", "agency",
-                         "first_action", "first_action_by"})
+                         "first_action", "first_action_by", "hold"})
         self.assertEqual(result["over_cap"], {"total": 0, "shown": 0, "calls": []})
         self.assertEqual(result["cap_minutes"], 60)
 
@@ -190,9 +191,9 @@ class SlowCallListTests(unittest.TestCase):
         received = datetime(2026, 10, 21, 17, 7, tzinfo=timezone.utc)
         FakeSlowCallRepository.rows = [
             ("CFS-9", received, 5400.0, "Hang up", "HANG", "30", "LCSO",
-             "assigned", "SO1", "unit", "over_cap", 1, 1),
+             "assigned", "SO1", "unit", "over_cap", 1, 1, None),
             ("CFS-1", received, 300.0, "Alarm", "ALM", "3", "FC 1",
-             "assigned", "E1", "unit", "timed", 1, 1),
+             "assigned", "E1", "unit", "timed", 1, 1, None),
         ]
 
         result = get_dispatcher_slow_calls(REF, period="24h")
@@ -318,7 +319,7 @@ class TablePageTests(unittest.TestCase):
         self.assertIn(f'data-slow-calls="{REF}"', self.html)
         self.assertIn('id="dispatcher-slow-calls"', self.html)
         self.assertIn('aria-controls="dispatcher-slow-calls"', self.html)
-        self.assertIn("lcdash-analytics.js?v=20261105-first-action", self.html)
+        self.assertIn("lcdash-analytics.js?v=20261105-stack", self.html)
 
     def test_a_dispatcher_with_no_slow_calls_gets_a_plain_number(self):
         self.overview["dispatchers"][0]["over_180_count"] = 0

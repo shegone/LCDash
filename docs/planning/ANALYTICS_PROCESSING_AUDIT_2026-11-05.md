@@ -101,15 +101,16 @@ in every `cfs_core/search` result and the normaliser discards. Collecting
 it (section 5, items 1 and 4; no new API call) makes 34950 read 2:17 and
 36232 read 7:59, and lets the unit's own hold be shown apart. That is the
 remaining step to the lowest *accurate* time; nothing else in the data can
-shorten the interval honestly. The schema change still needs Ted's explicit
-approval before anything is written.
+shorten the interval honestly. **Ted approved the schema change on
+2026-11-05 ("Yes, add Stack")**; section 5 records what was implemented.
 
 1. Accept definition B now (received → earliest unit action, any agency or
    unit, Assigned/En route/Staged/On scene). Implemented; can be reverted.
 2. Approve the data-model change in section 5 (unit status events from the
    command log, `HowReported` code, `UnitType.Discipline`) so option C and
-   a separate "unit hold time" become possible. Nothing is changed until
-   approved.
+   a separate "unit hold time" become possible. **Approved 2026-11-05 for
+   the status events (Stack); implemented as section 5 items 1 and 4.**
+   `HowReported` and `UnitType.Discipline` remain open.
 3. Keep the 60-minute cap on averaged intervals (page now shows how many
    calls it removed, and lists them in the drill-down marked "not averaged")
    or choose another value.
@@ -220,34 +221,47 @@ Expected effect on the four calls: 1:58, 20:59, 54:29 (listed, with "Assigned
 SO22" shown so the hold is recognisable), 1:39. Two of the four leave the
 "> 3 Min" list; the other two stay until Stack is collected.
 
-## 5. Data-model plan (needs Ted's approval; nothing changed)
+## 5. Data-model plan (items 1 and 4 approved and implemented 2026-11-05)
 
 Goal: option C and a separate "unit hold time", plus self-initiated-call
 handling, without adding narrative or caller data to the warehouse.
 
-1. New table `lcdash_analytics.unit_status_events (cfs_number, unit_number,
-   status_code, status_description, occurred_at, considered_dispatched,
-   considered_enroute, …)` populated from `cfs_core` `CommandLog[]` entries
-   that have both a `UnitNumber` and a `Status`. Store the
-   `CADUnitStatusDropdown` abbreviation/description and its `ConsiderAs*`
-   flags; **never** `Text`, `Creator`, `Destination` or `Location`.
-   `normalize_analytics_bundle` already receives the full `cfs_core` record
-   (`raw_call`), so no new API call is needed.
+1. **Done.** New table `lcdash_analytics.unit_status_events (cfs_number,
+   event_order, unit_number, status_code, status_description, event_kind,
+   occurred_at)` populated by `normalize_analytics_bundle` from the
+   `cfs_core` `CommandLog[]` entries that have a `Status` and a
+   `Timestamp` (`database/analytics_schema.sql`,
+   `app/services/analytics_models.py`, `AnalyticsRepository.upsert_bundle`).
+   `event_kind` is `stacked` / `assigned` / `enroute` / `staged` /
+   `on_scene` / `''`, decided by the status's `ConsiderAs*` flags when
+   present and by its wording otherwise; Stack has no flag, so any status
+   word beginning `STACK` (CAD's "Stack", "STACKED") is `stacked`, and
+   "Unstack" is not. `Text`, `Creator`, `Destination` and `Tag` are
+   **never** read (`tests/test_analytics.py` proves it). No new API call:
+   the collector already received the command log in every
+   `cfs_core/search` result and discarded it. Rows exist only for calls
+   collected after this release; earlier calls have no Stack (see 5).
 2. `calls.how_reported` (text code from `Reporter.HowReported.Description`,
    nothing else from `Reporter`).
 3. `units.discipline` from `UnitType.Discipline` in `cfs_analytics`.
-4. Reporting: processing = received → first event whose status is Stack or
-   `ConsiderAsDispatched` or `ConsiderAsEnrouteToCFSLocation`; hold =
-   first Stack → first dispatched/en route for the same unit, reported as
-   its own column; self-initiated (`how_reported` radio/officer) shown
-   separately; discipline from `units.discipline` first.
-5. Backfill: the collector's overlap re-scan only covers recent calls;
-   history would need a bounded re-read of closed calls through the
-   reviewed read connector (read-only, rate-limited), to be sized
-   separately.
-6. Tests: normaliser excludes `Text`/`Creator`; schema idempotent; live
-   PostgreSQL test with the four timelines reproduces 1:58 / 2:17 / 7:59 /
-   1:39.
+4. **Done** (except the self-initiated part, which needs item 2).
+   Reporting: processing = received → earliest of Stack, Assign, En route,
+   Staged or On scene from `unit_status_events` ∪ `unit_responses` ∪
+   `call_agency_times` (`ACTION_STAMPS_SQL`); `hold_seconds` = that first
+   action → the first non-Stack action when the call was stacked first,
+   shown as the "Stacked" column (count, with the average hold in the
+   tooltip), the "Stacked first" summary line and the drill-down's "Unit
+   hold" column; it is never in the processing figures. The discipline
+   tables time a Stack by the stacked unit's roster discipline.
+5. **Open.** Backfill: the collector's overlap re-scan only covers recent
+   calls, so the 90-day page shows Stack only for calls collected after
+   the release. History would need a bounded re-read of closed calls
+   through the reviewed read connector (read-only, rate-limited; one
+   `cfs_core/{cfs}` read per call, no `cfs_analytics` call), to be sized
+   and approved separately.
+6. **Done** for the status events: normaliser excludes `Text` / `Creator`
+   / `Destination` / `Tag`; schema idempotent; the live PostgreSQL test
+   now expects 1:58 / 2:17 / 7:59 / 1:39 with holds of 18:42 and 46:30.
 
 Infrastructure impact: none beyond a normal release (no new resource types;
 the collector task definition is already in the standard change-set scope).

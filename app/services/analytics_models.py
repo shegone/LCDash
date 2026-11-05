@@ -146,6 +146,75 @@ def _normalize_times(raw_times: dict) -> dict:
     }
 
 
+# CAD command-log status rows, classified into the events the processing
+# metric needs. The ``ConsiderAs*`` flags on the status dropdown decide when
+# present; the status wording is the fallback. Stack has no flag: CAD names
+# it "Stack" (the unit list says "STACKED"), so the wording is the rule.
+# "Unstack" does not start with STACK and is left as an ordinary event.
+STATUS_EVENT_FLAGS = (
+    ("ConsiderAsDispatched", "assigned"),
+    ("ConsiderAsEnrouteToCFSLocation", "enroute"),
+    ("ConsiderAsStaged", "staged"),
+    ("ConsiderAsArrivedAtCFSLocation", "on_scene"),
+)
+STATUS_EVENT_WORDS = (
+    ("ASSIGN", "assigned"),
+    ("DISPATCH", "assigned"),
+    ("ENROUTE", "enroute"),
+    ("EN ROUTE", "enroute"),
+    ("STAGED", "staged"),
+    ("ON SCENE", "on_scene"),
+    ("ONSCENE", "on_scene"),
+)
+# Command-log fields that carry narrative, names or free text. They are
+# listed so a test can prove none of them reaches the bundle.
+COMMAND_LOG_EXCLUDED_FIELDS = ("Text", "Creator", "Destination", "Tag")
+
+
+def classify_status_event(status: dict) -> str:
+    """The event kind for one command-log status: stacked, assigned, enroute,
+    staged, on_scene, or '' for any other status."""
+    words = " ".join(
+        _safe_text(status.get(field)).upper()
+        for field in ("Abbreviation", "Code", "Description")
+    )
+    if any(word.startswith("STACK") for word in words.split()):
+        return "stacked"
+    for flag, kind in STATUS_EVENT_FLAGS:
+        if status.get(flag) is True:
+            return kind
+    for word, kind in STATUS_EVENT_WORDS:
+        if word in words:
+            return kind
+    return ""
+
+
+def _status_events(raw_call: dict, cfs_number: str) -> list[dict]:
+    entries = raw_call.get("CommandLog") or []
+    if not isinstance(entries, list):
+        return []
+    events = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        status = entry.get("Status")
+        occurred_at = _parse_datetime(entry.get("Timestamp"))
+        if not isinstance(status, dict) or occurred_at is None:
+            continue
+        events.append(
+            {
+                "cfs_number": cfs_number,
+                "event_order": len(events),
+                "unit_number": _safe_text(entry.get("UnitNumber")),
+                "status_code": _dropdown_text(status, "Abbreviation", "Code")[:40],
+                "status_description": _dropdown_text(status, "Description", "Name")[:80],
+                "event_kind": classify_status_event(status),
+                "occurred_at": occurred_at,
+            }
+        )
+    return events
+
+
 def _latest_completion_time(call_times: list, unit_responses: list) -> datetime | None:
     candidates = []
     for row in call_times + unit_responses:
@@ -270,4 +339,5 @@ def normalize_analytics_bundle(
         "call_times": call_times,
         "unit_responses": unit_responses,
         "units": units,
+        "unit_status_events": _status_events(raw_call, cfs_number),
     }

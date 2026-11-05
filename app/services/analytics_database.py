@@ -232,6 +232,35 @@ class AnalyticsRepository(AbstractContextManager):
             "DELETE FROM lcdash_analytics.unit_responses WHERE cfs_number = %s",
             (call["cfs_number"],),
         )
+        self._execute(
+            "DELETE FROM lcdash_analytics.unit_status_events WHERE cfs_number = %s",
+            (call["cfs_number"],),
+        )
+
+        for row in bundle.get("unit_status_events") or []:
+            self._execute(
+                """
+                INSERT INTO lcdash_analytics.unit_status_events (
+                    cfs_number,
+                    event_order,
+                    unit_number,
+                    status_code,
+                    status_description,
+                    event_kind,
+                    occurred_at
+                )
+                VALUES (
+                    %(cfs_number)s,
+                    %(event_order)s,
+                    %(unit_number)s,
+                    %(status_code)s,
+                    %(status_description)s,
+                    %(event_kind)s,
+                    %(occurred_at)s
+                )
+                """,
+                row,
+            )
 
         for row in bundle["call_times"]:
             self._execute(
@@ -413,6 +442,9 @@ class AnalyticsRepository(AbstractContextManager):
         responses = self._execute(
             "SELECT COUNT(*) FROM lcdash_analytics.unit_responses"
         ).fetchone()[0]
+        status_events = self._execute(
+            "SELECT COUNT(*) FROM lcdash_analytics.unit_status_events"
+        ).fetchone()[0]
         last_run = self._execute(
             """
             SELECT completed_at, status, calls_discovered, calls_stored, analytics_failures
@@ -426,6 +458,7 @@ class AnalyticsRepository(AbstractContextManager):
             "connected": True,
             "calls_stored": int(calls),
             "unit_responses_stored": int(responses),
+            "unit_status_events_stored": int(status_events),
             "last_run": {
                 "completed_at": last_run[0].isoformat() if last_run and last_run[0] else "",
                 "status": last_run[1] if last_run else "",

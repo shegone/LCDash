@@ -6,10 +6,10 @@ Follows `session-handoff-2026-10-26-release-120.md`. Facts first.
 
 | Item | State | Last verified |
 | --- | --- | --- |
-| LCDash repo | `main`; this work is a local commit on top of `51756ce` (not pushed; nothing built or deployed). | 2026-11-05 |
+| LCDash repo | `main`; three local commits on top of `51756ce`: `3d182c5` (first-action metric), `5d07c98` (yardstick note) and the Stack commit described below. Not pushed; nothing built or deployed. | 2026-11-05 |
 | LCDash pilot (AWS) | unchanged: foundation stack `UPDATE_COMPLETE` (2026-10-26), web task definition revision 120, digest `sha256:4d02e77f96ca0414b02e06ce25ad04f6243d760a0af4adaee41173d9111d45d1`; `AnalyticsCollectorEnabled=true`, schedule 30 min; collector runs today all `complete`, 0 failures. | 2026-11-05 (read-only) |
-| Tests | application: `python -m pytest tests/` 2074 passed, 6 skipped, 2623 subtests passed; infrastructure: `python -m pytest infrastructure/tests/` 151 passed, 9 subtests passed. `tests/test_analytics_postgres_live.py` (3 tests, now including the four CFS timelines) **skipped**: no PostgreSQL reachable from this session. | 2026-11-05 |
-| Decisions open | listed in `docs/planning/ANALYTICS_PROCESSING_AUDIT_2026-11-05.md` section 1.4 (definition, data-model change, cap, benchmarks, scheduled exclusion, duplicate identity). Ted's yardstick (2026-11-05): call added to CAD → someone added to the call, i.e. first Assign **or Stack**; Stack needs the command-log collection in audit section 5 (schema change, awaiting explicit approval). | 2026-11-05 |
+| Tests | after the Stack commit: application `python -m pytest tests/` 2078 passed, 6 skipped, 2623 subtests passed; infrastructure `python -m pytest infrastructure/tests/` 151 passed, 9 subtests passed. `tests/test_analytics_postgres_live.py` (3 tests, including the four CFS timelines with Stack) **skipped**: no PostgreSQL reachable from this session. | 2026-11-05 |
+| Decisions open | listed in `docs/planning/ANALYTICS_PROCESSING_AUDIT_2026-11-05.md` section 1.4 (definition, data-model change, cap, benchmarks, scheduled exclusion, duplicate identity). Ted's yardstick (2026-11-05): call added to CAD → someone added to the call, i.e. first Assign **or Stack**. Ted approved the command-log collection ("Yes, add Stack") the same day; implemented, see below. Still open: `HowReported`, `UnitType.Discipline`, the backfill of older calls, cap, benchmarks, duplicate identity. | 2026-11-05 |
 
 ## What was found
 
@@ -65,8 +65,44 @@ available and not collected.
   no-stamp, scheduled, self-initiated zero; plus response, busiest-unit and
   discipline checks).
 
-Not changed: warehouse schema, collector, normaliser, infrastructure,
-anything on `.227` or `.15`.
+### Stack collection (second commit, approved by Ted 2026-11-05)
+
+- `database/analytics_schema.sql`: new table
+  `lcdash_analytics.unit_status_events (cfs_number, event_order,
+  unit_number, status_code, status_description, event_kind, occurred_at)`
+  plus an index; created idempotently by `initialize_schema()` on the next
+  app start / collector run (no CDK or RDS change).
+- `app/services/analytics_models.py`: `classify_status_event` and
+  `_status_events` read the `cfs_core` `CommandLog[]` rows that have a
+  `Status` and a `Timestamp` (the collector already received them in every
+  `cfs_core/search` result; no new API call). `Text`, `Creator`,
+  `Destination` and `Tag` are never read. `event_kind` is decided by the
+  status's `ConsiderAs*` flags, else its wording; any status word starting
+  `STACK` is `stacked`, "Unstack" is not, "Arrived" alone is nothing.
+- `app/services/analytics_database.py`: `upsert_bundle` replaces the
+  call's status events; `status()` reports `unit_status_events_stored`.
+- `app/tools/phase1_schema_initializer.py`: the new table is added to
+  `APPROVED_OBJECTS` (the Phase 1 schema allowlist), with the approval
+  date in a comment.
+- `app/services/analytics_reporting.py`: `ACTION_STAMPS_SQL` adds the
+  status events (Stack ranked before an Assign at the same second);
+  `first_dispatch_at` and `hold_seconds` (Stack → first non-Stack action)
+  on every call row; dispatcher summary and rows gain `stacked_calls` and
+  `average_hold` (summary row 12 columns, dispatcher rows 14, ref last);
+  discipline tables include the status events by the stacked unit's roster
+  discipline; the drill-down returns `hold` and labels "Stacked".
+- `templates/analytics.html` (`?v=20261105-stack`), `static/js/lcdash-analytics.js`:
+  "Stacked" column (average hold in the tooltip), "Stacked first" summary
+  line, "Unit hold" drill-down column, note rewritten.
+- Tests: `tests/test_analytics.py` (status-event normalisation, narrative
+  exclusion, classification, schema), `tests/test_analytics_first_action.py`,
+  `tests/test_analytics_slow_calls.py`, the two contract fakes, and
+  `tests/test_analytics_postgres_live.py` (expects 1:58 / 2:17 / 7:59 /
+  1:39, holds 18:42 and 46:30, law 5 timed).
+
+Not changed: collector loop, infrastructure, anything on `.227` or `.15`.
+Older calls are not backfilled: Stack appears only for calls collected
+after the release (audit section 5 item 5).
 
 ## Not verified
 
@@ -94,10 +130,15 @@ anything on `.227` or `.15`.
    rollout, ALB target, signed-in page, and then compare the four CFS numbers
    in the drill-down with the audit table (expected 1:58, 20:59, 54:29,
    1:39; the first and last leave the "> 3 Min" list).
-4. If Ted approves audit section 5, plan the `unit_status_events` table
-   (command-log status entries only), `calls.how_reported`,
-   `units.discipline`, and the option-C metric with a separate unit hold
-   column, as its own work package.
+4. After the release, confirm on the pilot that `unit_status_events` fills
+   (`/api/analytics/status` → `unit_status_events_stored` rising with each
+   collector run) and that a known stacked call shows "Stacked" with a
+   hold in the drill-down. If the live CAD's Stack status is worded
+   differently from "Stack"/"STACKED", `classify_status_event` needs that
+   word (one-line change, test first).
+5. Separate work packages, each needing Ted's approval: the bounded
+   backfill of closed calls (audit section 5 item 5), `calls.how_reported`
+   and `units.discipline` (items 2 and 3).
 
 Services were left running; nothing was stopped, started or changed on AWS,
 `.227` or `.15`. The SSO device-code login was approved by Ted for read-only

@@ -43,14 +43,16 @@ class RecordingRepository:
             # response, response samples, latest, scheduled
             return (12, 20, 118.0, 900.0, 700.0, 6, None, 2)
         if "calls_with_call_taker" in query:
-            return (10, 6, 200.0, 118.0, 2, 2, 600.0, 1, 2, 1)
+            # calls, timed, average, median, within 90, over 180, p90,
+            # scheduled, no stamp, over cap, stacked, average hold
+            return (10, 6, 200.0, 118.0, 2, 2, 600.0, 1, 2, 1, 2, 1956.0)
         return (0, 0, 0)
 
     def fetchall(self, query, params=None):
         self.queries.append((query, params))
         if "AS dispatcher_ref" in query:
             return [("A DISPATCHER", 10, 6, 200.0, 118.0, 2, 2, 600.0, 1, 2, 1,
-                     "0123456789abcdef")]
+                     1, 1122.0, "0123456789abcdef")]
         return []
 
 
@@ -62,14 +64,24 @@ class ProcessingDefinitionTests(unittest.TestCase):
         self.processing_queries = [
             q for q, _ in self.repository.queries if "END AS timing_status" in q]
 
-    def test_every_processing_query_reads_both_timing_records(self):
+    def test_every_processing_query_reads_all_three_timing_records(self):
         # overview metrics, dispatcher summary, dispatcher rows
         self.assertEqual(len(self.processing_queries), 3)
         for query in self.processing_queries:
             self.assertIn("FROM lcdash_analytics.call_agency_times", query)
             self.assertIn("FROM lcdash_analytics.unit_responses", query)
+            self.assertIn("FROM lcdash_analytics.unit_status_events", query)
             for kind in ("'assigned', 1", "'enroute', 2", "'staged', 3", "'on_scene', 4"):
                 self.assertIn(kind, query)
+            # Stack ends the interval (someone was added to the call) and is
+            # named before an Assign at the same second.
+            self.assertIn("WHEN 'stacked' THEN 0", query)
+            self.assertIn(
+                "event_kind IN ('stacked', 'assigned', 'enroute', 'staged', 'on_scene')", query)
+            # The hold is Stack to the first non-Stack action, never negative.
+            self.assertIn("WHERE action_stamps.kind <> 'stacked'", query)
+            self.assertIn("first_dispatch_at > call_milestones.first_action_at", query)
+            self.assertIn("END AS hold_seconds", query)
             self.assertIn(
                 "MIN(action_stamps.stamp_at) FILTER (\n"
                 "                    WHERE action_stamps.stamp_at >= selected_calls.call_received_at\n"
@@ -123,11 +135,22 @@ class ProcessingDefinitionTests(unittest.TestCase):
                           row["excluded_over_cap"]), (1, 2, 1))
         self.assertEqual(row["within_90_percent"], 33)
 
+    def test_stacked_calls_and_the_unit_hold_are_reported_apart(self):
+        summary = self.result["dispatcher_metrics"]
+        self.assertEqual((summary["stacked_calls"], summary["average_hold"]), (2, "32:36"))
+        row = self.result["dispatchers"][0]
+        self.assertEqual((row["stacked_calls"], row["average_hold"]), (1, "18:42"))
+        for query in self.processing_queries[1:]:
+            self.assertIn("timing_status = 'timed' AND hold_seconds > 0", query)
+            self.assertIn("AS average_hold_seconds", query)
+
     def test_the_empty_snapshot_carries_the_new_fields(self):
         empty = ar._empty_overview(self.window, "none")
         self.assertEqual(empty["metrics"]["response_eligible_calls"], 0)
         self.assertEqual(empty["dispatcher_metrics"]["excluded_over_cap"], 0)
         self.assertEqual(empty["dispatcher_metrics"]["processing_cap_minutes"], 60)
+        self.assertEqual((empty["dispatcher_metrics"]["stacked_calls"],
+                          empty["dispatcher_metrics"]["average_hold"]), (0, "—"))
 
     def test_no_location_or_narrative_columns(self):
         for query, _ in self.repository.queries:
@@ -145,8 +168,18 @@ class SharedSqlTests(unittest.TestCase):
 
     def test_first_action_labels(self):
         self.assertEqual(ar.FIRST_ACTION_LABELS, {
-            "assigned": "Assigned", "enroute": "En route",
+            "stacked": "Stacked", "assigned": "Assigned", "enroute": "En route",
             "staged": "Staged", "on_scene": "On scene"})
+
+    def test_the_discipline_query_times_a_stack_by_the_stacked_units_discipline(self):
+        repository = RecordingRepository()
+        ar._discipline_metrics(repository, {
+            "window_start": None, "window_end": None,
+            "excluded_dispatcher_identity": ar.EXCLUDED_DISPATCHER_IDENTITY})
+        query = repository.queries[0][0]
+        self.assertIn("FROM lcdash_analytics.unit_status_events AS status_event", query)
+        self.assertIn("ON unit_record.unit_number = status_event.unit_number", query)
+        self.assertIn("IN ('stacked', 'assigned', 'enroute', 'staged', 'on_scene')", query)
 
 
 class PageWordingTests(unittest.TestCase):
@@ -155,10 +188,11 @@ class PageWordingTests(unittest.TestCase):
         self.overview = base.overview
         self.overview["dispatcher_metrics"].update(
             {"excluded_scheduled": 3, "excluded_no_stamp": 4, "excluded_over_cap": 5,
-             "processing_cap_minutes": 60})
+             "processing_cap_minutes": 60, "stacked_calls": 2, "average_hold": "32:36"})
         self.overview["dispatchers"][0].update(
             {"dispatcher_ref": "0123456789abcdef", "excluded_scheduled": 1,
-             "excluded_no_stamp": 2, "excluded_over_cap": 3})
+             "excluded_no_stamp": 2, "excluded_over_cap": 3,
+             "stacked_calls": 1, "average_hold": "18:42"})
         self.overview["metrics"].update(
             {"response_samples": 38, "response_eligible_calls": 40})
         # The discipline section renders only when the server sent its groups.
@@ -174,7 +208,10 @@ class PageWordingTests(unittest.TestCase):
 
     def test_the_definition_and_its_limits_are_stated(self):
         self.assertIn("earliest action by any unit of any agency on the call", self.html)
-        self.assertIn("CAD's Stack event is not collected", self.html)
+        self.assertIn("A Stack (the call queued on a busy unit) ends the interval like an Assign",
+                      self.html)
+        self.assertIn("Stacked first: 2 timed calls were queued on a busy unit, average hold 32:36",
+                      self.html)
         self.assertIn("Not timed: 3 scheduled &middot; 4 with no unit stamp", self.html)
         self.assertIn("5 over 60 minutes", self.html)
         self.assertIn("38 of 40 calls", self.html)
@@ -183,6 +220,8 @@ class PageWordingTests(unittest.TestCase):
     def test_each_dispatcher_row_shows_its_untimed_calls(self):
         self.assertIn("Not timed", self.html)
         self.assertIn('title="1 scheduled · 2 no unit stamp · 3 over 60 min">6</td>', self.html)
+        self.assertIn('title="average unit hold 18:42">1</td>', self.html)
+        self.assertIn(">Stacked</th>", self.html)
 
     def test_the_discipline_rule_and_the_unit_average_are_explained(self):
         self.assertIn("agency in the unit roster", self.html)
@@ -195,6 +234,8 @@ class ScriptTests(unittest.TestCase):
 
     def test_the_drill_down_names_the_first_action_and_lists_over_cap_calls_apart(self):
         self.assertIn('"First action"', self.script)
+        self.assertIn('"Unit hold"', self.script)
+        self.assertIn("call.hold", self.script)
         self.assertIn("call.first_action_by", self.script)
         self.assertIn("data.over_cap", self.script)
         self.assertIn("not averaged and not in the count above", self.script)
