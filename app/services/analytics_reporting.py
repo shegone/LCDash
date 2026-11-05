@@ -35,6 +35,21 @@ MAX_CUSTOM_DAYS = 366
 # Keep the historical call records, but exclude the exact normalized identity
 # from Dispatcher / CAD Entry workload and processing-time reporting.
 EXCLUDED_DISPATCHER_IDENTITY = "KIM MAYNARD"
+# CAD processing runs from the CAD call-received time to the earliest action
+# by any unit of any agency on the call (assigned, en route, staged or on
+# scene), read from both the per-agency and the per-unit timing records.
+# Intervals over the cap are held or queued calls rather than call-taker
+# work: they are kept out of the averages but stay visible as a count and in
+# the slow-call drill-down. CAD's Stack event is not collected, so unit hold
+# time cannot be separated yet (docs/planning/ANALYTICS_PROCESSING_AUDIT_2026-11-05.md).
+PROCESSING_CAP_SECONDS = 3600
+PROCESSING_CAP_MINUTES = PROCESSING_CAP_SECONDS // 60
+FIRST_ACTION_LABELS = {
+    "assigned": "Assigned",
+    "enroute": "En route",
+    "staged": "Staged",
+    "on_scene": "On scene",
+}
 
 
 class AnalyticsRangeError(ValueError):
@@ -159,6 +174,127 @@ def _format_duration(seconds) -> str:
     return f"{minutes}:{seconds:02d}"
 
 
+# Every dispatch-related stamp CAD recorded for a call, one row per stamp,
+# from both the per-agency record (CallTimes) and the per-unit record
+# (UnitTimes). ``stamp_rank`` orders stamps that share a timestamp (an
+# "Assigned" derived from an "En route" carries the same time).
+ACTION_STAMPS_SQL = """
+        action_stamps AS (
+            SELECT
+                timing.cfs_number,
+                timing.party,
+                timing.source,
+                stamp.stamp_at,
+                stamp.kind,
+                stamp.stamp_rank
+            FROM (
+                SELECT
+                    cfs_number,
+                    agency_ori AS party,
+                    'agency' AS source,
+                    dispatched_at,
+                    enroute_at,
+                    staged_at,
+                    on_scene_at
+                FROM lcdash_analytics.call_agency_times
+                UNION ALL
+                SELECT
+                    cfs_number,
+                    unit_number,
+                    'unit',
+                    dispatched_at,
+                    enroute_at,
+                    staged_at,
+                    on_scene_at
+                FROM lcdash_analytics.unit_responses
+            ) AS timing
+            CROSS JOIN LATERAL (
+                VALUES
+                    (timing.dispatched_at, 'assigned', 1),
+                    (timing.enroute_at, 'enroute', 2),
+                    (timing.staged_at, 'staged', 3),
+                    (timing.on_scene_at, 'on_scene', 4)
+            ) AS stamp(stamp_at, kind, stamp_rank)
+            WHERE stamp.stamp_at IS NOT NULL
+        )"""
+
+
+def _call_processing_sql(*, dispatcher_calls: bool, extra_columns: str = "") -> str:
+    """CTEs ending in ``call_processing``: one row per completed call in the window.
+
+    Each row carries ``first_action_at`` (the earliest unit action at or
+    after the received time), ``first_on_scene_at``, ``processing_seconds``
+    and ``timing_status``: ``timed``, ``scheduled``, ``no_stamp`` (no unit
+    action at or after the received time) or ``over_cap``. Only ``timed``
+    rows enter any average; the other three are counted so the exclusions
+    are visible on the page. ``dispatcher_calls`` restricts the population
+    to calls with a call taker, minus the excluded identity. Bound
+    parameters: window_start, window_end, processing_cap_seconds and, for
+    dispatcher calls, excluded_dispatcher_identity.
+    """
+    taker_filter = ""
+    if dispatcher_calls:
+        taker_filter = (
+            "AND BTRIM(call_taker) <> '' "
+            "AND UPPER(BTRIM(call_taker)) <> %(excluded_dispatcher_identity)s"
+        )
+    return f"""
+        WITH selected_calls AS (
+            SELECT
+                cfs_number,
+                call_taker,
+                COALESCE(
+                    NULLIF(call_taker_unique_identifier, ''),
+                    'legacy:' || UPPER(call_taker)
+                ) AS dispatcher_key,
+                call_received_at,
+                is_scheduled,
+                source_collected_at{extra_columns}
+            FROM lcdash_analytics.calls
+            WHERE call_received_at >= %(window_start)s
+              AND call_received_at < %(window_end)s
+              {taker_filter}
+        ),
+        {ACTION_STAMPS_SQL},
+        call_milestones AS (
+            SELECT
+                selected_calls.cfs_number,
+                MIN(action_stamps.stamp_at) FILTER (
+                    WHERE action_stamps.stamp_at >= selected_calls.call_received_at
+                ) AS first_action_at,
+                MIN(action_stamps.stamp_at) FILTER (
+                    WHERE action_stamps.kind = 'on_scene'
+                      AND action_stamps.stamp_at >= selected_calls.call_received_at
+                ) AS first_on_scene_at
+            FROM selected_calls
+            LEFT JOIN action_stamps
+                ON action_stamps.cfs_number = selected_calls.cfs_number
+            GROUP BY selected_calls.cfs_number
+        ),
+        call_processing AS (
+            SELECT
+                selected_calls.*,
+                call_milestones.first_action_at,
+                call_milestones.first_on_scene_at,
+                EXTRACT(
+                    EPOCH FROM call_milestones.first_action_at - selected_calls.call_received_at
+                ) AS processing_seconds,
+                CASE
+                    WHEN selected_calls.is_scheduled THEN 'scheduled'
+                    WHEN call_milestones.first_action_at IS NULL THEN 'no_stamp'
+                    WHEN call_milestones.first_action_at
+                        > selected_calls.call_received_at
+                          + make_interval(secs => %(processing_cap_seconds)s)
+                        THEN 'over_cap'
+                    ELSE 'timed'
+                END AS timing_status
+            FROM selected_calls
+            JOIN call_milestones
+                ON call_milestones.cfs_number = selected_calls.cfs_number
+        )
+    """
+
+
 def _empty_overview(window: AnalyticsWindow, message: str) -> dict:
     return {
         "available": False,
@@ -176,6 +312,8 @@ def _empty_overview(window: AnalyticsWindow, message: str) -> dict:
             "average_response": "—",
             "median_response": "—",
             "response_coverage_percent": 0,
+            "response_samples": 0,
+            "response_eligible_calls": 0,
             "scheduled_calls": 0,
         },
         "dispatcher_metrics": {
@@ -189,6 +327,10 @@ def _empty_overview(window: AnalyticsWindow, message: str) -> dict:
             "processing_samples": 0,
             "within_90_percent": 0,
             "over_180_count": 0,
+            "excluded_scheduled": 0,
+            "excluded_no_stamp": 0,
+            "excluded_over_cap": 0,
+            "processing_cap_minutes": PROCESSING_CAP_MINUTES,
         },
         "dispatchers": [],
         "dispatcher_disciplines": [],
@@ -230,37 +372,14 @@ def _query_overview(
         "window_start": window.start_at,
         "window_end": window.end_at,
         "excluded_dispatcher_identity": EXCLUDED_DISPATCHER_IDENTITY,
+        "processing_cap_seconds": PROCESSING_CAP_SECONDS,
     }
 
+    # Response time: received to the earliest on-scene stamp from either
+    # record; scheduled calls (transports booked ahead) are left out.
     metrics_row = repository.fetchone(
-        """
-        WITH selected_calls AS (
-            SELECT *
-            FROM lcdash_analytics.calls
-            WHERE call_received_at >= %(window_start)s
-              AND call_received_at < %(window_end)s
-        ),
-        call_milestones AS (
-            SELECT
-                selected_calls.cfs_number,
-                selected_calls.call_received_at,
-                selected_calls.source_collected_at,
-                selected_calls.is_scheduled,
-                MIN(agency_times.dispatched_at) FILTER (
-                    WHERE agency_times.dispatched_at >= selected_calls.call_received_at
-                ) AS first_dispatched_at,
-                MIN(agency_times.on_scene_at) FILTER (
-                    WHERE agency_times.on_scene_at >= selected_calls.call_received_at
-                ) AS first_on_scene_at
-            FROM selected_calls
-            LEFT JOIN lcdash_analytics.call_agency_times AS agency_times
-                ON agency_times.cfs_number = selected_calls.cfs_number
-            GROUP BY
-                selected_calls.cfs_number,
-                selected_calls.call_received_at,
-                selected_calls.source_collected_at,
-                selected_calls.is_scheduled
-        )
+        _call_processing_sql(dispatcher_calls=False)
+        + """
         SELECT
             COUNT(*) AS total_calls,
             (
@@ -269,189 +388,85 @@ def _query_overview(
                 JOIN selected_calls
                     ON selected_calls.cfs_number = unit_response.cfs_number
             ) AS unit_responses,
-            AVG(EXTRACT(EPOCH FROM first_dispatched_at - call_received_at))
-                FILTER (WHERE first_dispatched_at IS NOT NULL) AS average_processing_seconds,
+            AVG(processing_seconds) FILTER (WHERE timing_status = 'timed')
+                AS average_processing_seconds,
             AVG(EXTRACT(EPOCH FROM first_on_scene_at - call_received_at))
-                FILTER (WHERE first_on_scene_at IS NOT NULL) AS average_response_seconds,
+                FILTER (WHERE first_on_scene_at IS NOT NULL AND NOT is_scheduled)
+                AS average_response_seconds,
             PERCENTILE_CONT(0.5) WITHIN GROUP (
                 ORDER BY EXTRACT(EPOCH FROM first_on_scene_at - call_received_at)
-            ) FILTER (WHERE first_on_scene_at IS NOT NULL) AS median_response_seconds,
-            COUNT(*) FILTER (WHERE first_on_scene_at IS NOT NULL) AS response_samples,
+            ) FILTER (WHERE first_on_scene_at IS NOT NULL AND NOT is_scheduled)
+                AS median_response_seconds,
+            COUNT(*) FILTER (WHERE first_on_scene_at IS NOT NULL AND NOT is_scheduled)
+                AS response_samples,
             MAX(source_collected_at) AS latest_data_at,
             COUNT(*) FILTER (WHERE is_scheduled) AS scheduled_calls
-        FROM call_milestones
+        FROM call_processing
         """,
         params,
     ) or (0, 0, None, None, None, 0, None, 0)
 
     total_calls = int(metrics_row[0] or 0)
+    scheduled_calls = int(metrics_row[7] or 0)
     response_samples = int(metrics_row[5] or 0)
+    response_eligible_calls = max(total_calls - scheduled_calls, 0)
     response_coverage = (
-        round((response_samples / total_calls) * 100) if total_calls else 0
+        round((response_samples / response_eligible_calls) * 100)
+        if response_eligible_calls
+        else 0
     )
 
-    dispatcher_summary_row = repository.fetchone(
-        """
-        WITH selected_calls AS (
-            SELECT
-                cfs_number,
-                call_taker,
-                call_taker_unique_identifier,
-                call_received_at,
-                is_scheduled
-            FROM lcdash_analytics.calls
-            WHERE call_received_at >= %(window_start)s
-              AND call_received_at < %(window_end)s
-              AND BTRIM(call_taker) <> ''
-              AND UPPER(BTRIM(call_taker)) <> %(excluded_dispatcher_identity)s
-        ),
-        call_processing AS (
-            SELECT
-                selected_calls.cfs_number,
-                selected_calls.call_taker,
-                COALESCE(
-                    NULLIF(selected_calls.call_taker_unique_identifier, ''),
-                    'legacy:' || UPPER(selected_calls.call_taker)
-                ) AS dispatcher_key,
-                selected_calls.call_received_at,
-                selected_calls.is_scheduled,
-                MIN(agency_times.dispatched_at) FILTER (
-                    WHERE agency_times.dispatched_at >= selected_calls.call_received_at
-                ) AS first_dispatched_at
-            FROM selected_calls
-            LEFT JOIN lcdash_analytics.call_agency_times AS agency_times
-                ON agency_times.cfs_number = selected_calls.cfs_number
-            GROUP BY
-                selected_calls.cfs_number,
-                selected_calls.call_taker,
-                selected_calls.call_taker_unique_identifier,
-                selected_calls.call_received_at,
-                selected_calls.is_scheduled
-        )
-        SELECT
-            COUNT(*) AS calls_with_call_taker,
-            COUNT(*) FILTER (
-                WHERE first_dispatched_at IS NOT NULL
-                  AND NOT is_scheduled
-                  AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
-            )
+    # One timing_status column feeds every aggregate, so the count, the
+    # average, the percentiles and the "≤ 90 s" / "> 3 min" figures always
+    # describe the same calls.
+    processing_aggregates_sql = """
+            COUNT(*) FILTER (WHERE timing_status = 'timed')
                 AS processing_samples,
-            AVG(EXTRACT(EPOCH FROM first_dispatched_at - call_received_at))
-                FILTER (
-                    WHERE first_dispatched_at IS NOT NULL
-                      AND NOT is_scheduled
-                      AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
-                )
+            AVG(processing_seconds) FILTER (WHERE timing_status = 'timed')
                 AS average_processing_seconds,
-            PERCENTILE_CONT(0.5) WITHIN GROUP (
-                ORDER BY EXTRACT(EPOCH FROM first_dispatched_at - call_received_at)
-            ) FILTER (
-                WHERE first_dispatched_at IS NOT NULL
-                  AND NOT is_scheduled
-                  AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
-            )
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY processing_seconds)
+                FILTER (WHERE timing_status = 'timed')
                 AS median_processing_seconds,
             COUNT(*) FILTER (
-                WHERE EXTRACT(EPOCH FROM first_dispatched_at - call_received_at) <= 90
-                  AND NOT is_scheduled
+                WHERE timing_status = 'timed' AND processing_seconds <= 90
             ) AS within_90_seconds,
             COUNT(*) FILTER (
-                WHERE EXTRACT(EPOCH FROM first_dispatched_at - call_received_at) > 180
-                  AND NOT is_scheduled
-                  AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
+                WHERE timing_status = 'timed' AND processing_seconds > 180
             ) AS over_180_seconds,
-            PERCENTILE_CONT(0.9) WITHIN GROUP (
-                ORDER BY EXTRACT(EPOCH FROM first_dispatched_at - call_received_at)
-            ) FILTER (
-                WHERE first_dispatched_at IS NOT NULL
-                  AND NOT is_scheduled
-                  AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
-            )
-                AS p90_processing_seconds
+            PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY processing_seconds)
+                FILTER (WHERE timing_status = 'timed')
+                AS p90_processing_seconds,
+            COUNT(*) FILTER (WHERE timing_status = 'scheduled')
+                AS excluded_scheduled,
+            COUNT(*) FILTER (WHERE timing_status = 'no_stamp')
+                AS excluded_no_stamp,
+            COUNT(*) FILTER (WHERE timing_status = 'over_cap')
+                AS excluded_over_cap
+    """
+
+    dispatcher_summary_row = repository.fetchone(
+        _call_processing_sql(dispatcher_calls=True)
+        + """
+        SELECT
+            COUNT(*) AS calls_with_call_taker,
+        """
+        + processing_aggregates_sql
+        + """
         FROM call_processing
         """,
         params,
-    ) or (0, 0, None, None, 0, 0, None)
+    ) or (0, 0, None, None, 0, 0, None, 0, 0, 0)
 
     dispatcher_rows = repository.fetchall(
-        """
-        WITH selected_calls AS (
-            SELECT
-                cfs_number,
-                call_taker,
-                call_taker_unique_identifier,
-                call_received_at,
-                is_scheduled
-            FROM lcdash_analytics.calls
-            WHERE call_received_at >= %(window_start)s
-              AND call_received_at < %(window_end)s
-              AND BTRIM(call_taker) <> ''
-              AND UPPER(BTRIM(call_taker)) <> %(excluded_dispatcher_identity)s
-        ),
-        call_processing AS (
-            SELECT
-                selected_calls.cfs_number,
-                selected_calls.call_taker,
-                COALESCE(
-                    NULLIF(selected_calls.call_taker_unique_identifier, ''),
-                    'legacy:' || UPPER(selected_calls.call_taker)
-                ) AS dispatcher_key,
-                selected_calls.call_received_at,
-                selected_calls.is_scheduled,
-                MIN(agency_times.dispatched_at) FILTER (
-                    WHERE agency_times.dispatched_at >= selected_calls.call_received_at
-                ) AS first_dispatched_at
-            FROM selected_calls
-            LEFT JOIN lcdash_analytics.call_agency_times AS agency_times
-                ON agency_times.cfs_number = selected_calls.cfs_number
-            GROUP BY
-                selected_calls.cfs_number,
-                selected_calls.call_taker,
-                selected_calls.call_taker_unique_identifier,
-                selected_calls.call_received_at,
-                selected_calls.is_scheduled
-        )
+        _call_processing_sql(dispatcher_calls=True)
+        + """
         SELECT
             MAX(call_taker) AS call_taker,
             COUNT(*) AS calls_entered,
-            COUNT(*) FILTER (
-                WHERE first_dispatched_at IS NOT NULL
-                  AND NOT is_scheduled
-                  AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
-            )
-                AS processing_samples,
-            AVG(EXTRACT(EPOCH FROM first_dispatched_at - call_received_at))
-                FILTER (
-                    WHERE first_dispatched_at IS NOT NULL
-                      AND NOT is_scheduled
-                      AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
-                )
-                AS average_processing_seconds,
-            PERCENTILE_CONT(0.5) WITHIN GROUP (
-                ORDER BY EXTRACT(EPOCH FROM first_dispatched_at - call_received_at)
-            ) FILTER (
-                WHERE first_dispatched_at IS NOT NULL
-                  AND NOT is_scheduled
-                  AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
-            )
-                AS median_processing_seconds,
-            COUNT(*) FILTER (
-                WHERE EXTRACT(EPOCH FROM first_dispatched_at - call_received_at) <= 90
-                  AND NOT is_scheduled
-            ) AS within_90_seconds,
-            COUNT(*) FILTER (
-                WHERE EXTRACT(EPOCH FROM first_dispatched_at - call_received_at) > 180
-                  AND NOT is_scheduled
-                  AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
-            ) AS over_180_seconds,
-            PERCENTILE_CONT(0.9) WITHIN GROUP (
-                ORDER BY EXTRACT(EPOCH FROM first_dispatched_at - call_received_at)
-            ) FILTER (
-                WHERE first_dispatched_at IS NOT NULL
-                  AND NOT is_scheduled
-                  AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
-            )
-                AS p90_processing_seconds,
+        """
+        + processing_aggregates_sql
+        + """
+            ,
             LEFT(
                 encode(sha256(convert_to(dispatcher_key, 'UTF8')), 'hex'),
                 16
@@ -467,6 +482,8 @@ def _query_overview(
     dispatcher_processing_samples = int(dispatcher_summary_row[1] or 0)
     dispatchers = []
     for row in dispatcher_rows:
+        # taker, calls, timed, average, median, within 90, over 180, p90,
+        # scheduled, no stamp, over cap, ref
         calls_entered = int(row[1] or 0)
         processing_samples = int(row[2] or 0)
         within_90 = int(row[5] or 0)
@@ -484,12 +501,15 @@ def _query_overview(
                 "p90_processing": _format_duration(row[7]),
                 # An opaque handle for the slow-call list; the CAD identifier
                 # itself never leaves the server.
-                "dispatcher_ref": str(row[8] or ""),
+                "dispatcher_ref": str(row[11] or ""),
                 "processing_samples": processing_samples,
                 "within_90_percent": round(
                     (within_90 / processing_samples) * 100
                 ) if processing_samples else 0,
                 "over_180_count": over_180,
+                "excluded_scheduled": int(row[8] or 0),
+                "excluded_no_stamp": int(row[9] or 0),
+                "excluded_over_cap": int(row[10] or 0),
             }
         )
 
@@ -510,6 +530,10 @@ def _query_overview(
             (int(dispatcher_summary_row[4] or 0) / dispatcher_processing_samples) * 100
         ) if dispatcher_processing_samples else 0,
         "over_180_count": int(dispatcher_summary_row[5] or 0),
+        "excluded_scheduled": int(dispatcher_summary_row[7] or 0),
+        "excluded_no_stamp": int(dispatcher_summary_row[8] or 0),
+        "excluded_over_cap": int(dispatcher_summary_row[9] or 0),
+        "processing_cap_minutes": PROCESSING_CAP_MINUTES,
     }
 
     daily_rows = repository.fetchall(
@@ -655,10 +679,12 @@ def _query_overview(
         for row in incident_rows
     ]
 
+    # Scheduled calls (transports booked ahead) would otherwise dominate the
+    # unit's received-to-on-scene average.
     unit_rows = repository.fetchall(
         """
         WITH selected_calls AS (
-            SELECT cfs_number
+            SELECT cfs_number, is_scheduled
             FROM lcdash_analytics.calls
             WHERE call_received_at >= %(window_start)s
               AND call_received_at < %(window_end)s
@@ -672,7 +698,10 @@ def _query_overview(
             ) AS station,
             COUNT(DISTINCT unit_response.cfs_number) AS response_count,
             AVG(response_metrics.total_response_seconds)
-                FILTER (WHERE response_metrics.total_response_seconds IS NOT NULL)
+                FILTER (
+                    WHERE response_metrics.total_response_seconds IS NOT NULL
+                      AND NOT selected_calls.is_scheduled
+                )
                 AS average_response_seconds
         FROM selected_calls
         JOIN lcdash_analytics.unit_responses AS unit_response
@@ -919,7 +948,9 @@ def _query_overview(
             "average_response": _format_duration(metrics_row[3]),
             "median_response": _format_duration(metrics_row[4]),
             "response_coverage_percent": response_coverage,
-            "scheduled_calls": int(metrics_row[7] or 0),
+            "response_samples": response_samples,
+            "response_eligible_calls": response_eligible_calls,
+            "scheduled_calls": scheduled_calls,
         },
         "dispatcher_metrics": dispatcher_metrics,
         "dispatchers": dispatchers,
@@ -973,11 +1004,15 @@ def _discipline_metrics(
 ) -> tuple[list[dict], dict]:
     """Call processing time by discipline, for every dispatcher and for all.
 
-    A call counts once in each discipline that was dispatched to it, measured
-    from the CAD "call received" time to the first dispatch of that discipline,
-    so a dispatcher can be compared on law, EMS and fire separately. The same
-    rules as the main table apply: scheduled calls and intervals over one hour
-    are left out.
+    A call counts once in each discipline whose units acted on it, measured
+    from the CAD "call received" time to the earliest action (assigned, en
+    route, staged or on scene) by a unit of that discipline, so a dispatcher
+    can be compared on law, EMS and fire separately. The discipline comes
+    from the responding unit's roster agency or unit type (the same rule the
+    station-discipline chart uses, which classifies every response); the
+    per-agency record's ORI is a fallback. The same rules as the main table
+    apply: scheduled calls, calls with no unit stamp and intervals over the
+    cap are left out.
     """
     rows = repository.fetchall(
         """
@@ -985,7 +1020,10 @@ def _discipline_metrics(
             SELECT
                 cfs_number,
                 call_taker,
-                call_taker_unique_identifier,
+                COALESCE(
+                    NULLIF(call_taker_unique_identifier, ''),
+                    'legacy:' || UPPER(call_taker)
+                ) AS dispatcher_key,
                 call_received_at,
                 is_scheduled
             FROM lcdash_analytics.calls
@@ -994,53 +1032,88 @@ def _discipline_metrics(
               AND BTRIM(call_taker) <> ''
               AND UPPER(BTRIM(call_taker)) <> %(excluded_dispatcher_identity)s
         ),
-        classified_times AS (
+        discipline_stamps AS (
             SELECT
-                cfs_number,
-                dispatched_at,
+                timing.cfs_number,
+                stamp.stamp_at,
                 CASE
-                    WHEN UPPER(agency_ori) LIKE 'FC %%' THEN 'fire'
-                    WHEN UPPER(agency_ori) = ANY(%(ems_agencies)s) THEN 'ems'
-                    WHEN UPPER(agency_ori) = ANY(%(law_agencies)s) THEN 'law'
+                    WHEN timing.agency = ANY(%(ems_agencies)s)
+                      OR timing.unit_type LIKE 'EMS %%' THEN 'ems'
+                    WHEN timing.agency LIKE 'FC %%'
+                      OR timing.unit_type LIKE 'FIRE %%' THEN 'fire'
+                    WHEN timing.agency = ANY(%(law_agencies)s)
+                      OR timing.unit_type IN ('PATROL CAR', 'COUNTY ADMIN') THEN 'law'
                 END AS discipline
-            FROM lcdash_analytics.call_agency_times
+            FROM (
+                SELECT
+                    cfs_number,
+                    UPPER(agency_ori) AS agency,
+                    '' AS unit_type,
+                    dispatched_at,
+                    enroute_at,
+                    staged_at,
+                    on_scene_at
+                FROM lcdash_analytics.call_agency_times
+                UNION ALL
+                SELECT
+                    unit_response.cfs_number,
+                    UPPER(COALESCE(NULLIF(unit_record.agency, ''), '')),
+                    UPPER(COALESCE(
+                        NULLIF(unit_record.unit_type, ''),
+                        NULLIF(unit_response.unit_type, ''),
+                        ''
+                    )),
+                    unit_response.dispatched_at,
+                    unit_response.enroute_at,
+                    unit_response.staged_at,
+                    unit_response.on_scene_at
+                FROM lcdash_analytics.unit_responses AS unit_response
+                LEFT JOIN lcdash_analytics.units AS unit_record
+                    ON unit_record.unit_number = unit_response.unit_number
+            ) AS timing
+            CROSS JOIN LATERAL (
+                VALUES
+                    (timing.dispatched_at),
+                    (timing.enroute_at),
+                    (timing.staged_at),
+                    (timing.on_scene_at)
+            ) AS stamp(stamp_at)
+            WHERE stamp.stamp_at IS NOT NULL
         ),
         discipline_dispatch AS (
             SELECT
                 selected_calls.cfs_number,
                 selected_calls.call_taker,
-                COALESCE(
-                    NULLIF(selected_calls.call_taker_unique_identifier, ''),
-                    'legacy:' || UPPER(selected_calls.call_taker)
-                ) AS dispatcher_key,
+                selected_calls.dispatcher_key,
                 selected_calls.call_received_at,
                 selected_calls.is_scheduled,
-                classified_times.discipline,
-                MIN(classified_times.dispatched_at) FILTER (
-                    WHERE classified_times.dispatched_at >= selected_calls.call_received_at
-                ) AS first_dispatched_at
+                discipline_stamps.discipline,
+                MIN(discipline_stamps.stamp_at) FILTER (
+                    WHERE discipline_stamps.stamp_at >= selected_calls.call_received_at
+                ) AS first_action_at
             FROM selected_calls
-            JOIN classified_times
-                ON classified_times.cfs_number = selected_calls.cfs_number
-            WHERE classified_times.discipline IS NOT NULL
+            JOIN discipline_stamps
+                ON discipline_stamps.cfs_number = selected_calls.cfs_number
+            WHERE discipline_stamps.discipline IS NOT NULL
             GROUP BY
                 selected_calls.cfs_number,
                 selected_calls.call_taker,
-                selected_calls.call_taker_unique_identifier,
+                selected_calls.dispatcher_key,
                 selected_calls.call_received_at,
                 selected_calls.is_scheduled,
-                classified_times.discipline
+                discipline_stamps.discipline
         ),
         timed AS (
             SELECT
                 discipline,
                 dispatcher_key,
                 call_taker,
-                EXTRACT(EPOCH FROM first_dispatched_at - call_received_at) AS seconds
+                EXTRACT(EPOCH FROM first_action_at - call_received_at) AS seconds
             FROM discipline_dispatch
-            WHERE first_dispatched_at IS NOT NULL
+            WHERE first_action_at IS NOT NULL
               AND NOT is_scheduled
-              AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
+              AND first_action_at <= call_received_at
+                  + make_interval(secs => %(processing_cap_seconds)s)
         )
         SELECT
             discipline,
@@ -1059,6 +1132,7 @@ def _discipline_metrics(
         GROUP BY GROUPING SETS ((discipline, dispatcher_key), (discipline))
         """,
         {
+            "processing_cap_seconds": PROCESSING_CAP_SECONDS,
             **params,
             "ems_agencies": list(EMS_AGENCY_CODES),
             "law_agencies": list(LAW_AGENCY_CODES),
@@ -1119,82 +1193,74 @@ def _query_slow_calls(
     window: AnalyticsWindow,
     dispatcher_ref: str,
 ) -> dict:
-    """Calls the dispatcher entered that took over three minutes to dispatch.
+    """Calls the dispatcher entered that took over three minutes to a unit action.
 
-    Same population as the "> 3 Min" count in the dispatcher table: scheduled
-    calls and intervals over one hour are excluded. Only fields the analytics
-    store already shows elsewhere (CFS number, incident type, priority, agency
-    and the times); no location and no narrative.
+    ``calls`` is the same population as the "> 3 Min" count in the dispatcher
+    table (scheduled calls and intervals over the cap excluded). Calls over
+    the cap are returned separately in ``over_cap`` so nothing is hidden;
+    they are not in any average. Each row names the first unit action (the
+    event and the unit or agency) so the interval can be checked against the
+    CAD report. Only fields the analytics store already shows elsewhere (CFS
+    number, incident type, priority, responding agency, unit number and the
+    times); no location and no narrative.
     """
     rows = repository.fetchall(
-        """
-        WITH selected_calls AS (
-            SELECT
-                cfs_number,
-                call_taker,
-                call_taker_unique_identifier,
-                call_received_at,
-                is_scheduled,
-                incident_code,
-                incident_description,
-                priority,
-                dispatch_agency
-            FROM lcdash_analytics.calls
-            WHERE call_received_at >= %(window_start)s
-              AND call_received_at < %(window_end)s
-              AND BTRIM(call_taker) <> ''
-              AND UPPER(BTRIM(call_taker)) <> %(excluded_dispatcher_identity)s
-        ),
-        call_processing AS (
-            SELECT
-                selected_calls.cfs_number,
-                COALESCE(
-                    NULLIF(selected_calls.call_taker_unique_identifier, ''),
-                    'legacy:' || UPPER(selected_calls.call_taker)
-                ) AS dispatcher_key,
-                selected_calls.call_received_at,
-                selected_calls.is_scheduled,
-                selected_calls.incident_code,
-                selected_calls.incident_description,
-                selected_calls.priority,
-                selected_calls.dispatch_agency,
-                MIN(agency_times.dispatched_at) FILTER (
-                    WHERE agency_times.dispatched_at >= selected_calls.call_received_at
-                ) AS first_dispatched_at
-            FROM selected_calls
-            LEFT JOIN lcdash_analytics.call_agency_times AS agency_times
-                ON agency_times.cfs_number = selected_calls.cfs_number
-            GROUP BY
-                selected_calls.cfs_number,
-                selected_calls.call_taker,
-                selected_calls.call_taker_unique_identifier,
-                selected_calls.call_received_at,
-                selected_calls.is_scheduled,
-                selected_calls.incident_code,
-                selected_calls.incident_description,
-                selected_calls.priority,
-                selected_calls.dispatch_agency
+        _call_processing_sql(
+            dispatcher_calls=True,
+            extra_columns=(
+                ",\n                incident_code,"
+                "\n                incident_description,"
+                "\n                priority,"
+                "\n                response_agency,"
+                "\n                dispatch_agency"
+            ),
+        )
+        + """
+        , first_actions AS (
+            SELECT DISTINCT ON (action_stamps.cfs_number)
+                action_stamps.cfs_number,
+                action_stamps.kind,
+                action_stamps.party,
+                action_stamps.source
+            FROM action_stamps
+            JOIN selected_calls
+                ON selected_calls.cfs_number = action_stamps.cfs_number
+            WHERE action_stamps.stamp_at >= selected_calls.call_received_at
+            ORDER BY
+                action_stamps.cfs_number,
+                action_stamps.stamp_at,
+                action_stamps.stamp_rank,
+                (action_stamps.source = 'unit') DESC
         )
         SELECT
-            cfs_number,
-            call_received_at,
-            EXTRACT(EPOCH FROM first_dispatched_at - call_received_at)
-                AS dispatch_seconds,
-            incident_description,
-            incident_code,
-            priority,
-            dispatch_agency,
-            COUNT(*) OVER () AS total_matches
+            call_processing.cfs_number,
+            call_processing.call_received_at,
+            call_processing.processing_seconds AS dispatch_seconds,
+            call_processing.incident_description,
+            call_processing.incident_code,
+            call_processing.priority,
+            COALESCE(
+                NULLIF(call_processing.response_agency, ''),
+                NULLIF(call_processing.dispatch_agency, ''),
+                ''
+            ) AS agency,
+            first_actions.kind AS first_action_kind,
+            first_actions.party AS first_action_party,
+            first_actions.source AS first_action_source,
+            call_processing.timing_status,
+            COUNT(*) FILTER (WHERE call_processing.timing_status = 'timed') OVER ()
+                AS total_timed,
+            COUNT(*) FILTER (WHERE call_processing.timing_status = 'over_cap') OVER ()
+                AS total_over_cap
         FROM call_processing
+        LEFT JOIN first_actions
+            ON first_actions.cfs_number = call_processing.cfs_number
         WHERE LEFT(
-                encode(sha256(convert_to(dispatcher_key, 'UTF8')), 'hex'),
+                encode(sha256(convert_to(call_processing.dispatcher_key, 'UTF8')), 'hex'),
                 16
               ) = %(dispatcher_ref)s
-          AND first_dispatched_at IS NOT NULL
-          AND NOT is_scheduled
-          AND first_dispatched_at <= call_received_at + INTERVAL '1 hour'
-          AND EXTRACT(EPOCH FROM first_dispatched_at - call_received_at)
-              > %(threshold_seconds)s
+          AND call_processing.timing_status IN ('timed', 'over_cap')
+          AND call_processing.processing_seconds > %(threshold_seconds)s
         ORDER BY dispatch_seconds DESC, call_received_at DESC
         LIMIT %(row_limit)s
         """,
@@ -1202,35 +1268,49 @@ def _query_slow_calls(
             "window_start": window.start_at,
             "window_end": window.end_at,
             "excluded_dispatcher_identity": EXCLUDED_DISPATCHER_IDENTITY,
+            "processing_cap_seconds": PROCESSING_CAP_SECONDS,
             "dispatcher_ref": dispatcher_ref,
             "threshold_seconds": SLOW_CALL_THRESHOLD_SECONDS,
             "row_limit": SLOW_CALL_LIMIT,
         },
     )
     calls = []
+    over_cap_calls = []
     for row in rows:
         received = row[1]
-        calls.append(
-            {
-                "cfs_number": str(row[0] or ""),
-                "received_at": (
-                    received.astimezone(LOCAL_TIMEZONE).strftime("%b %d, %H:%M")
-                    if received is not None
-                    else "—"
-                ),
-                "processing": _format_duration(row[2]),
-                "processing_seconds": int(round(float(row[2]))) if row[2] is not None else None,
-                "incident": str(row[3] or row[4] or "").strip() or "—",
-                "priority": str(row[5] or "").strip() or "—",
-                "agency": _agency_display_label(str(row[6] or "")) or "—",
-            }
-        )
-    total = int(rows[0][7]) if rows else 0
+        kind = str(row[7] or "")
+        entry = {
+            "cfs_number": str(row[0] or ""),
+            "received_at": (
+                received.astimezone(LOCAL_TIMEZONE).strftime("%b %d, %H:%M")
+                if received is not None
+                else "—"
+            ),
+            "processing": _format_duration(row[2]),
+            "processing_seconds": int(round(float(row[2]))) if row[2] is not None else None,
+            "incident": str(row[3] or row[4] or "").strip() or "—",
+            "priority": str(row[5] or "").strip() or "—",
+            "agency": _agency_display_label(str(row[6] or "")) or "—",
+            "first_action": FIRST_ACTION_LABELS.get(kind, kind.replace("_", " ").title()),
+            "first_action_by": str(row[8] or "").strip(),
+        }
+        if str(row[10] or "") == "over_cap":
+            over_cap_calls.append(entry)
+        else:
+            calls.append(entry)
+    total = int(rows[0][11] or 0) if rows else 0
+    total_over_cap = int(rows[0][12] or 0) if rows else 0
     return {
         "threshold_seconds": SLOW_CALL_THRESHOLD_SECONDS,
+        "cap_minutes": PROCESSING_CAP_MINUTES,
         "total": total,
         "shown": len(calls),
         "calls": calls,
+        "over_cap": {
+            "total": total_over_cap,
+            "shown": len(over_cap_calls),
+            "calls": over_cap_calls,
+        },
     }
 
 
@@ -1259,9 +1339,11 @@ def get_dispatcher_slow_calls(
         "available": False,
         "period_label": window.label,
         "threshold_seconds": SLOW_CALL_THRESHOLD_SECONDS,
+        "cap_minutes": PROCESSING_CAP_MINUTES,
         "total": 0,
         "shown": 0,
         "calls": [],
+        "over_cap": {"total": 0, "shown": 0, "calls": []},
     }
     if not analytics_database_is_configured():
         return {**empty, "message": "PostgreSQL analytics is not configured on this machine."}

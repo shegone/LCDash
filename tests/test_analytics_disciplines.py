@@ -113,7 +113,16 @@ class DisciplineMetricsTests(unittest.TestCase):
         self.assertIn("LIKE 'FC %%'", query)
         self.assertIn("GROUPING SETS ((discipline, dispatcher_key), (discipline))", query)
         # Same population rules as the dispatcher table.
-        for rule in ("NOT is_scheduled", "INTERVAL '1 hour'", "excluded_dispatcher_identity"):
+        self.assertEqual(params["processing_cap_seconds"], 3600)
+        for rule in ("NOT is_scheduled", "make_interval(secs => %(processing_cap_seconds)s)",
+                     "excluded_dispatcher_identity"):
+            self.assertIn(rule, query)
+        # Discipline comes from the responding unit's roster agency or unit
+        # type (the per-agency ORI alone never matched), from both records.
+        for rule in ("FROM lcdash_analytics.unit_responses", "LEFT JOIN lcdash_analytics.units",
+                     "FROM lcdash_analytics.call_agency_times", "unit_type LIKE 'EMS %%'",
+                     "unit_type LIKE 'FIRE %%'", "'PATROL CAR', 'COUNTY ADMIN'",
+                     "(timing.enroute_at)", "(timing.on_scene_at)"):
             self.assertIn(rule, query)
         # No location or narrative fields.
         for column in ("latitude", "longitude", "city", "narrative", "address"):

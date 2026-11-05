@@ -438,18 +438,35 @@
         const calls = Array.isArray(data.calls) ? data.calls : [];
         const total = Number(data.total) || calls.length;
         const shown = node("div", "slow-calls-meta",
-            `${data.period_label || ""}. Received to first dispatch, longest first. ` +
+            `${data.period_label || ""}. Received to first unit action (assigned, en route, staged or on scene), longest first. ` +
             (total > calls.length ? `Showing ${calls.length} of ${total}.` : `${total} call${total === 1 ? "" : "s"}.`));
         panel.appendChild(shown);
         if (!calls.length) {
             panel.appendChild(node("div", "text-secondary py-2",
                 data.message || "No calls over 3 minutes in this period."));
-            return;
+        } else {
+            panel.appendChild(slowCallsTable(calls));
         }
+
+        // Calls over the cap are not in any average or in the "> 3 Min"
+        // count; they are listed here so a held or queued call is never hidden.
+        const overCap = data.over_cap && Array.isArray(data.over_cap.calls) ? data.over_cap : null;
+        if (overCap && overCap.calls.length) {
+            const capTotal = Number(overCap.total) || overCap.calls.length;
+            const capMinutes = Number(data.cap_minutes) || 60;
+            panel.appendChild(node("div", "slow-calls-meta mt-3",
+                `Over ${capMinutes} minutes, not averaged and not in the count above (a held or queued call, ` +
+                `or a stamp entered late): ` +
+                (capTotal > overCap.calls.length ? `showing ${overCap.calls.length} of ${capTotal}.` : `${capTotal} call${capTotal === 1 ? "" : "s"}.`)));
+            panel.appendChild(slowCallsTable(overCap.calls));
+        }
+    }
+
+    function slowCallsTable(calls) {
         const wrap = node("div", "table-responsive mt-2");
         const table = node("table", "table analytics-table align-middle");
         const headRow = node("tr");
-        ["CFS", "Received", "Time to dispatch", "Incident", "Priority", "Agency"].forEach(function (label, index) {
+        ["CFS", "Received", "Time to first action", "First action", "Incident", "Priority", "Agency"].forEach(function (label, index) {
             headRow.appendChild(node("th", index === 2 ? "text-end" : "", label));
         });
         const thead = node("thead");
@@ -461,6 +478,7 @@
             row.appendChild(node("td", "fw-bold text-white", String(call.cfs_number || "")));
             row.appendChild(node("td", "", String(call.received_at || "")));
             row.appendChild(node("td", "text-end text-warning fw-bold", String(call.processing || "")));
+            row.appendChild(node("td", "", [call.first_action, call.first_action_by].filter(Boolean).join(" ")));
             row.appendChild(node("td", "", String(call.incident || "")));
             row.appendChild(node("td", "", String(call.priority || "")));
             row.appendChild(node("td", "", String(call.agency || "")));
@@ -468,7 +486,7 @@
         });
         table.appendChild(body);
         wrap.appendChild(table);
-        panel.appendChild(wrap);
+        return wrap;
     }
 
     function bindSlowCalls(snapshot) {

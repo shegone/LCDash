@@ -61,14 +61,15 @@ class RecordingRepository:
         if "MAX(source_collected_at)" in query:
             return (10, 0, None, None, None, 0, None, 0)
         if "calls_with_call_taker" in query:
-            # calls, samples, average, median, within 90, over 180, p90
-            return (4, 3, 300.0, 120.0, 1, 1, 540.0)
+            # calls, samples, average, median, within 90, over 180, p90,
+            # excluded scheduled, no stamp, over cap
+            return (4, 3, 300.0, 120.0, 1, 1, 540.0, 1, 0, 0)
         return (0, 0, 0)
 
     def fetchall(self, query, params=None):
         self.queries.append((query, params))
         if "AS dispatcher_ref" in query:
-            return [("A DISPATCHER", 4, 3, 300.0, 120.0, 1, 1, 540.0, REF)]
+            return [("A DISPATCHER", 4, 3, 300.0, 120.0, 1, 1, 540.0, 1, 0, 0, REF)]
         if "AS agency" in query and "LIMIT 8" in query:
             return [("SLD", 10)]
         return []
@@ -91,11 +92,20 @@ class NinetiethPercentileTests(unittest.TestCase):
         sql = [q for q, _ in self.repository.queries if "p90_processing_seconds" in q]
         self.assertEqual(len(sql), 2)
         for query in sql:
+            # Every aggregate reads the one timing_status column, which is
+            # 'timed' only for a non-scheduled call with a unit action inside
+            # the cap.
             p90 = query[query.index("PERCENTILE_CONT(0.9)"):]
             p90 = p90[:p90.index("p90_processing_seconds")]
-            for rule in ("first_dispatched_at IS NOT NULL", "NOT is_scheduled",
-                         "INTERVAL '1 hour'"):
-                self.assertIn(rule, p90)
+            self.assertIn("timing_status = 'timed'", p90)
+            median = query[query.index("PERCENTILE_CONT(0.5)"):]
+            median = median[:median.index("median_processing_seconds")]
+            self.assertIn("timing_status = 'timed'", median)
+            status = query[query.index("CASE"):query.index("END AS timing_status")]
+            self.assertIn("is_scheduled THEN 'scheduled'", status)
+            self.assertIn("first_action_at IS NULL THEN 'no_stamp'", status)
+            self.assertIn("make_interval(secs => %(processing_cap_seconds)s)", status)
+            self.assertIn("THEN 'over_cap'", status)
 
     def test_the_dispatcher_is_named_by_an_opaque_reference(self):
         row = self.result["dispatchers"][0]
@@ -133,9 +143,14 @@ class FakeSlowCallRepository:
 class SlowCallListTests(unittest.TestCase):
     def setUp(self):
         received = datetime(2026, 10, 21, 17, 7, tzinfo=timezone.utc)
+        # cfs, received, seconds, description, code, priority, agency,
+        # first-action kind, party, source, timing_status, total timed,
+        # total over cap
         FakeSlowCallRepository.rows = [
-            ("CFS-1", received, 1800.0, "Welfare check", "WELCK", "3", "LEASA", 2),
-            ("CFS-2", received, 240.0, "", "MED", "", "", 2),
+            ("CFS-1", received, 1800.0, "Welfare check", "WELCK", "3", "LEASA",
+             "enroute", "MED10", "unit", "timed", 2, 0),
+            ("CFS-2", received, 240.0, "", "MED", "", "",
+             "assigned", "SYN-AG", "agency", "timed", 2, 0),
         ]
         self.repository = FakeSlowCallRepository()
         self.patches = [
@@ -161,9 +176,32 @@ class SlowCallListTests(unittest.TestCase):
         self.assertEqual(second["incident"], "MED")
         self.assertEqual(second["priority"], "—")
         self.assertEqual(second["agency"], "Unknown")
+        self.assertEqual(first["first_action"], "En route")
+        self.assertEqual(first["first_action_by"], "MED10")
+        self.assertEqual(second["first_action"], "Assigned")
         self.assertEqual(
             set(first), {"cfs_number", "received_at", "processing",
-                         "processing_seconds", "incident", "priority", "agency"})
+                         "processing_seconds", "incident", "priority", "agency",
+                         "first_action", "first_action_by"})
+        self.assertEqual(result["over_cap"], {"total": 0, "shown": 0, "calls": []})
+        self.assertEqual(result["cap_minutes"], 60)
+
+    def test_calls_over_the_cap_are_listed_apart_not_hidden(self):
+        received = datetime(2026, 10, 21, 17, 7, tzinfo=timezone.utc)
+        FakeSlowCallRepository.rows = [
+            ("CFS-9", received, 5400.0, "Hang up", "HANG", "30", "LCSO",
+             "assigned", "SO1", "unit", "over_cap", 1, 1),
+            ("CFS-1", received, 300.0, "Alarm", "ALM", "3", "FC 1",
+             "assigned", "E1", "unit", "timed", 1, 1),
+        ]
+
+        result = get_dispatcher_slow_calls(REF, period="24h")
+
+        self.assertEqual([c["cfs_number"] for c in result["calls"]], ["CFS-1"])
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["over_cap"]["total"], 1)
+        self.assertEqual(result["over_cap"]["calls"][0]["cfs_number"], "CFS-9")
+        self.assertEqual(result["over_cap"]["calls"][0]["processing"], "1:30:00")
 
     def test_it_asks_for_exactly_the_calls_behind_the_over_3_minute_count(self):
         get_dispatcher_slow_calls(REF, period="24h")
@@ -173,9 +211,13 @@ class SlowCallListTests(unittest.TestCase):
         self.assertEqual(SLOW_CALL_THRESHOLD_SECONDS, 180)
         self.assertEqual(params["row_limit"], SLOW_CALL_LIMIT)
         self.assertEqual(params["dispatcher_ref"], REF)
-        # Same rules as the table's count.
-        for rule in ("NOT is_scheduled", "INTERVAL '1 hour'",
-                     "> %(threshold_seconds)s", "ORDER BY dispatch_seconds DESC"):
+        self.assertEqual(params["processing_cap_seconds"], 3600)
+        # Same rules as the table's count, plus the over-cap list.
+        for rule in ("timing_status IN ('timed', 'over_cap')",
+                     "> %(threshold_seconds)s", "ORDER BY dispatch_seconds DESC",
+                     "FROM lcdash_analytics.unit_responses",
+                     "FROM lcdash_analytics.call_agency_times",
+                     "DISTINCT ON (action_stamps.cfs_number)"):
             self.assertIn(rule, query)
         # The reference travels as a bound parameter, never in the SQL text.
         self.assertNotIn(REF, query)
@@ -276,7 +318,7 @@ class TablePageTests(unittest.TestCase):
         self.assertIn(f'data-slow-calls="{REF}"', self.html)
         self.assertIn('id="dispatcher-slow-calls"', self.html)
         self.assertIn('aria-controls="dispatcher-slow-calls"', self.html)
-        self.assertIn("lcdash-analytics.js?v=20261021-slow-calls", self.html)
+        self.assertIn("lcdash-analytics.js?v=20261105-first-action", self.html)
 
     def test_a_dispatcher_with_no_slow_calls_gets_a_plain_number(self):
         self.overview["dispatchers"][0]["over_180_count"] = 0

@@ -43,12 +43,27 @@ The Analytics page includes a Dispatcher / CAD Entry section for:
 - Calls taking longer than three minutes to reach first dispatch
 - Call-taker data coverage for the selected reporting window
 
-CAD processing is measured from the CFS `CallDateTime` to the earliest valid
-agency dispatch timestamp. Scheduled calls and atypical intervals longer than
-one hour are excluded from processing-time calculations. The table reports the
-number of timed samples so small samples are visible. CAD processing is not 911
+CAD processing is measured from the CFS `CallDateTime` to the earliest action
+by any unit of any agency on the call (Assigned, En route, Staged or On scene),
+read from both `call_agency_times` and `unit_responses`. A call is timed only
+when it is not scheduled, has such a stamp at or after the received time, and
+the interval is within the 60-minute cap; the three excluded buckets are
+counted on the page (summary line and the "Not timed" column) and calls over
+the cap are listed in the slow-call drill-down as "not averaged". The
+drill-down names the first action (event and unit or agency) so an interval can
+be checked against the CAD report. CAD's Stack event is not in `cfs_analytics`
+and is not collected, so time a unit spends holding a stacked call cannot be
+separated from call-taker time yet; see
+`docs/planning/ANALYTICS_PROCESSING_AUDIT_2026-11-05.md` for the audit, the
+options and the proposed data-model change. CAD processing is not 911
 phone-answer time. NGA911 integration can later add answer time, call duration,
 abandoned-call, transfer, queue-delay, and callback metrics.
+
+Response times (average and median response, coverage, busiest-unit average)
+use the earliest on-scene stamp from either record and exclude scheduled calls.
+The discipline tables classify a call's units by the unit roster agency or unit
+type (FC departments fire, LEASA EMS, sheriff and police law), with the
+per-agency ORI as a fallback.
 
 Kim Maynard is excluded by exact normalized name from this Dispatcher / CAD
 Entry section because she is an ambulance-service employee rather than a Logan

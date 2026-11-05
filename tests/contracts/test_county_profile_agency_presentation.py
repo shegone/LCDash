@@ -37,7 +37,9 @@ class SyntheticAnalyticsRepository:
         if "MAX(source_collected_at)" in query:
             return (10, 0, None, None, None, 0, None, 0)
         if "calls_with_call_taker" in query:
-            return (0, 0, None, None, 0, 0, None)
+            # calls, timed, average, median, within 90, over 180, p90,
+            # excluded scheduled, no stamp, over cap
+            return (0, 0, None, None, 0, 0, None, 0, 0, 0)
         return (0, 0, 0)
 
     def fetchall(self, query, params):
