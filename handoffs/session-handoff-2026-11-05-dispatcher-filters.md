@@ -7,7 +7,7 @@ Stack collection live). Facts first.
 
 | Item | State | Last verified |
 | --- | --- | --- |
-| LCDash repo | `main`; this work is **committed locally only** on top of `70356ad` (see "Commit" below). Not pushed, not built, not deployed. | 2026-11-05 |
+| LCDash repo | `main` at `0d78d88` (**local only**, on top of `70356ad`). Not pushed, not built, not deployed. | 2026-11-05 |
 | LCDash pilot (AWS) | Unchanged since release 121: web task definition revision 121, collector 81, image `release-4fcc6457782c`, digest `sha256:14d3f80abe58c6f3c581d34b39a9d0aca801b823f39ccf79e97f70cb70a25764`. No AWS call was made this session. | 2026-11-05 16:10 EST (previous handoff) |
 | Tests | application suite and infrastructure suite results are in the "Tests" section; `tests/test_analytics_postgres_live.py` still **skipped** (no PostgreSQL reachable from this workstation). | 2026-11-05 |
 
@@ -85,8 +85,8 @@ Stack collection live). Facts first.
 
 ## Tests
 
-See the commit message for the exact counts of the run made before the
-commit (`python -m pytest tests/` and `python -m pytest infrastructure/tests/`).
+Before the commit: `python -m pytest tests/` 2088 passed, 6 skipped, 2623
+subtests passed; `python -m pytest infrastructure/tests/` 151 passed, 9 subtests.
 The live PostgreSQL file is skipped here; its new expectations were
 derived by hand from the synthetic timelines and have **not** run against
 a database.
