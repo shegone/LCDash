@@ -9,7 +9,7 @@ Follows `session-handoff-2026-10-26-release-120.md`. Facts first.
 | LCDash repo | `main`; this work is a local commit on top of `51756ce` (not pushed; nothing built or deployed). | 2026-11-05 |
 | LCDash pilot (AWS) | unchanged: foundation stack `UPDATE_COMPLETE` (2026-10-26), web task definition revision 120, digest `sha256:4d02e77f96ca0414b02e06ce25ad04f6243d760a0af4adaee41173d9111d45d1`; `AnalyticsCollectorEnabled=true`, schedule 30 min; collector runs today all `complete`, 0 failures. | 2026-11-05 (read-only) |
 | Tests | application: `python -m pytest tests/` 2074 passed, 6 skipped, 2623 subtests passed; infrastructure: `python -m pytest infrastructure/tests/` 151 passed, 9 subtests passed. `tests/test_analytics_postgres_live.py` (3 tests, now including the four CFS timelines) **skipped**: no PostgreSQL reachable from this session. | 2026-11-05 |
-| Decisions open | listed in `docs/planning/ANALYTICS_PROCESSING_AUDIT_2026-11-05.md` section 1.4 (definition, data-model change, cap, benchmarks, scheduled exclusion, duplicate identity). | |
+| Decisions open | listed in `docs/planning/ANALYTICS_PROCESSING_AUDIT_2026-11-05.md` section 1.4 (definition, data-model change, cap, benchmarks, scheduled exclusion, duplicate identity). Ted's yardstick (2026-11-05): call added to CAD → someone added to the call, i.e. first Assign **or Stack**; Stack needs the command-log collection in audit section 5 (schema change, awaiting explicit approval). | 2026-11-05 |
 
 ## What was found
 

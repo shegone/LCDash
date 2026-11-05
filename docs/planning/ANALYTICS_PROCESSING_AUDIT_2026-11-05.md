@@ -89,6 +89,21 @@ left out of call-taker timing or shown separately. Not possible today.
 
 ### 1.4 Decisions for Ted
 
+**Yardstick stated by Ted on 2026-11-05:** the public judges the centre on
+the time from the call being added to CAD to the time someone is added to
+the call. In CAD terms that is `CallDateTime` (the warehouse's
+`call_received_at`, the report's "Received") to the first **Assign or
+Stack** of any unit, or the first En route / Staged / On scene when a unit
+skipped Assign (the report marks that `*`). Definition B (implemented)
+matches this exactly except that it cannot see Stack, because Stack exists
+only in the `cfs_core` command log, which the collector already receives
+in every `cfs_core/search` result and the normaliser discards. Collecting
+it (section 5, items 1 and 4; no new API call) makes 34950 read 2:17 and
+36232 read 7:59, and lets the unit's own hold be shown apart. That is the
+remaining step to the lowest *accurate* time; nothing else in the data can
+shorten the interval honestly. The schema change still needs Ted's explicit
+approval before anything is written.
+
 1. Accept definition B now (received → earliest unit action, any agency or
    unit, Assigned/En route/Staged/On scene). Implemented; can be reverted.
 2. Approve the data-model change in section 5 (unit status events from the
