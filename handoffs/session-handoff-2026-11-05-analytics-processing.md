@@ -6,7 +6,7 @@ Follows `session-handoff-2026-10-26-release-120.md`. Facts first.
 
 | Item | State | Last verified |
 | --- | --- | --- |
-| LCDash repo | `main`; three local commits on top of `51756ce`: `3d182c5` (first-action metric), `5d07c98` (yardstick note) and the Stack commit described below. Not pushed; nothing built or deployed. | 2026-11-05 |
+| LCDash repo | `main` at `a747596` (`3d182c5` first-action metric, `5d07c98` yardstick note, `a747596` Stack collection), **pushed to GitHub and Bitbucket on 2026-11-05** at Ted's "Yes, push main". Nothing built or deployed; the release-builder has not run for this commit. | 2026-11-05 |
 | LCDash pilot (AWS) | unchanged: foundation stack `UPDATE_COMPLETE` (2026-10-26), web task definition revision 120, digest `sha256:4d02e77f96ca0414b02e06ce25ad04f6243d760a0af4adaee41173d9111d45d1`; `AnalyticsCollectorEnabled=true`, schedule 30 min; collector runs today all `complete`, 0 failures. | 2026-11-05 (read-only) |
 | Tests | after the Stack commit: application `python -m pytest tests/` 2078 passed, 6 skipped, 2623 subtests passed; infrastructure `python -m pytest infrastructure/tests/` 151 passed, 9 subtests passed. `tests/test_analytics_postgres_live.py` (3 tests, including the four CFS timelines with Stack) **skipped**: no PostgreSQL reachable from this session. | 2026-11-05 |
 | Decisions open | listed in `docs/planning/ANALYTICS_PROCESSING_AUDIT_2026-11-05.md` section 1.4 (definition, data-model change, cap, benchmarks, scheduled exclusion, duplicate identity). Ted's yardstick (2026-11-05): call added to CAD → someone added to the call, i.e. first Assign **or Stack**. Ted approved the command-log collection ("Yes, add Stack") the same day; implemented, see below. Still open: `HowReported`, `UnitType.Discipline`, the backfill of older calls, cap, benchmarks, duplicate identity. | 2026-11-05 |
@@ -123,8 +123,10 @@ after the release (audit section 5 item 5).
    implements the recommended defaults; any change is a small edit).
 2. Run the live PostgreSQL test file as above; fix anything it finds.
 3. Release through the guarded path (AGENTS.md "Production deployment
-   rules"): push `main` to both remotes (Ted's yes), full suites, release
-   builder, CodeBuild with `IMAGE_TAG=release-<12 hex>`, ECR scan against
+   rules"): `main` is pushed (done); next is the release builder for
+   the release commit, CodeBuild with `IMAGE_TAG=release-<first 12 hex of
+   HEAD>` (confirm with `git rev-parse HEAD` once this handoff commit is
+   pushed), ECR scan against
    the accepted baseline, named change set with only `PilotImageDigest`
    changing, execute only after Ted types the change-set name, verify ECS
    rollout, ALB target, signed-in page, and then compare the four CFS numbers
