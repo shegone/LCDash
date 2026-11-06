@@ -167,6 +167,17 @@ domain; web log since 17:26:59Z: 75 events, 0 errors, 0 warnings. The
 first collector run on revision 86 was not waited for. Rollback target:
 release 125's digest `sha256:d5c7a299...`.
 
+## Held for the next release: seven more not-timed call types (23)
+
+At Ted's request Road Block, Welfare Check, Tree Down, Missing Person,
+Fire Brush, Gas Leak and Rescue were added to `EXCLUDED_CALL_TYPES`
+(twenty-three natures). List-only; the page wording changed from "not
+dispatched as emergencies" to "the county does not time for dispatcher
+processing", since some of these are emergency natures. Flagged to Ted:
+the list also governs the by-discipline tables, so Fire Brush, Gas Leak
+and Rescue leave the ISO fire view's alarm-processing figures. Tests,
+docs and this note follow. **Not pushed and not released** when written.
+
 ## Exact next action
 
 1. Ted checks, on release 126: the Fire view of the call that started

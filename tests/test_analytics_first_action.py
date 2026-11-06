@@ -145,17 +145,19 @@ class ProcessingDefinitionTests(unittest.TestCase):
             self.assertIn(") AS within_60_seconds", query)
 
     def test_the_listed_call_types_are_not_timed_but_still_counted(self):
-        # Ted's list (2026-11-05, four more on 2026-11-06): natures that are
-        # never dispatched as an emergency, so the interval says nothing
-        # about the dispatcher. CAD carries the lock-out nature under two
-        # names, and the match is exact apart from case and punctuation, so
-        # both are listed.
+        # Ted's list (2026-11-05, eleven more on 2026-11-06): natures the
+        # county does not time for dispatcher processing, so the interval
+        # says nothing about the dispatcher. CAD carries the lock-out nature
+        # under two names, and the match is exact apart from case and
+        # punctuation, so both are listed.
         self.assertEqual(ar.EXCLUDED_CALL_TYPES, (
             "Roundtrip", "Take Home", "Transfer / Inter-Facility", "Contact",
             "Move-Up", "Shoplifting", "Complaint", "911 Hang Up",
             "Call Through Office", "911 Open Line", "Information",
             "Be On the Lookout", "Motorist Assist", "Public Works / Utilities",
-            "Vehicle Lock Out / Lock In", "Lock Out"))
+            "Vehicle Lock Out / Lock In", "Lock Out", "Road Block", "Welfare Check",
+            "Tree Down", "Missing Person", "Fire Brush", "Gas Leak", "Rescue"))
+        self.assertEqual(len(ar.EXCLUDED_CALL_TYPE_KEYS), len(set(ar.EXCLUDED_CALL_TYPE_KEYS)))
         # Matching ignores case, spaces and punctuation.
         self.assertEqual(ar.call_type_key(" 911 hang-up "), "911HANGUP")
         self.assertEqual(ar.call_type_key("TRANSFER/INTER-FACILITY"), "TRANSFERINTERFACILITY")
@@ -397,13 +399,14 @@ class PageWordingTests(unittest.TestCase):
         self.assertIn("Stacked first: 2 timed calls were queued on a busy unit, average hold 32:36",
                       self.html)
         self.assertIn("Not timed: 6 of a call type that is not timed", self.html)
-        self.assertIn("(16 types)</span> &middot; 3 scheduled &middot; 4 with no unit stamp", self.html)
+        self.assertIn("(23 types)</span> &middot; 3 scheduled &middot; 4 with no unit stamp", self.html)
         self.assertIn("5 over 60 minutes", self.html)
-        self.assertIn("these call types, which are not dispatched as emergencies: "
+        self.assertIn("these call types, which the county does not time for dispatcher processing: "
                       "Roundtrip, Take Home, Transfer / Inter-Facility, Contact, Move-Up, "
                       "Shoplifting, Complaint, 911 Hang Up, Call Through Office, 911 Open Line, "
                       "Information, Be On the Lookout, Motorist Assist, Public Works / Utilities, "
-                      "Vehicle Lock Out / Lock In, Lock Out. Those calls still count as entered.",
+                      "Vehicle Lock Out / Lock In, Lock Out, Road Block, Welfare Check, Tree Down, "
+                      "Missing Person, Fire Brush, Gas Leak, Rescue. Those calls still count as entered.",
                       self.html)
         self.assertIn("38 of 40 calls", self.html)
         self.assertIn("scheduled calls are excluded", self.html)

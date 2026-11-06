@@ -880,7 +880,7 @@
                 CAD processing is call received to the earliest unit action on the call.
                 It excludes scheduled calls, calls with no unit stamp at or after the
                 received time, intervals over {{ dispatcher_metrics.processing_cap_minutes|default(60) }} minutes,
-                and these call types, which are not dispatched as emergencies:
+                and these call types, which the county does not time for dispatcher processing:
                 {{ dispatcher_metrics.excluded_call_types|default([])|join(', ') }}.
                 Those calls still count as entered.
                 A Stack (the call queued on a busy unit) ends the interval like an

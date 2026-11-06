@@ -55,12 +55,16 @@ buckets are counted on the page (summary line and the "Not timed" column) and
 calls over the cap are listed in the slow-call drill-down as "not averaged".
 The not-timed call types (`EXCLUDED_CALL_TYPES` in
 `app/services/analytics_reporting.py`, Ted's list of 2026-11-05, extended
-2026-11-06) are natures that are never dispatched as an emergency: Roundtrip,
-Take Home, Transfer / Inter-Facility, Contact, Move-Up, Shoplifting,
-Complaint, 911 Hang Up, Call Through Office, 911 Open Line, Information, Be
-On the Lookout, Motorist Assist, Public Works / Utilities, Vehicle Lock Out /
-Lock In and Lock Out (CAD carries the lock-out nature under both names, and
-the match is exact apart from case and punctuation). They are
+2026-11-06) are natures the county does not time for dispatcher processing:
+Roundtrip, Take Home, Transfer / Inter-Facility, Contact, Move-Up,
+Shoplifting, Complaint, 911 Hang Up, Call Through Office, 911 Open Line,
+Information, Be On the Lookout, Motorist Assist, Public Works / Utilities,
+Vehicle Lock Out / Lock In, Lock Out (CAD carries the lock-out nature under
+both names, and the match is exact apart from case and punctuation), Road
+Block, Welfare Check, Tree Down, Missing Person, Fire Brush, Gas Leak and
+Rescue. Because the list also governs the by-discipline tables, the fire
+natures on it (Fire Brush, Gas Leak, Rescue) are outside the ISO fire view's
+alarm-processing figures. They are
 matched on the CAD incident description ignoring case, spaces and punctuation,
 still count as calls entered, and are left out of the discipline tables too. A Stack (the call queued on a busy unit) ends
 the interval like an Assign; the unit's wait from that Stack to its first

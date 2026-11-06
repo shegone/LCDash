@@ -66,15 +66,18 @@ DISCIPLINE_FILTERS = (
     ("law", "Law"),
 )
 DISCIPLINE_FILTER_LABELS = dict(DISCIPLINE_FILTERS)
-# Call types that are never dispatched as an emergency (administrative or
-# scheduled transport natures, information and lookout entries, hang-ups
-# and open lines), so their "received to first unit action" interval says
-# nothing about the dispatcher. They stay in the call counts and are
-# reported as not timed. Ted's list, 2026-11-05; Motorist Assist, Public
-# Works / Utilities, Vehicle Lock Out / Lock In and Lock Out added 2026-11-06
-# (CAD carries the lock-out nature under both names). Matching ignores case,
-# spaces and punctuation ("911 Hang Up" = "911 HANG-UP" = "911 HANGUP") but
-# is otherwise exact, so each CAD spelling needs its own entry.
+# Call types the county does not time for dispatcher processing: natures
+# that are administrative, scheduled, informational, or routinely held or
+# worked without an immediate unit assignment, so their "received to first
+# unit action" interval says nothing about the dispatcher. They stay in the
+# call counts and are reported as not timed; they are also left out of the
+# by-discipline tables and the ISO fire view. Ted's list, 2026-11-05;
+# Motorist Assist, Public Works / Utilities, Vehicle Lock Out / Lock In and
+# Lock Out added 2026-11-06 (CAD carries the lock-out nature under both
+# names); Road Block, Welfare Check, Tree Down, Missing Person, Fire Brush,
+# Gas Leak and Rescue added 2026-11-06 at Ted's request. Matching ignores
+# case, spaces and punctuation ("911 Hang Up" = "911 HANG-UP" = "911
+# HANGUP") but is otherwise exact, so each CAD spelling needs its own entry.
 EXCLUDED_CALL_TYPES = (
     "Roundtrip",
     "Take Home",
@@ -92,6 +95,13 @@ EXCLUDED_CALL_TYPES = (
     "Public Works / Utilities",
     "Vehicle Lock Out / Lock In",
     "Lock Out",
+    "Road Block",
+    "Welfare Check",
+    "Tree Down",
+    "Missing Person",
+    "Fire Brush",
+    "Gas Leak",
+    "Rescue",
 )
 
 
