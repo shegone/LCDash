@@ -62,10 +62,11 @@ Shoplifting, Complaint, 911 Hang Up, Call Through Office, 911 Open Line,
 Information, Be On the Lookout, Motorist Assist, Public Works / Utilities,
 Vehicle Lock Out / Lock In, Lock Out (CAD carries the lock-out nature under
 both names, and the match is exact apart from case and punctuation), Road
-Block, Welfare Check, Tree Down, Missing Person, Fire Brush, Gas Leak and
-Rescue. Because the list also governs the by-discipline tables, the fire
-natures on it (Fire Brush, Gas Leak, Rescue) are outside the ISO fire view's
-alarm-processing figures. They are
+Block, Welfare Check, Tree Down, Missing Person, Fire Brush, Gas Leak,
+Rescue and Helicopter (an EMS supervisor chooses the aircraft, so extra
+calls and steps come before the assignment). Because the list also governs
+the by-discipline tables, the fire natures on it (Fire Brush, Gas Leak,
+Rescue) are outside the ISO fire view's alarm-processing figures. They are
 matched on the CAD incident description ignoring case, spaces and punctuation,
 still count as calls entered, and are left out of the discipline tables too. A Stack (the call queued on a busy unit) ends
 the interval like an Assign; the unit's wait from that Stack to its first

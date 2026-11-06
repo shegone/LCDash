@@ -85,9 +85,11 @@ DISCIPLINE_FILTER_LABELS = dict(DISCIPLINE_FILTERS)
 # Motorist Assist, Public Works / Utilities, Vehicle Lock Out / Lock In and
 # Lock Out added 2026-11-06 (CAD carries the lock-out nature under both
 # names); Road Block, Welfare Check, Tree Down, Missing Person, Fire Brush,
-# Gas Leak and Rescue added 2026-11-06 at Ted's request. Matching ignores
-# case, spaces and punctuation ("911 Hang Up" = "911 HANG-UP" = "911
-# HANGUP") but is otherwise exact, so each CAD spelling needs its own entry.
+# Gas Leak and Rescue added 2026-11-06 at Ted's request; Helicopter added
+# the same day (an EMS supervisor chooses the aircraft, so extra calls and
+# steps come before the assignment). Matching ignores case, spaces and
+# punctuation ("911 Hang Up" = "911 HANG-UP" = "911 HANGUP") but is
+# otherwise exact, so each CAD spelling needs its own entry.
 EXCLUDED_CALL_TYPES = (
     "Roundtrip",
     "Take Home",
@@ -112,6 +114,7 @@ EXCLUDED_CALL_TYPES = (
     "Fire Brush",
     "Gas Leak",
     "Rescue",
+    "Helicopter",
 )
 
 
