@@ -70,8 +70,10 @@ DISCIPLINE_FILTER_LABELS = dict(DISCIPLINE_FILTERS)
 # scheduled transport natures, information and lookout entries, hang-ups
 # and open lines), so their "received to first unit action" interval says
 # nothing about the dispatcher. They stay in the call counts and are
-# reported as not timed. Ted's list, 2026-11-05. Matching ignores case,
-# spaces and punctuation ("911 Hang Up" = "911 HANG-UP" = "911 HANGUP").
+# reported as not timed. Ted's list, 2026-11-05; Motorist Assist, Public
+# Works / Utilities and Vehicle Lock Out / Lock In added 2026-11-06. Matching
+# ignores case, spaces and punctuation ("911 Hang Up" = "911 HANG-UP" =
+# "911 HANGUP").
 EXCLUDED_CALL_TYPES = (
     "Roundtrip",
     "Take Home",
@@ -85,6 +87,9 @@ EXCLUDED_CALL_TYPES = (
     "911 Open Line",
     "Information",
     "Be On the Lookout",
+    "Motorist Assist",
+    "Public Works / Utilities",
+    "Vehicle Lock Out / Lock In",
 )
 
 

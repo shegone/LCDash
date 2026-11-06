@@ -88,6 +88,16 @@ the same in every view. The All view is unchanged.
   would allow a true per-discipline clock) was not checked: it needs a
   look at a live payload.
 
+## Later the same day: three more not-timed call types (not released)
+
+At Ted's request Motorist Assist, Public Works / Utilities and Vehicle
+Lock Out / Lock In were added to `EXCLUDED_CALL_TYPES` (fifteen natures
+now). List-only change: no SQL changed, the page derives the names and
+the count from the list. Tests, `docs/ANALYTICS_FOUNDATION.md` and the
+audit document follow. Committed locally; not pushed and not released
+when this note was written. The CAD spelling of the three natures was not
+read from the warehouse (same caveat as the first twelve).
+
 ## Exact next action
 
 1. Ted checks the Fire view of the call that started this and the
