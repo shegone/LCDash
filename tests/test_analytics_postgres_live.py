@@ -2,7 +2,7 @@
 
 Skipped unless LCDASH_TEST_PG_DSN names a server that may create and drop
 databases, for example "host=127.0.0.1 port=55432 user=postgres". Run against
-PostgreSQL 17.6 on 2026-10-21 (production is RDS 17).
+PostgreSQL 17.6 on 2026-10-21 and 17.11 on 2026-11-06 (production is RDS 17).
 """
 
 import hashlib

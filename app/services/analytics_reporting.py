@@ -241,16 +241,25 @@ ACTION_STAMPS_SQL = """
                 stamps.stamp_at,
                 stamps.kind,
                 stamps.stamp_rank,
-                CASE
-                    WHEN stamps.agency = ANY(%(ems_agencies)s)
-                      OR stamps.unit_type LIKE 'EMS %%' THEN 'ems'
-                    WHEN stamps.agency LIKE 'FC %%'
-                      OR stamps.unit_type LIKE 'FIRE %%' THEN 'fire'
-                    WHEN stamps.agency = ANY(%(law_agencies)s)
-                      OR stamps.unit_type IN ('PATROL CAR', 'COUNTY ADMIN') THEN 'law'
-                    ELSE ''
-                END AS discipline
+                stamps.discipline
             FROM (
+                SELECT
+                    raw_stamps.cfs_number,
+                    raw_stamps.party,
+                    raw_stamps.source,
+                    raw_stamps.stamp_at,
+                    raw_stamps.kind,
+                    raw_stamps.stamp_rank,
+                    CASE
+                        WHEN raw_stamps.agency = ANY(%(ems_agencies)s)
+                          OR raw_stamps.unit_type LIKE 'EMS %%' THEN 'ems'
+                        WHEN raw_stamps.agency LIKE 'FC %%'
+                          OR raw_stamps.unit_type LIKE 'FIRE %%' THEN 'fire'
+                        WHEN raw_stamps.agency = ANY(%(law_agencies)s)
+                          OR raw_stamps.unit_type IN ('PATROL CAR', 'COUNTY ADMIN') THEN 'law'
+                        ELSE ''
+                    END AS discipline
+                FROM (
                 SELECT
                     status_event.cfs_number,
                     status_event.unit_number AS party,
@@ -319,6 +328,7 @@ ACTION_STAMPS_SQL = """
                         (timing.on_scene_at, 'on_scene', 4)
                 ) AS stamp(stamp_at, kind, stamp_rank)
                 WHERE stamp.stamp_at IS NOT NULL
+                ) AS raw_stamps
             ) AS stamps
             __STAMP_FILTER__
         )"""

@@ -1,3 +1,4 @@
+import logging
 from contextlib import AbstractContextManager
 from pathlib import Path
 
@@ -5,6 +6,8 @@ import psycopg
 
 from app.config.settings import settings
 
+
+logger = logging.getLogger(__name__)
 
 SCHEMA_PATH = Path(__file__).resolve().parents[2] / "database" / "analytics_schema.sql"
 SYNC_STATE_KEY = "completed_calls_through"
@@ -52,6 +55,13 @@ class AnalyticsRepository(AbstractContextManager):
             return self.connection.execute(query, params)
         except psycopg.Error as exc:
             self.connection.rollback()
+            # The structural message only (SQLSTATE and the server's primary
+            # text, e.g. a missing column); never the statement or its values.
+            logger.warning(
+                "PostgreSQL analytics operation failed: %s %s",
+                getattr(exc, "sqlstate", "") or "",
+                getattr(getattr(exc, "diag", None), "message_primary", "") or type(exc).__name__,
+            )
             raise AnalyticsDatabaseError(
                 "A PostgreSQL analytics operation failed."
             ) from exc
