@@ -107,10 +107,14 @@ The discipline tables classify a call's units by the unit roster agency or unit
 type (FC departments fire, LEASA EMS, sheriff and police law), with the
 per-agency ORI as a fallback.
 
-Kim Maynard is excluded by exact normalized name from this Dispatcher / CAD
-Entry section because she is an ambulance-service employee rather than a Logan
-County dispatcher. This reporting rule does not delete her records or alter
-overall call, unit, station, response, or EMS analytics.
+Six people are excluded by exact normalized CAD CallTaker name from this
+Dispatcher / CAD Entry section and the discipline tables
+(`EXCLUDED_DISPATCHER_IDENTITIES`): Kim Maynard, an ambulance-service
+employee rather than a Logan County dispatcher; the supervisors Amanda Crum
+and Jonathan Isom; and the office personnel Pam Sheppard, Talyn Runyon and
+Kayla Ellis (Ted, 2026-11-06). This reporting rule does not delete their
+records or alter overall call, unit, station, response, or EMS analytics;
+their calls still count in the page-level totals.
 
 For the Calls by Agency display, the stored `LCEOC` agency code is presented as
 `911 Center / Administrative`. This is a display-only label for 911-center and

@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services.analytics_reporting import (
-    EXCLUDED_DISPATCHER_IDENTITY,
+    EXCLUDED_DISPATCHER_IDENTITIES,
     LOCAL_TIMEZONE,
     _agency_display_label,
     AnalyticsRangeError,
@@ -46,8 +46,12 @@ class AnalyticsWindowTests(unittest.TestCase):
                 hours=8, start="2026-07-01", end="2026-07-03", now=self.now
             )
 
-    def test_non_dispatcher_employee_is_explicitly_excluded_from_dispatcher_metrics(self):
-        self.assertEqual(EXCLUDED_DISPATCHER_IDENTITY, "KIM MAYNARD")
+    def test_non_dispatchers_are_explicitly_excluded_from_dispatcher_metrics(self):
+        # An ambulance-service employee, two supervisors and three office
+        # staff (Ted, 2026-11-06), by their CAD CallTaker spellings.
+        self.assertEqual(EXCLUDED_DISPATCHER_IDENTITIES, (
+            "KIM MAYNARD", "AMANDA CRUM", "JONATHAN ISOM",
+            "PAM SHEPPARD", "TALYN RUNYON", "KAYLA ELLIS"))
 
     def test_lceoc_is_labeled_as_911_center_administration(self):
         self.assertEqual(_agency_display_label("LCEOC"), "911 Center / Administrative")

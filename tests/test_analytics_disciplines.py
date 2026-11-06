@@ -37,7 +37,7 @@ class FakeRepository:
         return self.rows
 
 
-PARAMS = {"window_start": 1, "window_end": 2, "excluded_dispatcher_identity": "KIM MAYNARD"}
+PARAMS = {"window_start": 1, "window_end": 2, "excluded_dispatcher_identities": ["KIM MAYNARD", "AMANDA CRUM"]}
 
 # discipline, is_total, call_taker, ref, timed, average, median, p90, within fast, within slow, over 180
 ROWS = [
@@ -115,7 +115,7 @@ class DisciplineMetricsTests(unittest.TestCase):
         # Same population rules as the dispatcher table.
         self.assertEqual(params["processing_cap_seconds"], 3600)
         for rule in ("NOT is_scheduled", "make_interval(secs => %(processing_cap_seconds)s)",
-                     "excluded_dispatcher_identity"):
+                     "<> ALL(%(excluded_dispatcher_identities)s)"):
             self.assertIn(rule, query)
         # Discipline comes from the responding unit's roster agency or unit
         # type (the per-agency ORI alone never matched), from both records.

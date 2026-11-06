@@ -86,6 +86,8 @@ class LiveAnalyticsTests(unittest.TestCase):
         for value in (200, 300, 280, 260):
             add("KADEN CANTRELL", "", [("LEASA", value)])        # legacy key (no identifier)
         add("KIM MAYNARD", "id-kim", [("FC 1", 600)])            # excluded identity
+        add("JONATHAN ISOM", "id-isom", [("FC 1", 30)])          # excluded (supervisor)
+        add("Pam Sheppard ", "id-pam", [("FC 1", 30)])           # excluded (office), any case
         repository.connection.commit()
 
         window = ar.resolve_analytics_window(period="24h")
@@ -99,7 +101,10 @@ class LiveAnalyticsTests(unittest.TestCase):
             rosser["p90_processing"],
             fmt(statistics.quantiles(seconds, n=10, method="inclusive")[8]))
         self.assertEqual(rosser["over_180_count"], 3)
-        self.assertNotIn("KIM MAYNARD", [d["call_taker"] for d in overview["dispatchers"]])
+        listed = [d["call_taker"] for d in overview["dispatchers"]]
+        for name in ("KIM MAYNARD", "JONATHAN ISOM", "Pam Sheppard "):
+            self.assertNotIn(name, listed)
+        self.assertEqual(overview["dispatcher_metrics"]["calls_with_call_taker"], len(seconds) + 3 + 1 + 1 + 4)
         ref = hashlib.sha256(b"id-rosser").hexdigest()[:16]
         self.assertEqual(rosser["dispatcher_ref"], ref)
         cantrell = next(d for d in overview["dispatchers"] if d["call_taker"] == "KADEN CANTRELL")
@@ -135,7 +140,7 @@ class LiveAnalyticsTests(unittest.TestCase):
         params = {
             "window_start": window.start_at,
             "window_end": window.end_at,
-            "excluded_dispatcher_identity": ar.EXCLUDED_DISPATCHER_IDENTITY,
+            "excluded_dispatcher_identities": list(ar.EXCLUDED_DISPATCHER_IDENTITIES),
         }
         groups, iso = ar._discipline_metrics(repository, params)
         by = {group["key"]: group for group in groups}
@@ -333,7 +338,7 @@ class LiveAnalyticsTests(unittest.TestCase):
         # dispatched). The forestry unit is unclassified.
         groups, iso = ar._discipline_metrics(repository, {
             "window_start": window.start_at, "window_end": window.end_at,
-            "excluded_dispatcher_identity": ar.EXCLUDED_DISPATCHER_IDENTITY})
+            "excluded_dispatcher_identities": list(ar.EXCLUDED_DISPATCHER_IDENTITIES)})
         by = {group["key"]: group for group in groups}
         self.assertEqual((by["fire"]["overall"]["timed"], by["fire"]["overall"]["median"]),
                          (1, "1:58"))

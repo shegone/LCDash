@@ -105,9 +105,14 @@ class ProcessingDefinitionTests(unittest.TestCase):
 
     def test_only_the_dispatcher_queries_filter_on_the_call_taker(self):
         overview_query = self.processing_queries[0]
-        self.assertNotIn("excluded_dispatcher_identity", overview_query)
+        self.assertNotIn("excluded_dispatcher_identit", overview_query)
         for query in self.processing_queries[1:]:
-            self.assertIn("UPPER(BTRIM(call_taker)) <> %(excluded_dispatcher_identity)s", query)
+            self.assertIn("UPPER(BTRIM(call_taker)) <> ALL(%(excluded_dispatcher_identities)s)",
+                          query)
+        for _, params in self.repository.queries:
+            if params and "excluded_dispatcher_identities" in params:
+                self.assertEqual(params["excluded_dispatcher_identities"],
+                                 list(ar.EXCLUDED_DISPATCHER_IDENTITIES))
 
     def test_response_time_uses_the_earliest_on_scene_and_skips_scheduled_calls(self):
         query = self.processing_queries[0]
@@ -250,7 +255,7 @@ class SharedSqlTests(unittest.TestCase):
         repository = RecordingRepository()
         ar._discipline_metrics(repository, {
             "window_start": None, "window_end": None,
-            "excluded_dispatcher_identity": ar.EXCLUDED_DISPATCHER_IDENTITY})
+            "excluded_dispatcher_identities": list(ar.EXCLUDED_DISPATCHER_IDENTITIES)})
         query = repository.queries[0][0]
         self.assertIn("FROM lcdash_analytics.unit_status_events AS status_event", query)
         self.assertIn("ON unit_record.unit_number = status_event.unit_number", query)
@@ -264,7 +269,7 @@ class SharedSqlTests(unittest.TestCase):
         repository = RecordingRepository()
         ar._discipline_metrics(repository, {
             "window_start": None, "window_end": None,
-            "excluded_dispatcher_identity": ar.EXCLUDED_DISPATCHER_IDENTITY})
+            "excluded_dispatcher_identities": list(ar.EXCLUDED_DISPATCHER_IDENTITIES)})
         query = repository.queries[0][0]
         first = query[query.index("call_first_action AS"):query.index("discipline_dispatch AS")]
         self.assertIn("MIN(discipline_stamps.stamp_at) FILTER", first)

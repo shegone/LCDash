@@ -31,10 +31,20 @@ PERIOD_OPTIONS = {
 }
 DEFAULT_PERIOD = "30d"
 MAX_CUSTOM_DAYS = 366
-# This person is an ambulance-service employee, not a Logan County dispatcher.
-# Keep the historical call records, but exclude the exact normalized identity
-# from Dispatcher / CAD Entry workload and processing-time reporting.
-EXCLUDED_DISPATCHER_IDENTITY = "KIM MAYNARD"
+# People whose CAD entries are not dispatcher work: Kim Maynard is an
+# ambulance-service employee; Amanda Crum and Jonathan Isom are supervisors;
+# Pam Sheppard, Talyn Runyon and Kayla Ellis are office personnel (Ted,
+# 2026-11-06; the names are the CAD CallTaker spellings). Every call record
+# is kept, but these exact normalized identities are left out of the
+# Dispatcher / CAD Entry workload, processing-time and discipline reporting.
+EXCLUDED_DISPATCHER_IDENTITIES = (
+    "KIM MAYNARD",
+    "AMANDA CRUM",
+    "JONATHAN ISOM",
+    "PAM SHEPPARD",
+    "TALYN RUNYON",
+    "KAYLA ELLIS",
+)
 # CAD processing runs from the CAD call-received time to the earliest action
 # by any unit of any agency on the call (assigned, en route, staged or on
 # scene), read from both the per-agency and the per-unit timing records.
@@ -380,13 +390,13 @@ def _call_processing_sql(
     filtered discipline was added to the call later). Bound parameters:
     window_start, window_end,
     processing_cap_seconds, ems_agencies, law_agencies, excluded_call_types
-    and, when used, excluded_dispatcher_identity and discipline.
+    and, when used, excluded_dispatcher_identities and discipline.
     """
     taker_filter = ""
     if dispatcher_calls:
         taker_filter = (
             "AND BTRIM(call_taker) <> '' "
-            "AND UPPER(BTRIM(call_taker)) <> %(excluded_dispatcher_identity)s"
+            "AND UPPER(BTRIM(call_taker)) <> ALL(%(excluded_dispatcher_identities)s)"
         )
     discipline_filter = ""
     if discipline:
@@ -558,7 +568,7 @@ def _query_overview(
     params = {
         "window_start": window.start_at,
         "window_end": window.end_at,
-        "excluded_dispatcher_identity": EXCLUDED_DISPATCHER_IDENTITY,
+        "excluded_dispatcher_identities": list(EXCLUDED_DISPATCHER_IDENTITIES),
         "processing_cap_seconds": PROCESSING_CAP_SECONDS,
         "ems_agencies": list(EMS_AGENCY_CODES),
         "law_agencies": list(LAW_AGENCY_CODES),
@@ -1266,7 +1276,7 @@ def _discipline_metrics(
             WHERE call_received_at >= %(window_start)s
               AND call_received_at < %(window_end)s
               AND BTRIM(call_taker) <> ''
-              AND UPPER(BTRIM(call_taker)) <> %(excluded_dispatcher_identity)s
+              AND UPPER(BTRIM(call_taker)) <> ALL(%(excluded_dispatcher_identities)s)
               AND NOT (
                   regexp_replace(UPPER(incident_description), '[^A-Z0-9]', '', 'g')
                       = ANY(%(excluded_call_types)s)
@@ -1529,7 +1539,7 @@ def _query_slow_calls(
         {
             "window_start": window.start_at,
             "window_end": window.end_at,
-            "excluded_dispatcher_identity": EXCLUDED_DISPATCHER_IDENTITY,
+            "excluded_dispatcher_identities": list(EXCLUDED_DISPATCHER_IDENTITIES),
             "processing_cap_seconds": PROCESSING_CAP_SECONDS,
             "ems_agencies": list(EMS_AGENCY_CODES),
             "law_agencies": list(LAW_AGENCY_CODES),
