@@ -130,6 +130,22 @@ pushed or released. Tests, docs and this note follow. **Not pushed and
 not released** when written: release 125 (live) still has the
 fifteen-type list until the next release goes out.
 
+## Held for the next release: "≤ 60 Sec" column in, "Stacked" column out
+
+At Ted's request the dispatcher table no longer shows the "Stacked"
+column (the "Stacked first" summary line and the drill-down's unit hold
+remain, and the API still returns `stacked_calls` / `average_hold`), and
+a "≤ 60 Sec" column (share of timed calls dispatched within 60 seconds)
+sits beside "≤ 90 Sec". The "Within 90 seconds" tile's subline also
+shows the 60-second share. Implementation: one more aggregate,
+`within_60_seconds`, appended to `processing_aggregates_sql` (so the
+existing column positions did not move; the dispatcher ref moved from
+index 14 to 15), `within_60_percent` on each row, the summary and the
+empty overview. The live PostgreSQL test expects 20 % on the synthetic
+timelines (only the self-initiated zero is under 60 s). Reporting SQL
+changed, so the live test was run (PostgreSQL 17.11, 3 passed). Local
+commit, **not pushed and not released**.
+
 ## Exact next action
 
 1. Ted checks the Fire view of the call that started this and the

@@ -45,15 +45,15 @@ class RecordingRepository:
         if "calls_with_call_taker" in query:
             # calls, timed, average, median, within 90, over 180, p90,
             # scheduled, no stamp, over cap, stacked, average hold,
-            # excluded call type
-            return (10, 6, 200.0, 118.0, 2, 2, 600.0, 1, 2, 1, 2, 1956.0, 3)
+            # excluded call type, within 60
+            return (10, 6, 200.0, 118.0, 2, 2, 600.0, 1, 2, 1, 2, 1956.0, 3, 1)
         return (0, 0, 0)
 
     def fetchall(self, query, params=None):
         self.queries.append((query, params))
         if "AS dispatcher_ref" in query:
             return [("A DISPATCHER", 10, 6, 200.0, 118.0, 2, 2, 600.0, 1, 2, 1,
-                     1, 1122.0, 2, "0123456789abcdef")]
+                     1, 1122.0, 2, 1, "0123456789abcdef")]
         return []
 
 
@@ -136,6 +136,13 @@ class ProcessingDefinitionTests(unittest.TestCase):
         self.assertEqual((row["excluded_scheduled"], row["excluded_no_stamp"],
                           row["excluded_over_cap"]), (1, 2, 1))
         self.assertEqual(row["within_90_percent"], 33)
+        # The 60-second share comes from the same timed calls, as its own
+        # aggregate at the end of the row.
+        self.assertEqual(row["within_60_percent"], 17)
+        self.assertEqual(summary["within_60_percent"], 17)
+        for query in self.processing_queries[1:]:
+            self.assertIn("WHERE timing_status = 'timed' AND processing_seconds <= 60", query)
+            self.assertIn(") AS within_60_seconds", query)
 
     def test_the_listed_call_types_are_not_timed_but_still_counted(self):
         # Ted's list (2026-11-05, four more on 2026-11-06): natures that are
@@ -360,11 +367,12 @@ class PageWordingTests(unittest.TestCase):
         self.overview["dispatcher_metrics"].update(
             {"excluded_scheduled": 3, "excluded_no_stamp": 4, "excluded_over_cap": 5,
              "excluded_type": 6, "excluded_call_types": list(ar.EXCLUDED_CALL_TYPES),
-             "processing_cap_minutes": 60, "stacked_calls": 2, "average_hold": "32:36"})
+             "processing_cap_minutes": 60, "stacked_calls": 2, "average_hold": "32:36",
+             "within_60_percent": 41})
         self.overview["dispatchers"][0].update(
             {"dispatcher_ref": "0123456789abcdef", "excluded_scheduled": 1,
              "excluded_no_stamp": 2, "excluded_over_cap": 3, "excluded_type": 4,
-             "stacked_calls": 1, "average_hold": "18:42"})
+             "stacked_calls": 1, "average_hold": "18:42", "within_60_percent": 43})
         self.overview["discipline_key"] = "fire"
         self.overview["discipline_label"] = "Fire"
         self.overview["discipline_options"] = [
@@ -404,8 +412,15 @@ class PageWordingTests(unittest.TestCase):
         self.assertIn("Not timed", self.html)
         self.assertIn('title="4 call type not timed · 1 scheduled · 2 no unit stamp · 3 over 60 min">10</td>',
                       self.html)
-        self.assertIn('title="average unit hold 18:42">1</td>', self.html)
-        self.assertIn(">Stacked</th>", self.html)
+        # The Stacked column was dropped from the table on 2026-11-06 (the
+        # "Stacked first" summary line and the drill-down's hold remain);
+        # the 60-second share took its place beside the 90-second one.
+        self.assertNotIn(">Stacked</th>", self.html)
+        self.assertNotIn("average unit hold", self.html)
+        self.assertIn(">≤ 60 Sec</th>", self.html)
+        self.assertIn(">≤ 90 Sec</th>", self.html)
+        self.assertIn('<td class="text-end text-success">43%</td>', self.html)
+        self.assertIn("41% within 60 seconds", self.html)
 
     def test_the_discipline_rule_and_the_unit_average_are_explained(self):
         self.assertIn("agency in the unit roster", self.html)

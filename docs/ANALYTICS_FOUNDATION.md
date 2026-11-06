@@ -64,9 +64,11 @@ the match is exact apart from case and punctuation). They are
 matched on the CAD incident description ignoring case, spaces and punctuation,
 still count as calls entered, and are left out of the discipline tables too. A Stack (the call queued on a busy unit) ends
 the interval like an Assign; the unit's wait from that Stack to its first
-Assign or En route is the hold, reported apart (the "Stacked" column with the
-average hold, the "Stacked first" summary line, the drill-down's "Unit hold")
-and never added to the dispatcher's time. The drill-down names the first
+Assign or En route is the hold, reported apart (the "Stacked first" summary
+line and the drill-down's "Unit hold"; the table's "Stacked" column was
+dropped 2026-11-06 at Ted's request) and never added to the dispatcher's
+time. The table shows the share of timed calls dispatched within 60 seconds
+and within 90 seconds beside the average, median and 90th percentile. The drill-down names the first
 action (event and unit or agency) so an interval can be checked against the
 CAD report. Status rows are collected from the day the table was introduced;
 earlier calls have no Stack and time to their first Assign. See

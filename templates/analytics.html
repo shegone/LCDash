@@ -767,7 +767,8 @@
                         <div class="analytics-eyebrow">WITHIN 90 SECONDS</div>
                         <div class="analytics-value">{{ dispatcher_metrics.within_90_percent }}%</div>
                         <div class="analytics-subvalue">
-                            {{ dispatcher_metrics.over_180_count }} calls exceeded 3 minutes
+                            {{ dispatcher_metrics.within_60_percent|default(0) }}% within 60 seconds
+                            &middot; {{ dispatcher_metrics.over_180_count }} calls exceeded 3 minutes
                         </div>
                     </div>
                 </div>
@@ -813,8 +814,6 @@
                                         <th class="text-end"
                                             title="Calls that could not be timed: scheduled, no unit stamp at or after the received time, or over 60 minutes.">Not timed</th>
                                         <th class="text-end"
-                                            title="Timed calls whose first action was a Stack: the dispatcher queued the call on a busy unit. The unit's average hold from Stack to Assign or En route is in each cell's tooltip; it is not charged to the dispatcher.">Stacked</th>
-                                        <th class="text-end"
                                             title="The mean. A few very long calls pull it up, so read it next to the median and the 90th percentile.">
                                             Average
                                             <span class="analytics-th-note">pulled up by long calls</span>
@@ -827,7 +826,10 @@
                                             title="Nine in ten calls were dispatched within this time. It shows the slow tail without a single call deciding it.">
                                             90th %
                                         </th>
-                                        <th class="text-end">≤ 90 Sec</th>
+                                        <th class="text-end"
+                                            title="Share of timed calls dispatched within 60 seconds of the call being received.">≤ 60 Sec</th>
+                                        <th class="text-end"
+                                            title="Share of timed calls dispatched within 90 seconds of the call being received.">≤ 90 Sec</th>
                                         <th class="text-end">&gt; 3 Min</th>
                                     </tr>
                                 </thead>
@@ -839,10 +841,10 @@
                                             <td class="text-end">{{ dispatcher.share_percent }}%</td>
                                             <td class="text-end">{{ dispatcher.processing_samples }}</td>
                                             <td class="text-end text-secondary" title="{{ dispatcher.excluded_type|default(0) }} call type not timed · {{ dispatcher.excluded_scheduled|default(0) }} scheduled · {{ dispatcher.excluded_no_stamp|default(0) }} no unit stamp · {{ dispatcher.excluded_over_cap|default(0) }} over {{ dispatcher_metrics.processing_cap_minutes|default(60) }} min">{{ (dispatcher.excluded_type|default(0)) + (dispatcher.excluded_scheduled|default(0)) + (dispatcher.excluded_no_stamp|default(0)) + (dispatcher.excluded_over_cap|default(0)) }}</td>
-                                            <td class="text-end text-secondary" title="average unit hold {{ dispatcher.average_hold|default('—') }}">{{ dispatcher.stacked_calls|default(0) }}</td>
                                             <td class="text-end">{{ dispatcher.average_processing }}</td>
                                             <td class="text-end">{{ dispatcher.median_processing }}</td>
                                             <td class="text-end">{{ dispatcher.p90_processing|default('—') }}</td>
+                                            <td class="text-end text-success">{{ dispatcher.within_60_percent|default(0) }}%</td>
                                             <td class="text-end text-success">{{ dispatcher.within_90_percent }}%</td>
                                             <td class="text-end">
                                                 {% if dispatcher.over_180_count and dispatcher.dispatcher_ref %}

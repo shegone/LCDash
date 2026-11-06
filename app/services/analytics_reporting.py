@@ -488,6 +488,7 @@ def _empty_overview(window: AnalyticsWindow, message: str) -> dict:
             "median_processing": "—",
             "p90_processing": "—",
             "processing_samples": 0,
+            "within_60_percent": 0,
             "within_90_percent": 0,
             "over_180_count": 0,
             "excluded_scheduled": 0,
@@ -623,7 +624,10 @@ def _query_overview(
             AVG(hold_seconds) FILTER (WHERE timing_status = 'timed' AND hold_seconds > 0)
                 AS average_hold_seconds,
             COUNT(*) FILTER (WHERE timing_status = 'excluded_type')
-                AS excluded_type
+                AS excluded_type,
+            COUNT(*) FILTER (
+                WHERE timing_status = 'timed' AND processing_seconds <= 60
+            ) AS within_60_seconds
     """
 
     # The dispatcher section alone follows the discipline filter: the calls
@@ -640,7 +644,7 @@ def _query_overview(
         FROM call_processing
         """,
         params,
-    ) or (0, 0, None, None, 0, 0, None, 0, 0, 0, 0, None, 0)
+    ) or (0, 0, None, None, 0, 0, None, 0, 0, 0, 0, None, 0, 0)
 
     dispatcher_rows = repository.fetchall(
         _call_processing_sql(dispatcher_calls=True, discipline=discipline)
@@ -669,11 +673,12 @@ def _query_overview(
     for row in dispatcher_rows:
         # taker, calls, timed, average, median, within 90, over 180, p90,
         # scheduled, no stamp, over cap, stacked, average hold, excluded
-        # type, ref
+        # type, within 60, ref
         calls_entered = int(row[1] or 0)
         processing_samples = int(row[2] or 0)
         within_90 = int(row[5] or 0)
         over_180 = int(row[6] or 0)
+        within_60 = int(row[14] or 0)
         dispatchers.append(
             {
                 "call_taker": row[0],
@@ -687,8 +692,11 @@ def _query_overview(
                 "p90_processing": _format_duration(row[7]),
                 # An opaque handle for the slow-call list; the CAD identifier
                 # itself never leaves the server.
-                "dispatcher_ref": str(row[14] or ""),
+                "dispatcher_ref": str(row[15] or ""),
                 "processing_samples": processing_samples,
+                "within_60_percent": round(
+                    (within_60 / processing_samples) * 100
+                ) if processing_samples else 0,
                 "within_90_percent": round(
                     (within_90 / processing_samples) * 100
                 ) if processing_samples else 0,
@@ -717,6 +725,9 @@ def _query_overview(
         "median_processing": _format_duration(dispatcher_summary_row[3]),
         "p90_processing": _format_duration(dispatcher_summary_row[6]),
         "processing_samples": dispatcher_processing_samples,
+        "within_60_percent": round(
+            (int(dispatcher_summary_row[13] or 0) / dispatcher_processing_samples) * 100
+        ) if dispatcher_processing_samples else 0,
         "within_90_percent": round(
             (int(dispatcher_summary_row[4] or 0) / dispatcher_processing_samples) * 100
         ) if dispatcher_processing_samples else 0,

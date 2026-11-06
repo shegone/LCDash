@@ -62,14 +62,15 @@ class RecordingRepository:
             return (10, 0, None, None, None, 0, None, 0)
         if "calls_with_call_taker" in query:
             # calls, samples, average, median, within 90, over 180, p90,
-            # excluded scheduled, no stamp, over cap, stacked, average hold
-            return (4, 3, 300.0, 120.0, 1, 1, 540.0, 1, 0, 0, 0, None, 0)
+            # excluded scheduled, no stamp, over cap, stacked, average hold,
+            # excluded type, within 60
+            return (4, 3, 300.0, 120.0, 1, 1, 540.0, 1, 0, 0, 0, None, 0, 1)
         return (0, 0, 0)
 
     def fetchall(self, query, params=None):
         self.queries.append((query, params))
         if "AS dispatcher_ref" in query:
-            return [("A DISPATCHER", 4, 3, 300.0, 120.0, 1, 1, 540.0, 1, 0, 0, 0, None, 0, REF)]
+            return [("A DISPATCHER", 4, 3, 300.0, 120.0, 1, 1, 540.0, 1, 0, 0, 0, None, 0, 1, REF)]
         if "AS agency" in query and "LIMIT 8" in query:
             return [("SLD", 10)]
         return []
