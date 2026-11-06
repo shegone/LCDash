@@ -116,14 +116,19 @@ domain; web log since 16:05:54Z: 73 events, 0 errors, 0 warnings. The
 first collector run on revision 85 was not waited for. Rollback target:
 release 124's digest `sha256:4818358b...`.
 
-## Held for the next release: Vehicle Lock Out / Lock In timed again
+## Held for the next release: "Lock Out" added (sixteen not-timed types)
 
-After release 125 Ted asked for Lock Out to come back off the not-timed
-list in the next update. `EXCLUDED_CALL_TYPES` is fourteen natures again
-(the first twelve plus Motorist Assist and Public Works / Utilities);
-Vehicle Lock Out / Lock In calls are timed. Tests, docs and this note
-follow. Committed locally, **not pushed and not released**: release 125
-(live) still has the fifteen-type list until the next release goes out.
+After release 125 Ted found CAD carries the lock-out nature under two
+names, "Vehicle Lock Out / Lock In" and "Lock Out". The matcher is exact
+apart from case, spaces and punctuation, so release 125 only caught the
+first. `EXCLUDED_CALL_TYPES` now lists both (sixteen natures: the first
+twelve plus Motorist Assist, Public Works / Utilities, Vehicle Lock Out /
+Lock In and Lock Out). An intermediate local commit (`025652d`) had
+briefly taken Vehicle Lock Out / Lock In off the list on a misreading of
+the request; it is superseded by the commit that follows it and was never
+pushed or released. Tests, docs and this note follow. **Not pushed and
+not released** when written: release 125 (live) still has the
+fifteen-type list until the next release goes out.
 
 ## Exact next action
 

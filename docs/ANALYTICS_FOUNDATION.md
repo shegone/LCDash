@@ -58,8 +58,9 @@ The not-timed call types (`EXCLUDED_CALL_TYPES` in
 2026-11-06) are natures that are never dispatched as an emergency: Roundtrip,
 Take Home, Transfer / Inter-Facility, Contact, Move-Up, Shoplifting,
 Complaint, 911 Hang Up, Call Through Office, 911 Open Line, Information, Be
-On the Lookout, Motorist Assist and Public Works / Utilities (Vehicle Lock
-Out / Lock In was on the list for release 125 only and is timed). They are
+On the Lookout, Motorist Assist, Public Works / Utilities, Vehicle Lock Out /
+Lock In and Lock Out (CAD carries the lock-out nature under both names, and
+the match is exact apart from case and punctuation). They are
 matched on the CAD incident description ignoring case, spaces and punctuation,
 still count as calls entered, and are left out of the discipline tables too. A Stack (the call queued on a busy unit) ends
 the interval like an Assign; the unit's wait from that Stack to its first
