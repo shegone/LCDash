@@ -88,20 +88,39 @@ the same in every view. The All view is unchanged.
   would allow a true per-discipline clock) was not checked: it needs a
   look at a live payload.
 
-## Later the same day: three more not-timed call types (not released)
+## Later the same day: three more not-timed call types (release 125)
 
 At Ted's request Motorist Assist, Public Works / Utilities and Vehicle
 Lock Out / Lock In were added to `EXCLUDED_CALL_TYPES` (fifteen natures
 now). List-only change: no SQL changed, the page derives the names and
 the count from the list. Tests, `docs/ANALYTICS_FOUNDATION.md` and the
-audit document follow. Committed locally; not pushed and not released
-when this note was written. The CAD spelling of the three natures was not
-read from the warehouse (same caveat as the first twelve).
+audit document follow. Commit `5a4cdf2`, pushed to both remotes. The CAD
+spelling of the three natures was not read from the warehouse (same
+caveat as the first twelve).
+
+**Release 125 live.** Change set `release-5a4cdf2-20261106` (Ted typed
+the name; executed 16:05:54Z, 11:05 EST; `UPDATE_COMPLETE`). Web task
+definition **revision 125**, collector **revision 85**, image tag
+`release-5a4cdf24fffe`, digest
+`sha256:d5c7a299715f43475b6aab90bd763b7a1cbe46637c21a2fb40cfd5ad5a8d91c6`.
+Build `lcdash-p1-logan-use1-release-builder:380d6125-49c7-4621-8dd6-dc07c634798d`
+SUCCEEDED 10:53:22 to 10:54:15 EST, `source_asset_sha256`
+`d76af9ced383f2e49b4ca3ffb6eda23b84c1292058b458c8d69c8e72ab1f0b74`
+(matches the release-builder deploy output); base image unchanged. ECR
+scan COMPLETE 10:55 EST, zero findings. Of 23 stack parameters only
+`PilotImageDigest` changed; the standard five resources were modified.
+Verification: PRIMARY deployment on revision 125, rollout COMPLETED
+11:08:46 EST, 1 of 1 running; ALB target `10.42.1.214:8000` healthy; `/`,
+`/active-calls` and `/analytics?discipline=fire` answer 302 to the Cognito
+domain; web log since 16:05:54Z: 73 events, 0 errors, 0 warnings. The
+first collector run on revision 85 was not waited for. Rollback target:
+release 124's digest `sha256:4818358b...`.
 
 ## Exact next action
 
 1. Ted checks the Fire view of the call that started this and the
-   by-discipline tables on release 124.
+   by-discipline tables, and that the "Not timed" count now shows 15
+   types and rises for the three new natures (release 125).
 2. Push this handoff commit when Ted says so (`git push origin main`).
 3. Open items unchanged: Stack backfill of older calls, `HowReported`,
    `UnitType.Discipline`, the AGENTS.md note about the empty accepted ECR
