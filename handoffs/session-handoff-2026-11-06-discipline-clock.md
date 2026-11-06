@@ -116,6 +116,15 @@ domain; web log since 16:05:54Z: 73 events, 0 errors, 0 warnings. The
 first collector run on revision 85 was not waited for. Rollback target:
 release 124's digest `sha256:4818358b...`.
 
+## Held for the next release: Vehicle Lock Out / Lock In timed again
+
+After release 125 Ted asked for Lock Out to come back off the not-timed
+list in the next update. `EXCLUDED_CALL_TYPES` is fourteen natures again
+(the first twelve plus Motorist Assist and Public Works / Utilities);
+Vehicle Lock Out / Lock In calls are timed. Tests, docs and this note
+follow. Committed locally, **not pushed and not released**: release 125
+(live) still has the fifteen-type list until the next release goes out.
+
 ## Exact next action
 
 1. Ted checks the Fire view of the call that started this and the

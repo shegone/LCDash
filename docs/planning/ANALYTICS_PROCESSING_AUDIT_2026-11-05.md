@@ -203,11 +203,12 @@ count as "within 90 s".
   buckets are counted in the summary line, in the "Not timed" column
   (tooltip gives the split) and over-cap calls are listed in the
   drill-down as "not averaged".
-- **Not-timed call types** (added 2026-11-05 at Ted's request; three more
-  on 2026-11-06): Roundtrip, Take Home, Transfer / Inter-Facility, Contact,
-  Move-Up, Shoplifting, Complaint, 911 Hang Up, Call Through Office, 911
-  Open Line, Information, Be On the Lookout, Motorist Assist, Public Works
-  / Utilities, Vehicle Lock Out / Lock In. Matched on
+- **Not-timed call types** (added 2026-11-05 at Ted's request; Motorist
+  Assist and Public Works / Utilities on 2026-11-06; Vehicle Lock Out /
+  Lock In was added and removed the same day and is timed): Roundtrip,
+  Take Home, Transfer / Inter-Facility, Contact, Move-Up, Shoplifting,
+  Complaint, 911 Hang Up, Call Through Office, 911 Open Line, Information,
+  Be On the Lookout, Motorist Assist, Public Works / Utilities. Matched on
   `incident_description` ignoring case,
   spaces and punctuation (`EXCLUDED_CALL_TYPES`); the calls still count as
   entered and are left out of the discipline tables as well. The CAD's
