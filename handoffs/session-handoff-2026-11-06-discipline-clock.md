@@ -146,11 +146,33 @@ timelines (only the self-initiated zero is under 60 s). Reporting SQL
 changed, so the live test was run (PostgreSQL 17.11, 3 passed). Local
 commit, **not pushed and not released**.
 
+## Release 126 live (lock-out natures, "≤ 60 Sec" column, Stacked column removed)
+
+The three held commits (`025652d`, `352087c`, `b8fb588`) were pushed to
+both remotes and released together. Change set
+`release-b8fb588-20261106` (Ted typed the name; executed 17:26:59Z,
+12:26 EST; `UPDATE_COMPLETE`). Web task definition **revision 126**,
+collector **revision 86**, image tag `release-b8fb588c504f`, digest
+`sha256:7e14b9d88ace0d6dd78a2c1cac321dabe1e98d342a1f6e8bf2501b10407396f6`.
+Build `lcdash-p1-logan-use1-release-builder:366c7187-aba1-48ff-8294-8233305ec1df`
+SUCCEEDED 12:21:09 to 12:22:02 EST, `source_asset_sha256`
+`79a3d66625da3893479fe4edc69aab63ba6e362cb1fdad4ec4ae931877be93d3`
+(matches the release-builder deploy output); base image unchanged. ECR
+scan COMPLETE 12:22 EST, zero findings. Of 23 stack parameters only
+`PilotImageDigest` changed; the standard five resources were modified.
+Verification: PRIMARY deployment on revision 126, rollout COMPLETED
+12:29:38 EST, 1 of 1 running; ALB target `10.42.1.107:8000` healthy; `/`,
+`/active-calls` and `/analytics?discipline=fire` answer 302 to the Cognito
+domain; web log since 17:26:59Z: 75 events, 0 errors, 0 warnings. The
+first collector run on revision 86 was not waited for. Rollback target:
+release 125's digest `sha256:d5c7a299...`.
+
 ## Exact next action
 
-1. Ted checks the Fire view of the call that started this and the
-   by-discipline tables, and that the "Not timed" count now shows 15
-   types and rises for the three new natures (release 125).
+1. Ted checks, on release 126: the Fire view of the call that started
+   this and the by-discipline tables; the "Not timed" count showing 16
+   types and rising for the new natures (both lock-out spellings); the
+   "≤ 60 Sec" column and the absence of the "Stacked" column.
 2. Push this handoff commit when Ted says so (`git push origin main`).
 3. Open items unchanged: Stack backfill of older calls, `HowReported`,
    `UnitType.Discipline`, the AGENTS.md note about the empty accepted ECR
