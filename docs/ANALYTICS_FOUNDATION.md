@@ -88,9 +88,13 @@ options and the data-model change. CAD processing is not 911
 phone-answer time. NGA911 integration can later add answer time, call duration,
 abandoned-call, transfer, queue-delay, and callback metrics.
 
-The dispatcher section (its KPIs, the table and the slow-call drill-down) can
-be narrowed to one discipline with the All / EMS / Fire / Law links beside the
-coverage chip (`?discipline=ems|fire|law` on `/analytics`,
+The top metric row (total calls, unit responses, call processing, average
+and median response) and the dispatcher section (its KPIs, the table and
+the slow-call drill-down) can be narrowed to one discipline with the All /
+EMS / Fire / Law links in the filter bar beside the period links (moved
+there from the dispatcher section on 2026-11-06 when the top row started
+to follow the choice; the period links and the custom-range form keep it)
+(`?discipline=ems|fire|law` on `/analytics`,
 `/api/analytics/overview` and `/api/analytics/dispatcher-slow-calls`; any
 other value is a 400). The filtered view keeps the calls that discipline's
 units acted on, using the same unit-roster rule as the discipline tables, so
@@ -100,7 +104,7 @@ first unit action on the call by any discipline, because the first unit
 assigned is what stops the dispatcher's clock (decided 2026-11-06, after a
 medical call whose fire units were added half an hour later showed the whole
 wait as fire processing). The by-discipline tables use the same rule. The
-page-level metrics and charts stay county-wide.
+charts and the station tables stay county-wide.
 
 Response times (average and median response, coverage, busiest-unit average)
 use the earliest on-scene stamp from either record and exclude scheduled calls.

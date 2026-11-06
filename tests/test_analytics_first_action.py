@@ -284,10 +284,10 @@ class SharedSqlTests(unittest.TestCase):
 
 
 class DisciplineFilterTests(unittest.TestCase):
-    """The dispatcher section can be narrowed to EMS, Fire or Law: the calls
-    that discipline's units acted on, each still timed to the first unit
-    action on the call by any discipline (the first unit assigned stops the
-    clock). The page-level metrics stay county-wide."""
+    """The top metric row and the dispatcher section can be narrowed to EMS,
+    Fire or Law: the calls that discipline's units acted on, each still
+    timed to the first unit action on the call by any discipline (the first
+    unit assigned stops the clock). The charts stay county-wide."""
 
     def setUp(self):
         self.repository = RecordingRepository()
@@ -296,11 +296,11 @@ class DisciplineFilterTests(unittest.TestCase):
         self.processing_queries = [
             q for q, _ in self.repository.queries if "END AS timing_status" in q]
 
-    def test_only_the_dispatcher_queries_are_narrowed(self):
-        overview_query = self.processing_queries[0]
-        self.assertNotIn("%(discipline)s", overview_query)
-        self.assertNotIn("EXISTS (SELECT 1 FROM action_stamps", overview_query)
-        for query in self.processing_queries[1:]:
+    def test_the_top_row_and_the_dispatcher_queries_are_narrowed(self):
+        # The top row followed the filter from 2026-11-06 (Ted); before
+        # that only the dispatcher queries did.
+        self.assertEqual(len(self.processing_queries), 3)
+        for query in self.processing_queries:
             self.assertIn(
                 "AND EXISTS (SELECT 1 FROM action_stamps "
                 "WHERE action_stamps.cfs_number = lcdash_analytics.calls.cfs_number "
@@ -467,7 +467,16 @@ class PageWordingTests(unittest.TestCase):
         self.assertIn("Call-Taker Workload and CAD Processing: Fire</h4>", self.html)
         self.assertIn("Showing Fire only: the calls that Fire units acted on, each timed to the "
                       "first unit assigned on the call by any discipline", self.html)
-        self.assertIn('id="dispatcher-discipline-filter"', self.html)
+        # The chooser sits in the filter bar beside the period links, which
+        # keep the discipline, as does the custom-range form.
+        self.assertIn('id="analytics-discipline-filter"', self.html)
+        self.assertNotIn('id="dispatcher-discipline-filter"', self.html)
+        self.assertIn('href="/analytics?period=7d&amp;discipline=fire"', self.html)
+        self.assertIn('<input type="hidden" name="discipline" value="fire">', self.html)
+        self.assertIn("Showing Fire: the calls that Fire units acted on. Processing and response "
+                      "are still timed to the first unit of any discipline on the call; the charts "
+                      "and station tables below stay county-wide.", self.html)
+        self.assertIn("Completed CAD incidents Fire units acted on</div>", self.html)
         self.assertIn('class="period-link " href="/analytics?period=30d" >All</a>', self.html)
         self.assertIn('class="period-link " href="/analytics?period=30d&amp;discipline=ems" >EMS</a>',
                       self.html)

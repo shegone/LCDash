@@ -584,7 +584,7 @@ def _query_overview(
     # Response time: received to the earliest on-scene stamp from either
     # record; scheduled calls (transports booked ahead) are left out.
     metrics_row = repository.fetchone(
-        _call_processing_sql(dispatcher_calls=False)
+        _call_processing_sql(dispatcher_calls=False, discipline=discipline)
         + """
         SELECT
             COUNT(*) AS total_calls,
@@ -662,9 +662,10 @@ def _query_overview(
             ) AS within_fast_seconds
     """
 
-    # The dispatcher section alone follows the discipline filter: the calls
-    # that discipline's units acted on, each timed to the first unit action
-    # on the call. The page-level metrics and charts stay county-wide.
+    # The top metric row (above) and the dispatcher section follow the
+    # discipline filter: the calls that discipline's units acted on, each
+    # timed to the first unit action on the call (Ted, 2026-11-06, for the
+    # top row). The charts and the station tables stay county-wide.
     dispatcher_summary_row = repository.fetchone(
         _call_processing_sql(dispatcher_calls=True, discipline=discipline)
         + """

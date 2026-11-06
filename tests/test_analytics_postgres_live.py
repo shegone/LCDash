@@ -370,6 +370,14 @@ class LiveAnalyticsTests(unittest.TestCase):
                    if d["call_taker"] == "DISPATCHER T")
         self.assertEqual((ems["calls_entered"], ems["processing_samples"],
                           ems["excluded_scheduled"]), (1, 0, 1))
+        # The top row follows the same choice of calls (2026-11-06): law
+        # keeps eight calls, fire the fire call alone (processing 1:58, the
+        # engine's Assign), EMS the scheduled transport.
+        for key, expected_calls in (("law", 8), ("fire", 1), ("ems", 1)):
+            narrowed = ar._query_overview(repository, window, None, key)["metrics"]
+            self.assertEqual(narrowed["total_calls"], expected_calls, key)
+        self.assertEqual(ar._query_overview(repository, window, None, "fire")["metrics"]
+                         ["average_processing"], "1:58")
         law_slow = ar._query_slow_calls(repository, window, row["dispatcher_ref"], "law")
         self.assertEqual([(c["cfs_number"], c["processing_seconds"], c["first_action_by"])
                           for c in law_slow["calls"]],

@@ -572,13 +572,28 @@
                 {% for value, label in period_options %}
                     <a
                         class="period-link {% if analytics_snapshot.period_key == value %}active{% endif %}"
-                        href="/analytics?period={{ value }}"
+                        href="/analytics?period={{ value }}{% if analytics_snapshot.discipline_key %}&amp;discipline={{ analytics_snapshot.discipline_key }}{% endif %}"
                     >{{ label }}</a>
                 {% endfor %}
             </div>
         </div>
 
+        <div>
+            <div class="analytics-eyebrow mb-2">DISCIPLINE</div>
+            <div class="d-flex flex-wrap gap-2" id="analytics-discipline-filter" aria-label="Discipline filter">
+                {% for option in analytics_snapshot.discipline_options|default([]) %}
+                    <a
+                        class="period-link {% if analytics_snapshot.discipline_key == option.key %}active{% endif %}"
+                        href="/analytics?{% if analytics_snapshot.start_date and analytics_snapshot.end_date and analytics_snapshot.period_key == 'custom' %}start={{ analytics_snapshot.start_date }}&amp;end={{ analytics_snapshot.end_date }}{% else %}period={{ analytics_snapshot.period_key }}{% endif %}{% if option.key %}&amp;discipline={{ option.key }}{% endif %}"
+                    >{{ 'All' if not option.key else option.label }}</a>
+                {% endfor %}
+            </div>
+        </div>
+
         <form method="get" action="/analytics" class="d-flex align-items-end flex-wrap gap-2">
+            {% if analytics_snapshot.discipline_key %}
+                <input type="hidden" name="discipline" value="{{ analytics_snapshot.discipline_key }}">
+            {% endif %}
             <div>
                 <label class="analytics-eyebrow d-block mb-1" for="analytics-start">START</label>
                 <input
@@ -625,12 +640,18 @@
 
     {% endif %}
 
+    {% if analytics_snapshot.discipline_key %}
+        <div class="data-note mb-2">
+            Showing {{ analytics_snapshot.discipline_label }}: the calls that {{ analytics_snapshot.discipline_label }} units acted on.
+            Processing and response are still timed to the first unit of any discipline on the call; the charts and station tables below stay county-wide.
+        </div>
+    {% endif %}
     <div class="row g-3 mb-4">
         <div class="col-6 col-xl">
             <div class="glass analytics-kpi">
                 <div class="analytics-eyebrow">TOTAL CALLS</div>
                 <div class="analytics-value">{{ metrics.total_calls }}</div>
-                <div class="analytics-subvalue">Completed CAD incidents</div>
+                <div class="analytics-subvalue">Completed CAD incidents{% if analytics_snapshot.discipline_key %} {{ analytics_snapshot.discipline_label }} units acted on{% endif %}</div>
             </div>
         </div>
         <div class="col-6 col-xl">
@@ -710,20 +731,10 @@
                         {% endif %}
                     </div>
                 </div>
-                <div class="d-flex flex-column align-items-end gap-2">
-                    <span class="coverage-chip">
-                        <i class="bi bi-person-check-fill"></i>
-                        {{ dispatcher_metrics.coverage_percent }}% call-taker coverage
-                    </span>
-                    <div class="d-flex flex-wrap gap-2" id="dispatcher-discipline-filter" aria-label="Discipline filter">
-                        {% for option in analytics_snapshot.discipline_options|default([]) %}
-                            <a
-                                class="period-link {% if analytics_snapshot.discipline_key == option.key %}active{% endif %}"
-                                href="/analytics?{% if analytics_snapshot.start_date and analytics_snapshot.end_date and analytics_snapshot.period_key == 'custom' %}start={{ analytics_snapshot.start_date }}&amp;end={{ analytics_snapshot.end_date }}{% else %}period={{ analytics_snapshot.period_key }}{% endif %}{% if option.key %}&amp;discipline={{ option.key }}{% endif %}"
-                            >{{ 'All' if not option.key else option.label }}</a>
-                        {% endfor %}
-                    </div>
-                </div>
+                <span class="coverage-chip">
+                    <i class="bi bi-person-check-fill"></i>
+                    {{ dispatcher_metrics.coverage_percent }}% call-taker coverage
+                </span>
             </div>
 
             <div class="row g-3 mt-2">
