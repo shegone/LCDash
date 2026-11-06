@@ -8,7 +8,7 @@ and a local PostgreSQL 17.11. No AWS state was changed in this stretch.
 
 | Item | State | Last verified |
 | --- | --- | --- |
-| LCDash repo | `main` at `5684954` (seven more not-timed types), pushed to GitHub and Bitbucket. This handoff update is a later local commit. Earlier rows of this day: `c689892` (release 124), `5a4cdf2` (125), `b8fb588` (126). | 2026-11-06 13:05 EST |
+| LCDash repo | `main` at `58463c8`, four local commits past release 127's `5684954` (pushed): `c0a8b40` (64 / 106 s columns), `03859f5` (six identities out of the dispatcher tables), `58f00e1` (Helicopter not timed, 24 types), `58463c8` (top row follows the discipline choice). **Not pushed, not released.** This handoff update is a later local commit. | 2026-11-06 13:55 EST |
 | LCDash pilot (AWS) | **Release 127 live** (web task definition revision 127, collector 87, image tag `release-56849549d816`, digest `sha256:8ed918503caf9d303c44afe71b306928207b26ab6d7d970637c1b546a2c1e55d`); details and rollback target in the "Release 127 live" section. Releases 124, 125 and 126 earlier the same day are recorded in their own sections. | 2026-11-06 13:05 EST |
 | Release 124 build | CodeBuild `lcdash-p1-logan-use1-release-builder:93e69eca-8793-4ce6-83eb-5b25d323706c`, SUCCEEDED 10:29:33 to 10:30:19 EST; `source_asset_sha256` `57fbf34d299cfb0d2d8b16402e5b2e81216d32b56e239dccbfd93ada5498376a` (matches the release-builder deploy output); base `python:3.13-alpine@sha256:4d511039...` unchanged. | 2026-11-06 |
 | ECR scan (release 124) | COMPLETE: **zero findings**. | 2026-11-06 |
@@ -200,14 +200,64 @@ release, so the live PostgreSQL test was not rerun. Rollback target:
 release 126's digest
 `sha256:7e14b9d88ace0d6dd78a2c1cac321dabe1e98d342a1f6e8bf2501b10407396f6`.
 
+## Held for the next release: NFPA marks, six identities, Helicopter, top-row discipline
+
+Four commits after release 127, each tested on its own (focused tests, the
+full suites and the live PostgreSQL reporting test where the SQL changed):
+
+1. `c0a8b40` The dispatcher table's share columns are "≤ 64 Sec" and
+   "≤ 106 Sec" and the tile reads "Within 106 seconds" with the 64-second
+   share under it: the NFPA 1225 alarm-processing marks (90 % and 95 %) the
+   discipline tables and the ISO fire view already use, bound as the
+   `fast_seconds` / `slow_seconds` parameters from `PROCESSING_TARGET_*`
+   (keys `within_fast_percent` / `within_slow_percent` replace
+   `within_60_percent` / `within_90_percent`; `fast_seconds`,
+   `fast_target_percent`, `slow_seconds`, `slow_target_percent` ride on
+   `dispatcher_metrics`). A share under its mark is `text-warning`. The
+   three-minute count and drill-down are unchanged: Ted asked whether to
+   move the 3-minute mark to 106 s; the answer given was no (106 is a 95 %
+   share, not a per-call fault, and the drill-down would fill with
+   ordinary calls), and he chose 64 / 106 columns with the 3-minute list
+   kept.
+2. `03859f5` `EXCLUDED_DISPATCHER_IDENTITIES` (a tuple, `<> ALL(...)` in
+   both call-taker filters) replaces the single name: KIM MAYNARD
+   (ambulance service), the supervisors AMANDA CRUM and JONATHAN ISOM, and
+   the office personnel PAM SHEPPARD, TALYN RUNYON and KAYLA ELLIS, by their
+   CAD CallTaker spellings as read from the live dispatcher table (Ted wrote
+   "John Isom" and "Talyan Runyon"; CAD has JONATHAN ISOM and TALYN RUNYON).
+   Their calls stay in every page-level total.
+3. `58f00e1` "Helicopter" (exact CAD spelling, confirmed from the live
+   slow-call lists) joins the not-timed list, 24 types: an EMS supervisor
+   chooses the aircraft, so extra calls and steps come before the
+   assignment.
+4. `58463c8` The top metric row (total calls, unit responses, call
+   processing, average and median response) follows the EMS / Fire / Law
+   choice: the overview query now takes the same `EXISTS` discipline filter
+   as the dispatcher queries, so under a discipline the row shows the calls
+   that discipline's units acted on, each still timed to the first unit of
+   any discipline. The chooser moved from the dispatcher section to the
+   filter bar beside the period links (`id="analytics-discipline-filter"`);
+   the period links and the custom-range form keep the discipline; a note
+   above the row names the view. Charts and station tables stay county-wide.
+   Verified on the live page before the change that the dispatcher tiles
+   already followed the filter and the top row did not (90 days: 10,635
+   calls and 2:32 under every choice).
+
+Rollback for the lot is release 127's digest. No schema, collector or
+infrastructure change.
+
 ## Exact next action
 
-1. Ted checks, on release 127: the Fire view of the call that started
-   this and the by-discipline tables; the "Not timed" count showing 23
-   types and rising for the new natures (both lock-out spellings, Road
-   Block, Welfare Check, Tree Down, Missing Person, Fire Brush, Gas Leak,
-   Rescue); the "≤ 60 Sec" column and the absence of the "Stacked" column.
-2. Push this handoff commit when Ted says so (`git push origin main`).
+1. Push and release the four held commits when Ted says so: `git push
+   origin main`, release-builder deploy, build `IMAGE_TAG=release-<12 hex of
+   HEAD>`, ECR scan (zero findings), change set `release-<7 hex>-<date>` with
+   only `PilotImageDigest`, execute only on the exact name, verify (web
+   revision 128 / collector 88 expected), record here.
+2. Ted checks on that release: the ≤ 64 / ≤ 106 columns and warning
+   colouring, the six names gone from the dispatcher and discipline tables
+   (their calls still in the totals), Helicopter under "Not timed" (24
+   types), and the top row changing with EMS / Fire / Law from the filter
+   bar.
 3. Open items unchanged: Stack backfill of older calls, `HowReported`,
    `UnitType.Discipline`, the AGENTS.md note about the empty accepted ECR
    list and the live PostgreSQL test for reporting SQL, the CAD
