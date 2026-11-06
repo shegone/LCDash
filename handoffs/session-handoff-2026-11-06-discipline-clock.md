@@ -8,8 +8,8 @@ and a local PostgreSQL 17.11. No AWS state was changed in this stretch.
 
 | Item | State | Last verified |
 | --- | --- | --- |
-| LCDash repo | `main` at `58463c8`, four local commits past release 127's `5684954` (pushed): `c0a8b40` (64 / 106 s columns), `03859f5` (six identities out of the dispatcher tables), `58f00e1` (Helicopter not timed, 24 types), `58463c8` (top row follows the discipline choice). **Not pushed, not released.** This handoff update is a later local commit. | 2026-11-06 13:55 EST |
-| LCDash pilot (AWS) | **Release 127 live** (web task definition revision 127, collector 87, image tag `release-56849549d816`, digest `sha256:8ed918503caf9d303c44afe71b306928207b26ab6d7d970637c1b546a2c1e55d`); details and rollback target in the "Release 127 live" section. Releases 124, 125 and 126 earlier the same day are recorded in their own sections. | 2026-11-06 13:05 EST |
+| LCDash repo | `main` at `decc9ee` (four analytics commits `c0a8b40`, `03859f5`, `58f00e1`, `58463c8` plus the handoff), pushed to GitHub and Bitbucket at the same hash. This handoff update is a later local commit. | 2026-11-06 16:15 EST |
+| LCDash pilot (AWS) | **Release 128 live** (web task definition revision 128, collector 88, image tag `release-decc9eea5054`, digest `sha256:e71840d851fb317b65bcfec96f4a4c7e12269aedbfee72533f865cd6357c1c04`); details and rollback target in the "Release 128 live" section. Releases 124 to 127 earlier the same day are recorded in their own sections. | 2026-11-06 16:15 EST |
 | Release 124 build | CodeBuild `lcdash-p1-logan-use1-release-builder:93e69eca-8793-4ce6-83eb-5b25d323706c`, SUCCEEDED 10:29:33 to 10:30:19 EST; `source_asset_sha256` `57fbf34d299cfb0d2d8b16402e5b2e81216d32b56e239dccbfd93ada5498376a` (matches the release-builder deploy output); base `python:3.13-alpine@sha256:4d511039...` unchanged. | 2026-11-06 |
 | ECR scan (release 124) | COMPLETE: **zero findings**. | 2026-11-06 |
 | Release 124 verification | ECS service `lcdash-p1-logan-use1-web`: PRIMARY deployment on revision 124, rollout COMPLETED 10:36:54 EST, 1 of 1 running. ALB target `10.42.1.200:8000` healthy. `/`, `/active-calls` and `/analytics?discipline=fire` answer 302 to the Cognito domain. Web log group since 15:34:16Z: 111 events, 0 errors, 0 warnings. The first collector run on revision 84 (next :07 / :37 EST slot) was not waited for. | 2026-11-06 10:40 EST |
@@ -243,21 +243,38 @@ full suites and the live PostgreSQL reporting test where the SQL changed):
    already followed the filter and the top row did not (90 days: 10,635
    calls and 2:32 under every choice).
 
-Rollback for the lot is release 127's digest. No schema, collector or
+Pushed and released as release 128 (below). No schema, collector or
 infrastructure change.
+
+## Release 128 live (NFPA marks, six identities, Helicopter, top-row discipline)
+
+Commits `c0a8b40`, `03859f5`, `58f00e1`, `58463c8` and the handoff
+`decc9ee` were pushed to both remotes and released together. Change set
+`release-decc9ee-20261106` (Ted typed the name; executed 21:04Z, 16:04
+EST; stack `UPDATE_COMPLETE` 21:08:01Z). Web task definition **revision
+128**, collector **revision 88**, image tag `release-decc9eea5054`, digest
+`sha256:e71840d851fb317b65bcfec96f4a4c7e12269aedbfee72533f865cd6357c1c04`.
+Build `lcdash-p1-logan-use1-release-builder:f540a80d-4d49-446f-8150-93b10bf6636c`
+SUCCEEDED 15:22 to 15:23 EST, `source_asset_sha256`
+`cbc98767c4c96c6166834f755b938f667e74555586ace3e6636d84009f32682a`
+(matches the release-builder deploy output). ECR scan COMPLETE 15:23 EST,
+zero findings. Of 23 stack parameters only `PilotImageDigest` changed; the
+standard five resources were modified. Verification: PRIMARY deployment on
+revision 128, rollout COMPLETED, 1 of 1 running; ALB target `10.42.1.190`
+healthy; `/analytics?discipline=fire` answers 302 to the Cognito domain;
+web log in the 15 minutes around the rollout: 0 errors. The first
+collector run on revision 88 was not waited for. Rollback target: release
+127's digest
+`sha256:8ed918503caf9d303c44afe71b306928207b26ab6d7d970637c1b546a2c1e55d`.
 
 ## Exact next action
 
-1. Push and release the four held commits when Ted says so: `git push
-   origin main`, release-builder deploy, build `IMAGE_TAG=release-<12 hex of
-   HEAD>`, ECR scan (zero findings), change set `release-<7 hex>-<date>` with
-   only `PilotImageDigest`, execute only on the exact name, verify (web
-   revision 128 / collector 88 expected), record here.
-2. Ted checks on that release: the ≤ 64 / ≤ 106 columns and warning
-   colouring, the six names gone from the dispatcher and discipline tables
-   (their calls still in the totals), Helicopter under "Not timed" (24
-   types), and the top row changing with EMS / Fire / Law from the filter
-   bar.
+1. Ted checks on release 128: the ≤ 64 / ≤ 106 columns and their warning
+   colouring; the six names gone from the dispatcher and discipline tables
+   (their calls still in the totals); Helicopter under "Not timed" (24
+   types); the EMS / Fire / Law chooser in the filter bar changing the top
+   row, with the period links keeping the choice.
+2. Push this handoff commit when Ted says so (`git push origin main`).
 3. Open items unchanged: Stack backfill of older calls, `HowReported`,
    `UnitType.Discipline`, the AGENTS.md note about the empty accepted ECR
    list and the live PostgreSQL test for reporting SQL, the CAD
