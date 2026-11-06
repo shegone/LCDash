@@ -7,7 +7,7 @@ Stack collection live). Facts first.
 
 | Item | State | Last verified |
 | --- | --- | --- |
-| LCDash repo | `main` at `0d78d88` (**local only**, on top of `70356ad`). Not pushed, not built, not deployed. | 2026-11-05 |
+| LCDash repo | `main` at `17e8f4c` (feature commit `0d78d88` on top of `70356ad`), **pushed to GitHub and Bitbucket** 2026-11-05 evening. Not built, not deployed. | 2026-11-05 |
 | LCDash pilot (AWS) | Unchanged since release 121: web task definition revision 121, collector 81, image `release-4fcc6457782c`, digest `sha256:14d3f80abe58c6f3c581d34b39a9d0aca801b823f39ccf79e97f70cb70a25764`. No AWS call was made this session. | 2026-11-05 16:10 EST (previous handoff) |
 | Tests | application suite and infrastructure suite results are in the "Tests" section; `tests/test_analytics_postgres_live.py` still **skipped** (no PostgreSQL reachable from this workstation). | 2026-11-05 |
 
@@ -106,7 +106,7 @@ a database.
 ## Exact next action
 
 1. Ted: review the twelve names against the CAD nature list and the "Law"
-   label; say "push main" and "start release" if wanted. The release
+   label; main is pushed; say "start release" if wanted. The release
    path is the guarded one in AGENTS.md (release-builder deploy, CodeBuild
    `IMAGE_TAG=release-<12 hex of HEAD>`, ECR scan against the accepted
    baseline, named change set on the foundation stack with only
