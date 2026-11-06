@@ -8,8 +8,11 @@ and a local PostgreSQL 17.11. No AWS state was changed in this stretch.
 
 | Item | State | Last verified |
 | --- | --- | --- |
-| LCDash repo | `main`; the handoff for release 123 (`3b80e60`) is pushed to GitHub and Bitbucket. This change is a **local commit on top of it, not pushed** (see "Exact next action"). | 2026-11-06 |
-| LCDash pilot (AWS) | **Release 123 still live** (web revision 123, collector 83, digest `sha256:2fcfb972...`). This change is not deployed; the live Fire / EMS / Law views still time a call to that discipline's own first action. | 2026-11-06 |
+| LCDash repo | `main` at `c689892` (this change), pushed to GitHub and Bitbucket. The handoff update that records release 124 is a later local commit. | 2026-11-06 10:25 EST |
+| LCDash pilot (AWS) | **Release 124 live.** Foundation stack updated via change set `release-c689892-20261106` (Ted typed the name; executed 15:34:16Z, 10:34 EST; `UPDATE_COMPLETE`). Web task definition **revision 124**, collector **revision 84**, both image tag `release-c6898920b59e`, digest `sha256:4818358bdea974ee83e7bfcb55a71c6429fd6df5055a7ac3d953838de7d7a0fe`. Of 23 stack parameters only `PilotImageDigest` changed; the standard five resources were modified. Rollback target: release 123's digest `sha256:2fcfb9727e4dd49688a7b6e17c6fc44f9d05a09b1dccf05d49e6f8adf3a02fe0`. | 2026-11-06 10:40 EST |
+| Release 124 build | CodeBuild `lcdash-p1-logan-use1-release-builder:93e69eca-8793-4ce6-83eb-5b25d323706c`, SUCCEEDED 10:29:33 to 10:30:19 EST; `source_asset_sha256` `57fbf34d299cfb0d2d8b16402e5b2e81216d32b56e239dccbfd93ada5498376a` (matches the release-builder deploy output); base `python:3.13-alpine@sha256:4d511039...` unchanged. | 2026-11-06 |
+| ECR scan (release 124) | COMPLETE: **zero findings**. | 2026-11-06 |
+| Release 124 verification | ECS service `lcdash-p1-logan-use1-web`: PRIMARY deployment on revision 124, rollout COMPLETED 10:36:54 EST, 1 of 1 running. ALB target `10.42.1.200:8000` healthy. `/`, `/active-calls` and `/analytics?discipline=fire` answer 302 to the Cognito domain. Web log group since 15:34:16Z: 111 events, 0 errors, 0 warnings. The first collector run on revision 84 (next :07 / :37 EST slot) was not waited for. | 2026-11-06 10:40 EST |
 | Tests | Focused: `tests/test_analytics_first_action.py`, `tests/test_analytics_slow_calls.py`, `tests/test_analytics.py` and `tests/test_analytics_postgres_live.py` (3 live tests against PostgreSQL 17.11) all pass. Full: `python -m pytest tests/` 2089 passed, 6 skipped, 2623 subtests; `python -m pytest infrastructure/tests/` 151 passed, 9 subtests. | 2026-11-06 |
 | Local PostgreSQL | Started again from the session scratchpad for the live test; stopped at the end of the session. | 2026-11-06 |
 
@@ -70,8 +73,9 @@ the same in every view. The All view is unchanged.
 
 ## Not verified
 
-- Not deployed, so not seen on the live page. After release the Fire view
-  of that call should show the medic's two minutes, not the half hour.
+- The signed-in Fire view of the call that started this was not checked
+  by the agent (it has no signed-in session); it should now show the
+  medic's two minutes, not the half hour. Ted's check.
 - The CAD `CallDateTime` the collector stores as `call_received_at`
   matched the report's "Report Time" on the checked call, a round minute
   48 s before the command log's "New CFS" entry; on the four earlier
@@ -86,14 +90,9 @@ the same in every view. The All view is unchanged.
 
 ## Exact next action
 
-1. Ted decides whether to push and release. Release path exactly as in
-   `session-handoff-2026-11-06-release-123.md` ("Release path as
-   executed"): push, release-builder deploy, CodeBuild with
-   `IMAGE_TAG=release-<12 hex>`, ECR scan with an **empty** accepted
-   list, named change set with only `PilotImageDigest` changing, execute
-   only after Ted types the name, verify.
-2. After release, Ted checks the Fire view of the call that started this
-   and the by-discipline tables.
+1. Ted checks the Fire view of the call that started this and the
+   by-discipline tables on release 124.
+2. Push this handoff commit when Ted says so (`git push origin main`).
 3. Open items unchanged: Stack backfill of older calls, `HowReported`,
    `UnitType.Discipline`, the AGENTS.md note about the empty accepted ECR
    list and the live PostgreSQL test for reporting SQL.
