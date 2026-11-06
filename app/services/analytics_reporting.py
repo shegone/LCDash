@@ -54,8 +54,11 @@ FIRST_ACTION_LABELS = {
     "on_scene": "On scene",
 }
 # The dispatcher section can be narrowed to one discipline: the calls that
-# discipline's units responded to, timed to that discipline's first action
-# (the same unit-roster rule the discipline tables use).
+# discipline's units responded to (the same unit-roster rule the discipline
+# tables use). The filter chooses the calls only; each is still timed to the
+# first unit action on the call, whatever that unit's discipline, because the
+# first unit assigned is what stops the dispatcher's clock (decided
+# 2026-11-06).
 DISCIPLINE_FILTERS = (
     ("", "All disciplines"),
     ("ems", "EMS"),
@@ -230,8 +233,9 @@ def _format_duration(seconds) -> str:
 # "Assigned" derived from an "En route" carries the same time; a Stack at
 # the same second as an Assign is named first). ``discipline`` is the acting
 # unit's roster agency / unit type (ems, fire, law or ''), with the per-agency
-# ORI as the fallback; ``__STAMP_FILTER__`` is replaced by a WHERE clause
-# when the caller narrows the stamps to one discipline.
+# ORI as the fallback. It is never filtered here: a discipline view narrows
+# the calls (``_call_processing_sql``), and every call is timed to its first
+# stamp by any unit.
 ACTION_STAMPS_SQL = """
         action_stamps AS (
             SELECT
@@ -330,7 +334,6 @@ ACTION_STAMPS_SQL = """
                 WHERE stamp.stamp_at IS NOT NULL
                 ) AS raw_stamps
             ) AS stamps
-            __STAMP_FILTER__
         )"""
 
 
@@ -354,8 +357,11 @@ def _call_processing_sql(
     ``excluded_type`` (an EXCLUDED_CALL_TYPES nature). ``dispatcher_calls``
     restricts the population to calls with a call taker, minus the excluded
     identity. ``discipline`` (ems, fire or law) keeps only the calls that
-    discipline's units acted on and times them to that discipline's first
-    action. Bound parameters: window_start, window_end,
+    discipline's units acted on; the milestones still come from every stamp
+    on the call, so the interval ends at the first unit action by any
+    discipline (the first unit assigned stops the clock, even when the
+    filtered discipline was added to the call later). Bound parameters:
+    window_start, window_end,
     processing_cap_seconds, ems_agencies, law_agencies, excluded_call_types
     and, when used, excluded_dispatcher_identity and discipline.
     """
@@ -365,16 +371,15 @@ def _call_processing_sql(
             "AND BTRIM(call_taker) <> '' "
             "AND UPPER(BTRIM(call_taker)) <> %(excluded_dispatcher_identity)s"
         )
-    stamp_filter = ""
     discipline_filter = ""
     if discipline:
-        stamp_filter = "WHERE stamps.discipline = %(discipline)s"
         discipline_filter = (
             "AND EXISTS (SELECT 1 FROM action_stamps "
-            "WHERE action_stamps.cfs_number = lcdash_analytics.calls.cfs_number)"
+            "WHERE action_stamps.cfs_number = lcdash_analytics.calls.cfs_number "
+            "AND action_stamps.discipline = %(discipline)s)"
         )
     return f"""
-        WITH {ACTION_STAMPS_SQL.replace("__STAMP_FILTER__", stamp_filter)},
+        WITH {ACTION_STAMPS_SQL},
         selected_calls AS (
             SELECT
                 cfs_number,
@@ -615,8 +620,8 @@ def _query_overview(
     """
 
     # The dispatcher section alone follows the discipline filter: the calls
-    # that discipline's units acted on, timed to that discipline's first
-    # action. The page-level metrics and charts stay county-wide.
+    # that discipline's units acted on, each timed to the first unit action
+    # on the call. The page-level metrics and charts stay county-wide.
     dispatcher_summary_row = repository.fetchone(
         _call_processing_sql(dispatcher_calls=True, discipline=discipline)
         + """
@@ -1193,8 +1198,11 @@ def _discipline_metrics(
 
     A call counts once in each discipline whose units acted on it, measured
     from the CAD "call received" time to the earliest action (stacked,
-    assigned, en route, staged or on scene) by a unit of that discipline, so a dispatcher
-    can be compared on law, EMS and fire separately. The discipline comes
+    assigned, en route, staged or on scene) by any unit on the call, so a
+    dispatcher can be compared on law, EMS and fire separately. The first
+    unit assigned stops the clock for every discipline the call counts in:
+    a discipline added to a call later is not charged the time before it was
+    requested, which the warehouse does not hold. The discipline comes
     from the responding unit's roster agency or unit type (the same rule the
     station-discipline chart uses, which classifies every response); the
     per-agency record's ORI is a fallback. The same rules as the main table
@@ -1284,28 +1292,32 @@ def _discipline_metrics(
             ) AS stamp(stamp_at)
             WHERE stamp.stamp_at IS NOT NULL
         ),
-        discipline_dispatch AS (
+        call_first_action AS (
             SELECT
                 selected_calls.cfs_number,
-                selected_calls.call_taker,
-                selected_calls.dispatcher_key,
-                selected_calls.call_received_at,
-                selected_calls.is_scheduled,
-                discipline_stamps.discipline,
                 MIN(discipline_stamps.stamp_at) FILTER (
                     WHERE discipline_stamps.stamp_at >= selected_calls.call_received_at
                 ) AS first_action_at
             FROM selected_calls
             JOIN discipline_stamps
                 ON discipline_stamps.cfs_number = selected_calls.cfs_number
-            WHERE discipline_stamps.discipline IS NOT NULL
-            GROUP BY
+            GROUP BY selected_calls.cfs_number
+        ),
+        discipline_dispatch AS (
+            SELECT DISTINCT
                 selected_calls.cfs_number,
                 selected_calls.call_taker,
                 selected_calls.dispatcher_key,
                 selected_calls.call_received_at,
                 selected_calls.is_scheduled,
-                discipline_stamps.discipline
+                discipline_stamps.discipline,
+                call_first_action.first_action_at
+            FROM selected_calls
+            JOIN discipline_stamps
+                ON discipline_stamps.cfs_number = selected_calls.cfs_number
+            JOIN call_first_action
+                ON call_first_action.cfs_number = selected_calls.cfs_number
+            WHERE discipline_stamps.discipline IS NOT NULL
         ),
         timed AS (
             SELECT

@@ -223,11 +223,32 @@ class SharedSqlTests(unittest.TestCase):
         self.assertIn("ON unit_record.unit_number = status_event.unit_number", query)
         self.assertIn("IN ('stacked', 'assigned', 'enroute', 'staged', 'on_scene')", query)
 
+    def test_the_discipline_tables_time_every_call_to_its_first_unit_action(self):
+        """A call counts in each discipline whose units acted on it, but the
+        clock stops at the first unit assigned to the call, whatever that
+        unit's discipline: a discipline added to a call later is not charged
+        the time before it was requested."""
+        repository = RecordingRepository()
+        ar._discipline_metrics(repository, {
+            "window_start": None, "window_end": None,
+            "excluded_dispatcher_identity": ar.EXCLUDED_DISPATCHER_IDENTITY})
+        query = repository.queries[0][0]
+        first = query[query.index("call_first_action AS"):query.index("discipline_dispatch AS")]
+        self.assertIn("MIN(discipline_stamps.stamp_at) FILTER", first)
+        self.assertNotIn("discipline_stamps.discipline", first)
+        self.assertIn("GROUP BY selected_calls.cfs_number", first)
+        dispatch = query[query.index("discipline_dispatch AS"):query.index("timed AS")]
+        self.assertIn("SELECT DISTINCT", dispatch)
+        self.assertIn("call_first_action.first_action_at", dispatch)
+        self.assertIn("WHERE discipline_stamps.discipline IS NOT NULL", dispatch)
+        self.assertNotIn("MIN(", dispatch)
+
 
 class DisciplineFilterTests(unittest.TestCase):
     """The dispatcher section can be narrowed to EMS, Fire or Law: the calls
-    that discipline's units acted on, timed to that discipline's first
-    action. The page-level metrics stay county-wide."""
+    that discipline's units acted on, each still timed to the first unit
+    action on the call by any discipline (the first unit assigned stops the
+    clock). The page-level metrics stay county-wide."""
 
     def setUp(self):
         self.repository = RecordingRepository()
@@ -241,13 +262,17 @@ class DisciplineFilterTests(unittest.TestCase):
         self.assertNotIn("%(discipline)s", overview_query)
         self.assertNotIn("EXISTS (SELECT 1 FROM action_stamps", overview_query)
         for query in self.processing_queries[1:]:
-            self.assertIn("WHERE stamps.discipline = %(discipline)s", query)
             self.assertIn(
                 "AND EXISTS (SELECT 1 FROM action_stamps "
-                "WHERE action_stamps.cfs_number = lcdash_analytics.calls.cfs_number)", query)
-            # The stamps are filtered before the milestones are taken, so the
-            # interval ends at that discipline's first action.
-            self.assertLess(query.index("WHERE stamps.discipline"), query.index("call_milestones AS"))
+                "WHERE action_stamps.cfs_number = lcdash_analytics.calls.cfs_number "
+                "AND action_stamps.discipline = %(discipline)s)", query)
+            # The discipline chooses the calls only. The stamps are never
+            # filtered, so the milestones (and the interval) come from the
+            # first action by any unit on the call.
+            self.assertNotIn("WHERE stamps.discipline", query)
+            self.assertEqual(query.count("%(discipline)s"), 1)
+            milestones = query[query.index("call_milestones AS"):query.index("call_processing AS")]
+            self.assertNotIn("discipline", milestones)
         for _, params in self.repository.queries:
             if params and "discipline" in params:
                 self.assertEqual(params["discipline"], "fire")
@@ -378,8 +403,8 @@ class PageWordingTests(unittest.TestCase):
 
     def test_the_discipline_filter_links_keep_the_window_and_name_the_view(self):
         self.assertIn("Call-Taker Workload and CAD Processing: Fire</h4>", self.html)
-        self.assertIn("Showing Fire only: the calls that Fire units acted on, timed to the first "
-                      "Fire unit action", self.html)
+        self.assertIn("Showing Fire only: the calls that Fire units acted on, each timed to the "
+                      "first unit assigned on the call by any discipline", self.html)
         self.assertIn('id="dispatcher-discipline-filter"', self.html)
         self.assertIn('class="period-link " href="/analytics?period=30d" >All</a>', self.html)
         self.assertIn('class="period-link " href="/analytics?period=30d&amp;discipline=ems" >EMS</a>',

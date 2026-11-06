@@ -216,14 +216,22 @@ count as "within 90 s".
 - **Discipline filter** (added 2026-11-05): the dispatcher section can be
   narrowed to EMS, Fire or Law. The filtered population is the calls with
   at least one stamp by a unit of that discipline (roster rule above,
-  ORI fallback), each timed to that discipline's first action; the same
-  timed rule and not-timed buckets apply. The overview metrics and charts
-  are not filtered.
+  ORI fallback); the same timed rule and not-timed buckets apply. The
+  overview metrics and charts are not filtered.
+- **Discipline timing** (changed 2026-11-06): in the filtered view and in
+  the by-discipline tables a call is timed to the first unit action on the
+  call by **any** discipline, not to the filtered discipline's own first
+  action. The first unit assigned stops the clock. Until 2026-11-06 the
+  interval ended at that discipline's first action, which charged a
+  discipline added to a call later (fire requested after a medic was on
+  scene, for example) with the whole wait before it was requested; the
+  warehouse holds no per-agency "requested" time, so the first unit on the
+  call is the only defensible end point.
 - **By discipline**: a call counts once per discipline whose units acted on
   it; discipline from the unit roster agency / unit type (EMS: LEASA or
   `EMS *` unit type; fire: `FC *` or `FIRE *`; law: sheriff and police
   codes, `PATROL CAR`, `COUNTY ADMIN`), ORI as fallback; interval to the
-  earliest action by a unit of that discipline; same timed rule.
+  earliest action by any unit on the call (above); same timed rule.
 - **Response**: received to the earliest on-scene stamp from either table;
   scheduled calls excluded; coverage = calls with a sample / non-scheduled
   calls.

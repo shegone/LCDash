@@ -123,7 +123,7 @@ class LiveAnalyticsTests(unittest.TestCase):
             add("DISPATCHER X", "id-x", [("LCSO", value)])
         for value in (40, 45, 300):
             add("DISPATCHER Y", "id-y", [("FC 200", value)])
-        add("DISPATCHER X", "id-x", [("FC 100", 50), ("LEASA", 150)])     # counts in both
+        add("DISPATCHER X", "id-x", [("FC 100", 50), ("LEASA", 150)])     # counts in both, timed 50 in both
         add("DISPATCHER Y", "id-y", [("FC 300", 70), ("FC 400", 500)])    # first dispatch counts
         add("DISPATCHER X", "id-x", [("ZZZ", 10)])                        # no discipline
         add("DISPATCHER X", "id-x", [("FC 100", 20)], scheduled=True)     # scheduled
@@ -157,7 +157,9 @@ class LiveAnalyticsTests(unittest.TestCase):
         x_row = next(d for d in by["fire"]["dispatchers"] if d["call_taker"] == "DISPATCHER X")
         self.assertEqual(pick(x_row), figures(fire_x))
         self.assertEqual(pick(by["fire"]["overall"]), figures(fire_x + fire_y))
-        self.assertEqual(pick(by["ems"]["overall"]), figures([20, 40, 80, 150]))
+        # The joint call's EMS unit came 150 s in, but the fire unit at 50 s
+        # was the first unit assigned, so EMS is timed at 50 too.
+        self.assertEqual(pick(by["ems"]["overall"]), figures([20, 40, 80, 50]))
         self.assertEqual(pick(by["law"]["overall"]), figures([90, 300]))
         self.assertEqual([d["call_taker"] for d in by["fire"]["dispatchers"]],
                          ["DISPATCHER X", "DISPATCHER Y"])
@@ -321,9 +323,11 @@ class LiveAnalyticsTests(unittest.TestCase):
         m1 = next(u for u in overview["busiest_units"] if u["unit_number"] == "M1")
         self.assertEqual((m1["responses"], m1["average_response"]), (1, "—"))
 
-        # Disciplines from the unit roster: fire times the fire unit's Assign,
-        # law times the sheriff's units (on the fire call, the deputy's Stack
-        # at 25:00 is law's first action); the forestry unit is unclassified.
+        # Disciplines from the unit roster: fire and law both count the fire
+        # call, and both time it to the engine's Assign at 1:58, the first
+        # unit assigned; the deputy's Stack at 25:00 came later and is not
+        # law's clock (the deputy was added to the call after it was already
+        # dispatched). The forestry unit is unclassified.
         groups, iso = ar._discipline_metrics(repository, {
             "window_start": window.start_at, "window_end": window.end_at,
             "excluded_dispatcher_identity": ar.EXCLUDED_DISPATCHER_IDENTITY})
@@ -331,24 +335,25 @@ class LiveAnalyticsTests(unittest.TestCase):
         self.assertEqual((by["fire"]["overall"]["timed"], by["fire"]["overall"]["median"]),
                          (1, "1:58"))
         self.assertEqual((by["law"]["overall"]["timed"], by["law"]["overall"]["over_180_count"]),
-                         (5, 2))
+                         (5, 1))
         self.assertIsNone(by["ems"]["overall"])
         self.assertEqual(iso["timed"], 1)
 
         # The discipline filter on the dispatcher section: law keeps the
-        # calls a sheriff's unit acted on (the fire call too, timed to the
-        # deputy's Stack at 25:00) and drops the scheduled EMS call and the
-        # hang-up; fire keeps the fire call alone, timed to the engine's
-        # Assign; EMS keeps only the scheduled transport.
+        # calls a sheriff's unit acted on (the fire call too, still timed to
+        # the engine's Assign at 1:58, so it is no longer stacked or over
+        # three minutes) and drops the scheduled EMS call and the hang-up;
+        # fire keeps the fire call alone; EMS keeps only the scheduled
+        # transport.
         law = next(d for d in ar._query_overview(repository, window, None, "law")["dispatchers"]
                    if d["call_taker"] == "DISPATCHER T")
         self.assertEqual(law["calls_entered"], 8)
         self.assertEqual(law["processing_samples"], 5)
-        self.assertEqual(law["median_processing"], "2:17")
-        self.assertEqual(law["over_180_count"], 2)
+        self.assertEqual(law["median_processing"], "1:58")
+        self.assertEqual(law["over_180_count"], 1)
         self.assertEqual((law["excluded_scheduled"], law["excluded_no_stamp"],
                           law["excluded_over_cap"], law["excluded_type"]), (0, 1, 1, 1))
-        self.assertEqual(law["stacked_calls"], 3)
+        self.assertEqual(law["stacked_calls"], 2)
         fire = next(d for d in ar._query_overview(repository, window, None, "fire")["dispatchers"]
                     if d["call_taker"] == "DISPATCHER T")
         self.assertEqual((fire["calls_entered"], fire["processing_samples"],
@@ -358,8 +363,12 @@ class LiveAnalyticsTests(unittest.TestCase):
         self.assertEqual((ems["calls_entered"], ems["processing_samples"],
                           ems["excluded_scheduled"]), (1, 0, 1))
         law_slow = ar._query_slow_calls(repository, window, row["dispatcher_ref"], "law")
-        self.assertEqual([(c["cfs_number"], c["processing_seconds"]) for c in law_slow["calls"]],
-                         [("C-FIRE", 1500), ("C-HELD", 479)])
+        self.assertEqual([(c["cfs_number"], c["processing_seconds"], c["first_action_by"])
+                          for c in law_slow["calls"]],
+                         [("C-HELD", 479, "S3")])
+        # Under the law filter the fire call is timed to E1's Assign (1:58),
+        # so it is not in law's "> 3 Min" list.
+        self.assertEqual(law_slow["total"], 1)
 
 
 if __name__ == "__main__":

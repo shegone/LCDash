@@ -706,7 +706,7 @@
                         Calls entered are attributed from CentralSquare's CallTaker field.
                         CAD processing runs from call received to the earliest action by any unit of any agency on the call (assigned, en route, staged or on scene), read from both the per-agency and the per-unit CAD timing records.
                         {% if analytics_snapshot.discipline_key %}
-                            Showing {{ analytics_snapshot.discipline_label }} only: the calls that {{ analytics_snapshot.discipline_label }} units acted on, timed to the first {{ analytics_snapshot.discipline_label }} unit action (a call with EMS and fire units counts under both).
+                            Showing {{ analytics_snapshot.discipline_label }} only: the calls that {{ analytics_snapshot.discipline_label }} units acted on, each timed to the first unit assigned on the call by any discipline (a call with EMS and fire units counts under both).
                         {% endif %}
                     </div>
                 </div>
@@ -908,9 +908,9 @@
                         A call counts once in every discipline whose units were dispatched to it.
                         The discipline comes from the responding unit's agency in the unit roster
                         (FC departments are fire, LEASA is EMS, the sheriff and the state, city and
-                        town police are law), timed from the CAD call-received time to the earliest
-                        action by a unit of that discipline, so a dispatcher can be compared on
-                        fire, EMS and law separately.
+                        town police are law), timed from the CAD call-received time to the first
+                        unit action on the call by any discipline (the first unit assigned stops
+                        the clock), so a dispatcher can be compared on fire, EMS and law separately.
                         The &le; {{ iso.fast_seconds }} sec and &le; {{ iso.slow_seconds }} sec
                         columns are the NFPA 1221 (2016) alarm-processing benchmarks.
                     </p>

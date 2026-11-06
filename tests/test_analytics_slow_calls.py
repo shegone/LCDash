@@ -220,8 +220,12 @@ class SlowCallListTests(unittest.TestCase):
         get_dispatcher_slow_calls(REF, period="24h", discipline="law")
         query, params = self.repository.calls[-1]
         self.assertEqual(params["discipline"], "law")
-        self.assertIn("WHERE stamps.discipline = %(discipline)s", query)
         self.assertIn("AND EXISTS (SELECT 1 FROM action_stamps", query)
+        self.assertIn("AND action_stamps.discipline = %(discipline)s)", query)
+        # The discipline picks the calls; the interval and the first action
+        # shown still come from the first unit on the call, any discipline.
+        self.assertNotIn("WHERE stamps.discipline", query)
+        self.assertEqual(query.count("%(discipline)s"), 1)
         # Same rules as the table's count, plus the over-cap list.
         for rule in ("timing_status IN ('timed', 'over_cap')",
                      "> %(threshold_seconds)s", "ORDER BY dispatch_seconds DESC",

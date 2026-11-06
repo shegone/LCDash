@@ -77,10 +77,14 @@ be narrowed to one discipline with the All / EMS / Fire / Law links beside the
 coverage chip (`?discipline=ems|fire|law` on `/analytics`,
 `/api/analytics/overview` and `/api/analytics/dispatcher-slow-calls`; any
 other value is a 400). The filtered view keeps the calls that discipline's
-units acted on and times each to that discipline's first unit action, using
-the same unit-roster rule as the discipline tables, so a call with EMS and
-fire units counts under both. The page-level metrics, charts and the
-by-discipline tables stay county-wide.
+units acted on, using the same unit-roster rule as the discipline tables, so
+a call with EMS and fire units counts under both. The discipline chooses the
+calls only: each call is still timed from the CAD call-received time to the
+first unit action on the call by any discipline, because the first unit
+assigned is what stops the dispatcher's clock (decided 2026-11-06, after a
+medical call whose fire units were added half an hour later showed the whole
+wait as fire processing). The by-discipline tables use the same rule. The
+page-level metrics and charts stay county-wide.
 
 Response times (average and median response, coverage, busiest-unit average)
 use the earliest on-scene stamp from either record and exclude scheduled calls.
