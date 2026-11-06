@@ -61,9 +61,9 @@ class RecordingRepository:
         if "MAX(source_collected_at)" in query:
             return (10, 0, None, None, None, 0, None, 0)
         if "calls_with_call_taker" in query:
-            # calls, samples, average, median, within 90, over 180, p90,
+            # calls, samples, average, median, within 106 s, over 180, p90,
             # excluded scheduled, no stamp, over cap, stacked, average hold,
-            # excluded type, within 60
+            # excluded type, within 64 s
             return (4, 3, 300.0, 120.0, 1, 1, 540.0, 1, 0, 0, 0, None, 0, 1)
         return (0, 0, 0)
 

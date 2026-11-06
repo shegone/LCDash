@@ -39,7 +39,8 @@ The Analytics page includes a Dispatcher / CAD Entry section for:
 - Calls entered by call taker
 - Share of attributed calls
 - Average and median CAD processing time
-- Percentage dispatched within 90 seconds
+- Percentage dispatched within 64 seconds and within 106 seconds (the NFPA
+  1225 alarm-processing marks, expected at 90% and 95%)
 - Calls taking longer than three minutes to reach first dispatch
 - Call-taker data coverage for the selected reporting window
 
@@ -71,8 +72,13 @@ the interval like an Assign; the unit's wait from that Stack to its first
 Assign or En route is the hold, reported apart (the "Stacked first" summary
 line and the drill-down's "Unit hold"; the table's "Stacked" column was
 dropped 2026-11-06 at Ted's request) and never added to the dispatcher's
-time. The table shows the share of timed calls dispatched within 60 seconds
-and within 90 seconds beside the average, median and 90th percentile. The drill-down names the first
+time. The table shows the share of timed calls dispatched within 64 seconds
+and within 106 seconds beside the average, median and 90th percentile:
+the NFPA 1225 alarm-processing marks (90% and 95%) that the by-discipline
+tables and the ISO fire view already use, bound from the same constants
+(they replaced 60 and 90 seconds on 2026-11-06; a share under its mark is
+shown as a warning). The three-minute count and its drill-down are the
+investigate list and stay at three minutes. The drill-down names the first
 action (event and unit or agency) so an interval can be checked against the
 CAD report. Status rows are collected from the day the table was introduced;
 earlier calls have no Stack and time to their first Assign. See

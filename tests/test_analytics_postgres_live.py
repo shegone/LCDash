@@ -293,8 +293,10 @@ class LiveAnalyticsTests(unittest.TestCase):
         self.assertEqual(row["median_processing"], "1:58")
         self.assertEqual(row["average_processing"], ar._format_duration(statistics.mean(timed)))
         self.assertEqual(row["over_180_count"], 1)
-        self.assertEqual(row["within_90_percent"], 20)
-        self.assertEqual(row["within_60_percent"], 20)   # only the self-initiated zero
+        # NFPA 1225 marks: 0 and 1:39 are within 106 s; only the
+        # self-initiated zero is within 64 s.
+        self.assertEqual(row["within_slow_percent"], 40)
+        self.assertEqual(row["within_fast_percent"], 20)
         # The two stacked calls waited 46:30 and 18:42 on their units.
         self.assertEqual((row["stacked_calls"], row["average_hold"]),
                          (2, ar._format_duration((3269 - 479 + 1259 - 137) / 2)))

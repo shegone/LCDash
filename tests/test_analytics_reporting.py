@@ -151,7 +151,12 @@ class AnalyticsOverviewRouteTests(unittest.TestCase):
                 "average_processing": "1:28",
                 "median_processing": "1:12",
                 "processing_samples": 38,
-                "within_90_percent": 68,
+                "fast_seconds": 64,
+                "fast_target_percent": 90,
+                "slow_seconds": 106,
+                "slow_target_percent": 95,
+                "within_fast_percent": 50,
+                "within_slow_percent": 68,
                 "over_180_count": 3,
             },
             "dispatchers": [
@@ -162,7 +167,8 @@ class AnalyticsOverviewRouteTests(unittest.TestCase):
                     "average_processing": "1:20",
                     "median_processing": "1:08",
                     "processing_samples": 17,
-                    "within_90_percent": 71,
+                    "within_fast_percent": 53,
+                    "within_slow_percent": 71,
                     "over_180_count": 1,
                 }
             ],

@@ -498,8 +498,12 @@ def _empty_overview(window: AnalyticsWindow, message: str) -> dict:
             "median_processing": "—",
             "p90_processing": "—",
             "processing_samples": 0,
-            "within_60_percent": 0,
-            "within_90_percent": 0,
+            "fast_seconds": PROCESSING_TARGET_FAST_SECONDS,
+            "fast_target_percent": PROCESSING_TARGET_FAST_PERCENT,
+            "slow_seconds": PROCESSING_TARGET_SLOW_SECONDS,
+            "slow_target_percent": PROCESSING_TARGET_SLOW_PERCENT,
+            "within_fast_percent": 0,
+            "within_slow_percent": 0,
             "over_180_count": 0,
             "excluded_scheduled": 0,
             "excluded_no_stamp": 0,
@@ -560,6 +564,8 @@ def _query_overview(
         "law_agencies": list(LAW_AGENCY_CODES),
         "excluded_call_types": list(EXCLUDED_CALL_TYPE_KEYS),
         "discipline": discipline,
+        "fast_seconds": PROCESSING_TARGET_FAST_SECONDS,
+        "slow_seconds": PROCESSING_TARGET_SLOW_SECONDS,
     }
 
     # Response time: received to the earliest on-scene stamp from either
@@ -604,7 +610,8 @@ def _query_overview(
     )
 
     # One timing_status column feeds every aggregate, so the count, the
-    # average, the percentiles and the "≤ 90 s" / "> 3 min" figures always
+    # average, the percentiles, the NFPA 1225 shares (within 64 and 106
+    # seconds, PROCESSING_TARGET_*) and the "> 3 min" figure always
     # describe the same calls.
     processing_aggregates_sql = """
             COUNT(*) FILTER (WHERE timing_status = 'timed')
@@ -615,8 +622,9 @@ def _query_overview(
                 FILTER (WHERE timing_status = 'timed')
                 AS median_processing_seconds,
             COUNT(*) FILTER (
-                WHERE timing_status = 'timed' AND processing_seconds <= 90
-            ) AS within_90_seconds,
+                WHERE timing_status = 'timed'
+                  AND processing_seconds <= %(slow_seconds)s
+            ) AS within_slow_seconds,
             COUNT(*) FILTER (
                 WHERE timing_status = 'timed' AND processing_seconds > 180
             ) AS over_180_seconds,
@@ -636,8 +644,9 @@ def _query_overview(
             COUNT(*) FILTER (WHERE timing_status = 'excluded_type')
                 AS excluded_type,
             COUNT(*) FILTER (
-                WHERE timing_status = 'timed' AND processing_seconds <= 60
-            ) AS within_60_seconds
+                WHERE timing_status = 'timed'
+                  AND processing_seconds <= %(fast_seconds)s
+            ) AS within_fast_seconds
     """
 
     # The dispatcher section alone follows the discipline filter: the calls
@@ -681,14 +690,14 @@ def _query_overview(
     dispatcher_processing_samples = int(dispatcher_summary_row[1] or 0)
     dispatchers = []
     for row in dispatcher_rows:
-        # taker, calls, timed, average, median, within 90, over 180, p90,
-        # scheduled, no stamp, over cap, stacked, average hold, excluded
-        # type, within 60, ref
+        # taker, calls, timed, average, median, within slow (106 s), over
+        # 180, p90, scheduled, no stamp, over cap, stacked, average hold,
+        # excluded type, within fast (64 s), ref
         calls_entered = int(row[1] or 0)
         processing_samples = int(row[2] or 0)
-        within_90 = int(row[5] or 0)
+        within_slow = int(row[5] or 0)
         over_180 = int(row[6] or 0)
-        within_60 = int(row[14] or 0)
+        within_fast = int(row[14] or 0)
         dispatchers.append(
             {
                 "call_taker": row[0],
@@ -704,11 +713,11 @@ def _query_overview(
                 # itself never leaves the server.
                 "dispatcher_ref": str(row[15] or ""),
                 "processing_samples": processing_samples,
-                "within_60_percent": round(
-                    (within_60 / processing_samples) * 100
+                "within_fast_percent": round(
+                    (within_fast / processing_samples) * 100
                 ) if processing_samples else 0,
-                "within_90_percent": round(
-                    (within_90 / processing_samples) * 100
+                "within_slow_percent": round(
+                    (within_slow / processing_samples) * 100
                 ) if processing_samples else 0,
                 "over_180_count": over_180,
                 "excluded_scheduled": int(row[8] or 0),
@@ -735,10 +744,14 @@ def _query_overview(
         "median_processing": _format_duration(dispatcher_summary_row[3]),
         "p90_processing": _format_duration(dispatcher_summary_row[6]),
         "processing_samples": dispatcher_processing_samples,
-        "within_60_percent": round(
+        "fast_seconds": PROCESSING_TARGET_FAST_SECONDS,
+        "fast_target_percent": PROCESSING_TARGET_FAST_PERCENT,
+        "slow_seconds": PROCESSING_TARGET_SLOW_SECONDS,
+        "slow_target_percent": PROCESSING_TARGET_SLOW_PERCENT,
+        "within_fast_percent": round(
             (int(dispatcher_summary_row[13] or 0) / dispatcher_processing_samples) * 100
         ) if dispatcher_processing_samples else 0,
-        "within_90_percent": round(
+        "within_slow_percent": round(
             (int(dispatcher_summary_row[4] or 0) / dispatcher_processing_samples) * 100
         ) if dispatcher_processing_samples else 0,
         "over_180_count": int(dispatcher_summary_row[5] or 0),

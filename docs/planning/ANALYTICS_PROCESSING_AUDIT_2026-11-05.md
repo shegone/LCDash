@@ -199,7 +199,8 @@ count as "within 90 s".
   `call_agency_times` for the call.
 - **Timed**: call type not on the not-timed list, not scheduled, has such
   a stamp, interval ≤ 60 minutes. Only timed calls enter the average,
-  median, 90th percentile, "≤ 90 s" and "> 3 Min". The four excluded
+  median, 90th percentile, "≤ 64 s", "≤ 106 s" (the NFPA 1225 marks,
+  since 2026-11-06; 60 and 90 s before) and "> 3 Min". The four excluded
   buckets are counted in the summary line, in the "Not timed" column
   (tooltip gives the split) and over-cap calls are listed in the
   drill-down as "not averaged".

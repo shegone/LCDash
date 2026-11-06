@@ -43,9 +43,9 @@ class RecordingRepository:
             # response, response samples, latest, scheduled
             return (12, 20, 118.0, 900.0, 700.0, 6, None, 2)
         if "calls_with_call_taker" in query:
-            # calls, timed, average, median, within 90, over 180, p90,
+            # calls, timed, average, median, within 106 s, over 180, p90,
             # scheduled, no stamp, over cap, stacked, average hold,
-            # excluded call type, within 60
+            # excluded call type, within 64 s
             return (10, 6, 200.0, 118.0, 2, 2, 600.0, 1, 2, 1, 2, 1956.0, 3, 1)
         return (0, 0, 0)
 
@@ -135,14 +135,29 @@ class ProcessingDefinitionTests(unittest.TestCase):
         self.assertEqual(row["dispatcher_ref"], "0123456789abcdef")
         self.assertEqual((row["excluded_scheduled"], row["excluded_no_stamp"],
                           row["excluded_over_cap"]), (1, 2, 1))
-        self.assertEqual(row["within_90_percent"], 33)
-        # The 60-second share comes from the same timed calls, as its own
-        # aggregate at the end of the row.
-        self.assertEqual(row["within_60_percent"], 17)
-        self.assertEqual(summary["within_60_percent"], 17)
-        for query in self.processing_queries[1:]:
-            self.assertIn("WHERE timing_status = 'timed' AND processing_seconds <= 60", query)
-            self.assertIn(") AS within_60_seconds", query)
+        # The two shares are the NFPA 1225 alarm-processing marks (64 s at
+        # 90 %, 106 s at 95 %, the same constants the discipline tables
+        # use; 2026-11-06, replacing 60 and 90 s), bound as parameters so
+        # the SQL and the page cannot drift apart. The fast share comes
+        # from the same timed calls, as its own aggregate at the end of
+        # the row.
+        self.assertEqual(row["within_slow_percent"], 33)
+        self.assertEqual(row["within_fast_percent"], 17)
+        self.assertEqual(summary["within_fast_percent"], 17)
+        self.assertEqual(summary["within_slow_percent"], 33)
+        self.assertEqual((summary["fast_seconds"], summary["fast_target_percent"],
+                          summary["slow_seconds"], summary["slow_target_percent"]),
+                         (64, 90, 106, 95))
+        for query, params in self.repository.queries:
+            if "calls_with_call_taker" not in query and "AS stacked_calls" not in query:
+                continue
+            self.assertIn("AND processing_seconds <= %(fast_seconds)s", query)
+            self.assertIn(") AS within_fast_seconds", query)
+            self.assertIn("AND processing_seconds <= %(slow_seconds)s", query)
+            self.assertIn(") AS within_slow_seconds", query)
+            self.assertEqual((params["fast_seconds"], params["slow_seconds"]), (64, 106))
+        self.assertNotIn("within_60", "".join(q for q, _ in self.repository.queries))
+        self.assertNotIn("within_90", "".join(q for q, _ in self.repository.queries))
 
     def test_the_listed_call_types_are_not_timed_but_still_counted(self):
         # Ted's list (2026-11-05, eleven more on 2026-11-06): natures the
@@ -370,11 +385,14 @@ class PageWordingTests(unittest.TestCase):
             {"excluded_scheduled": 3, "excluded_no_stamp": 4, "excluded_over_cap": 5,
              "excluded_type": 6, "excluded_call_types": list(ar.EXCLUDED_CALL_TYPES),
              "processing_cap_minutes": 60, "stacked_calls": 2, "average_hold": "32:36",
-             "within_60_percent": 41})
+             "fast_seconds": 64, "fast_target_percent": 90,
+             "slow_seconds": 106, "slow_target_percent": 95,
+             "within_fast_percent": 41, "within_slow_percent": 96})
         self.overview["dispatchers"][0].update(
             {"dispatcher_ref": "0123456789abcdef", "excluded_scheduled": 1,
              "excluded_no_stamp": 2, "excluded_over_cap": 3, "excluded_type": 4,
-             "stacked_calls": 1, "average_hold": "18:42", "within_60_percent": 43})
+             "stacked_calls": 1, "average_hold": "18:42",
+             "within_fast_percent": 43, "within_slow_percent": 96})
         self.overview["discipline_key"] = "fire"
         self.overview["discipline_label"] = "Fire"
         self.overview["discipline_options"] = [
@@ -416,14 +434,23 @@ class PageWordingTests(unittest.TestCase):
         self.assertIn('title="4 call type not timed · 1 scheduled · 2 no unit stamp · 3 over 60 min">10</td>',
                       self.html)
         # The Stacked column was dropped from the table on 2026-11-06 (the
-        # "Stacked first" summary line and the drill-down's hold remain);
-        # the 60-second share took its place beside the 90-second one.
+        # "Stacked first" summary line and the drill-down's hold remain).
+        # The two share columns are the NFPA 1225 marks the discipline
+        # tables use, 64 s (90 %) and 106 s (95 %), labelled from the
+        # constants; a share under its mark reads as a warning.
         self.assertNotIn(">Stacked</th>", self.html)
         self.assertNotIn("average unit hold", self.html)
-        self.assertIn(">≤ 60 Sec</th>", self.html)
-        self.assertIn(">≤ 90 Sec</th>", self.html)
-        self.assertIn('<td class="text-end text-success">43%</td>', self.html)
-        self.assertIn("41% within 60 seconds", self.html)
+        self.assertNotIn("60 Sec", self.html)
+        self.assertNotIn("90 Sec", self.html)
+        self.assertIn(">≤ 64 Sec</th>", self.html)
+        self.assertIn(">≤ 106 Sec</th>", self.html)
+        self.assertIn("NFPA 1225, the alarm-processing standard ISO grades against, expects 90%.",
+                      self.html)
+        self.assertIn("NFPA 1225 expects 95%.", self.html)
+        self.assertIn('<td class="text-end text-warning">43%</td>', self.html)
+        self.assertIn('<td class="text-end text-success">96%</td>', self.html)
+        self.assertIn("WITHIN 106 SECONDS", self.html)
+        self.assertIn("41% within 64 seconds", self.html)
 
     def test_the_discipline_rule_and_the_unit_average_are_explained(self):
         self.assertIn("agency in the unit roster", self.html)

@@ -764,10 +764,10 @@
                 </div>
                 <div class="col-12 col-xl">
                     <div class="analytics-kpi dispatcher-kpi">
-                        <div class="analytics-eyebrow">WITHIN 90 SECONDS</div>
-                        <div class="analytics-value">{{ dispatcher_metrics.within_90_percent }}%</div>
+                        <div class="analytics-eyebrow">WITHIN {{ dispatcher_metrics.slow_seconds }} SECONDS</div>
+                        <div class="analytics-value">{{ dispatcher_metrics.within_slow_percent }}%</div>
                         <div class="analytics-subvalue">
-                            {{ dispatcher_metrics.within_60_percent|default(0) }}% within 60 seconds
+                            {{ dispatcher_metrics.within_fast_percent|default(0) }}% within {{ dispatcher_metrics.fast_seconds }} seconds
                             &middot; {{ dispatcher_metrics.over_180_count }} calls exceeded 3 minutes
                         </div>
                     </div>
@@ -827,9 +827,9 @@
                                             90th %
                                         </th>
                                         <th class="text-end"
-                                            title="Share of timed calls dispatched within 60 seconds of the call being received.">≤ 60 Sec</th>
+                                            title="Share of timed calls dispatched within {{ dispatcher_metrics.fast_seconds }} seconds of the call being received. NFPA 1225, the alarm-processing standard ISO grades against, expects {{ dispatcher_metrics.fast_target_percent }}%.">≤ {{ dispatcher_metrics.fast_seconds }} Sec</th>
                                         <th class="text-end"
-                                            title="Share of timed calls dispatched within 90 seconds of the call being received.">≤ 90 Sec</th>
+                                            title="Share of timed calls dispatched within {{ dispatcher_metrics.slow_seconds }} seconds of the call being received. NFPA 1225 expects {{ dispatcher_metrics.slow_target_percent }}%.">≤ {{ dispatcher_metrics.slow_seconds }} Sec</th>
                                         <th class="text-end">&gt; 3 Min</th>
                                     </tr>
                                 </thead>
@@ -844,8 +844,8 @@
                                             <td class="text-end">{{ dispatcher.average_processing }}</td>
                                             <td class="text-end">{{ dispatcher.median_processing }}</td>
                                             <td class="text-end">{{ dispatcher.p90_processing|default('—') }}</td>
-                                            <td class="text-end text-success">{{ dispatcher.within_60_percent|default(0) }}%</td>
-                                            <td class="text-end text-success">{{ dispatcher.within_90_percent }}%</td>
+                                            <td class="text-end {{ 'text-success' if dispatcher.within_fast_percent|default(0) >= dispatcher_metrics.fast_target_percent else 'text-warning' }}">{{ dispatcher.within_fast_percent|default(0) }}%</td>
+                                            <td class="text-end {{ 'text-success' if dispatcher.within_slow_percent|default(0) >= dispatcher_metrics.slow_target_percent else 'text-warning' }}">{{ dispatcher.within_slow_percent|default(0) }}%</td>
                                             <td class="text-end">
                                                 {% if dispatcher.over_180_count and dispatcher.dispatcher_ref %}
                                                     <button type="button" class="slow-calls-button"
