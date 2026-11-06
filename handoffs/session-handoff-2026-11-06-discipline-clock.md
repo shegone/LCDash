@@ -8,8 +8,8 @@ and a local PostgreSQL 17.11. No AWS state was changed in this stretch.
 
 | Item | State | Last verified |
 | --- | --- | --- |
-| LCDash repo | `main` at `c689892` (this change), pushed to GitHub and Bitbucket. The handoff update that records release 124 is a later local commit. | 2026-11-06 10:25 EST |
-| LCDash pilot (AWS) | **Release 124 live.** Foundation stack updated via change set `release-c689892-20261106` (Ted typed the name; executed 15:34:16Z, 10:34 EST; `UPDATE_COMPLETE`). Web task definition **revision 124**, collector **revision 84**, both image tag `release-c6898920b59e`, digest `sha256:4818358bdea974ee83e7bfcb55a71c6429fd6df5055a7ac3d953838de7d7a0fe`. Of 23 stack parameters only `PilotImageDigest` changed; the standard five resources were modified. Rollback target: release 123's digest `sha256:2fcfb9727e4dd49688a7b6e17c6fc44f9d05a09b1dccf05d49e6f8adf3a02fe0`. | 2026-11-06 10:40 EST |
+| LCDash repo | `main` at `5684954` (seven more not-timed types), pushed to GitHub and Bitbucket. This handoff update is a later local commit. Earlier rows of this day: `c689892` (release 124), `5a4cdf2` (125), `b8fb588` (126). | 2026-11-06 13:05 EST |
+| LCDash pilot (AWS) | **Release 127 live** (web task definition revision 127, collector 87, image tag `release-56849549d816`, digest `sha256:8ed918503caf9d303c44afe71b306928207b26ab6d7d970637c1b546a2c1e55d`); details and rollback target in the "Release 127 live" section. Releases 124, 125 and 126 earlier the same day are recorded in their own sections. | 2026-11-06 13:05 EST |
 | Release 124 build | CodeBuild `lcdash-p1-logan-use1-release-builder:93e69eca-8793-4ce6-83eb-5b25d323706c`, SUCCEEDED 10:29:33 to 10:30:19 EST; `source_asset_sha256` `57fbf34d299cfb0d2d8b16402e5b2e81216d32b56e239dccbfd93ada5498376a` (matches the release-builder deploy output); base `python:3.13-alpine@sha256:4d511039...` unchanged. | 2026-11-06 |
 | ECR scan (release 124) | COMPLETE: **zero findings**. | 2026-11-06 |
 | Release 124 verification | ECS service `lcdash-p1-logan-use1-web`: PRIMARY deployment on revision 124, rollout COMPLETED 10:36:54 EST, 1 of 1 running. ALB target `10.42.1.200:8000` healthy. `/`, `/active-calls` and `/analytics?discipline=fire` answer 302 to the Cognito domain. Web log group since 15:34:16Z: 111 events, 0 errors, 0 warnings. The first collector run on revision 84 (next :07 / :37 EST slot) was not waited for. | 2026-11-06 10:40 EST |
@@ -176,15 +176,40 @@ dispatched as emergencies" to "the county does not time for dispatcher
 processing", since some of these are emergency natures. Flagged to Ted:
 the list also governs the by-discipline tables, so Fire Brush, Gas Leak
 and Rescue leave the ISO fire view's alarm-processing figures. Tests,
-docs and this note follow. **Not pushed and not released** when written.
+docs and this note follow. Committed as `5684954` and released below.
+
+## Release 127 live (seven more not-timed call types, 23)
+
+Commit `5684954` was pushed to both remotes (GitHub and Bitbucket at the
+same hash) and released. Change set `release-5684954-20261106` (Ted typed
+the name; executed 18:03Z, 13:03 EST; stack `UPDATE_COMPLETE` 18:03:27Z).
+Web task definition **revision 127**, collector **revision 87**, image tag
+`release-56849549d816`, digest
+`sha256:8ed918503caf9d303c44afe71b306928207b26ab6d7d970637c1b546a2c1e55d`.
+Build `lcdash-p1-logan-use1-release-builder:269a8dd2-9814-4160-be35-63c3dc21537b`
+SUCCEEDED 12:58:42 to 12:59:20 EST, `source_asset_sha256`
+`46886058b64a61cfd03ace69e9a63db0a12fa4bc893df9be5de5844d64da8184`
+(matches the release-builder deploy output). ECR scan COMPLETE 13:00 EST,
+zero findings. Of 23 stack parameters only `PilotImageDigest` changed;
+the standard five resources were modified. Verification: PRIMARY
+deployment on revision 127, rollout COMPLETED, 1 of 1 running; ALB target
+`10.42.1.164` healthy; `/` answers 302 to the Cognito domain; web log in
+the 15 minutes around the rollout: 0 errors. The first collector run on
+revision 87 was not waited for. No SQL, schema or collector change in this
+release, so the live PostgreSQL test was not rerun. Rollback target:
+release 126's digest
+`sha256:7e14b9d88ace0d6dd78a2c1cac321dabe1e98d342a1f6e8bf2501b10407396f6`.
 
 ## Exact next action
 
-1. Ted checks, on release 126: the Fire view of the call that started
-   this and the by-discipline tables; the "Not timed" count showing 16
-   types and rising for the new natures (both lock-out spellings); the
-   "≤ 60 Sec" column and the absence of the "Stacked" column.
+1. Ted checks, on release 127: the Fire view of the call that started
+   this and the by-discipline tables; the "Not timed" count showing 23
+   types and rising for the new natures (both lock-out spellings, Road
+   Block, Welfare Check, Tree Down, Missing Person, Fire Brush, Gas Leak,
+   Rescue); the "≤ 60 Sec" column and the absence of the "Stacked" column.
 2. Push this handoff commit when Ted says so (`git push origin main`).
 3. Open items unchanged: Stack backfill of older calls, `HowReported`,
    `UnitType.Discipline`, the AGENTS.md note about the empty accepted ECR
-   list and the live PostgreSQL test for reporting SQL.
+   list and the live PostgreSQL test for reporting SQL, the CAD
+   `CallDateTime` versus "New CFS" start-time question, and the
+   per-agency request-time check.
