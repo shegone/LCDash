@@ -445,3 +445,209 @@ def test_main_keeps_the_capture_signal_in_the_transcript_json(tmp_path, monkeypa
 def test_main_adds_no_signal_key_when_the_job_has_none(tmp_path, monkeypatch):
     result = run_main_with_job(tmp_path, monkeypatch, {})
     assert "signal" not in result
+
+
+# ------------------------------------------------------------------ VAD and audio conditioning (2026-11-07)
+
+
+def write_tone(path: Path, seconds=0.5, hz=1000.0, amplitude=0.1, rate=8000):
+    import math
+    import struct
+    frames = int(seconds * rate)
+    samples = (int(amplitude * 32767 * math.sin(2 * math.pi * hz * i / rate)) for i in range(frames))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(path), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(rate)
+        handle.writeframes(b"".join(struct.pack("<h", s) for s in samples))
+
+
+def test_conditioning_defaults_are_todays_behaviour():
+    assert transcribe.conditioning_settings({}) == {
+        "vad_filter": False, "vad_parameters": None, "pad_seconds": 0.0,
+        "normalize_gain": False, "bandpass": False,
+    }
+    assert transcribe.conditioning_settings(None) == transcribe.conditioning_settings({})
+    assert not transcribe.conditioning_active(transcribe.conditioning_settings({}))
+
+
+def test_conditioning_reads_the_config_and_clamps_odd_values():
+    settings = transcribe.conditioning_settings({
+        "vad_filter": True, "vad_min_silence_ms": 450, "vad_speech_pad_ms": 99999,
+        "pad_seconds": 0.5, "normalize_gain": True, "bandpass": "yes",
+    })
+    assert settings == {
+        "vad_filter": True,
+        "vad_parameters": {"threshold": 0.5, "min_speech_duration_ms": 250,
+                           "min_silence_duration_ms": 450, "speech_pad_ms": 2000},
+        "pad_seconds": 0.5, "normalize_gain": True, "bandpass": False,
+    }
+    assert transcribe.conditioning_active(settings)
+    # Strings, booleans and out-of-range numbers fall back to the defaults.
+    odd = transcribe.conditioning_settings({"vad_filter": "true", "pad_seconds": "0.5",
+                                            "vad_min_silence_ms": True})
+    assert odd["vad_filter"] is False and odd["pad_seconds"] == 0.0
+    assert transcribe.conditioning_settings({"pad_seconds": 9})["pad_seconds"] == transcribe.MAX_PAD_SECONDS
+    assert transcribe.conditioning_settings({"pad_seconds": -1})["pad_seconds"] == 0.0
+    vad_only = transcribe.conditioning_settings({"vad_filter": True})
+    assert vad_only["vad_parameters"] == {"threshold": 0.5, "min_speech_duration_ms": 250,
+                                          "min_silence_duration_ms": 300, "speech_pad_ms": 200}
+    permissive = transcribe.conditioning_settings({"vad_filter": True, "vad_threshold": 0.3,
+                                                   "vad_min_speech_ms": 100})
+    assert permissive["vad_parameters"]["threshold"] == 0.3
+    assert permissive["vad_parameters"]["min_speech_duration_ms"] == 100
+    assert (transcribe.conditioning_settings({"vad_filter": True, "vad_threshold": 7})
+            ["vad_parameters"]["threshold"] == 0.95)
+    assert not transcribe.conditioning_active(vad_only)
+
+
+def test_condition_audio_pads_normalises_and_resamples_to_16k(tmp_path):
+    import numpy as np
+    wav = tmp_path / "tone.wav"
+    write_tone(wav, seconds=0.5, amplitude=0.1)
+    samples = transcribe.read_pcm16(wav)
+    assert samples.dtype == np.float32 and len(samples) == 4000
+    assert 0.09 < float(np.max(np.abs(samples))) < 0.11
+
+    out = transcribe.condition_audio(samples, transcribe.conditioning_settings(
+        {"pad_seconds": 0.5, "normalize_gain": True}))
+    assert out.dtype == np.float32
+    assert len(out) == int((0.5 + 0.5 + 0.5) * 16000)
+    peak = float(np.max(np.abs(out)))
+    assert 0.8 < peak <= transcribe.GAIN_TARGET_PEAK + 1e-6  # 0.9 before the 16 kHz interpolation
+    assert not np.any(out[:7990]) and not np.any(out[-7990:])  # the padding is silence (one interpolated edge sample aside)
+
+    plain = transcribe.condition_audio(samples, transcribe.conditioning_settings({"pad_seconds": 0.0}))
+    assert len(plain) == 8000  # no conditioning except the model's 16 kHz
+
+
+def test_condition_audio_bandpass_keeps_voice_and_cuts_hum(tmp_path):
+    import numpy as np
+    settings = transcribe.conditioning_settings({"bandpass": True})
+    voice = tmp_path / "voice.wav"
+    hum = tmp_path / "hum.wav"
+    write_tone(voice, seconds=1.0, hz=1000.0, amplitude=0.5)
+    write_tone(hum, seconds=1.0, hz=60.0, amplitude=0.5)
+    kept = transcribe.condition_audio(transcribe.read_pcm16(voice), settings)
+    cut = transcribe.condition_audio(transcribe.read_pcm16(hum), settings)
+    assert len(kept) == len(cut) == 16000
+    assert float(np.max(np.abs(kept[2000:-2000]))) > 0.35
+    assert float(np.max(np.abs(cut[2000:-2000]))) < 0.1
+
+
+def test_read_pcm16_rejects_stereo(tmp_path):
+    wav = tmp_path / "stereo.wav"
+    with wave.open(str(wav), "wb") as handle:
+        handle.setnchannels(2)
+        handle.setsampwidth(2)
+        handle.setframerate(8000)
+        handle.writeframes(b"\x00\x00" * 800)
+    with pytest.raises(ValueError):
+        transcribe.read_pcm16(wav)
+
+
+def test_transcriber_without_conditioning_still_passes_the_path(tmp_path):
+    model = FakeModel()
+    transcribe.ClipTranscriber(model, "en", 5, "off", None).transcribe(tmp_path / "a.wav")
+    audio, kwargs = model.calls[0]
+    assert audio == str(tmp_path / "a.wav")
+    assert kwargs == BASE_KWARGS
+
+
+def test_transcriber_with_vad_and_padding_passes_conditioned_samples(tmp_path):
+    import numpy as np
+    wav = tmp_path / "a.wav"
+    write_tone(wav, seconds=0.5)
+    model = FakeModel()
+    settings = transcribe.conditioning_settings({"vad_filter": True, "pad_seconds": 0.5,
+                                                 "normalize_gain": True})
+    clip = transcribe.ClipTranscriber(model, "en", 5, "off", None, settings).transcribe(wav)
+    audio, kwargs = model.calls[0]
+    assert isinstance(audio, np.ndarray) and audio.dtype == np.float32 and len(audio) == 24000
+    assert kwargs == {
+        "language": "en", "beam_size": 5, "condition_on_previous_text": False,
+        "vad_filter": True, "vad_parameters": {"threshold": 0.5, "min_speech_duration_ms": 250,
+                                               "min_silence_duration_ms": 300, "speech_pad_ms": 200},
+    }
+    assert clip["transcript"] == "engine nine respond"
+    # Segment times are reported against the clip, not the padded audio
+    # (the fake model answers 0.0 to 1.0 on audio that starts 0.5 s in).
+    assert clip["segments"][0]["start"] == 0.0 and clip["segments"][0]["end"] == 0.5
+
+
+def test_vad_alone_passes_the_path_with_vad_parameters(tmp_path):
+    model = FakeModel()
+    settings = transcribe.conditioning_settings({"vad_filter": True, "vad_min_silence_ms": 500})
+    transcribe.ClipTranscriber(model, "en", 5, "off", None, settings).transcribe(tmp_path / "a.wav")
+    audio, kwargs = model.calls[0]
+    assert audio == str(tmp_path / "a.wav")
+    assert kwargs["vad_filter"] is True
+    assert kwargs["vad_parameters"] == {"threshold": 0.5, "min_speech_duration_ms": 250,
+                                        "min_silence_duration_ms": 500, "speech_pad_ms": 200}
+
+
+def test_padding_does_not_make_a_short_clip_look_long_to_the_hint_rule(tmp_path):
+    """The model reports the padded length; the hint-suspect rule must use the
+    clip's own length so a parroted 0.5 s key-up is still flagged."""
+    glossary_path = tmp_path / "status" / "glossary.json"
+    write_glossary(glossary_path, hotwords="Engine 9")
+    wav = tmp_path / "a.wav"
+    write_tone(wav, seconds=0.5)
+    model = FakeModel(text=" Engine 9.", duration=4.5)  # 0.5 s clip + 2 x 2 s padding
+    settings = transcribe.conditioning_settings({"pad_seconds": 2.0})
+    clip = transcribe.ClipTranscriber(model, "en", 5, "hotwords",
+                                      transcribe.GlossaryCache(glossary_path), settings).transcribe(wav)
+    assert clip["hint_suspect"] is True
+
+
+def test_main_applies_the_shipped_conditioning_config(tmp_path, monkeypatch):
+    import numpy as np
+    root = tmp_path / "data"
+    pending = root / "queue" / "pending"
+    pending.mkdir(parents=True)
+    wav_path = root / "audio" / "ems" / "ems_tx_20261107T120000_000000Z_ab12cd34.wav"
+    write_tone(wav_path, seconds=1.0)
+    segment_id = wav_path.stem
+    (pending / f"{segment_id}.json").write_text(json.dumps(
+        {"segment_id": segment_id, "channel": "ems", "direction": "tx", "audio_file": str(wav_path)}),
+        encoding="utf-8")
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps({
+        "output_directory": str(root),
+        "transcription": {"model": "fake-model", "device": "cpu", "compute_type": "int8",
+                          "language": "en", "beam_size": 5, "glossary_mode": "off",
+                          "vad_filter": True, "pad_seconds": 0.5, "normalize_gain": True},
+    }), encoding="utf-8")
+    seen = {}
+
+    class StopAfterFirst(FakeModel):
+        def __init__(self, *args, **kwargs):
+            super().__init__(text=" Medic 4 en route.", duration=2.0,
+                             on_call=lambda: setattr(transcribe, "STOP", True))
+            seen["model"] = self
+
+    fake_module = types.ModuleType("faster_whisper")
+    fake_module.WhisperModel = StopAfterFirst
+    monkeypatch.setitem(sys.modules, "faster_whisper", fake_module)
+    monkeypatch.setattr(transcribe, "CONFIG", config)
+    monkeypatch.setattr(transcribe, "STOP", False)
+
+    transcribe.main()
+
+    audio, kwargs = seen["model"].calls[0]
+    assert isinstance(audio, np.ndarray) and len(audio) == 32000  # (1.0 + 2 x 0.5) s at 16 kHz
+    assert kwargs["vad_filter"] is True and kwargs["vad_parameters"]["speech_pad_ms"] == 200
+    result = json.loads((root / "transcripts" / f"{segment_id}.json").read_text(encoding="utf-8"))
+    assert result["transcript"] == "Medic 4 en route."
+    assert "hint_suspect" not in result
+
+
+def test_repo_config_ships_vad_and_padding():
+    config = json.loads((TRANSCRIBE_PATH.parent / "config.json").read_text(encoding="utf-8"))
+    settings = transcribe.conditioning_settings(config["transcription"])
+    assert settings["vad_filter"] is True
+    assert settings["pad_seconds"] == 0.5
+    assert settings["normalize_gain"] is True and settings["bandpass"] is False
+    assert settings["vad_parameters"] == {"threshold": 0.3, "min_speech_duration_ms": 100,
+                                          "min_silence_duration_ms": 300, "speech_pad_ms": 200}

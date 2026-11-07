@@ -71,6 +71,18 @@ and the worker runs with Hugging Face offline mode enabled. Audio and transcript
 data remain on `.227`; this prototype has no cloud upload or LCDash connection.
 Transcripts are machine-generated and require human review.
 
+Since 2026-11-07 the worker runs faster-whisper's Silero voice-activity
+filter (`vad_filter`, `vad_min_silence_ms`, `vad_speech_pad_ms`) and pads
+each clip with `pad_seconds` of silence before decoding; `normalize_gain`
+and `bandpass` (300 to 3400 Hz) are further optional conditioning steps.
+Every key defaults to the old behaviour when absent. On 300 real clips the
+VAD cut the share of transcripts that were invented boilerplate ("Thanks
+for watching!") from about 17 % to 2 %, and the padding kept it from
+dropping real speech at the edges of short transmissions; the measurements
+are in `docs/MINDSHARE_RADIO_TRANSCRIPTION_TUNING.md`. When any conditioning
+step is on the worker reads the WAV itself (numpy, which faster-whisper
+already requires) and hands the model 16 kHz samples instead of the path.
+
 ## Configuration
 
 Add channels to the `channels` array in `config.json`. Each entry has a unique

@@ -12,7 +12,14 @@
     "compute_type": "int8_float16",
     "language": "en",
     "beam_size": 5,
-    "glossary_mode": "off"
+    "glossary_mode": "off",
+    "vad_filter": true,
+    "vad_min_silence_ms": 300,
+    "vad_speech_pad_ms": 200,
+    "vad_threshold": 0.3,
+    "vad_min_speech_ms": 100,
+    "pad_seconds": 0.5,
+    "normalize_gain": true
   },
   "channels": [
     {
