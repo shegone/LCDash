@@ -9,7 +9,7 @@ Follows `session-handoff-2026-11-06-discipline-clock.md` (release 128 live,
 | --- | --- | --- |
 | LCDash repo | `main` at `633d36f` (one commit past `aedadfe`): VAD and audio conditioning for the radio listener's transcription worker. **Not pushed.** | 2026-11-07 |
 | LCDash pilot (AWS) | Release 128 unchanged (web revision 128, collector 88). Nothing in this session touched AWS beyond read-only page reads as Ted through Chrome. | 2026-11-07 |
-| `.227` | Three radio services active, GPU RTX 3090. The new worker code is **not installed yet**; the running worker still uses the old settings. Evaluation files are under `/home/administrator/asr-eval` (owner-only; they hold transcript text and must not leave the host). | 2026-11-07 12:00 EST |
+| `.227` | Three radio services active, GPU RTX 3090. **New worker installed 2026-11-07 12:48 EST** (Ted: "Install now"): `transcribe.py` sha256 `ed5d23b7df6e1c7a…` and `config.json` `9ecf7cff4d92fa40…` from commit `633d36f`, previous files in `/opt/mindshare-radio-capture/backup-pre-vad/`. Only `mindshare-radio-transcribe` was restarted; capture and upload ran on. Evaluation files are under `/home/administrator/asr-eval` (owner-only; they hold transcript text and must not leave the host). | 2026-11-07 12:50 EST |
 
 ## What Ted asked
 
@@ -62,13 +62,25 @@ services opt-out policy first) are written up in the tuning doc.
 - `python -m pytest tests/ -q`: 2100 passed, 6 skipped (2,623 subtests), 61 s.
 - Infrastructure tests not run: no infrastructure change.
 
+## Installed on `.227` (2026-11-07 12:48 EST)
+
+The two files on `.227` matched the pre-change repository versions byte for
+byte (sha256 `6ef4e1070e45aa40…` and `0ba67e18c022d743…` = `aedadfe`), so
+nothing local was overwritten. Backup: `/opt/mindshare-radio-capture/backup-pre-vad/`.
+The committed LF files were copied in, hashes verified against the commit,
+`py_compile` passed, then `sudo systemctl restart mindshare-radio-transcribe`.
+Ready line at 12:48:14: `vad_filter=True pad_seconds=0.5 normalize_gain=True
+bandpass=False`. All three services active, 0 restarts, pending and failed
+queues empty, GPU 2.4 GiB. (An onnxruntime "Failed to persist telemetry device
+ID" warning at start is the Silero VAD loading; harmless.) By 12:55 EST six clips had been transcribed (0 failures), all six uploaded with 201, failed queue empty; two of the six came out empty, which is the VAD at work on noise clips.
+
+Rollback: `cp /opt/mindshare-radio-capture/backup-pre-vad/{transcribe.py,config.json}
+/opt/mindshare-radio-capture/ && sudo systemctl restart mindshare-radio-transcribe`.
+
 ## Exact next action
 
-1. Ted decides whether to install the new worker on `.227` (the radio
-   services there are authorised for this project; this restarts
-   `mindshare-radio-transcribe` only, capture and upload keep running and the
-   queue holds clips during the restart). Install from the committed LF
-   files, keeping a backup:
+1. ~~Install the new worker on `.227`~~ Done 12:48 EST (section above). The
+   install recipe is kept here for the next listener change:
 
    ```
    ssh administrator@14.1.1.227 'mkdir -p /opt/mindshare-radio-capture/backup-pre-vad && cp /opt/mindshare-radio-capture/transcribe.py /opt/mindshare-radio-capture/config.json /opt/mindshare-radio-capture/backup-pre-vad/'
@@ -77,12 +89,11 @@ services opt-out policy first) are written up in the tuning doc.
    ssh administrator@14.1.1.227 'sudo systemctl restart mindshare-radio-transcribe && sleep 20 && journalctl -u mindshare-radio-transcribe -n 5 --no-pager'
    ```
    The ready line must read `vad_filter=True pad_seconds=0.5 normalize_gain=True bandpass=False`.
-   Rollback: copy the two files back from `backup-pre-vad/` and restart.
 2. Push the commit when Ted says so (`git push origin main`); no AWS release
    is needed (listener-only change).
 3. Grow the ground truth: correct transcripts on the radio page, short
    acknowledgements with unit numbers especially.
 4. Open items unchanged from the 2026-11-06 handoff.
 
-Services on `.227` were left running; nothing on `.227` was changed except the
-new `~/asr-eval` folder.
+Services on `.227` were left running. Changed there: the two worker files
+(backup kept) and the new `~/asr-eval` folder.
