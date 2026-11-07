@@ -7,7 +7,7 @@ Follows `session-handoff-2026-11-06-discipline-clock.md` (release 128 live,
 
 | Item | State | Last verified |
 | --- | --- | --- |
-| LCDash repo | `main` at `633d36f` (one commit past `aedadfe`): VAD and audio conditioning for the radio listener's transcription worker. **Not pushed.** | 2026-11-07 |
+| LCDash repo | `main` at `96b43f8` (`633d36f` worker change plus two handoff commits), **pushed to GitHub and Bitbucket 2026-11-07 13:05 EST** (Ted: "Yes"). This note is a later local commit. | 2026-11-07 13:05 EST |
 | LCDash pilot (AWS) | Release 128 unchanged (web revision 128, collector 88). Nothing in this session touched AWS beyond read-only page reads as Ted through Chrome. | 2026-11-07 |
 | `.227` | Three radio services active, GPU RTX 3090. **New worker installed 2026-11-07 12:48 EST** (Ted: "Install now"): `transcribe.py` sha256 `ed5d23b7df6e1c7a…` and `config.json` `9ecf7cff4d92fa40…` from commit `633d36f`, previous files in `/opt/mindshare-radio-capture/backup-pre-vad/`. Only `mindshare-radio-transcribe` was restarted; capture and upload ran on. Evaluation files are under `/home/administrator/asr-eval` (owner-only; they hold transcript text and must not leave the host). | 2026-11-07 12:50 EST |
 
@@ -89,10 +89,15 @@ Rollback: `cp /opt/mindshare-radio-capture/backup-pre-vad/{transcribe.py,config.
    ssh administrator@14.1.1.227 'sudo systemctl restart mindshare-radio-transcribe && sleep 20 && journalctl -u mindshare-radio-transcribe -n 5 --no-pager'
    ```
    The ready line must read `vad_filter=True pad_seconds=0.5 normalize_gain=True bandpass=False`.
-2. Push the commit when Ted says so (`git push origin main`); no AWS release
-   is needed (listener-only change).
+2. ~~Push the commit~~ Pushed 13:05 EST; no AWS release is needed (listener-only
+   change). Push this note when Ted says so.
 3. Grow the ground truth: correct transcripts on the radio page, short
-   acknowledgements with unit numbers especially.
+   acknowledgements with unit numbers especially. Ted's convention (chat,
+   2026-11-07): the form refuses an empty correction, so a noise, beep or
+   key-up clip is corrected to a single period `.`; scoring treats a
+   correction with no letters or digits as "no speech". Follow-up worth
+   doing: let the correction form save "no speech" explicitly (API
+   `PUT /api/radio/segments/{id}/correction` requires 1+ characters today).
 4. Open items unchanged from the 2026-11-06 handoff.
 
 Services on `.227` were left running. Changed there: the two worker files

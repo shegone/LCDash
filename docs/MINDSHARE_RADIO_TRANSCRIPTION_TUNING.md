@@ -110,6 +110,13 @@ transmissions. None of the decoder settings move that. The routes that can:
    numbers especially) make word error rate measurable and become training
    text. Corrected segments keep their audio for a year, so they survive the
    15-day local purge on the pilot even though `.227` deletes its copy.
+   **Convention for noise:** the correction form will not save an empty
+   text (the API requires at least one character), so Ted marks a key-up,
+   beep or pure-noise clip by saving a single period `.` (Ted, chat,
+   2026-11-07). Any scoring must read a corrected text that holds no
+   letters or digits as "no speech": the right machine output for that
+   clip is empty, and any words are an invented phrase. A real "no speech"
+   correction in the UI is an open follow-up.
 2. **A domain model.** Either a Whisper fine-tune on the corrections (the RTX
    3090 can LoRA-tune large-v3) or Amazon Transcribe streaming with a custom
    vocabulary (unit names, stations, streets, ten-codes) and, with 10,000+
