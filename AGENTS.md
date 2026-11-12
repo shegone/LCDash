@@ -113,8 +113,18 @@ deploy only under the rules below.
 
 ## Agents and models
 
-Workers and subagents run as cheaper Sonnet models, at most four at once, with
-non-overlapping edit scopes. This charter overrides any skill.
+Workers and subagents run on the lowest model that can do the piece well,
+chosen per task by the orchestrating session (Ted, 2026-11-12): Haiku for
+simple read-only work (searching, listing, reading Git state, logs or
+status, running a known read-only command and returning its output);
+Sonnet for anything that edits source, tests, docs or infrastructure, and
+for any read that needs judgment. At most four at once, with
+non-overlapping edit scopes. Decisions this charter escalates (production
+deployment, rollback, credentials, networking, authentication,
+authorization, backup policy, public-safety outputs) stay with the
+orchestrating session and are never handed to a worker. Verify a worker's
+result in the files and command output, not in its report. This charter
+overrides any skill.
 
 ## Approvals
 
